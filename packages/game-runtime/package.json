@@ -1,0 +1,24 @@
+{
+  "name": "@ancadeba/game-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "dev": "tsc --watch --preserveWatchOutput",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ancadeba/schemas": "workspace:*",
+    "@ancadeba/utilities": "workspace:*"
+  }
+}

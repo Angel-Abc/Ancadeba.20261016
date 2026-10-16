@@ -1,0 +1,18 @@
+{
+  "name": "@ancadeba/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "pnpm typecheck && vp build",
+    "preview": "vp preview",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "@ancadeba/game-runtime": "workspace:*",
+    "@ancadeba/schemas": "workspace:*",
+    "@ancadeba/ui-components": "workspace:*",
+    "@ancadeba/utilities": "workspace:*"
+  }
+}

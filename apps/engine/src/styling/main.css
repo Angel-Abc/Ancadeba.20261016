@@ -1,0 +1,14 @@
+@import './reset.css';
+
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e5e7eb;
+  background: #111827;
+  color-scheme: dark;
+}
+
+main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 4rem 2rem;
+}
