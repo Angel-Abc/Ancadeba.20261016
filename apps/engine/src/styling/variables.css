@@ -1,0 +1,13 @@
+:root {
+  --ge-min-root-size: min(100vw, 100vh);
+  --ge-unit-size: calc(0.001 * var(--ge-min-root-size));
+
+  --ge-font-size: calc(20 * var(--ge-unit-size));
+  --ge-font-family: 'Arial', sans-serif;
+
+  --ge-font-color: oklch(0.819 0.1135 65.12);
+  --ge-background-color: oklch(0 0 0);
+  --ge-color-contrast: oklch(0.66 0.241 354.308);
+  --ge-color-dark: oklch(0.2 0.1 0);
+  --ge-component-border-color: oklch(0.3 0.1 0);
+}

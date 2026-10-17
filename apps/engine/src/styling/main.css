@@ -1,14 +1,9 @@
 @import './reset.css';
+@import './variables.css';
 
 :root {
-  font-family: system-ui, sans-serif;
-  color: #e5e7eb;
-  background: #111827;
-  color-scheme: dark;
-}
-
-main {
-  max-width: 64rem;
-  margin: 0 auto;
-  padding: 4rem 2rem;
+  font-family: var(--ge-font-family);
+  color: var(--ge-font-color);
+  font-size: var(--ge-font-size);
+  background-color: var(--ge-background-color);
 }
