@@ -20,7 +20,13 @@ export default defineConfig({
         env: { browser: true, node: false },
       },
       {
-        files: ['apps/editor-server/**', 'tests/**', '**/vite.config.ts'],
+        files: [
+          'apps/editor-server/**',
+          'apps/engine/tooling/**',
+          'tooling/**',
+          'tests/**',
+          '**/vite.config.ts',
+        ],
         env: { node: true },
       },
       {

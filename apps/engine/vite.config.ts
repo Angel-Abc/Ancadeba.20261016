@@ -1,8 +1,12 @@
 import { defineConfig } from 'vite-plus'
+import { engineRuntimeConfigPlugin, loadEngineConfig } from './tooling/config.js'
+
+const config = loadEngineConfig()
 
 export default defineConfig({
+  plugins: [engineRuntimeConfigPlugin(config.gameUrl)],
   server: {
-    port: Number(process.env.ENGINE_PORT ?? 5173),
+    port: config.port,
     strictPort: true,
   },
 })

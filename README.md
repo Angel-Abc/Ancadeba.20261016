@@ -9,6 +9,9 @@ Requirements: Node.js 24.11+ in the 24.x LTS line (or Node.js 26+) and pnpm 11.5
 
 ```sh
 pnpm install
+cp apps/engine/config.example.json apps/engine/config.json
+cp apps/editor-ui/config.example.json apps/editor-ui/config.json
+cp apps/editor-server/config.example.json apps/editor-server/config.json
 pnpm dev
 ```
 
@@ -82,14 +85,128 @@ Run only the desired app command. In another terminal, use
 `pnpm --filter './packages/*' --parallel dev` to watch shared library changes.
 
 The editor server provides `GET /health`, returning `{ "status": "ok" }`. During
-development, the editor UI proxies `/health` to `http://127.0.0.1:3000`.
-`HOST` and `PORT` configure the server; defaults are `127.0.0.1` and `3000`.
+development, the editor UI proxies `/health` and `/api` to its configured
+`editorServerUrl`.
+
+## App configuration
+
+Copy each app's `config.example.json` to `config.json` and edit the values.
+PowerShell users can use `Copy-Item` in place of `cp`. Local config files are
+ignored by Git. Config files are located relative to the app, regardless of the
+terminal's working directory. Missing files, invalid JSON, or invalid settings
+stop startup with setup guidance. Restart the relevant app after changing its
+source config.
+
+Engine (`apps/engine/config.json`):
+
+```json
+{
+  "gameUrl": "/games/example/",
+  "port": 5173
+}
+```
+
+`gameUrl` is required and refers to a directory of browser-accessible game files.
+It accepts an HTTP(S) URL or a relative web path. Relative paths resolve against
+the engine application's base URL, and a missing trailing slash is added. For
+example, `./game` under `/engine/` resolves to `/engine/game/`. Put static game
+files in `apps/engine/public/games/example/` to use the example URL, or point to
+an existing web server (which must allow cross-origin requests when applicable).
+The engine's injected `gameResources.fetchResource('assets/sprite.png')` service
+fetches files beneath that directory and reports HTTP/network failures. Game
+parsing and execution are not implemented yet. The editor file API is a separate
+interface and is not a directory URL for this service.
+
+Editor UI (`apps/editor-ui/config.json`):
+
+```json
+{
+  "port": 5174,
+  "editorServerUrl": "http://127.0.0.1:3000"
+}
+```
+
+Editor server (`apps/editor-server/config.json`):
+
+```json
+{
+  "workFolder": "../../sample-games",
+  "host": "127.0.0.1",
+  "port": 3000
+}
+```
+
+`workFolder` is required and must be an existing accessible directory, not a
+symbolic link or junction. Relative paths resolve against the config file's
+directory. Absolute paths are supported; in Windows JSON use forward slashes
+(`D:/Games/My Project`) or escape backslashes. The server does not create the
+workspace root. Only files inside this folder are exposed.
+
+Optional settings use the defaults shown above. Existing environment variables
+override JSON settings, which override defaults:
+
+| App           | Environment override | JSON setting      |
+| ------------- | -------------------- | ----------------- |
+| Engine        | `ENGINE_PORT`        | `port`            |
+| Editor UI     | `EDITOR_UI_PORT`     | `port`            |
+| Editor UI     | `EDITOR_SERVER_URL`  | `editorServerUrl` |
+| Editor server | `HOST`               | `host`            |
+| Editor server | `PORT`               | `port`            |
+
+Ports must be integers between 1 and 65535. Vite CLI options such as `--port`
+continue to work. Environment overrides can be scoped to a terminal and its child
+processes, without changing config files.
+
+## Workspace file API
+
+The editor server exposes these endpoints directly and through the editor UI's
+development proxy. Paths use `/` separators relative to `workFolder`; URL-encode
+the `path` query value. Host filesystem paths are not included in responses.
+
+| Request                                | Behavior                                                                           |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET /api/workspace`                   | List the workspace root                                                            |
+| `GET /api/workspace?path=levels`       | List a directory                                                                   |
+| `GET /api/files?path=levels/demo.json` | Read file bytes as `application/octet-stream`                                      |
+| `PUT /api/files?path=levels/demo.json` | Create or replace a file using the raw request body; create missing parent folders |
+
+Listings return `{ "entries": [{ "name": "levels", "type": "directory" }] }`,
+with entry types `file` and `directory`. Links are omitted. File creation returns
+`201`; replacement returns `204`. Empty and binary files are supported. Writes
+are limited to 10 MiB, including requests without a content-length header.
+
+Errors return `{ "error": "message" }`: `400` for invalid paths, `403` for
+traversal or link access, `404` for missing resources, `409` for file/directory
+conflicts, and `413` for oversized writes. Filesystem permission failures return
+`403`; unexpected failures return `500`. Absolute paths, `..`, backslashes,
+Windows device names, and alternate data streams are rejected. No rename,
+delete, or concurrent-edit detection is provided. The editor UI does not yet
+include a file browser or editor.
+
+Example using PowerShell:
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:3000/api/workspace'
+Invoke-WebRequest 'http://127.0.0.1:3000/api/files?path=levels/demo.json' `
+  -Method Put -ContentType 'application/octet-stream' -Body '{"name":"Demo"}'
+```
+
+## Production
 
 After `pnpm build`, run `pnpm --filter @ancadeba/engine preview` or
 `pnpm --filter @ancadeba/editor-ui preview` to preview a web build. Use
 `pnpm --filter @ancadeba/editor-server start` to start the built server. Keep the
 installed workspace and shared package build output available for server runtime
-imports. The development proxy is not included in production static builds.
+imports. Keep `apps/editor-server/config.json` alongside the server's `dist/`
+folder; work-folder paths retain the same meaning for source and compiled runs.
+The development proxy is not included in production static builds.
+
+The engine build emits `apps/engine/dist/config.json` containing only `gameUrl`.
+The browser loads it before creating services, with caching disabled. Edit that
+deployed file to switch games without rebuilding JavaScript; configure the static
+host to avoid caching `config.json`. Source settings such as ports are not exposed
+to the browser. Vite preview serves the emitted config file. Both web apps still
+require their source app config files when invoking Vite tooling.
 
 ## Separate development instances
 

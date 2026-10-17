@@ -1,11 +1,20 @@
 import { defineConfig } from 'vite-plus'
+import { parseEditorUiConfig } from '@ancadeba/schemas'
+import { loadAppConfig } from '../../tooling/app-config.js'
+
+const config = loadAppConfig(new URL('./config.json', import.meta.url), (value, env) => {
+  const parsed = parseEditorUiConfig(value, env)
+  new URL(parsed.editorServerUrl)
+  return parsed
+})
 
 export default defineConfig({
   server: {
-    port: Number(process.env.EDITOR_UI_PORT ?? 5174),
+    port: config.port,
     strictPort: true,
     proxy: {
-      '/health': process.env.EDITOR_SERVER_URL ?? 'http://127.0.0.1:3000',
+      '/health': config.editorServerUrl,
+      '/api': config.editorServerUrl,
     },
   },
 })
