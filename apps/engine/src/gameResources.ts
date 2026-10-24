@@ -1,4 +1,6 @@
-export interface GameResourceService {
+import type { IResourceSource } from '@ancadeba/utilities'
+
+export interface GameResourceService extends IResourceSource {
   fetchResource(relativePath: string): Promise<Response>
 }
 
@@ -21,7 +23,17 @@ export class HttpGameResources implements GameResourceService {
     this.base = base
   }
 
-  async fetchResource(relativePath: string): Promise<Response> {
+  async readText(path: string): Promise<string> {
+    const response = await this.fetchResource(path, { cache: 'no-cache' })
+    return response.text()
+  }
+
+  async readBytes(path: string): Promise<Uint8Array> {
+    const response = await this.fetchResource(path)
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  async fetchResource(relativePath: string, options?: RequestInit): Promise<Response> {
     let decoded: string
     try {
       decoded = decodeURIComponent(relativePath)
@@ -42,9 +54,10 @@ export class HttpGameResources implements GameResourceService {
     if (url.origin !== this.base.origin || !url.pathname.startsWith(this.base.pathname)) {
       throw new Error('Game resource paths must stay within the game directory')
     }
+    const fetcher = this.fetcher
     let response: Response
     try {
-      response = await this.fetcher(url.href)
+      response = options ? await fetcher(url.href, options) : await fetcher(url.href)
     } catch (error) {
       throw new Error(`Could not fetch game resource: ${relativePath}`, { cause: error })
     }

@@ -2,6 +2,8 @@
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "[javascript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
   "[typescript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "[json]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
+  "files.eol": "\n",
   "editor.formatOnSave": true,
   "editor.formatOnSaveMode": "file",
   "editor.codeActionsOnSave": {

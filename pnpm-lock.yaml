@@ -89,11 +89,19 @@ importers:
         specifier: workspace:*
         version: link:../utilities
 
-  packages/schemas: {}
+  packages/schemas:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/ui-components: {}
 
-  packages/utilities: {}
+  packages/utilities:
+    dependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
 packages:
 
@@ -1292,6 +1300,9 @@ packages:
     resolution: {integrity: sha512-XrBh9ZiQK5mJVRxZBAvD6LwRyAYrK3MFtH3+onyuxFL5hFD44EC3QOmIC1FjTj6H2MMwq46/NAI+NZxLZPZgxg==}
     engines: {node: '>=14.18.0'}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
   '@babel/code-frame@7.29.7':
@@ -2150,3 +2161,5 @@ snapshots:
     dependencies:
       '@yuku-toolchain/types': 0.19.0
       yuku-core: 0.19.0
+
+  zod@4.6.7: {}

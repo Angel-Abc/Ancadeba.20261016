@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { gameSchema } from '@ancadeba/schemas'
 import { HttpGameResources } from '../apps/engine/src/gameResources.js'
 import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
@@ -30,6 +31,26 @@ describe('engine game resources', () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([0, 255, 42]))
   })
 
+  it('reads UTF-8 text with cache revalidation', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('Café 🎮'))
+    const resources = new HttpGameResources('/game', 'https://engine.example/', fetcher)
+
+    await expect(resources.readText('dialogue/intro.txt')).resolves.toBe('Café 🎮')
+    expect(fetcher.mock.contexts).toEqual([undefined])
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      'https://engine.example/game/dialogue/intro.txt',
+      { cache: 'no-cache' },
+    )
+  })
+
+  it('reads binary resources without altering their bytes', async () => {
+    const bytes = new Uint8Array([0, 255, 128, 42])
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(bytes))
+    const resources = new HttpGameResources('/game', 'https://engine.example/', fetcher)
+
+    await expect(resources.readBytes('assets/sprite.bin')).resolves.toEqual(bytes)
+  })
+
   it.each([
     '../secret',
     '/secret',
@@ -45,6 +66,8 @@ describe('engine game resources', () => {
     const fetcher = vi.fn<typeof fetch>()
     const resources = new HttpGameResources('/game/', 'https://engine.example/', fetcher)
     await expect(resources.fetchResource(path)).rejects.toThrow()
+    await expect(resources.readText(path)).rejects.toThrow()
+    await expect(resources.readBytes(path)).rejects.toThrow()
     expect(fetcher).not.toHaveBeenCalled()
   })
 
@@ -100,5 +123,55 @@ describe('engine game resources', () => {
       Response,
     )
     expect(fetcher).toHaveBeenCalledWith('https://engine.example/game/a.txt')
+  })
+
+  it.each([
+    ['/game', 'https://engine.example/game/game.json'],
+    ['./game/', 'https://engine.example/app/game/game.json'],
+    ['https://cdn.example/game/', 'https://cdn.example/game/game.json'],
+  ])('loads game.json from %s through the registered JSON loader', async (gameUrl, expectedUrl) => {
+    const game = { title: 'Demo', settings: { difficulty: 1 } }
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(game)))
+    const container = new ContainerBuilder(
+      { gameUrl },
+      'https://engine.example/app/',
+      fetcher,
+    ).build()
+
+    await expect(
+      container.resolve('jsonResourceLoader').load('game.json', gameSchema),
+    ).resolves.toEqual(game)
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(expectedUrl, { cache: 'no-cache' })
+  })
+
+  it.each([
+    ['missing', '', 404],
+    ['malformed', 'invalid JSON', 200],
+    ['non-object', '[]', 200],
+  ])('rejects a %s game.json', async (_reason, body, status) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status }))
+    const container = new ContainerBuilder(
+      { gameUrl: '/game/' },
+      'https://engine.example/',
+      fetcher,
+    ).build()
+
+    await expect(
+      container.resolve('jsonResourceLoader').load('game.json', gameSchema),
+    ).rejects.toThrow()
+  })
+
+  it('enforces the game directory boundary when loading JSON through the container', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    const container = new ContainerBuilder(
+      { gameUrl: '/game/' },
+      'https://engine.example/',
+      fetcher,
+    ).build()
+
+    await expect(
+      container.resolve('jsonResourceLoader').load('../secret.json', gameSchema),
+    ).rejects.toThrow('Game resource paths must stay within the game directory')
+    expect(fetcher).not.toHaveBeenCalled()
   })
 })

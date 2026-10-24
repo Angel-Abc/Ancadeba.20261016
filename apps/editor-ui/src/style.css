@@ -18,3 +18,118 @@ main {
   margin: 0 auto;
   padding: 4rem 2rem;
 }
+
+.intro,
+.help,
+.preview-empty {
+  color: #a6b1c4;
+}
+
+.preview-panel {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  background: #172033;
+}
+
+.preview-heading,
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.preview-heading {
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.preview-heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.status {
+  padding: 0.25rem 0.65rem;
+  border-radius: 1rem;
+  background: #334155;
+  font-size: 0.875rem;
+}
+
+[data-state='running'] .status {
+  color: #bbf7d0;
+  background: #14532d;
+}
+
+[data-state='starting'] .status {
+  color: #fde68a;
+  background: #713f12;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+input,
+button {
+  min-height: 2.75rem;
+  border: 1px solid #475569;
+  border-radius: 0.375rem;
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  color: inherit;
+  background: #111827;
+}
+
+.help {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+}
+
+button {
+  padding: 0.5rem 1.25rem;
+  color: inherit;
+  background: #334155;
+  cursor: pointer;
+}
+
+#preview-start {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+button:disabled,
+input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}
+
+.error {
+  color: #fca5a5;
+  overflow-wrap: anywhere;
+}
+
+.preview-content {
+  min-height: 12rem;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px dashed #475569;
+  border-radius: 0.5rem;
+  background: #111827;
+}
+
+.game-preview h3 {
+  margin-top: 0;
+}

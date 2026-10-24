@@ -112,10 +112,11 @@ the engine application's base URL, and a missing trailing slash is added. For
 example, `./game` under `/engine/` resolves to `/engine/game/`. Put static game
 files in `apps/engine/public/games/example/` to use the example URL, or point to
 an existing web server (which must allow cross-origin requests when applicable).
-The engine's injected `gameResources.fetchResource('assets/sprite.png')` service
-fetches files beneath that directory and reports HTTP/network failures. Game
-parsing and execution are not implemented yet. The editor file API is a separate
-interface and is not a directory URL for this service.
+The engine's injected `gameResources` service reads text and bytes beneath that
+directory and reports HTTP/network failures. Startup loads and validates
+`game.json` through `JsonResourceLoader`. The current game schema accepts an
+object and preserves its fields; game execution is not implemented yet. The
+editor file API is a separate interface and is not a directory URL for this service.
 
 Editor UI (`apps/editor-ui/config.json`):
 
@@ -156,6 +157,61 @@ override JSON settings, which override defaults:
 Ports must be integers between 1 and 65535. Vite CLI options such as `--port`
 continue to work. Environment overrides can be scoped to a terminal and its child
 processes, without changing config files.
+
+## Engine instances
+
+The editor includes Start and Stop controls and a Game folder field. Leave the
+field empty when the editor server's `workFolder` is the game directory, or enter
+a subfolder such as `basic` when the workspace contains multiple games. Start
+loads that folder's `game.json` through `/api/files`, with caching disabled, and
+mounts a preview after validation. Stop also works while loading. Each new start
+uses a fresh instance and reads the latest saved files; unsaved edits are not yet
+part of the resource source. Failures appear beside the controls and allow retrying.
+The preview currently confirms that the game definition loaded; gameplay rendering
+is not implemented yet.
+
+`@ancadeba/game-runtime` exports `createEngine`, `IEngine`, and `IEngineHost`.
+It has no browser or Node globals and can be imported by the editor without
+starting the standalone engine or fetching its `config.json`.
+
+```ts
+import { createEngine } from '@ancadeba/game-runtime'
+
+const engine = createEngine({
+  resourceSource,
+  logger,
+  host: {
+    mount(game) {
+      const root = previewElement.ownerDocument.createElement('section')
+      root.textContent = typeof game.title === 'string' ? game.title : 'Game preview'
+      previewElement.append(root)
+      return () => root.remove()
+    },
+  },
+})
+
+await engine.start()
+console.log(engine.state, engine.game)
+engine.stop()
+```
+
+Supply an `IResourceSource`, an `ILogger`, and a host whose synchronous `mount`
+returns a cleanup function. Each instance gets its own container and JSON loader.
+The host should release its mounted content, listeners, and other owned resources
+in that cleanup function. If mounting throws, the host is responsible for undoing
+any partial mount. Injected sources and loggers remain owned by the caller.
+
+Instances transition through `stopped`, `starting`, and `running`. Repeated starts
+share the current startup promise, and repeated stops are safe. A stopped instance
+can start again and reads fresh game data. Startup failures reject `start()` and
+return the instance to `stopped`.
+
+Stopping during startup resolves the cancelled `start()` without mounting. Late
+resource results cannot revive a stopped instance or overwrite a newer run.
+Underlying resource reads can finish in the background because `IResourceSource`
+does not yet expose transport cancellation. `stop()` clears the loaded game and
+runs host cleanup synchronously. The standalone page uses this lifecycle and
+stops its instance when Vite replaces its entry module.
 
 ## Workspace file API
 

@@ -6,7 +6,43 @@
     <title>Ancadeba Editor</title>
   </head>
   <body>
-    <main id="app"></main>
+    <main id="app">
+      <h1>Ancadeba Editor</h1>
+      <p class="intro">Preview a game from your editor workspace.</p>
+      <section class="preview-panel" aria-labelledby="preview-heading" data-state="stopped">
+        <div class="preview-heading">
+          <h2 id="preview-heading">Engine preview</h2>
+          <span id="preview-status" class="status" role="status">Stopped</span>
+        </div>
+        <form id="preview-form">
+          <label for="game-folder">Game folder</label>
+          <input
+            id="game-folder"
+            type="text"
+            placeholder="Workspace root"
+            aria-describedby="game-folder-help"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p id="game-folder-help" class="help">
+            Relative to the editor workspace. Leave empty to use its root.
+          </p>
+          <div class="preview-actions">
+            <button id="preview-start" type="submit">Start</button>
+            <button id="preview-stop" type="button" disabled>Stop</button>
+          </div>
+        </form>
+        <p id="preview-error" class="error" role="alert" hidden></p>
+        <div
+          id="preview-content"
+          class="preview-content"
+          aria-label="Game preview"
+          aria-busy="false"
+        >
+          <p id="preview-empty" class="preview-empty">Start the engine to preview the game.</p>
+        </div>
+      </section>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

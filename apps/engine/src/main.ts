@@ -1,6 +1,8 @@
 import './styling/main.css'
+import { createEngine, type IEngine } from '@ancadeba/game-runtime'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
+import { DomEngineHost } from './engineHost'
 
 const app = document.querySelector<HTMLElement>('#app')
 
@@ -9,21 +11,29 @@ if (!app) {
 }
 
 const applicationUrl = new URL(import.meta.env.BASE_URL, document.baseURI).href
-let container
+let engine: IEngine | undefined
+let disposed = false
+
+import.meta.hot?.dispose(() => {
+  disposed = true
+  engine?.stop()
+})
+
 try {
   const config = await loadRuntimeConfig(applicationUrl, fetch)
-  container = new ContainerBuilder(config, applicationUrl, fetch).build()
-  container.resolve('gameResources')
+  if (!disposed) {
+    const container = new ContainerBuilder(config, applicationUrl, fetch).build()
+    engine = createEngine({
+      resourceSource: container.resolve('gameResources'),
+      logger: container.resolve('logger'),
+      host: new DomEngineHost(app),
+    })
+    await engine.start()
+  }
 } catch (error) {
-  app.textContent = 'Unable to start the engine. Check config.json and the browser console.'
-  throw error
+  if (!disposed) {
+    app.textContent =
+      'Unable to start the engine. Check config.json, game.json, and the browser console.'
+    throw error
+  }
 }
-
-const heading = document.createElement('h1')
-heading.textContent = 'Ancadeba Engine'
-
-const description = document.createElement('p')
-description.textContent = 'The engine workspace is ready.'
-
-app.append(heading, description)
-container.resolve('logger').info('Engine', 'The engine workspace is ready.')

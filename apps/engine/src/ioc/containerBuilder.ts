@@ -1,4 +1,4 @@
-import { Container } from '@ancadeba/utilities'
+import { Container, JsonResourceLoader } from '@ancadeba/utilities'
 import { engineFactories, type EngineServices } from './factories/index.js'
 import type { EngineRuntimeConfig } from '@ancadeba/schemas'
 import { HttpGameResources } from '../gameResources.js'
@@ -19,6 +19,8 @@ export class ContainerBuilder implements IContainerBuilder {
     const container = new Container<EngineServices>({
       ...engineFactories,
       config: () => this.config,
+      jsonResourceLoader: (resolver) =>
+        new JsonResourceLoader(resolver.resolve('gameResources'), resolver.resolve('logger')),
       gameResources: (resolver) =>
         new HttpGameResources(
           resolver.resolve('config').gameUrl,
