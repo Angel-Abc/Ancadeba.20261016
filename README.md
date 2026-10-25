@@ -51,6 +51,7 @@ them usable across browser and server applications.
 ```sh
 pnpm dev           # Start all apps and shared package watchers
 pnpm build         # Build all packages and apps in dependency order
+pnpm export:game sample-games/basic  # Package a standalone game
 pnpm check         # Format, lint, and type-check all source and TS configs
 pnpm lint          # Oxlint checks (including types) and Oxfmt format checks
 pnpm lint:fix      # Fix lint issues and format files
@@ -170,6 +171,13 @@ part of the resource source. Failures appear beside the controls and allow retry
 The preview currently confirms that the game definition loaded; gameplay rendering
 is not implemented yet.
 
+Export uses the same Game folder field and downloads a ZIP containing the engine,
+`game.json`, and the game's assets. It works while a preview is running and uses
+the latest saved workspace files. The folder is locked while the export builds;
+Stop remains available for a running preview. A download link remains available
+afterward so the ZIP can be downloaded again. Unzip it and serve the complete
+contents over HTTP(S), just like a command-line export.
+
 `@ancadeba/game-runtime` exports `createEngine`, `IEngine`, and `IEngineHost`.
 It has no browser or Node globals and can be imported by the editor without
 starting the standalone engine or fetching its `config.json`.
@@ -225,6 +233,7 @@ the `path` query value. Host filesystem paths are not included in responses.
 | `GET /api/workspace?path=levels`       | List a directory                                                                   |
 | `GET /api/files?path=levels/demo.json` | Read file bytes as `application/octet-stream`                                      |
 | `PUT /api/files?path=levels/demo.json` | Create or replace a file using the raw request body; create missing parent folders |
+| `POST /api/exports`                    | Export the game selected by the JSON body `{ "path": "levels/demo" }` as a ZIP     |
 
 Listings return `{ "entries": [{ "name": "levels", "type": "directory" }] }`,
 with entry types `file` and `directory`. Links are omitted. File creation returns
@@ -238,6 +247,17 @@ conflicts, and `413` for oversized writes. Filesystem permission failures return
 Windows device names, and alternate data streams are rejected. No rename,
 delete, or concurrent-edit detection is provided. The editor UI does not yet
 include a file browser or editor.
+
+Export requests must use `Content-Type: application/json`. An empty `path` selects
+the workspace root. Sources use the same path and link restrictions as the file
+API; clients cannot supply filesystem output paths. The server runs the existing
+export command in a child process and streams a ZIP with the standalone game's
+files at its root. Temporary build files are removed after the download or a
+failure, including disconnected clients. Only one export runs at a time; another
+request receives HTTP 409. Invalid game builds return HTTP 422 with a retryable
+error. Editor exports require the installed development workspace, shared package
+builds, and the `tooling/export-game.ts` source, including when starting the compiled
+editor server. The exported game itself has no such dependencies.
 
 Example using PowerShell:
 
@@ -263,6 +283,54 @@ deployed file to switch games without rebuilding JavaScript; configure the stati
 host to avoid caching `config.json`. Source settings such as ports are not exposed
 to the browser. Vite preview serves the emitted config file. Both web apps still
 require their source app config files when invoking Vite tooling.
+
+## Standalone game exports
+
+Run from the repository root:
+
+```sh
+pnpm export:game sample-games/basic
+pnpm export:game "path/to/my game" --out "dist/my-game"
+```
+
+The first command writes to `dist/games/basic`. Use `--out` to choose another
+destination. Paths are relative to the current working directory. Shared
+packages are compiled and the engine is typechecked first, then the exporter
+validates the saved `game.json` and builds the engine with Vite+. Export does not
+require the engine's local `config.json`, the editor server, or any running
+development instance.
+
+```text
+dist/games/basic/
+  index.html
+  config.json           # gameUrl: ./game/
+  assets/               # Compiled engine JavaScript and CSS
+  game/
+    game.json
+    ...                 # Game assets, preserving their paths and bytes
+```
+
+The exporter copies all regular game files, including unused assets. It excludes
+source-control directories (`.git`, `.hg`, `.svn`), `node_modules`, `.env` and
+`.env.*` files, and `.DS_Store`/`Thumbs.db`. Links and special files are rejected.
+The current schema validates that `game.json` is an object; it does not yet
+validate asset references or execute gameplay.
+
+Exports are assembled in a temporary directory and published only after a
+successful build. The destination must be new and must not overlap the source;
+existing files and previous exports are not overwritten. Choose a new `--out`
+directory for another export. Export never changes the source game or app configs.
+
+Upload the complete output folder to a static HTTP(S) host. Relative engine and
+game URLs allow moving it to a different directory or hosting it under a nested
+path. Node.js, pnpm, the repository, and the editor API are not needed by the
+deployed game. Opening `index.html` with `file://` is not supported.
+
+For a local check, serve the export with a static server, for example:
+
+```sh
+pnpm exec vp preview --outDir dist/games/basic --port 5273
+```
 
 ## Separate development instances
 

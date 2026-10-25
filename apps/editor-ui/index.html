@@ -30,8 +30,12 @@
           <div class="preview-actions">
             <button id="preview-start" type="submit">Start</button>
             <button id="preview-stop" type="button" disabled>Stop</button>
+            <button id="game-export" type="button">Export</button>
           </div>
         </form>
+        <p id="export-status" class="help" role="status"></p>
+        <p id="export-error" class="error" role="alert" hidden></p>
+        <a id="export-download" class="export-download" hidden>Download ZIP again</a>
         <p id="preview-error" class="error" role="alert" hidden></p>
         <div
           id="preview-content"

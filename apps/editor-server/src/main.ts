@@ -1,10 +1,14 @@
 import { createEditorServer } from './server.js'
 import { loadEditorServerConfig } from './config.js'
 import { FileWorkspace } from './workspace.js'
+import { WorkspaceGameExporter } from './gameExports.js'
+import { buildGame } from './buildGame.js'
+import { writeGameArchive } from './gameArchive.js'
 
 const config = await loadEditorServerConfig()
 const workspace = await FileWorkspace.open(config.workFolder)
-const server = createEditorServer(config, workspace)
+const exports = new WorkspaceGameExporter(workspace, buildGame, writeGameArchive)
+const server = createEditorServer(config, workspace, exports)
 
 server.on('error', (error) => {
   console.error(error)

@@ -133,3 +133,7 @@ button:focus-visible {
 .game-preview h3 {
   margin-top: 0;
 }
+
+.export-download {
+  color: #93c5fd;
+}

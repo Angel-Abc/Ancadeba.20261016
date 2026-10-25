@@ -141,6 +141,14 @@ export class FileWorkspace implements WorkspaceService {
     return readFile(target)
   }
 
+  async resolveDirectory(path: string): Promise<string> {
+    const target = await this.locate(path, true)
+    if (!(await this.inspect(target)).isDirectory()) {
+      throw new WorkspaceError(409, 'Expected a game directory')
+    }
+    return target
+  }
+
   async write(path: string, contents: Uint8Array): Promise<boolean> {
     const target = await this.locate(path, false, true)
     let exists = false

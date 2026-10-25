@@ -12,6 +12,14 @@ function validatePath(path: string, allowRoot = false): void {
   }
 }
 
+export function normalizeGameFolder(folder: string): string {
+  const trimmed = folder.trim()
+  if (trimmed.startsWith('/')) validatePath(trimmed)
+  const path = trimmed.replace(/\/+$/, '')
+  validatePath(path, true)
+  return path
+}
+
 export class EditorWorkspaceResources implements IResourceSource {
   private readonly folder: string
 
@@ -20,10 +28,7 @@ export class EditorWorkspaceResources implements IResourceSource {
     private readonly fetcher: typeof fetch,
     private readonly endpoint = '/api/files',
   ) {
-    const trimmed = folder.trim()
-    if (trimmed.startsWith('/')) validatePath(trimmed)
-    this.folder = trimmed.replace(/\/+$/, '')
-    validatePath(this.folder, true)
+    this.folder = normalizeGameFolder(folder)
   }
 
   async readText(path: string): Promise<string> {

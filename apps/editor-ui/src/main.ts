@@ -1,9 +1,10 @@
 import './style.css'
-import { createEngine } from '@ancadeba/game-runtime'
+import { createEngine, type EngineState } from '@ancadeba/game-runtime'
 import { ConsoleLogger, type IConsole } from '@ancadeba/utilities'
 import { EditorWorkspaceResources } from './workspaceResources'
 import { EditorPreviewController } from './previewController'
 import { EditorPreviewHost } from './previewHost'
+import { EditorExportController } from './exportController'
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector)
@@ -20,6 +21,54 @@ const status = element<HTMLElement>('#preview-status')
 const error = element<HTMLElement>('#preview-error')
 const content = element<HTMLElement>('#preview-content')
 const empty = element<HTMLElement>('#preview-empty')
+const exportButton = element<HTMLButtonElement>('#game-export')
+const exportStatus = element<HTMLElement>('#export-status')
+const exportError = element<HTMLElement>('#export-error')
+const exportDownload = element<HTMLAnchorElement>('#export-download')
+
+let previewState: EngineState = 'stopped'
+let exporting = false
+let downloadUrl: string | undefined
+
+function updateControls(): void {
+  start.disabled = previewState !== 'stopped' || exporting
+  stop.disabled = previewState === 'stopped'
+  folder.disabled = previewState !== 'stopped' || exporting
+  exportButton.disabled = exporting || previewState === 'starting'
+}
+
+function clearDownload(): void {
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+  downloadUrl = undefined
+  exportDownload.removeAttribute('href')
+  exportDownload.hidden = true
+}
+
+const exportController = new EditorExportController(
+  fetch,
+  (archive, fileName) => {
+    clearDownload()
+    downloadUrl = URL.createObjectURL(archive)
+    exportDownload.href = downloadUrl
+    exportDownload.download = fileName
+    exportDownload.hidden = false
+    exportDownload.click()
+  },
+  (state, message) => {
+    exporting = state === 'exporting'
+    exportButton.textContent = exporting ? 'Exporting…' : 'Export'
+    exportStatus.textContent = exporting
+      ? 'Building the game from its saved workspace files…'
+      : state === 'ready'
+        ? `Export ready: ${message ?? 'game.zip'}`
+        : ''
+    exportError.textContent =
+      state === 'error' ? `Unable to export game: ${message ?? 'Export failed'}` : ''
+    exportError.hidden = state !== 'error'
+    if (state === 'exporting' || state === 'error') clearDownload()
+    updateControls()
+  },
+)
 
 const consoleAdapter: IConsole = {
   debug: (message, ...args) => {
@@ -53,11 +102,10 @@ const controller = new EditorPreviewController(
       logger,
     }),
   (state, message) => {
+    previewState = state
     panel.dataset.state = state
     status.textContent = { stopped: 'Stopped', starting: 'Starting…', running: 'Running' }[state]
-    start.disabled = state !== 'stopped'
-    stop.disabled = state === 'stopped'
-    folder.disabled = state !== 'stopped'
+    updateControls()
     content.setAttribute('aria-busy', String(state === 'starting'))
     empty.hidden = state === 'running'
     empty.textContent =
@@ -73,12 +121,19 @@ function onStart(event: SubmitEvent): void {
 }
 
 const onStop = () => controller.stop()
+const onExport = () => {
+  void exportController.export(folder.value)
+}
 form.addEventListener('submit', onStart)
 stop.addEventListener('click', onStop)
+exportButton.addEventListener('click', onExport)
 controller.stop()
 
 import.meta.hot?.dispose(() => {
   form.removeEventListener('submit', onStart)
   stop.removeEventListener('click', onStop)
+  exportButton.removeEventListener('click', onExport)
+  exportController.dispose()
+  clearDownload()
   controller.dispose()
 })

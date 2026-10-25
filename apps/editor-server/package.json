@@ -12,9 +12,11 @@
   "dependencies": {
     "@ancadeba/game-runtime": "workspace:*",
     "@ancadeba/schemas": "workspace:*",
-    "@ancadeba/utilities": "workspace:*"
+    "@ancadeba/utilities": "workspace:*",
+    "yazl": "3.3.1"
   },
   "devDependencies": {
+    "@types/yazl": "3.3.1",
     "tsx": "^4.23.15"
   }
 }
