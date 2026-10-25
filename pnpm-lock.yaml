@@ -91,6 +91,10 @@ importers:
       '@ancadeba/utilities':
         specifier: workspace:*
         version: link:../../packages/utilities
+    devDependencies:
+      sirv:
+        specifier: 3.0.2
+        version: 3.0.2
 
   packages/game-runtime:
     dependencies:

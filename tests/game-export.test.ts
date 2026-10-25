@@ -65,7 +65,9 @@ describe('standalone game export', () => {
       const address = server.httpServer.address() as AddressInfo
       const applicationUrl = `http://127.0.0.1:${address.port}/nested/game/`
       const html = await (await fetch(applicationUrl)).text()
-      const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1]!)
+      const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+        .map((match) => match[1]!)
+        .filter((path) => !path.startsWith('data:'))
       expect(assets.some((path) => path.endsWith('.js'))).toBe(true)
       expect(assets.some((path) => path.endsWith('.css'))).toBe(true)
       for (const path of assets) {

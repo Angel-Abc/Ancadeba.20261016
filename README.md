@@ -102,7 +102,7 @@ Engine (`apps/engine/config.json`):
 
 ```json
 {
-  "gameUrl": "/games/example/",
+  "gameUrl": "/sample-games/basic/",
   "port": 5173
 }
 ```
@@ -110,9 +110,15 @@ Engine (`apps/engine/config.json`):
 `gameUrl` is required and refers to a directory of browser-accessible game files.
 It accepts an HTTP(S) URL or a relative web path. Relative paths resolve against
 the engine application's base URL, and a missing trailing slash is added. For
-example, `./game` under `/engine/` resolves to `/engine/game/`. Put static game
-files in `apps/engine/public/games/example/` to use the example URL, or point to
-an existing web server (which must allow cross-origin requests when applicable).
+example, `./game` under `/engine/` resolves to `/engine/game/`. During `pnpm dev`,
+the engine serves the repository's `sample-games` folder at `/sample-games/`, so
+the example configuration loads `sample-games/basic/game.json` directly. The
+route also supports a nested Vite base, returns real 404 responses for missing
+files, and reads saved changes without caching. Links, traversal paths, local
+environment files, source-control metadata, and `node_modules` are inaccessible.
+This route is only for development; use `export:game` to package a standalone
+game. You can also put static files under `apps/engine/public/` and configure
+their URL, or point to an existing HTTP(S) server with suitable cross-origin access.
 The engine's injected `gameResources` service reads text and bytes beneath that
 directory and reports HTTP/network failures. Startup loads and validates
 `game.json` through `JsonResourceLoader`. The current game schema accepts an

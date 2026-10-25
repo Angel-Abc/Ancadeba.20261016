@@ -14,5 +14,8 @@
     "@ancadeba/schemas": "workspace:*",
     "@ancadeba/ui-components": "workspace:*",
     "@ancadeba/utilities": "workspace:*"
+  },
+  "devDependencies": {
+    "sirv": "3.0.2"
   }
 }
