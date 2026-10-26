@@ -1,10 +1,7 @@
 import './style.css'
-import { createEngine, type EngineState } from '@ancadeba/game-runtime'
-import { ConsoleLogger, type IConsole } from '@ancadeba/utilities'
-import { EditorWorkspaceResources } from './workspaceResources'
-import { EditorPreviewController } from './previewController'
+import type { EngineState } from '@ancadeba/game-runtime'
 import { EditorPreviewHost } from './previewHost'
-import { EditorExportController } from './exportController'
+import { ContainerBuilder } from './ioc/containerBuilder'
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector)
@@ -44,9 +41,10 @@ function clearDownload(): void {
   exportDownload.hidden = true
 }
 
-const exportController = new EditorExportController(
-  fetch,
-  (archive, fileName) => {
+const container = new ContainerBuilder({
+  fetcher: fetch,
+  host: new EditorPreviewHost(content),
+  download: (archive, fileName) => {
     clearDownload()
     downloadUrl = URL.createObjectURL(archive)
     exportDownload.href = downloadUrl
@@ -54,7 +52,7 @@ const exportController = new EditorExportController(
     exportDownload.hidden = false
     exportDownload.click()
   },
-  (state, message) => {
+  onExportStateChange: (state, message) => {
     exporting = state === 'exporting'
     exportButton.textContent = exporting ? 'Exporting…' : 'Export'
     exportStatus.textContent = exporting
@@ -68,40 +66,7 @@ const exportController = new EditorExportController(
     if (state === 'exporting' || state === 'error') clearDownload()
     updateControls()
   },
-)
-
-const consoleAdapter: IConsole = {
-  debug: (message, ...args) => {
-    console.debug(message, ...args)
-    return message
-  },
-  info: (message, ...args) => {
-    console.info(message, ...args)
-    return message
-  },
-  warn: (message, ...args) => {
-    console.warn(message, ...args)
-    return message
-  },
-  error: (message, ...args) => {
-    console.error(message, ...args)
-    return message
-  },
-  log: (message, ...args) => {
-    console.log(message, ...args)
-    return message
-  },
-}
-const logger = new ConsoleLogger(consoleAdapter)
-const host = new EditorPreviewHost(content)
-const controller = new EditorPreviewController(
-  (gameFolder) =>
-    createEngine({
-      resourceSource: new EditorWorkspaceResources(gameFolder, fetch),
-      host,
-      logger,
-    }),
-  (state, message) => {
+  onPreviewStateChange: (state, message) => {
     previewState = state
     panel.dataset.state = state
     status.textContent = { stopped: 'Stopped', starting: 'Starting…', running: 'Running' }[state]
@@ -113,7 +78,9 @@ const controller = new EditorPreviewController(
     error.textContent = message ? `Unable to start preview: ${message}` : ''
     error.hidden = !message
   },
-)
+}).build()
+const controller = container.resolve('previewController')
+const exportController = container.resolve('exportController')
 
 function onStart(event: SubmitEvent): void {
   event.preventDefault()

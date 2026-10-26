@@ -3,8 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { preview } from 'vite-plus'
-import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test'
-import { gameSchema } from '@ancadeba/schemas'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vite-plus/test'
 import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { exportGame } from '../tooling/game-export.js'
@@ -77,10 +76,13 @@ describe('standalone game export', () => {
       }
 
       const config = await loadRuntimeConfig(applicationUrl, fetch)
-      const container = new ContainerBuilder(config, applicationUrl, fetch).build()
-      await expect(
-        container.resolve('jsonResourceLoader').load('game.json', gameSchema),
-      ).resolves.toEqual(game)
+      const host = { mount: vi.fn(() => () => {}) }
+      const container = new ContainerBuilder(config, applicationUrl, fetch, host).build()
+      const engine = container.resolve('engine')
+      await engine.start()
+      expect(engine.game).toEqual(game)
+      expect(host.mount).toHaveBeenCalledExactlyOnceWith(game)
+      engine.stop()
       await expect(
         container.resolve('gameResources').readBytes('assets/my sprite.bin'),
       ).resolves.toEqual(bytes)

@@ -1,5 +1,5 @@
-import { createEngine, type IEngineHost } from '@ancadeba/game-runtime'
-import type { ILogger } from '@ancadeba/utilities'
+import { Engine, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
+import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
   EditorPreviewController,
@@ -18,8 +18,14 @@ function createPreview() {
     error: () => '',
   }
   const onStateChange = vi.fn<PreviewStateListener>()
-  const createInstance = vi.fn((folder: string) =>
-    createEngine({ resourceSource: new EditorWorkspaceResources(folder, fetcher), host, logger }),
+  const createInstance = vi.fn(
+    (folder: string) =>
+      new Engine(
+        new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+        host,
+        logger,
+        () => new MessageBus<EngineMessages>(),
+      ),
   )
   const controller = new EditorPreviewController(createInstance, onStateChange)
   return { controller, fetcher, host, cleanup, onStateChange, createInstance }

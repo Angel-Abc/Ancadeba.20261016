@@ -5,6 +5,8 @@ import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 
 describe('engine game resources', () => {
+  const host = { mount: () => () => {} }
+
   it.each([
     ['/games/demo', 'https://engine.example/app/', 'https://engine.example/games/demo/data.json'],
     ['./game/', 'https://engine.example/app/', 'https://engine.example/app/game/data.json'],
@@ -116,7 +118,7 @@ describe('engine game resources', () => {
   it('injects configuration and resource access into isolated engine containers', async () => {
     const config = { gameUrl: '/game' }
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('ready'))
-    const container = new ContainerBuilder(config, 'https://engine.example/', fetcher).build()
+    const container = new ContainerBuilder(config, 'https://engine.example/', fetcher, host).build()
     expect(container.resolve('config')).toBe(config)
     expect(container.resolve('gameResources')).toBe(container.resolve('gameResources'))
     await expect(container.resolve('gameResources').fetchResource('a.txt')).resolves.toBeInstanceOf(
@@ -136,6 +138,7 @@ describe('engine game resources', () => {
       { gameUrl },
       'https://engine.example/app/',
       fetcher,
+      host,
     ).build()
 
     await expect(
@@ -154,6 +157,7 @@ describe('engine game resources', () => {
       { gameUrl: '/game/' },
       'https://engine.example/',
       fetcher,
+      host,
     ).build()
 
     await expect(
@@ -167,11 +171,91 @@ describe('engine game resources', () => {
       { gameUrl: '/game/' },
       'https://engine.example/',
       fetcher,
+      host,
     ).build()
 
     await expect(
       container.resolve('jsonResourceLoader').load('../secret.json', gameSchema),
     ).rejects.toThrow('Game resource paths must stay within the game directory')
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('resolves the engine with the registered loader, host, logger, and session bus factory', async () => {
+    const game = { title: 'Container game' }
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(JSON.stringify(game)))
+    const cleanup = vi.fn<() => void>()
+    const host = { mount: vi.fn().mockReturnValue(cleanup) }
+    const container = new ContainerBuilder(
+      { gameUrl: '/game/' },
+      'https://engine.example/',
+      fetcher,
+      host,
+    ).build()
+    const loader = container.resolve('jsonResourceLoader')
+    const load = vi.spyOn(loader, 'load')
+    const info = vi.spyOn(container.resolve('logger'), 'info')
+    const engine = container.resolve('engine')
+
+    expect(container.resolve('engine')).toBe(engine)
+    expect(container.resolve('host')).toBe(host)
+    expect(engine.messages).toBeUndefined()
+    expect(fetcher).not.toHaveBeenCalled()
+
+    const starting = engine.start()
+    const firstBus = engine.messages
+    const started = vi.fn()
+    firstBus?.subscribe('engine.started', started)
+    await starting
+
+    expect(load).toHaveBeenCalledExactlyOnceWith('game.json', gameSchema)
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(game)
+    expect(info).toHaveBeenCalledWith('Engine', 'The engine workspace is ready.')
+    expect(started).not.toHaveBeenCalled()
+    engine.flushMessages()
+    expect(started).toHaveBeenCalledExactlyOnceWith({ game })
+
+    engine.stop()
+    await engine.start()
+    expect(engine.messages).not.toBe(firstBus)
+    expect(load).toHaveBeenCalledTimes(2)
+    engine.flushMessages()
+    expect(started).toHaveBeenCalledTimes(1)
+    engine.stop()
+    expect(cleanup).toHaveBeenCalledTimes(2)
+
+    const createMessageBus = container.resolve('createMessageBus')
+    expect(createMessageBus()).not.toBe(createMessageBus())
+  })
+
+  it('keeps registered engines and their session state isolated between containers', async () => {
+    const firstHost = { mount: vi.fn(() => () => {}) }
+    const secondHost = { mount: vi.fn(() => () => {}) }
+    const first = new ContainerBuilder(
+      { gameUrl: '/first/' },
+      'https://engine.example/',
+      vi.fn<typeof fetch>().mockResolvedValue(new Response('{"title":"First"}')),
+      firstHost,
+    ).build()
+    const second = new ContainerBuilder(
+      { gameUrl: '/second/' },
+      'https://engine.example/',
+      vi.fn<typeof fetch>().mockResolvedValue(new Response('{"title":"Second"}')),
+      secondHost,
+    ).build()
+    const firstEngine = first.resolve('engine')
+    const secondEngine = second.resolve('engine')
+    await Promise.all([firstEngine.start(), secondEngine.start()])
+    firstEngine.stop()
+
+    expect(firstEngine).not.toBe(secondEngine)
+    expect(first.resolve('jsonResourceLoader')).not.toBe(second.resolve('jsonResourceLoader'))
+    expect(firstEngine.messages).not.toBe(secondEngine.messages)
+    expect(firstEngine.state).toBe('stopped')
+    expect(secondEngine.state).toBe('running')
+    expect(firstHost.mount).toHaveBeenCalledExactlyOnceWith({ title: 'First' })
+    expect(secondHost.mount).toHaveBeenCalledExactlyOnceWith({ title: 'Second' })
+    secondEngine.stop()
   })
 })

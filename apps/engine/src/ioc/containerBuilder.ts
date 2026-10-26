@@ -1,4 +1,5 @@
-import { Container, JsonResourceLoader } from '@ancadeba/utilities'
+import { Engine, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
+import { Container, JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
 import { engineFactories, type EngineServices } from './factories/index.js'
 import type { EngineRuntimeConfig } from '@ancadeba/schemas'
 import { HttpGameResources } from '../gameResources.js'
@@ -13,12 +14,22 @@ export class ContainerBuilder implements IContainerBuilder {
     private readonly config: EngineRuntimeConfig,
     private readonly applicationUrl: string,
     private readonly fetcher: typeof fetch,
+    private readonly host: IEngineHost,
   ) {}
 
   build(): Container<EngineServices> {
     const container = new Container<EngineServices>({
       ...engineFactories,
       config: () => this.config,
+      host: () => this.host,
+      createMessageBus: () => () => new MessageBus<EngineMessages>(),
+      engine: (resolver) =>
+        new Engine(
+          resolver.resolve('jsonResourceLoader'),
+          resolver.resolve('host'),
+          resolver.resolve('logger'),
+          resolver.resolve('createMessageBus'),
+        ),
       jsonResourceLoader: (resolver) =>
         new JsonResourceLoader(resolver.resolve('gameResources'), resolver.resolve('logger')),
       gameResources: (resolver) =>

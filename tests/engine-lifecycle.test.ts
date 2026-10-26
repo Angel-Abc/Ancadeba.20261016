@@ -1,11 +1,11 @@
+import { Engine, type EngineMessages, type IEngine, type IEngineHost } from '@ancadeba/game-runtime'
 import {
-  createEngine,
-  type EngineMessages,
-  type EngineOptions,
-  type IEngine,
-  type IEngineHost,
-} from '@ancadeba/game-runtime'
-import { MessageBus, type ILogger, type IResourceSource } from '@ancadeba/utilities'
+  JsonResourceLoader,
+  MessageBus,
+  type ILogger,
+  type IMessageBus,
+  type IResourceSource,
+} from '@ancadeba/utilities'
 import { describe, expect, expectTypeOf, it, vi } from 'vite-plus/test'
 
 function deferred<T>() {
@@ -18,7 +18,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function createInstance(options: Pick<EngineOptions, 'createMessageBus'> = {}) {
+function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMessages> } = {}) {
   const resourceSource = {
     readText: vi.fn<IResourceSource['readText']>().mockResolvedValue('{"title":"Demo"}'),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
@@ -33,7 +33,12 @@ function createInstance(options: Pick<EngineOptions, 'createMessageBus'> = {}) {
     warn: vi.fn<ILogger['warn']>(() => ''),
     error: vi.fn<ILogger['error']>(() => ''),
   } satisfies ILogger
-  const engine = createEngine({ resourceSource, host, logger, ...options })
+  const engine = new Engine(
+    new JsonResourceLoader(resourceSource, logger),
+    host,
+    logger,
+    options.createMessageBus ?? (() => new MessageBus<EngineMessages>()),
+  )
   return { engine, resourceSource, host, cleanup, logger }
 }
 

@@ -1,5 +1,5 @@
 import './styling/main.css'
-import { createEngine, type IEngine } from '@ancadeba/game-runtime'
+import type { IEngine } from '@ancadeba/game-runtime'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
@@ -22,12 +22,13 @@ import.meta.hot?.dispose(() => {
 try {
   const config = await loadRuntimeConfig(applicationUrl, fetch)
   if (!disposed) {
-    const container = new ContainerBuilder(config, applicationUrl, fetch).build()
-    engine = createEngine({
-      resourceSource: container.resolve('gameResources'),
-      logger: container.resolve('logger'),
-      host: new DomEngineHost(app),
-    })
+    const container = new ContainerBuilder(
+      config,
+      applicationUrl,
+      fetch,
+      new DomEngineHost(app),
+    ).build()
+    engine = container.resolve('engine')
     await engine.start()
   }
 } catch (error) {

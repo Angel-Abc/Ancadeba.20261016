@@ -2,13 +2,11 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { request } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createEngine } from '@ancadeba/game-runtime'
-import type { ILogger } from '@ancadeba/utilities'
 import { build, createServer, type ViteDevServer } from 'vite-plus'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vite-plus/test'
 import { gameFilesPlugin } from '../apps/engine/tooling/gameFiles.js'
 import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
-import { HttpGameResources } from '../apps/engine/src/gameResources.js'
+import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 
 describe('engine development game files', () => {
@@ -68,12 +66,8 @@ describe('engine development game files', () => {
     const applicationUrl = `${origin}/nested/`
     const config = await loadRuntimeConfig(applicationUrl, fetch)
     const mount = vi.fn(() => () => {})
-    const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
-    const engine = createEngine({
-      resourceSource: new HttpGameResources(config.gameUrl, applicationUrl, fetch),
-      host: { mount },
-      logger,
-    })
+    const container = new ContainerBuilder(config, applicationUrl, fetch, { mount }).build()
+    const engine = container.resolve('engine')
     await engine.start()
     expect(engine.state).toBe('running')
     expect(mount).toHaveBeenCalledExactlyOnceWith(game)

@@ -177,6 +177,13 @@ part of the resource source. Failures appear beside the controls and allow retry
 The preview currently confirms that the game definition loaded; gameplay rendering
 is not implemented yet.
 
+The editor UI composes its services in `apps/editor-ui/src/ioc/containerBuilder.ts`.
+The `factories/` folder registers console logging, preview engine creation, and
+the preview/export controllers. The entry point supplies the preview host, fetch
+function, download callback, and UI state callbacks, then resolves the controllers
+from one container. Each preview start creates a fresh engine for the selected
+game folder; controller disposal remains owned by the entry point.
+
 Export uses the same Game folder field and downloads a ZIP containing the engine,
 `game.json`, and the game's assets. It works while a preview is running and uses
 the latest saved workspace files. The folder is locked while the export builds;
@@ -184,17 +191,17 @@ Stop remains available for a running preview. A download link remains available
 afterward so the ZIP can be downloaded again. Unzip it and serve the complete
 contents over HTTP(S), just like a command-line export.
 
-`@ancadeba/game-runtime` exports `createEngine`, `IEngine`, and `IEngineHost`.
+`@ancadeba/game-runtime` exports `Engine`, `IEngine`, `IEngineHost`, and `EngineMessages`.
 It has no browser or Node globals and can be imported by the editor without
 starting the standalone engine or fetching its `config.json`.
 
 ```ts
-import { createEngine } from '@ancadeba/game-runtime'
+import { Engine, type EngineMessages } from '@ancadeba/game-runtime'
+import { JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
 
-const engine = createEngine({
-  resourceSource,
-  logger,
-  host: {
+const engine = new Engine(
+  new JsonResourceLoader(resourceSource, logger),
+  {
     mount(game) {
       const root = previewElement.ownerDocument.createElement('section')
       root.textContent = typeof game.title === 'string' ? game.title : 'Game preview'
@@ -202,15 +209,22 @@ const engine = createEngine({
       return () => root.remove()
     },
   },
-})
+  logger,
+  () => new MessageBus<EngineMessages>(),
+)
 
 await engine.start()
 console.log(engine.state, engine.game)
 engine.stop()
 ```
 
-Supply an `IResourceSource`, an `ILogger`, and a host whose synchronous `mount`
-returns a cleanup function. Each instance gets its own container and JSON loader.
+Construct `Engine` with an `IJsonResourceLoader`, a host whose synchronous `mount`
+returns a cleanup function, an `ILogger`, and a factory that creates a fresh
+message bus for each session. The standalone application uses
+`ContainerBuilder` to register the host, resources, JSON loader, message-bus
+factory, and engine in one container, then resolves `engine` from that container.
+The editor's IoC preview factory constructs an engine and JSON loader for each
+selected game folder, using the registered logger, host, and message-bus factory.
 The host should release its mounted content, listeners, and other owned resources
 in that cleanup function. If mounting throws, the host is responsible for undoing
 any partial mount. Injected sources and loggers remain owned by the caller.
@@ -271,9 +285,8 @@ transfer to the new session. Retained references to an old bus can still flush
 that session independently. Repeated starts while active and repeated stops do
 not create extra buses or events. Flushing before the first start does nothing.
 
-The composition root supplies the bus factory through dependency injection.
-`createEngine` uses a fresh `MessageBus<EngineMessages>` by default; optionally
-provide `EngineOptions.createMessageBus`, returning a fresh bus on every call.
+The application IoC registrations supply the bus factory through dependency
+injection, returning a fresh `MessageBus<EngineMessages>` on every call.
 Engine lifecycle topic contracts live in game-runtime; utilities remain generic.
 
 ## Queued messaging
