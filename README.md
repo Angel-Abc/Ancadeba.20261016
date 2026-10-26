@@ -227,6 +227,97 @@ does not yet expose transport cancellation. `stop()` clears the loaded game and
 runs host cleanup synchronously. The standalone page uses this lifecycle and
 stops its instance when Vite replaces its entry module.
 
+### Lifecycle messages
+
+Each `start()` that creates a session also creates a fresh
+`IMessageBus<EngineMessages>`, available immediately as `engine.messages`.
+It is `undefined` before the first start. Subscribe after calling `start()`;
+delivery stays queued until `engine.flushMessages()` or the bus's `flush()` is
+called. Neither starting nor stopping flushes automatically.
+
+```ts
+const starting = engine.start()
+const messages = engine.messages
+messages?.subscribe('engine.started', ({ game }) => {
+  console.log('Started', game)
+})
+messages?.subscribe('engine.failed', ({ error }) => {
+  console.error('Engine failed', error)
+})
+
+await starting
+engine.flushMessages()
+engine.stop()
+engine.flushMessages()
+```
+
+The exported `EngineMessages` interface defines these topics:
+
+| Topic             | Payload              | Queued when                                       |
+| ----------------- | -------------------- | ------------------------------------------------- |
+| `engine.starting` | `undefined`          | A new session is created                          |
+| `engine.started`  | `{ game: Game }`     | The game is loaded and mounted successfully       |
+| `engine.failed`   | `{ error: unknown }` | Startup or host cleanup throws                    |
+| `engine.stopped`  | `undefined`          | The session stops, including cancellation/failure |
+
+Failures queue `engine.failed` before `engine.stopped` and keep the existing
+promise rejection or synchronous exception behavior. Cancellation queues stopped
+without failed or started. Subscriber exceptions surface only from an explicit
+flush, without becoming engine failure events.
+
+After stop, `engine.messages` retains the stopped session's bus so final events
+can be flushed. A restart replaces it; subscriptions and queued messages do not
+transfer to the new session. Retained references to an old bus can still flush
+that session independently. Repeated starts while active and repeated stops do
+not create extra buses or events. Flushing before the first start does nothing.
+
+The composition root supplies the bus factory through dependency injection.
+`createEngine` uses a fresh `MessageBus<EngineMessages>` by default; optionally
+provide `EngineOptions.createMessageBus`, returning a fresh bus on every call.
+Engine lifecycle topic contracts live in game-runtime; utilities remain generic.
+
+## Queued messaging
+
+`@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.
+Define a topic-to-payload interface and inject the bus into the systems that need
+it. Create a bus for each engine session so sessions do not share messages or
+subscriptions. The utility has no browser or Node dependencies.
+
+```ts
+import { MessageBus } from '@ancadeba/utilities'
+
+interface GameplayMessages {
+  'entity.destroyed': { entityId: string }
+  'scene.loaded': { sceneId: string }
+}
+
+const messages = new MessageBus<GameplayMessages>()
+const unsubscribe = messages.subscribe('entity.destroyed', ({ entityId }) => {
+  scoreSystem.awardFor(entityId)
+})
+
+messages.publish('entity.destroyed', { entityId: 'enemy-42' })
+messages.flush() // Call explicitly at the chosen point in an engine update.
+unsubscribe() // Release the subscription when its owning system stops.
+```
+
+`publish` queues the payload by reference; treat it as immutable after publishing.
+`flush` synchronously delivers only the messages queued when that flush began, in
+publish order. Messages published by handlers wait for the next flush, and nested
+flush calls do nothing. The current engine has no update loop yet, so delivery is
+not scheduled automatically.
+
+Subscribers run in registration order and are selected at delivery time. New
+subscriptions added by a handler start with the next message. Unsubscribing takes
+effect immediately, including for messages already queued; the returned cleanup
+function is safe to call repeatedly. Registering the same handler twice creates
+two independent subscriptions. Messages flushed without subscribers are discarded.
+
+Handlers must be synchronous. If they throw, the remaining handlers and messages
+still run, then `flush` throws an `AggregateError` containing the failures. Failed
+deliveries are not retried, and messages queued during that flush remain available
+for the next call.
+
 ## Workspace file API
 
 The editor server exposes these endpoints directly and through the editor UI's

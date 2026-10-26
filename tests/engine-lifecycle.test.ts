@@ -1,6 +1,12 @@
-import { createEngine, type IEngineHost } from '@ancadeba/game-runtime'
-import type { ILogger, IResourceSource } from '@ancadeba/utilities'
-import { describe, expect, it, vi } from 'vite-plus/test'
+import {
+  createEngine,
+  type EngineMessages,
+  type EngineOptions,
+  type IEngine,
+  type IEngineHost,
+} from '@ancadeba/game-runtime'
+import { MessageBus, type ILogger, type IResourceSource } from '@ancadeba/utilities'
+import { describe, expect, expectTypeOf, it, vi } from 'vite-plus/test'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -12,7 +18,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function createInstance() {
+function createInstance(options: Pick<EngineOptions, 'createMessageBus'> = {}) {
   const resourceSource = {
     readText: vi.fn<IResourceSource['readText']>().mockResolvedValue('{"title":"Demo"}'),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
@@ -27,7 +33,7 @@ function createInstance() {
     warn: vi.fn<ILogger['warn']>(() => ''),
     error: vi.fn<ILogger['error']>(() => ''),
   } satisfies ILogger
-  const engine = createEngine({ resourceSource, host, logger })
+  const engine = createEngine({ resourceSource, host, logger, ...options })
   return { engine, resourceSource, host, cleanup, logger }
 }
 
@@ -238,5 +244,279 @@ describe('engine lifecycle', () => {
     expect(second.engine.game).toEqual({ title: 'Second' })
     expect(second.cleanup).not.toHaveBeenCalled()
     expect(second.host.mount).toHaveBeenCalledExactlyOnceWith({ title: 'Second' })
+  })
+})
+
+function observeLifecycle(engine: IEngine) {
+  const messages = engine.messages
+  if (!messages) throw new Error('Start a session before observing lifecycle events')
+
+  const topics: (keyof EngineMessages)[] = []
+  const started = vi.fn<(payload: EngineMessages['engine.started']) => void>()
+  const failed = vi.fn<(payload: EngineMessages['engine.failed']) => void>()
+  messages.subscribe('engine.starting', (payload) => {
+    expectTypeOf(payload).toEqualTypeOf<undefined>()
+    topics.push('engine.starting')
+  })
+  messages.subscribe('engine.started', (payload) => {
+    expectTypeOf(payload).toEqualTypeOf<EngineMessages['engine.started']>()
+    topics.push('engine.started')
+    started(payload)
+  })
+  messages.subscribe('engine.failed', (payload) => {
+    expectTypeOf(payload.error).toEqualTypeOf<unknown>()
+    topics.push('engine.failed')
+    failed(payload)
+  })
+  messages.subscribe('engine.stopped', (payload) => {
+    expectTypeOf(payload).toEqualTypeOf<undefined>()
+    topics.push('engine.stopped')
+  })
+  return { messages, topics, started, failed }
+}
+
+describe('engine session messaging', () => {
+  it('has no bus until the first session and allows flushing before starting', () => {
+    const createMessageBus = vi.fn(() => new MessageBus<EngineMessages>())
+    const { engine } = createInstance({ createMessageBus })
+
+    expect(engine.messages).toBeUndefined()
+    expect(() => engine.flushMessages()).not.toThrow()
+    engine.stop()
+    expect(createMessageBus).not.toHaveBeenCalled()
+  })
+
+  it('queues typed lifecycle events until explicitly flushed, including after stopping', async () => {
+    const { engine } = createInstance()
+    const starting = engine.start()
+    const { messages, topics, started } = observeLifecycle(engine)
+
+    expect(engine.state).toBe('starting')
+    expect(topics).toEqual([])
+    engine.flushMessages()
+    expect(topics).toEqual(['engine.starting'])
+    await starting
+    expect(topics).toEqual(['engine.starting'])
+
+    const game = engine.game
+    engine.flushMessages()
+    expect(topics).toEqual(['engine.starting', 'engine.started'])
+    expect(started).toHaveBeenCalledExactlyOnceWith({ game })
+    expect(started.mock.calls[0]?.[0].game).toBe(game)
+
+    engine.stop()
+    expect(engine.messages).toBe(messages)
+    expect(topics).toEqual(['engine.starting', 'engine.started'])
+    engine.flushMessages()
+    engine.flushMessages()
+    expect(topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
+  })
+
+  it('keeps repeated starts and stops from duplicating lifecycle events or buses', async () => {
+    const createMessageBus = vi.fn(() => new MessageBus<EngineMessages>())
+    const { engine } = createInstance({ createMessageBus })
+    const starting = engine.start()
+    const { topics } = observeLifecycle(engine)
+
+    expect(engine.start()).toBe(starting)
+    await starting
+    await engine.start()
+    engine.stop()
+    engine.stop()
+    engine.flushMessages()
+
+    expect(createMessageBus).toHaveBeenCalledTimes(1)
+    expect(topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
+  })
+
+  it('creates a fresh injected bus on restart without carrying over events or subscriptions', async () => {
+    const createMessageBus = vi.fn(() => new MessageBus<EngineMessages>())
+    const { engine } = createInstance({ createMessageBus })
+    const firstStart = engine.start()
+    const first = observeLifecycle(engine)
+    await firstStart
+    engine.stop()
+
+    const secondStart = engine.start()
+    const second = observeLifecycle(engine)
+    await secondStart
+    engine.flushMessages()
+
+    expect(createMessageBus).toHaveBeenCalledTimes(2)
+    expect(second.messages).not.toBe(first.messages)
+    expect(second.messages).toBe(createMessageBus.mock.results[1]?.value)
+    expect(first.topics).toEqual([])
+    expect(second.topics).toEqual(['engine.starting', 'engine.started'])
+
+    // Retained references may still flush the old session, without touching the new one.
+    first.messages.flush()
+    expect(first.topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
+    expect(second.topics).toEqual(['engine.starting', 'engine.started'])
+  })
+
+  it('isolates session buses between engine instances', async () => {
+    const first = createInstance()
+    const second = createInstance()
+    const firstStart = first.engine.start()
+    const firstEvents = observeLifecycle(first.engine)
+    const secondStart = second.engine.start()
+    const secondEvents = observeLifecycle(second.engine)
+    await Promise.all([firstStart, secondStart])
+
+    first.engine.stop()
+    first.engine.flushMessages()
+
+    expect(firstEvents.messages).not.toBe(secondEvents.messages)
+    expect(firstEvents.topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
+    expect(secondEvents.topics).toEqual([])
+    second.engine.flushMessages()
+    expect(secondEvents.topics).toEqual(['engine.starting', 'engine.started'])
+  })
+
+  it('queues failure and stopped events when startup fails, and allows a fresh retry', async () => {
+    const { engine, resourceSource } = createInstance()
+    const error = new Error('Game unavailable')
+    resourceSource.readText.mockRejectedValueOnce(error)
+    const starting = engine.start()
+    const first = observeLifecycle(engine)
+
+    await expect(starting).rejects.toBe(error)
+    expect(engine.state).toBe('stopped')
+    expect(engine.messages).toBe(first.messages)
+    expect(first.topics).toEqual([])
+    engine.flushMessages()
+    expect(first.topics).toEqual(['engine.starting', 'engine.failed', 'engine.stopped'])
+    expect(first.failed).toHaveBeenCalledExactlyOnceWith({ error })
+
+    const retry = engine.start()
+    const second = observeLifecycle(engine)
+    await retry
+    engine.flushMessages()
+    expect(second.topics).toEqual(['engine.starting', 'engine.started'])
+    expect(first.topics).toHaveLength(3)
+  })
+
+  it('reports a host mount failure without publishing a started event', async () => {
+    const { engine, host } = createInstance()
+    const error = new Error('Cannot mount')
+    host.mount.mockImplementationOnce(() => {
+      throw error
+    })
+    const starting = engine.start()
+    const { topics, failed, started } = observeLifecycle(engine)
+
+    await expect(starting).rejects.toBe(error)
+    engine.flushMessages()
+
+    expect(topics).toEqual(['engine.starting', 'engine.failed', 'engine.stopped'])
+    expect(failed).toHaveBeenCalledExactlyOnceWith({ error })
+    expect(started).not.toHaveBeenCalled()
+  })
+
+  it('queues failure and stopped events even when cleanup throws', async () => {
+    const { engine, cleanup } = createInstance()
+    const error = new Error('Cleanup failed')
+    cleanup.mockImplementationOnce(() => {
+      throw error
+    })
+    const starting = engine.start()
+    const { topics, failed } = observeLifecycle(engine)
+    await starting
+
+    expect(() => engine.stop()).toThrow(error)
+    engine.stop()
+    engine.flushMessages()
+
+    expect(engine.state).toBe('stopped')
+    expect(topics).toEqual(['engine.starting', 'engine.started', 'engine.failed', 'engine.stopped'])
+    expect(failed).toHaveBeenCalledExactlyOnceWith({ error })
+  })
+
+  it('queues stopped without started or failed when cancelled before resource loading', async () => {
+    const { engine } = createInstance()
+    const starting = engine.start()
+    const { topics } = observeLifecycle(engine)
+    engine.stop()
+    await starting
+    engine.flushMessages()
+
+    expect(topics).toEqual(['engine.starting', 'engine.stopped'])
+  })
+
+  it.each(['resolve', 'reject'] as const)(
+    'ignores a cancelled resource read that completes with %s after restart',
+    async (completion) => {
+      const { engine, resourceSource } = createInstance()
+      const read = deferred<string>()
+      resourceSource.readText.mockReturnValueOnce(read.promise)
+      const starting = engine.start()
+      const first = observeLifecycle(engine)
+      await Promise.resolve()
+      engine.stop()
+      await starting
+      const retry = engine.start()
+      const second = observeLifecycle(engine)
+      await retry
+
+      if (completion === 'resolve') read.resolve('{"title":"Old game"}')
+      else read.reject(new Error('Old game failed'))
+      await Promise.resolve()
+      await Promise.resolve()
+      engine.flushMessages()
+      first.messages.flush()
+
+      expect(first.topics).toEqual(['engine.starting', 'engine.stopped'])
+      expect(second.topics).toEqual(['engine.starting', 'engine.started'])
+    },
+  )
+
+  it('does not publish started when mounting stops the session reentrantly', async () => {
+    const { engine, host } = createInstance()
+    host.mount.mockImplementationOnce(() => {
+      engine.stop()
+      return () => {}
+    })
+    const starting = engine.start()
+    const { topics } = observeLifecycle(engine)
+    await starting
+    engine.flushMessages()
+
+    expect(topics).toEqual(['engine.starting', 'engine.stopped'])
+  })
+
+  it('defers a stopped event published by a subscriber until the next flush', async () => {
+    const { engine } = createInstance()
+    const starting = engine.start()
+    const { topics } = observeLifecycle(engine)
+    engine.messages?.subscribe('engine.started', () => {
+      engine.stop()
+      engine.flushMessages()
+    })
+    await starting
+
+    engine.flushMessages()
+    expect(engine.state).toBe('stopped')
+    expect(topics).toEqual(['engine.starting', 'engine.started'])
+    engine.flushMessages()
+    expect(topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
+  })
+
+  it('keeps subscriber errors separate from startup and cleanup failures', async () => {
+    const { engine, cleanup } = createInstance()
+    const starting = engine.start()
+    const { topics, failed } = observeLifecycle(engine)
+    engine.messages?.subscribe('engine.started', () => {
+      throw new Error('Subscriber failed')
+    })
+
+    await expect(starting).resolves.toBeUndefined()
+    expect(() => engine.flushMessages()).toThrow(AggregateError)
+    expect(engine.state).toBe('running')
+    expect(failed).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+
+    engine.stop()
+    engine.flushMessages()
+    expect(topics).toEqual(['engine.starting', 'engine.started', 'engine.stopped'])
   })
 })
