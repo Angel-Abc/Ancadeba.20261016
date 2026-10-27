@@ -124,6 +124,9 @@ directory and reports HTTP/network failures. Startup loads and validates
 `game.json` through `JsonResourceLoader`. The current game schema accepts an
 object and preserves its fields; game execution is not implemented yet. The
 editor file API is a separate interface and is not a directory URL for this service.
+`readText` and `readBytes` accept literal game-relative filenames, including `#`
+and `%`, and encode each path segment for HTTP. `fetchResource` accepts relative
+URL references, so its callers must encode filename characters themselves.
 
 Editor UI (`apps/editor-ui/config.json`):
 
@@ -349,6 +352,9 @@ Listings return `{ "entries": [{ "name": "levels", "type": "directory" }] }`,
 with entry types `file` and `directory`. Links are omitted. File creation returns
 `201`; replacement returns `204`. Empty and binary files are supported. Writes
 are limited to 10 MiB, including requests without a content-length header.
+Saves stage a complete file beside the destination before replacing it atomically.
+Concurrent saves leave one complete version; they do not merge contents or detect
+conflicting edits. Failed staging or replacement preserves the previous file.
 
 Errors return `{ "error": "message" }`: `400` for invalid paths, `403` for
 traversal or link access, `404` for missing resources, `409` for file/directory

@@ -1,5 +1,7 @@
-import { lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import type { WorkspaceListing } from '@ancadeba/schemas'
 
 export class WorkspaceError extends Error {
@@ -19,6 +21,21 @@ export interface WorkspaceService {
 
 function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
+}
+
+async function replaceFile(source: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(source, target)
+      return
+    } catch (error) {
+      // Windows can briefly deny replacement while a reader has the old file open.
+      if (attempt === 5 || !['EPERM', 'EACCES', 'EBUSY'].some((code) => hasCode(error, code))) {
+        throw error
+      }
+      await delay(10 * 2 ** attempt)
+    }
+  }
 }
 
 export function workspaceError(error: unknown): WorkspaceError {
@@ -152,14 +169,28 @@ export class FileWorkspace implements WorkspaceService {
   async write(path: string, contents: Uint8Array): Promise<boolean> {
     const target = await this.locate(path, false, true)
     let exists = false
+    let mode: number | undefined
     try {
       const info = await this.inspect(target)
       if (!info.isFile()) throw new WorkspaceError(409, 'Expected a file')
       exists = true
+      mode = info.mode
     } catch (error) {
       if (!hasCode(error, 'ENOENT')) throw error
     }
-    await writeFile(target, contents)
+    const temporary = resolve(dirname(target), `.ancadeba-save-${randomUUID()}.tmp`)
+    const file = await open(temporary, 'wx', mode)
+    try {
+      try {
+        await file.writeFile(contents)
+      } finally {
+        await file.close()
+      }
+      // Publish a complete file on the same filesystem, including during concurrent saves.
+      await replaceFile(temporary, target)
+    } finally {
+      await rm(temporary, { force: true })
+    }
     return !exists
   }
 }

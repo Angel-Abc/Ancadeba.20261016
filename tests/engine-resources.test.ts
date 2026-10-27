@@ -54,15 +54,13 @@ describe('engine game resources', () => {
   })
 
   it.each([
+    '',
     '../secret',
     '/secret',
     '//other.example/secret',
     'https://other.example/file',
     'a/../../secret',
-    '%2e%2e/secret',
-    '%2fsecret',
     'a\\secret',
-    '%',
     'a\0b',
   ])('rejects escaped or invalid resource paths %j', async (path) => {
     const fetcher = vi.fn<typeof fetch>()
@@ -71,6 +69,49 @@ describe('engine game resources', () => {
     await expect(resources.readText(path)).rejects.toThrow()
     await expect(resources.readBytes(path)).rejects.toThrow()
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it.each(['%2e%2e/secret', '%2fsecret', '%'])(
+    'rejects invalid URL paths in fetchResource %j',
+    async (path) => {
+      const fetcher = vi.fn<typeof fetch>()
+      const resources = new HttpGameResources('/game/', 'https://engine.example/', fetcher)
+      await expect(resources.fetchResource(path)).rejects.toThrow()
+      expect(fetcher).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['a/./b', 'a//b', 'a/', 'a\nb', 'a\tb', 'assets/C:file'])(
+    'rejects invalid literal paths %j before fetching',
+    async (path) => {
+      const fetcher = vi.fn<typeof fetch>()
+      const resources = new HttpGameResources('/game/', 'https://engine.example/', fetcher)
+      await expect(resources.readText(path)).rejects.toThrow()
+      await expect(resources.readBytes(path)).rejects.toThrow()
+      expect(fetcher).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['dialogue/intro #1.txt', 'dialogue/intro%20%231.txt'],
+    ['literal%2f.txt', 'literal%252f.txt'],
+    ['assets/100%.txt', 'assets/100%25.txt'],
+    ['%2e%2e/secret', '%252e%252e/secret'],
+    ['%2fsecret', '%252fsecret'],
+    ['assets/..#1.txt', 'assets/..%231.txt'],
+    ['assets/query?.txt', 'assets/query%3F.txt'],
+    ['assets/Café 🎮.txt', 'assets/Caf%C3%A9%20%F0%9F%8E%AE.txt'],
+  ])('reads literal resource path %j without URL interpretation', async (path, encoded) => {
+    const bytes = new TextEncoder().encode('Café 🎮')
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(bytes))
+    const resources = new HttpGameResources('/game/', 'https://engine.example/', fetcher)
+
+    await expect(resources.readText(path)).resolves.toBe('Café 🎮')
+    await expect(resources.readBytes(path)).resolves.toEqual(bytes)
+    expect(fetcher.mock.calls).toEqual([
+      [`https://engine.example/game/${encoded}`, { cache: 'no-cache' }],
+      [`https://engine.example/game/${encoded}`],
+    ])
   })
 
   it.each(['file:///game', 'https://user:pass@example.com/game', '/game?x=1', '/game#x'])(

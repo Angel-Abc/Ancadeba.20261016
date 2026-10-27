@@ -24,13 +24,25 @@ export class HttpGameResources implements GameResourceService {
   }
 
   async readText(path: string): Promise<string> {
-    const response = await this.fetchResource(path, { cache: 'no-cache' })
+    const response = await this.fetchUrl(this.resourceUrl(path), path, { cache: 'no-cache' })
     return response.text()
   }
 
   async readBytes(path: string): Promise<Uint8Array> {
-    const response = await this.fetchResource(path)
+    const response = await this.fetchUrl(this.resourceUrl(path), path)
     return new Uint8Array(await response.arrayBuffer())
+  }
+
+  private resourceUrl(path: string): URL {
+    const parts = path.split('/')
+    if (
+      /[\\:]/.test(path) ||
+      path.split('').some((character) => character.charCodeAt(0) < 32) ||
+      parts.some((part) => !part || part === '.' || part === '..')
+    ) {
+      throw new Error('Game resource paths must stay within the game directory')
+    }
+    return new URL(parts.map((part) => encodeURIComponent(part)).join('/'), this.base)
   }
 
   async fetchResource(relativePath: string, options?: RequestInit): Promise<Response> {
@@ -54,15 +66,19 @@ export class HttpGameResources implements GameResourceService {
     if (url.origin !== this.base.origin || !url.pathname.startsWith(this.base.pathname)) {
       throw new Error('Game resource paths must stay within the game directory')
     }
+    return this.fetchUrl(url, relativePath, options)
+  }
+
+  private async fetchUrl(url: URL, path: string, options?: RequestInit): Promise<Response> {
     const fetcher = this.fetcher
     let response: Response
     try {
       response = options ? await fetcher(url.href, options) : await fetcher(url.href)
     } catch (error) {
-      throw new Error(`Could not fetch game resource: ${relativePath}`, { cause: error })
+      throw new Error(`Could not fetch game resource: ${path}`, { cause: error })
     }
     if (!response.ok) {
-      throw new Error(`Could not fetch game resource ${relativePath}: HTTP ${response.status}`)
+      throw new Error(`Could not fetch game resource ${path}: HTTP ${response.status}`)
     }
     return response
   }

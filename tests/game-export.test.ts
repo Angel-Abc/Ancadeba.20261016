@@ -1,11 +1,14 @@
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { preview } from 'vite-plus'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vite-plus/test'
 import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
+import { HttpGameResources } from '../apps/engine/src/gameResources.js'
 import { exportGame } from '../tooling/game-export.js'
 
 describe('standalone game export', () => {
@@ -13,6 +16,7 @@ describe('standalone game export', () => {
   let source: string
   const game = { title: 'Export test', assets: ['assets/my sprite.bin'] }
   const bytes = new Uint8Array([0, 255, 128, 42])
+  const literalPaths = ['assets/intro #1.txt', 'assets/literal%2f.txt', 'assets/100%.txt']
 
   beforeAll(async () => {
     temp = await mkdtemp(fileURLToPath(new URL('./.tmp-game-export-', import.meta.url)))
@@ -23,6 +27,7 @@ describe('standalone game export', () => {
     await writeFile(join(source, 'game.json'), JSON.stringify(game))
     await writeFile(join(source, 'assets/my sprite.bin'), bytes)
     await writeFile(join(source, 'assets/dialogue/intro.txt'), 'Café 🎮')
+    for (const path of literalPaths) await writeFile(join(source, path), 'Café 🎮')
     await writeFile(join(source, 'index.html'), '<title>Game asset</title>')
     await writeFile(join(source, '.env'), 'LOCAL_SETTING=private')
     await writeFile(join(source, '.env.local'), 'LOCAL_SETTING=private')
@@ -37,7 +42,7 @@ describe('standalone game export', () => {
   it('packages the engine and game, then runs from a relocated nested URL', async () => {
     const output = join(temp, 'export')
     const result = await exportGame({ gameDirectory: source, outputDirectory: output })
-    expect(result.fileCount).toBe(4)
+    expect(result.fileCount).toBe(4 + literalPaths.length)
     expect(JSON.parse(await readFile(join(output, 'config.json'), 'utf8'))).toEqual({
       gameUrl: './game/',
     })
@@ -89,6 +94,40 @@ describe('standalone game export', () => {
       await expect(
         container.resolve('gameResources').readText('assets/dialogue/intro.txt'),
       ).resolves.toBe('Café 🎮')
+      // Serve literal filenames with standard percent decoding. Vite preview leaves
+      // reserved characters such as %23 encoded when looking up static files.
+      const fileServer = createServer((request, response) => {
+        const path = decodeURIComponent(
+          new URL(request.url ?? '/', 'http://localhost').pathname,
+        ).replace(/^\/game\//, '')
+        if (!literalPaths.includes(path)) {
+          response.writeHead(404).end()
+          return
+        }
+        void readFile(join(relocated, 'game', path))
+          .then((contents) => response.end(contents))
+          .catch(() => response.writeHead(500).end())
+      })
+      fileServer.listen(0, '127.0.0.1')
+      await once(fileServer, 'listening')
+      try {
+        const address = fileServer.address() as AddressInfo
+        const resources = new HttpGameResources(
+          '/game/',
+          `http://127.0.0.1:${address.port}/`,
+          fetch,
+        )
+        for (const path of literalPaths) {
+          await expect(resources.readText(path)).resolves.toBe('Café 🎮')
+          await expect(resources.readBytes(path)).resolves.toEqual(
+            new TextEncoder().encode('Café 🎮'),
+          )
+        }
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          fileServer.close((error) => (error ? reject(error) : resolve()))
+        })
+      }
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.httpServer.close((error) => (error ? reject(error) : resolve()))
