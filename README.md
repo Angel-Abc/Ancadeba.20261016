@@ -121,8 +121,9 @@ game. You can also put static files under `apps/engine/public/` and configure
 their URL, or point to an existing HTTP(S) server with suitable cross-origin access.
 The engine's injected `gameResources` service reads text and bytes beneath that
 directory and reports HTTP/network failures. Startup loads and validates
-`game.json` through `JsonResourceLoader`. The current game schema accepts an
-object and preserves its fields; game execution is not implemented yet. The
+`game.json` and its referenced scene files through `JsonResourceLoader` and
+`GameLoader`. Each file is validated before its definition is assembled into
+`GameData`; game execution is not implemented yet. The
 editor file API is a separate interface and is not a directory URL for this service.
 `readText` and `readBytes` accept literal game-relative filenames, including `#`
 and `%`, and encode each path segment for HTTP. `fetchResource` accepts relative
@@ -168,13 +169,39 @@ Ports must be integers between 1 and 65535. Vite CLI options such as `--port`
 continue to work. Environment overrides can be scoped to a terminal and its child
 processes, without changing config files.
 
+## Game data pipeline
+
+The pipeline is `JSON files → validated definitions → assembled game data`.
+`@ancadeba/schemas` owns `gameSchema` / `GameDefinition` and `sceneSchema` /
+`SceneDefinition`. The manifest requires `schema-version` (`1.0.0`), `id`, `title`,
+`description`, `version`, and a `scenes` array of unique IDs. IDs contain only
+letters, digits, underscores, and hyphens. An empty scene list is valid.
+
+`GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
+`scenes/<id>.json` for each reference. The current scene format supports
+`stand-alone` scenes with a `grid` screen, positive integer rows and columns,
+and an empty `components` array. Component definitions are not supported yet.
+Every scene must declare the ID used by its manifest reference.
+
+`assembleGameData` combines validated definitions without I/O. `GameData` contains
+game metadata and a `ReadonlyMap<string, SceneData>` in manifest order. The data
+excludes file schema versions: `schema-version` belongs to validation, while all
+supported file formats assemble into the same runtime data model. Scene objects are
+copied into the assembled structure. Readonly types describe the consumer API;
+these objects are not frozen at runtime. No initial scene is selected.
+
+The engine exposes and mounts the assembled game only after every referenced
+scene loads and validates. Rendering and mutable play state remain separate from
+this data pipeline; both existing hosts still display their placeholders.
+
 ## Engine instances
 
 The editor includes Start and Stop controls and a Game folder field. Leave the
 field empty when the editor server's `workFolder` is the game directory, or enter
 a subfolder such as `basic` when the workspace contains multiple games. Start
-loads that folder's `game.json` through `/api/files`, with caching disabled, and
-mounts a preview after validation. Stop also works while loading. Each new start
+loads that folder's `game.json` and referenced scenes through `/api/files`, with
+caching disabled, and mounts a preview after the complete game is validated and
+assembled. Stop also works while loading. Each new start
 uses a fresh instance and reads the latest saved files; unsaved edits are not yet
 part of the resource source. Failures appear beside the controls and allow retrying.
 The preview currently confirms that the game definition loaded; gameplay rendering
@@ -194,20 +221,21 @@ Stop remains available for a running preview. A download link remains available
 afterward so the ZIP can be downloaded again. Unzip it and serve the complete
 contents over HTTP(S), just like a command-line export.
 
-`@ancadeba/game-runtime` exports `Engine`, `IEngine`, `IEngineHost`, and `EngineMessages`.
+`@ancadeba/game-runtime` exports `Engine`, `IEngine`, `IEngineHost`, `EngineMessages`,
+`GameLoader`, `IGameLoader`, `assembleGameData`, `GameData`, and `SceneData`.
 It has no browser or Node globals and can be imported by the editor without
 starting the standalone engine or fetching its `config.json`.
 
 ```ts
-import { Engine, type EngineMessages } from '@ancadeba/game-runtime'
+import { Engine, GameLoader, type EngineMessages } from '@ancadeba/game-runtime'
 import { JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
 
 const engine = new Engine(
-  new JsonResourceLoader(resourceSource, logger),
+  new GameLoader(new JsonResourceLoader(resourceSource, logger)),
   {
     mount(game) {
       const root = previewElement.ownerDocument.createElement('section')
-      root.textContent = typeof game.title === 'string' ? game.title : 'Game preview'
+      root.textContent = game.title
       previewElement.append(root)
       return () => root.remove()
     },
@@ -221,7 +249,7 @@ console.log(engine.state, engine.game)
 engine.stop()
 ```
 
-Construct `Engine` with an `IJsonResourceLoader`, a host whose synchronous `mount`
+Construct `Engine` with an `IGameLoader`, a host whose synchronous `mount(game, session)`
 returns a cleanup function, an `ILogger`, and a factory that creates a fresh
 message bus for each session. The standalone application uses
 `ContainerBuilder` to register the host, resources, JSON loader, message-bus
@@ -291,6 +319,84 @@ not create extra buses or events. Flushing before the first start does nothing.
 The application IoC registrations supply the bus factory through dependency
 injection, returning a fresh `MessageBus<EngineMessages>` on every call.
 Engine lifecycle topic contracts live in game-runtime; utilities remain generic.
+
+## Game-specific input
+
+Games can add an optional `"input": "input.json"` reference to `game.json`.
+The filename must be a single game-root JSON filename: letters, digits,
+underscores, or hyphens followed by `.json`. Existing games can omit it.
+Startup and export validate the referenced file before mounting or publishing.
+
+```json
+{
+  "schema-version": "1.0.0",
+  "virtual-keys": ["north", "confirm"],
+  "keyboard": {
+    "KeyW": "north",
+    "ArrowUp": "north",
+    "Enter": "confirm"
+  },
+  "contexts": {
+    "gameplay": { "north": "moveNorth", "confirm": "interact" },
+    "menu": { "north": "selectPrevious", "confirm": "accept" }
+  },
+  "initial-context": "gameplay"
+}
+```
+
+The pipeline is physical keyboard position → game-defined virtual key →
+context-specific virtual input. Keyboard bindings use `KeyboardEvent.code`,
+so `KeyW` refers to a physical position even on a layout that types a different
+character there. Context and control IDs follow the same naming rules as game
+IDs. Virtual keys must be unique, references must exist, and every context must
+contain at least one mapping. Multiple physical keys may share a virtual key,
+and multiple virtual keys may share a virtual input.
+
+`GameLoader` assembles a copied `GameData.input` without the file schema version.
+Each running engine session creates its own `InputController`; `engine.input`
+is available only while running and only when the game defines input. The host
+receives it earlier through `mount(game, { input })` to attach browser listeners.
+`InputData`, `IGameInput`, `VirtualInput`, and `EngineHostSession` are exported
+from game-runtime. Browser adapters remain in ui-components.
+
+```ts
+await engine.start()
+engine.messages?.subscribe('input.virtual', ({ context, input, phase }) => {
+  console.log(context, input, phase)
+})
+engine.input?.pressKey('KeyW')
+engine.input?.releaseKey('KeyW')
+engine.flushMessages() // Delivers pressed and released; publishing does not flush.
+engine.input?.setContext('menu')
+```
+
+`input.virtual` carries `{ context, input, phase }`, where phase is `pressed`,
+`released`, or `cancelled`. One press is published when an input becomes active,
+and one release when its final contributing key is released. Each message captures
+its context when published. Virtual input does not execute gameplay or consume a turn.
+
+`IGameInput` exposes `context`, `setContext(id)`, `isKeyMapped(code)`,
+`pressKey(code)`, `releaseKey(code)`, and `reset()`. Press/release return whether
+the transition belongs to a mapped input; duplicate presses do not publish again.
+Selecting the current context does nothing; an unknown context throws. A context
+change cancels active inputs and suppresses held keys until released. `reset()`
+cancels active inputs and clears held state. Engine stop silently disposes the
+controller before host cleanup, and retained references become inert.
+
+The standalone game and editor preview use the same `bindKeyboardInput` adapter.
+Their game surfaces are focusable without stealing focus. Focus the surface to
+play; input in editor fields, editable game controls, or outside the game surface
+is ignored. Losing focus, entering an editable control, hiding the document, or
+blurring the window resets held input. Native keyboard repeat, composition, and
+Ctrl/Alt/Meta shortcuts are ignored. Shift does not change physical bindings.
+Releases of tracked keys are processed even when modifiers change. Only accepted
+mapped bindings have their browser defaults prevented; mapped held repeats also
+prevent defaults without generating inputs. Cleanup removes owned listeners.
+
+This version supplies game defaults, press/release state, and one active named
+context. Player remapping, persistence, chords, repeat policies, additional devices,
+automatic bus dispatch, and gameplay processing are not implemented yet. Hosts
+do not flush the bus on keyboard events; consumers explicitly call `flushMessages()`.
 
 ## Queued messaging
 
@@ -412,7 +518,8 @@ pnpm export:game "path/to/my game" --out "dist/my-game"
 The first command writes to `dist/games/basic`. Use `--out` to choose another
 destination. Paths are relative to the current working directory. Shared
 packages are compiled and the engine is typechecked first, then the exporter
-validates the saved `game.json` and builds the engine with Vite+. Export does not
+validates the saved `game.json` and referenced scenes, then builds the engine with
+Vite+. Export does not
 require the engine's local `config.json`, the editor server, or any running
 development instance.
 
@@ -429,8 +536,9 @@ dist/games/basic/
 The exporter copies all regular game files, including unused assets. It excludes
 source-control directories (`.git`, `.hg`, `.svn`), `node_modules`, `.env` and
 `.env.*` files, and `.DS_Store`/`Thumbs.db`. Links and special files are rejected.
-The current schema validates that `game.json` is an object; it does not yet
-validate asset references or execute gameplay.
+Exports use the same game data pipeline as engine startup. Missing or invalid
+referenced scenes prevent export; other asset references are not yet validated.
+Gameplay is not executed during export.
 
 Exports are assembled in a temporary directory and published only after a
 successful build. The destination must be new and must not overlap the source;

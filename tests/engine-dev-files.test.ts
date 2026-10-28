@@ -9,13 +9,34 @@ import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
+function gameData(title: string) {
+  return {
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: new Map(),
+  }
+}
+
 describe('engine development game files', () => {
   let temp: string
   let app: string
   let games: string
   let origin: string
   let server: ViteDevServer
-  const game = { title: 'Development game' }
+  const game = gameDefinition('Development game')
   const bytes = new Uint8Array([0, 255, 128, 42])
 
   beforeAll(async () => {
@@ -70,7 +91,9 @@ describe('engine development game files', () => {
     const engine = container.resolve('engine')
     await engine.start()
     expect(engine.state).toBe('running')
-    expect(mount).toHaveBeenCalledExactlyOnceWith(game)
+    expect(mount).toHaveBeenCalledExactlyOnceWith(gameData('Development game'), {
+      input: undefined,
+    })
     engine.stop()
   })
 

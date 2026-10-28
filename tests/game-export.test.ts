@@ -11,10 +11,71 @@ import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { HttpGameResources } from '../apps/engine/src/gameResources.js'
 import { exportGame } from '../tooling/game-export.js'
 
+const input = {
+  'schema-version': '1.0.0',
+  'virtual-keys': ['north'],
+  keyboard: { KeyW: 'north', ArrowUp: 'north' },
+  contexts: { gameplay: { north: 'moveNorth' } },
+  'initial-context': 'gameplay',
+}
+
+const scene = {
+  'schema-version': '1.0.0',
+  id: 'start-screen',
+  title: 'Start Screen',
+  description: '',
+  type: 'stand-alone',
+  screen: { type: 'grid', grid: { rows: 20, columns: 20 } },
+  components: [],
+}
+
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: ['start-screen'],
+  }
+}
+
+function gameData(title: string) {
+  return {
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    input: {
+      virtualKeys: input['virtual-keys'],
+      keyboard: input.keyboard,
+      contexts: input.contexts,
+      initialContext: input['initial-context'],
+    },
+    scenes: new Map([
+      [
+        'start-screen',
+        {
+          id: scene.id,
+          title: scene.title,
+          description: scene.description,
+          type: scene.type,
+          screen: scene.screen,
+          components: [],
+        },
+      ],
+    ]),
+  }
+}
+
 describe('standalone game export', () => {
   let temp: string
   let source: string
-  const game = { title: 'Export test', assets: ['assets/my sprite.bin'] }
+  const game = {
+    ...gameDefinition('Export test'),
+    input: 'input.json',
+    assets: ['assets/my sprite.bin'],
+  }
   const bytes = new Uint8Array([0, 255, 128, 42])
   const literalPaths = ['assets/intro #1.txt', 'assets/literal%2f.txt', 'assets/100%.txt']
 
@@ -24,7 +85,10 @@ describe('standalone game export', () => {
     await mkdir(join(source, 'assets/dialogue'), { recursive: true })
     await mkdir(join(source, '.git'))
     await mkdir(join(source, 'node_modules'))
+    await mkdir(join(source, 'scenes'))
     await writeFile(join(source, 'game.json'), JSON.stringify(game))
+    await writeFile(join(source, 'input.json'), JSON.stringify(input))
+    await writeFile(join(source, 'scenes/start-screen.json'), JSON.stringify(scene))
     await writeFile(join(source, 'assets/my sprite.bin'), bytes)
     await writeFile(join(source, 'assets/dialogue/intro.txt'), 'Café 🎮')
     for (const path of literalPaths) await writeFile(join(source, path), 'Café 🎮')
@@ -42,11 +106,15 @@ describe('standalone game export', () => {
   it('packages the engine and game, then runs from a relocated nested URL', async () => {
     const output = join(temp, 'export')
     const result = await exportGame({ gameDirectory: source, outputDirectory: output })
-    expect(result.fileCount).toBe(4 + literalPaths.length)
+    expect(result.fileCount).toBe(6 + literalPaths.length)
     expect(JSON.parse(await readFile(join(output, 'config.json'), 'utf8'))).toEqual({
       gameUrl: './game/',
     })
     expect(await readFile(join(output, 'game/game.json'), 'utf8')).toBe(JSON.stringify(game))
+    expect(JSON.parse(await readFile(join(output, 'game/input.json'), 'utf8'))).toEqual(input)
+    expect(
+      JSON.parse(await readFile(join(output, 'game/scenes/start-screen.json'), 'utf8')),
+    ).toEqual(scene)
     expect(new Uint8Array(await readFile(join(output, 'game/assets/my sprite.bin')))).toEqual(bytes)
     expect(await readFile(join(output, 'game/index.html'), 'utf8')).toBe(
       '<title>Game asset</title>',
@@ -85,8 +153,10 @@ describe('standalone game export', () => {
       const container = new ContainerBuilder(config, applicationUrl, fetch, host).build()
       const engine = container.resolve('engine')
       await engine.start()
-      expect(engine.game).toEqual(game)
-      expect(host.mount).toHaveBeenCalledExactlyOnceWith(game)
+      expect(engine.game).toEqual(gameData('Export test'))
+      expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Export test'), {
+        input: expect.objectContaining({ context: 'gameplay' }),
+      })
       engine.stop()
       await expect(
         container.resolve('gameResources').readBytes('assets/my sprite.bin'),
@@ -168,7 +238,47 @@ describe('standalone game export', () => {
     if (contents !== undefined) await writeFile(join(invalid, 'game.json'), contents)
 
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
-      'game.json is missing, malformed, or invalid',
+      'game.json, a referenced scene, or input definition is missing, malformed, or invalid',
+    )
+    await expect(readdir(output)).rejects.toHaveProperty('code', 'ENOENT')
+    expect((await readdir(temp)).filter((name) => name.startsWith('.game-export-'))).toEqual([])
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', '{broken'],
+    [
+      'invalid grid',
+      JSON.stringify({ ...scene, screen: { type: 'grid', grid: { rows: 0, columns: 20 } } }),
+    ],
+    ['mismatched ID', JSON.stringify({ ...scene, id: 'wrong' })],
+  ])('rejects a %s scene without publishing an export', async (kind, contents) => {
+    const invalid = join(temp, `scene-${kind}`)
+    const output = join(temp, `failed-scene-${kind}`)
+    await mkdir(join(invalid, 'scenes'), { recursive: true })
+    await writeFile(join(invalid, 'game.json'), JSON.stringify(game))
+    await writeFile(join(invalid, 'input.json'), JSON.stringify(input))
+    if (contents !== undefined) await writeFile(join(invalid, 'scenes/start-screen.json'), contents)
+
+    await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
+      'referenced scene',
+    )
+    await expect(readdir(output)).rejects.toHaveProperty('code', 'ENOENT')
+    expect((await readdir(temp)).filter((name) => name.startsWith('.game-export-'))).toEqual([])
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', '{broken'],
+    ['invalid', JSON.stringify({ ...input, 'initial-context': 'missing' })],
+  ])('rejects %s input without publishing an export', async (kind, contents) => {
+    const invalid = join(temp, `input-${kind}`)
+    const output = join(temp, `failed-input-${kind}`)
+    await mkdir(invalid)
+    await writeFile(join(invalid, 'game.json'), JSON.stringify({ ...game, scenes: [] }))
+    if (contents !== undefined) await writeFile(join(invalid, 'input.json'), contents)
+    await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
+      'input definition',
     )
     await expect(readdir(output)).rejects.toHaveProperty('code', 'ENOENT')
     expect((await readdir(temp)).filter((name) => name.startsWith('.game-export-'))).toEqual([])

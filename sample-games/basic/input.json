@@ -1,0 +1,14 @@
+{
+  "schema-version": "1.0.0",
+  "virtual-keys": ["north", "confirm"],
+  "keyboard": {
+    "KeyW": "north",
+    "ArrowUp": "north",
+    "Enter": "confirm"
+  },
+  "contexts": {
+    "gameplay": { "north": "moveNorth", "confirm": "interact" },
+    "menu": { "north": "selectPrevious", "confirm": "accept" }
+  },
+  "initial-context": "gameplay"
+}

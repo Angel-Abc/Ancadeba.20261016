@@ -1,4 +1,4 @@
-import { Engine, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
+import { Engine, GameLoader, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
 import { Container, JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
 import { engineFactories, type EngineServices } from './factories/index.js'
 import type { EngineRuntimeConfig } from '@ancadeba/schemas'
@@ -25,11 +25,12 @@ export class ContainerBuilder implements IContainerBuilder {
       createMessageBus: () => () => new MessageBus<EngineMessages>(),
       engine: (resolver) =>
         new Engine(
-          resolver.resolve('jsonResourceLoader'),
+          resolver.resolve('gameLoader'),
           resolver.resolve('host'),
           resolver.resolve('logger'),
           resolver.resolve('createMessageBus'),
         ),
+      gameLoader: (resolver) => new GameLoader(resolver.resolve('jsonResourceLoader')),
       jsonResourceLoader: (resolver) =>
         new JsonResourceLoader(resolver.resolve('gameResources'), resolver.resolve('logger')),
       gameResources: (resolver) =>

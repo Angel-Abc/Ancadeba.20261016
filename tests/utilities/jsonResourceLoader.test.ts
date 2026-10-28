@@ -2,6 +2,17 @@ import { gameSchema } from '@ancadeba/schemas'
 import { JsonResourceLoader, type ILogger, type IResourceSource } from '@ancadeba/utilities'
 import { describe, expect, it, vi } from 'vite-plus/test'
 
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
 function createLoader() {
   const source = {
     readText: vi.fn<IResourceSource['readText']>(),
@@ -20,7 +31,7 @@ function createLoader() {
 describe('JsonResourceLoader', () => {
   it('loads and validates JSON from a source without HTTP or URL dependencies', async () => {
     const { source, loader } = createLoader()
-    const game = { title: 'Demo', settings: { difficulty: 1 } }
+    const game = gameDefinition('Demo')
     source.readText.mockResolvedValue(JSON.stringify(game))
 
     await expect(loader.load('definitions/game.json', gameSchema)).resolves.toEqual(game)

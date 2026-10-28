@@ -1,0 +1,15 @@
+{
+  "schema-version": "1.0.0",
+  "id": "start-screen",
+  "title": "Start Screen",
+  "description": "The start screen of the game",
+  "type": "stand-alone",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 20,
+      "columns": 20
+    }
+  },
+  "components": []
+}

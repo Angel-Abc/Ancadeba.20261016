@@ -1,4 +1,10 @@
-import { Engine, type EngineMessages, type IEngine, type IEngineHost } from '@ancadeba/game-runtime'
+import {
+  Engine,
+  GameLoader,
+  type EngineMessages,
+  type IEngine,
+  type IEngineHost,
+} from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
   MessageBus,
@@ -31,7 +37,9 @@ export const previewFactories = {
     const createMessageBus = resolver.resolve('createMessageBus')
     return (folder: string) =>
       new Engine(
-        new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+        new GameLoader(
+          new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+        ),
         host,
         logger,
         createMessageBus,

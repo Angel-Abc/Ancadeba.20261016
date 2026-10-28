@@ -5,10 +5,31 @@ import type { EditorDependencies } from '../apps/editor-ui/src/ioc/factories/ind
 import type { PreviewStateListener } from '../apps/editor-ui/src/previewController.js'
 import type { ExportStateListener } from '../apps/editor-ui/src/exportController.js'
 
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
+function gameData(title: string) {
+  return {
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: new Map(),
+  }
+}
+
 function createDependencies() {
   const fetcher = vi
     .fn<typeof fetch>()
-    .mockImplementation(async () => new Response('{"title":"Preview"}'))
+    .mockImplementation(async () => new Response(JSON.stringify(gameDefinition('Preview'))))
   const cleanup = vi.fn<() => void>()
   const host = { mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup) }
   const dependencies = {
@@ -41,7 +62,9 @@ describe('editor container', () => {
         cache: 'no-store',
       },
     )
-    expect(dependencies.host.mount).toHaveBeenCalledExactlyOnceWith({ title: 'Preview' })
+    expect(dependencies.host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Preview'), {
+      input: undefined,
+    })
     expect(dependencies.onPreviewStateChange.mock.calls).toEqual([['starting'], ['running']])
     expect(dependencies.onExportStateChange).not.toHaveBeenCalled()
     expect(info).toHaveBeenCalledWith('Engine', 'The engine workspace is ready.')

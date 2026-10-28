@@ -1,4 +1,4 @@
-import { Engine, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
+import { Engine, GameLoader, type EngineMessages, type IEngineHost } from '@ancadeba/game-runtime'
 import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
@@ -7,8 +7,31 @@ import {
 } from '../apps/editor-ui/src/previewController.js'
 import { EditorWorkspaceResources } from '../apps/editor-ui/src/workspaceResources.js'
 
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
+function gameData(title: string) {
+  return {
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: new Map(),
+  }
+}
+
 function createPreview() {
-  const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'))
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async () => new Response(JSON.stringify(gameDefinition('Preview'))))
   const cleanup = vi.fn<() => void>()
   const host = { mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup) }
   const logger: ILogger = {
@@ -21,7 +44,9 @@ function createPreview() {
   const createInstance = vi.fn(
     (folder: string) =>
       new Engine(
-        new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+        new GameLoader(
+          new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+        ),
         host,
         logger,
         () => new MessageBus<EngineMessages>(),
@@ -32,16 +57,53 @@ function createPreview() {
 }
 
 describe('editor preview', () => {
+  it('loads referenced scenes from the selected workspace folder before mounting', async () => {
+    const { controller, fetcher, host } = createPreview()
+    fetcher
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...gameDefinition('Workspace game'), scenes: ['start-screen'] }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            'schema-version': '1.0.0',
+            id: 'start-screen',
+            title: 'Start Screen',
+            description: '',
+            type: 'stand-alone',
+            screen: { type: 'grid', grid: { rows: 20, columns: 20 } },
+            components: [],
+          }),
+        ),
+      )
+
+    await controller.start('basic')
+
+    expect(fetcher.mock.calls).toEqual([
+      ['/api/files?path=basic%2Fgame.json', { cache: 'no-store' }],
+      ['/api/files?path=basic%2Fscenes%2Fstart-screen.json', { cache: 'no-store' }],
+    ])
+    expect(host.mount.mock.calls[0]?.[0].scenes.get('start-screen')?.screen.grid).toEqual({
+      rows: 20,
+      columns: 20,
+    })
+    controller.dispose()
+  })
+
   it('starts from the workspace file API and cleans up on stop', async () => {
     const { controller, fetcher, host, cleanup, onStateChange } = createPreview()
-    fetcher.mockResolvedValueOnce(new Response('{"title":"Workspace game"}'))
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify(gameDefinition('Workspace game'))))
 
     await controller.start('basic')
 
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/files?path=basic%2Fgame.json', {
       cache: 'no-store',
     })
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith({ title: 'Workspace game' })
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Workspace game'), {
+      input: undefined,
+    })
     expect(onStateChange.mock.calls).toEqual([['starting'], ['running']])
 
     controller.stop()
@@ -110,11 +172,11 @@ describe('editor preview', () => {
     await Promise.all([first, second])
     expect(onStateChange.mock.calls).toEqual([['starting'], ['stopped'], ['starting'], ['running']])
 
-    finish(new Response('{"title":"Old game"}'))
+    finish(new Response(JSON.stringify(gameDefinition('Old game'))))
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith({})
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Preview'), { input: undefined })
     expect(onStateChange).toHaveBeenLastCalledWith('running')
   })
 

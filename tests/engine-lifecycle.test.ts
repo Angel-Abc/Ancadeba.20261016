@@ -1,4 +1,10 @@
-import { Engine, type EngineMessages, type IEngine, type IEngineHost } from '@ancadeba/game-runtime'
+import {
+  Engine,
+  GameLoader,
+  type EngineMessages,
+  type IEngine,
+  type IEngineHost,
+} from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
   MessageBus,
@@ -7,6 +13,27 @@ import {
   type IResourceSource,
 } from '@ancadeba/utilities'
 import { describe, expect, expectTypeOf, it, vi } from 'vite-plus/test'
+
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
+function gameData(title: string) {
+  return {
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: new Map(),
+  }
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -20,7 +47,9 @@ function deferred<T>() {
 
 function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMessages> } = {}) {
   const resourceSource = {
-    readText: vi.fn<IResourceSource['readText']>().mockResolvedValue('{"title":"Demo"}'),
+    readText: vi
+      .fn<IResourceSource['readText']>()
+      .mockResolvedValue(JSON.stringify(gameDefinition('Demo'))),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
   } satisfies IResourceSource
   const cleanup = vi.fn<() => void>()
@@ -34,7 +63,7 @@ function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMe
     error: vi.fn<ILogger['error']>(() => ''),
   } satisfies ILogger
   const engine = new Engine(
-    new JsonResourceLoader(resourceSource, logger),
+    new GameLoader(new JsonResourceLoader(resourceSource, logger)),
     host,
     logger,
     options.createMessageBus ?? (() => new MessageBus<EngineMessages>()),
@@ -62,16 +91,13 @@ describe('engine lifecycle', () => {
     expect(engine.game).toBeUndefined()
     expect(host.mount).not.toHaveBeenCalled()
 
-    read.resolve('{"title":"Loaded","settings":{"difficulty":2}}')
+    read.resolve(JSON.stringify(gameDefinition('Loaded')))
     await starting
 
     expect(resourceSource.readText).toHaveBeenCalledExactlyOnceWith('game.json')
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith({
-      title: 'Loaded',
-      settings: { difficulty: 2 },
-    })
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Loaded'), { input: undefined })
     expect(engine.state).toBe('running')
-    expect(engine.game).toEqual({ title: 'Loaded', settings: { difficulty: 2 } })
+    expect(engine.game).toEqual(gameData('Loaded'))
   })
 
   it('shares concurrent starts and keeps repeated starts from mounting twice', async () => {
@@ -103,11 +129,11 @@ describe('engine lifecycle', () => {
     const { engine, resourceSource, host, cleanup } = createInstance()
     await engine.start()
     engine.stop()
-    resourceSource.readText.mockResolvedValue('{"title":"Updated"}')
+    resourceSource.readText.mockResolvedValue(JSON.stringify(gameDefinition('Updated')))
 
     await engine.start()
 
-    expect(engine.game).toEqual({ title: 'Updated' })
+    expect(engine.game).toEqual(gameData('Updated'))
     expect(host.mount).toHaveBeenCalledTimes(2)
     expect(cleanup).toHaveBeenCalledTimes(1)
     engine.stop()
@@ -191,17 +217,17 @@ describe('engine lifecycle', () => {
       await Promise.resolve()
       engine.stop()
       await starting
-      resourceSource.readText.mockResolvedValue('{"title":"New game"}')
+      resourceSource.readText.mockResolvedValue(JSON.stringify(gameDefinition('New game')))
       await engine.start()
 
-      if (completion === 'resolve') read.resolve('{"title":"Old game"}')
+      if (completion === 'resolve') read.resolve(JSON.stringify(gameDefinition('Old game')))
       else read.reject(new Error('Old game failed'))
       await Promise.resolve()
       await Promise.resolve()
 
       expect(engine.state).toBe('running')
-      expect(engine.game).toEqual({ title: 'New game' })
-      expect(host.mount).toHaveBeenCalledExactlyOnceWith({ title: 'New game' })
+      expect(engine.game).toEqual(gameData('New game'))
+      expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('New game'), { input: undefined })
     },
   )
 
@@ -238,7 +264,7 @@ describe('engine lifecycle', () => {
   it('keeps resources, hosts, and state isolated between instances', async () => {
     const first = createInstance()
     const second = createInstance()
-    second.resourceSource.readText.mockResolvedValue('{"title":"Second"}')
+    second.resourceSource.readText.mockResolvedValue(JSON.stringify(gameDefinition('Second')))
 
     await Promise.all([first.engine.start(), second.engine.start()])
     first.engine.stop()
@@ -246,9 +272,11 @@ describe('engine lifecycle', () => {
     expect(first.engine.state).toBe('stopped')
     expect(first.cleanup).toHaveBeenCalledTimes(1)
     expect(second.engine.state).toBe('running')
-    expect(second.engine.game).toEqual({ title: 'Second' })
+    expect(second.engine.game).toEqual(gameData('Second'))
     expect(second.cleanup).not.toHaveBeenCalled()
-    expect(second.host.mount).toHaveBeenCalledExactlyOnceWith({ title: 'Second' })
+    expect(second.host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Second'), {
+      input: undefined,
+    })
   })
 })
 
@@ -463,7 +491,7 @@ describe('engine session messaging', () => {
       const second = observeLifecycle(engine)
       await retry
 
-      if (completion === 'resolve') read.resolve('{"title":"Old game"}')
+      if (completion === 'resolve') read.resolve(JSON.stringify(gameDefinition('Old game')))
       else read.reject(new Error('Old game failed'))
       await Promise.resolve()
       await Promise.resolve()

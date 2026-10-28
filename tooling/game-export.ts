@@ -11,7 +11,8 @@ import {
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { gameSchema } from '@ancadeba/schemas'
+import { GameLoader } from '@ancadeba/game-runtime'
+import { JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
 import { build } from 'vite-plus'
 import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
 
@@ -27,6 +28,12 @@ export interface GameExportResult {
 
 const engineRoot = fileURLToPath(new URL('../apps/engine/', import.meta.url))
 const excludedNames = new Set(['.git', '.hg', '.svn', 'node_modules', '.DS_Store', 'Thumbs.db'])
+const validationLogger: ILogger = {
+  debug: () => '',
+  info: () => '',
+  warn: () => '',
+  error: () => '',
+}
 
 function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
@@ -97,11 +104,19 @@ export async function exportGame(options: GameExportOptions): Promise<GameExport
   try {
     const fileCount = await copyGame(gameDirectory, join(staging, 'game'))
     try {
-      gameSchema.parse(JSON.parse(await readFile(join(staging, 'game/game.json'), 'utf8')))
+      const source = {
+        readText: (path: string) => readFile(join(staging, 'game', path), 'utf8'),
+        readBytes: async (path: string) =>
+          new Uint8Array(await readFile(join(staging, 'game', path))),
+      }
+      await new GameLoader(new JsonResourceLoader(source, validationLogger)).load()
     } catch (error) {
-      throw new Error('Cannot export game: game.json is missing, malformed, or invalid', {
-        cause: error,
-      })
+      throw new Error(
+        'Cannot export game: game.json, a referenced scene, or input definition is missing, malformed, or invalid',
+        {
+          cause: error,
+        },
+      )
     }
 
     await build({

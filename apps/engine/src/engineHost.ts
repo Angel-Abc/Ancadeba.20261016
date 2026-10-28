@@ -1,11 +1,13 @@
-import type { IEngineHost } from '@ancadeba/game-runtime'
+import type { EngineHostSession, GameData, IEngineHost } from '@ancadeba/game-runtime'
+import { bindKeyboardInput } from '@ancadeba/ui-components'
 
 export class DomEngineHost implements IEngineHost {
   constructor(private readonly element: HTMLElement) {}
 
-  mount(): () => void {
+  mount(_game: GameData, session: EngineHostSession): () => void {
     const document = this.element.ownerDocument
     const root = document.createElement('section')
+    root.tabIndex = 0
     const heading = document.createElement('h1')
     heading.textContent = 'Ancadeba Engine'
 
@@ -14,6 +16,15 @@ export class DomEngineHost implements IEngineHost {
 
     root.append(heading, description)
     this.element.append(root)
-    return () => root.remove()
+    try {
+      const unbind = session.input ? bindKeyboardInput(root, session.input) : undefined
+      return () => {
+        unbind?.()
+        root.remove()
+      }
+    } catch (error) {
+      root.remove()
+      throw error
+    }
   }
 }

@@ -1,1 +1,9 @@
-{}
+{
+  "schema-version": "1.0.0",
+  "id": "basic-game",
+  "title": "Basic Game",
+  "description": "A basic game example",
+  "version": "1.0.0",
+  "scenes": ["start-screen"],
+  "input": "input.json"
+}

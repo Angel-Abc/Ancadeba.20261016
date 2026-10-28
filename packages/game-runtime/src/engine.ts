@@ -1,17 +1,24 @@
-import { gameSchema, type Game } from '@ancadeba/schemas'
-import type { IJsonResourceLoader, ILogger, IMessageBus } from '@ancadeba/utilities'
+import type { ILogger, IMessageBus } from '@ancadeba/utilities'
+import type { GameData } from './gameData.js'
+import type { IGameLoader } from './gameLoader.js'
 import type { EngineMessages } from './messages.js'
+import { InputController, type IGameInput } from './input.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
+export interface EngineHostSession {
+  readonly input: IGameInput | undefined
+}
+
 export interface IEngineHost {
   // Return a cleanup function that releases everything mounted for this run.
-  mount(game: Game): () => void
+  mount(game: GameData, session: EngineHostSession): () => void
 }
 
 export interface IEngine {
   readonly state: EngineState
-  readonly game: Game | undefined
+  readonly game: GameData | undefined
+  readonly input: IGameInput | undefined
   /** The latest session's bus, retained after stop and replaced on the next start. */
   readonly messages: IMessageBus<EngineMessages> | undefined
   start(): Promise<void>
@@ -23,7 +30,8 @@ interface EngineSession {
   cancelled: Promise<undefined>
   cancel(): void
   messages: IMessageBus<EngineMessages>
-  game?: Game
+  game?: GameData
+  input?: InputController
   cleanup?: () => void
 }
 
@@ -33,7 +41,7 @@ export class Engine implements IEngine {
   private startup: Promise<void> = Promise.resolve()
 
   constructor(
-    private readonly loader: IJsonResourceLoader,
+    private readonly loader: IGameLoader,
     private readonly host: IEngineHost,
     private readonly logger: ILogger,
     private readonly createMessageBus: () => IMessageBus<EngineMessages>,
@@ -44,12 +52,16 @@ export class Engine implements IEngine {
     return this.session.game ? 'running' : 'starting'
   }
 
-  get game(): Game | undefined {
+  get game(): GameData | undefined {
     return this.session?.game
   }
 
   get messages(): IMessageBus<EngineMessages> | undefined {
     return this.latestMessages
+  }
+
+  get input(): IGameInput | undefined {
+    return this.session?.game ? this.session.input : undefined
   }
 
   flushMessages(): void {
@@ -77,6 +89,7 @@ export class Engine implements IEngine {
 
     this.session = undefined
     session.cancel()
+    session.input?.dispose()
     try {
       session.cleanup?.()
     } catch (error) {
@@ -91,13 +104,11 @@ export class Engine implements IEngine {
     if (this.session !== session) return
 
     try {
-      const game = await Promise.race([
-        this.loader.load('game.json', gameSchema),
-        session.cancelled,
-      ])
+      const game = await Promise.race([this.loader.load(), session.cancelled])
       if (this.session !== session || !game) return
 
-      const cleanup = this.host.mount(game)
+      if (game.input) session.input = new InputController(game.input, session.messages)
+      const cleanup = this.host.mount(game, { input: session.input })
       if (this.session !== session) {
         cleanup()
         return

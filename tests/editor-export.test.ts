@@ -15,6 +15,17 @@ import {
 import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { FileWorkspace } from '../apps/editor-server/src/workspace.js'
 
+function gameDefinition(title: string) {
+  return {
+    'schema-version': '1.0.0' as const,
+    id: 'test-game',
+    title,
+    description: 'Test game',
+    version: '1.0.0',
+    scenes: [] as string[],
+  }
+}
+
 describe('editor game export API', () => {
   let temp: string
   let root: string
@@ -31,10 +42,13 @@ describe('editor game export API', () => {
     await mkdir(join(root, 'assets'), { recursive: true })
     await mkdir(join(root, 'second game'))
     await mkdir(join(root, 'invalid'))
-    await writeFile(join(root, 'game.json'), '{"title":"Workspace game"}')
+    await writeFile(join(root, 'game.json'), JSON.stringify(gameDefinition('Workspace game')))
     await writeFile(join(root, 'assets/sprite.bin'), bytes)
     await writeFile(join(root, '.env.local'), 'PRIVATE_SETTING=value')
-    await writeFile(join(root, 'second game/game.json'), '{"title":"Second game"}')
+    await writeFile(
+      join(root, 'second game/game.json'),
+      JSON.stringify(gameDefinition('Second game')),
+    )
     await writeFile(join(root, 'invalid/game.json'), '[]')
     await symlink(scratch, join(root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
     const workspace = await FileWorkspace.open(root)
@@ -75,7 +89,7 @@ describe('editor game export API', () => {
     const files = unzipSync(new Uint8Array(await response.arrayBuffer()))
     expect(strFromU8(files['index.html']!)).toContain('./assets/')
     expect(JSON.parse(strFromU8(files['config.json']!))).toEqual({ gameUrl: './game/' })
-    expect(JSON.parse(strFromU8(files['game/game.json']!))).toEqual({ title: 'Second game' })
+    expect(JSON.parse(strFromU8(files['game/game.json']!))).toEqual(gameDefinition('Second game'))
     expect(
       Object.keys(files).some((path) => path.startsWith('assets/') && path.endsWith('.js')),
     ).toBe(true)
@@ -85,14 +99,16 @@ describe('editor game export API', () => {
   it('exports current saved files from the workspace root with binary assets', async () => {
     // A linked asset must be rejected; remove this test-only link before exporting the root.
     await rm(join(root, 'linked'))
-    await writeFile(join(root, 'game.json'), '{"title":"Saved changes"}')
+    await writeFile(join(root, 'game.json'), JSON.stringify(gameDefinition('Saved changes')))
     const response = await request({ path: '' })
     expect(response.status).toBe(200)
     const files = unzipSync(new Uint8Array(await response.arrayBuffer()))
-    expect(JSON.parse(strFromU8(files['game/game.json']!))).toEqual({ title: 'Saved changes' })
+    expect(JSON.parse(strFromU8(files['game/game.json']!))).toEqual(gameDefinition('Saved changes'))
     expect(files['game/assets/sprite.bin']).toEqual(bytes)
     expect(files['game/.env.local']).toBeUndefined()
-    expect(await readFile(join(root, 'game.json'), 'utf8')).toBe('{"title":"Saved changes"}')
+    expect(await readFile(join(root, 'game.json'), 'utf8')).toBe(
+      JSON.stringify(gameDefinition('Saved changes')),
+    )
     await vi.waitFor(async () => expect(await readdir(scratch)).toEqual([]))
   }, 20_000)
 
