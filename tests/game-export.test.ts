@@ -150,12 +150,17 @@ describe('standalone game export', () => {
 
       const config = await loadRuntimeConfig(applicationUrl, fetch)
       const host = { mount: vi.fn(() => () => {}) }
-      const container = new ContainerBuilder(config, applicationUrl, fetch, host).build()
+      const container = new ContainerBuilder(config, applicationUrl, fetch, host, {
+        clock: { now: () => 0 },
+        scheduler: { schedule: () => () => {} },
+      }).build()
       const engine = container.resolve('engine')
       await engine.start()
       expect(engine.game).toEqual(gameData('Export test'))
       expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Export test'), {
         input: expect.objectContaining({ context: 'gameplay' }),
+        messages: expect.anything(),
+        timers: expect.anything(),
       })
       engine.stop()
       await expect(

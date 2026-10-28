@@ -8,7 +8,13 @@ import {
 import { consoleFactory, type ConsoleServices } from './console.js'
 import type { EngineRuntimeConfig } from '@ancadeba/schemas'
 import type { GameResourceService } from '../../gameResources.js'
-import type { EngineMessages, IEngine, IEngineHost, IGameLoader } from '@ancadeba/game-runtime'
+import type {
+  EngineMessages,
+  IEngine,
+  IEngineHost,
+  IGameLoader,
+  EngineRuntimeServices,
+} from '@ancadeba/game-runtime'
 
 export type EngineServices = ConsoleServices &
   LoggerServices & {
@@ -17,6 +23,7 @@ export type EngineServices = ConsoleServices &
     jsonResourceLoader: IJsonResourceLoader
     gameLoader: IGameLoader
     host: IEngineHost
+    runtime: EngineRuntimeServices
     createMessageBus: () => IMessageBus<EngineMessages>
     engine: IEngine
   }

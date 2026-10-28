@@ -14,6 +14,8 @@ import {
 } from '@ancadeba/utilities'
 import { describe, expect, expectTypeOf, it, vi } from 'vite-plus/test'
 
+const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
+
 function gameDefinition(title: string) {
   return {
     'schema-version': '1.0.0' as const,
@@ -67,6 +69,7 @@ function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMe
     host,
     logger,
     options.createMessageBus ?? (() => new MessageBus<EngineMessages>()),
+    runtime,
   )
   return { engine, resourceSource, host, cleanup, logger }
 }
@@ -95,7 +98,11 @@ describe('engine lifecycle', () => {
     await starting
 
     expect(resourceSource.readText).toHaveBeenCalledExactlyOnceWith('game.json')
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Loaded'), { input: undefined })
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Loaded'), {
+      input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
+    })
     expect(engine.state).toBe('running')
     expect(engine.game).toEqual(gameData('Loaded'))
   })
@@ -227,7 +234,11 @@ describe('engine lifecycle', () => {
 
       expect(engine.state).toBe('running')
       expect(engine.game).toEqual(gameData('New game'))
-      expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('New game'), { input: undefined })
+      expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('New game'), {
+        input: undefined,
+        messages: expect.anything(),
+        timers: expect.anything(),
+      })
     },
   )
 
@@ -276,6 +287,8 @@ describe('engine lifecycle', () => {
     expect(second.cleanup).not.toHaveBeenCalled()
     expect(second.host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Second'), {
       input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
     })
   })
 })
@@ -377,7 +390,7 @@ describe('engine session messaging', () => {
 
     expect(createMessageBus).toHaveBeenCalledTimes(2)
     expect(second.messages).not.toBe(first.messages)
-    expect(second.messages).toBe(createMessageBus.mock.results[1]?.value)
+    expect(second.messages).not.toBe(createMessageBus.mock.results[1]?.value)
     expect(first.topics).toEqual([])
     expect(second.topics).toEqual(['engine.starting', 'engine.started'])
 

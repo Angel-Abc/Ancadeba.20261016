@@ -1,13 +1,27 @@
-import type { ILogger, IMessageBus } from '@ancadeba/utilities'
+import {
+  ScheduledMessageBus,
+  type ILogger,
+  type IMessageBus,
+  type ITaskScheduler,
+  type IMonotonicClock,
+} from '@ancadeba/utilities'
 import type { GameData } from './gameData.js'
 import type { IGameLoader } from './gameLoader.js'
 import type { EngineMessages } from './messages.js'
 import { InputController, type IGameInput } from './input.js'
+import { TimerService, type ITimerService } from './timers.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
+export interface EngineRuntimeServices {
+  readonly scheduler: ITaskScheduler
+  readonly clock: IMonotonicClock
+}
+
 export interface EngineHostSession {
   readonly input: IGameInput | undefined
+  readonly messages: IMessageBus<EngineMessages>
+  readonly timers: ITimerService
 }
 
 export interface IEngineHost {
@@ -19,6 +33,7 @@ export interface IEngine {
   readonly state: EngineState
   readonly game: GameData | undefined
   readonly input: IGameInput | undefined
+  readonly timers: ITimerService | undefined
   /** The latest session's bus, retained after stop and replaced on the next start. */
   readonly messages: IMessageBus<EngineMessages> | undefined
   start(): Promise<void>
@@ -29,9 +44,10 @@ export interface IEngine {
 interface EngineSession {
   cancelled: Promise<undefined>
   cancel(): void
-  messages: IMessageBus<EngineMessages>
+  messages: ScheduledMessageBus<EngineMessages>
   game?: GameData
   input?: InputController
+  timers?: TimerService
   cleanup?: () => void
 }
 
@@ -45,6 +61,7 @@ export class Engine implements IEngine {
     private readonly host: IEngineHost,
     private readonly logger: ILogger,
     private readonly createMessageBus: () => IMessageBus<EngineMessages>,
+    private readonly runtime: EngineRuntimeServices,
   ) {}
 
   get state(): EngineState {
@@ -64,6 +81,10 @@ export class Engine implements IEngine {
     return this.session?.game ? this.session.input : undefined
   }
 
+  get timers(): ITimerService | undefined {
+    return this.session?.game ? this.session.timers : undefined
+  }
+
   flushMessages(): void {
     this.latestMessages?.flush()
   }
@@ -75,7 +96,14 @@ export class Engine implements IEngine {
     const cancelled = new Promise<undefined>((resolve) => {
       cancel = () => resolve(undefined)
     })
-    const session: EngineSession = { cancelled, cancel, messages: this.createMessageBus() }
+    const messages = new ScheduledMessageBus(
+      this.createMessageBus(),
+      this.runtime.scheduler,
+      (error) => this.logger.error('Engine', 'Message dispatch failed', error),
+      (topic) =>
+        topic.startsWith('engine.') || (this.session === session && session.game !== undefined),
+    )
+    const session: EngineSession = { cancelled, cancel, messages }
     this.session = session
     this.latestMessages = session.messages
     session.messages.publish('engine.starting', undefined)
@@ -90,6 +118,7 @@ export class Engine implements IEngine {
     this.session = undefined
     session.cancel()
     session.input?.dispose()
+    session.timers?.dispose()
     try {
       session.cleanup?.()
     } catch (error) {
@@ -97,6 +126,7 @@ export class Engine implements IEngine {
       throw error
     } finally {
       session.messages.publish('engine.stopped', undefined)
+      session.messages.seal()
     }
   }
 
@@ -108,7 +138,16 @@ export class Engine implements IEngine {
       if (this.session !== session || !game) return
 
       if (game.input) session.input = new InputController(game.input, session.messages)
-      const cleanup = this.host.mount(game, { input: session.input })
+      session.timers = new TimerService(
+        session.messages,
+        this.runtime.scheduler,
+        this.runtime.clock,
+      )
+      const cleanup = this.host.mount(game, {
+        input: session.input,
+        messages: session.messages,
+        timers: session.timers,
+      })
       if (this.session !== session) {
         cleanup()
         return

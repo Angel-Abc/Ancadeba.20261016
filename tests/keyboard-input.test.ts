@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { describe, expect, it, vi } from 'vite-plus/test'
-import { bindKeyboardInput } from '@ancadeba/ui-components'
+import { bindKeyboardInput, createBrowserTiming } from '@ancadeba/ui-components'
 import {
   Engine,
   InputController,
@@ -60,8 +60,38 @@ class TestElement extends EventTarget {
   }
 }
 
+class TestWindow extends EventTarget {
+  readonly performance = { now: () => 0 }
+  readonly tasks = new Map<number, { run: () => void; delay: number }>()
+  private nextId = 0
+
+  setTimeout(run: () => void, delay: number): number {
+    const id = ++this.nextId
+    this.tasks.set(id, { run, delay })
+    return id
+  }
+
+  clearTimeout(id: number): void {
+    this.tasks.delete(id)
+  }
+
+  runNext(): void {
+    const [id, task] = this.tasks.entries().next().value!
+    this.tasks.delete(id)
+    task.run()
+  }
+
+  drain(): void {
+    let count = 0
+    while (this.tasks.size) {
+      if (++count > 100) throw new Error('Browser tasks did not become idle')
+      this.runNext()
+    }
+  }
+}
+
 class TestDocument extends EventTarget {
-  readonly defaultView = new EventTarget()
+  readonly defaultView = new TestWindow()
   activeElement: TestElement | null = null
   hidden = false
 
@@ -112,6 +142,28 @@ function setup() {
   const cleanup = bindKeyboardInput(surface.asElement(), input)
   return { document, surface, messages, input, handler, cleanup }
 }
+
+describe('browser timing adapter', () => {
+  it('uses the injected window for deferred tasks, idempotent cancellation, and monotonic time', () => {
+    const window = new TestWindow()
+    const timing = createBrowserTiming(window as unknown as Window)
+    const received = vi.fn()
+    const cancel = timing.scheduler.schedule(received, 10)
+    const task = window.tasks.values().next().value!
+    expect(task.delay).toBe(10)
+    expect(timing.clock.now()).toBe(0)
+    expect(received).not.toHaveBeenCalled()
+    cancel()
+    cancel()
+    task.run()
+    expect(received).not.toHaveBeenCalled()
+    const cancelCompleted = timing.scheduler.schedule(received, 0)
+    window.runNext()
+    cancelCompleted()
+    expect(received).toHaveBeenCalledTimes(1)
+    expect(window.tasks.size).toBe(0)
+  })
+})
 
 describe('shared keyboard adapter', () => {
   it('does not steal focus and only accepts input within the game surface', () => {
@@ -247,7 +299,7 @@ describe.each([
   ['standalone', (element: HTMLElement): IEngineHost => new DomEngineHost(element)],
   ['editor preview', (element: HTMLElement): IEngineHost => new EditorPreviewHost(element)],
 ] as const)('%s host input integration', (_name, createHost) => {
-  it('mounts focusable input, preserves queued delivery, and stops and restarts cleanly', async () => {
+  it('automatically dispatches input and timer wakeups and stops and restarts cleanly', async () => {
     const document = new TestDocument()
     const container = document.createElement('main')
     const game: GameData = {
@@ -269,8 +321,19 @@ describe.each([
       createHost(container.asElement()),
       logger,
       () => new MessageBus<EngineMessages>(),
+      createBrowserTiming(document.defaultView as unknown as Window),
     )
     await engine.start()
+    document.defaultView.drain()
+    const wakeup = vi.fn()
+    engine.messages!.subscribe('timer.wakeup', wakeup)
+    document.hidden = true
+    engine.timers!.schedule(0)
+    document.defaultView.runNext()
+    expect(wakeup).not.toHaveBeenCalled()
+    document.defaultView.runNext()
+    expect(wakeup).toHaveBeenCalledExactlyOnceWith({ timerId: 1, dueAt: 0, observedAt: 0 })
+    document.hidden = false
     const root = container.children[0]!
     expect(root.tabIndex).toBe(0)
     expect(document.activeElement).toBeNull()
@@ -283,11 +346,11 @@ describe.each([
     key(root, 'keyup', 'KeyW')
     expect(handler).not.toHaveBeenCalled()
     key(root, 'keyup', 'ArrowUp')
-    engine.flushMessages()
+    document.defaultView.runNext()
     expect(handler.mock.calls.map(([event]) => event.phase)).toEqual(['pressed', 'released'])
     engine.input!.setContext('menu')
     key(root, 'keydown', 'KeyW')
-    engine.flushMessages()
+    document.defaultView.runNext()
     expect(handler).toHaveBeenLastCalledWith({
       context: 'menu',
       input: 'selectPrevious',
@@ -298,7 +361,7 @@ describe.each([
     expect(container.children).toHaveLength(0)
     key(root, 'keyup', 'KeyW')
     key(root, 'keydown', 'KeyW')
-    oldMessages.flush()
+    document.defaultView.drain()
     expect(handler).not.toHaveBeenCalled()
     await engine.start()
     const next = container.children[0]!
@@ -306,12 +369,13 @@ describe.each([
     engine.messages!.subscribe('input.virtual', nextHandler)
     document.activeElement = next
     key(next, 'keydown', 'KeyW')
-    engine.flushMessages()
+    document.defaultView.drain()
     expect(nextHandler).toHaveBeenCalledExactlyOnceWith({
       context: 'gameplay',
       input: 'moveNorth',
       phase: 'pressed',
     })
     engine.stop()
+    document.defaultView.drain()
   })
 })

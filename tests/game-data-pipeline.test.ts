@@ -38,6 +38,7 @@ const scene: SceneDefinition = {
   components: [],
 }
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
 
 function createPipeline(
   files: Record<string, unknown> = {
@@ -54,7 +55,7 @@ function createPipeline(
   }
   const loader = new GameLoader(new JsonResourceLoader(source, logger))
   const host = { mount: vi.fn<IEngineHost['mount']>(() => () => {}) }
-  const engine = new Engine(loader, host, logger, () => new MessageBus<EngineMessages>())
+  const engine = new Engine(loader, host, logger, () => new MessageBus<EngineMessages>(), runtime)
   return { source, loader, host, engine }
 }
 
@@ -200,7 +201,11 @@ describe('game data pipeline', () => {
     await starting
     engine.flushMessages()
     expect(engine.game?.scenes.get('start-screen')?.screen.grid.rows).toBe(20)
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith(engine.game, { input: undefined })
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(engine.game, {
+      input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
+    })
     expect(started).toHaveBeenCalledExactlyOnceWith({ game: engine.game })
     engine.stop()
   })

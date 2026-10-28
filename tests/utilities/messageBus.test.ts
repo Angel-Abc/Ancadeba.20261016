@@ -8,6 +8,52 @@ interface Messages {
   ready: undefined
 }
 
+describe('MessageBus delivery filters', () => {
+  it('evaluates once per message, discards rejected messages, and finishes current subscribers', () => {
+    const bus = new MessageBus<Messages>()
+    let active = true
+    const filter = vi.fn(() => active)
+    const calls: string[] = []
+    bus.subscribe('tick', (value) => {
+      calls.push(`first:${value}`)
+      active = false
+    })
+    bus.subscribe('tick', (value) => calls.push(`second:${value}`))
+    bus.publish('tick', 1)
+    bus.publish('tick', 2)
+    bus.flush(filter)
+    expect(calls).toEqual(['first:1', 'second:1'])
+    expect(filter).toHaveBeenCalledTimes(2)
+    bus.flush(() => true)
+    expect(calls).toHaveLength(2)
+  })
+
+  it('aggregates predicate and subscriber failures while continuing the batch', () => {
+    const bus = new MessageBus<Messages>()
+    const calls: number[] = []
+    const predicateFailure = new Error('Filter failed')
+    const subscriberFailure = new Error('Subscriber failed')
+    bus.subscribe('tick', (value) => {
+      calls.push(value)
+      if (value === 2) throw subscriberFailure
+    })
+    for (const value of [1, 2, 3]) bus.publish('tick', value)
+    let aggregate: unknown
+    try {
+      bus.flush((_topic, payload) => {
+        if (payload === 1) throw predicateFailure
+        return true
+      })
+    } catch (error) {
+      aggregate = error
+    }
+    expect(aggregate).toBeInstanceOf(AggregateError)
+    expect((aggregate as AggregateError).errors).toEqual([predicateFailure, subscriberFailure])
+    expect(calls).toEqual([2, 3])
+    expect(() => bus.flush()).not.toThrow()
+  })
+})
+
 describe('MessageBus', () => {
   it('infers payloads and checks topics and payload types through its interface', () => {
     const bus: IMessageBus<Messages> = new MessageBus<Messages>()

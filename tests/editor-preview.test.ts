@@ -7,6 +7,8 @@ import {
 } from '../apps/editor-ui/src/previewController.js'
 import { EditorWorkspaceResources } from '../apps/editor-ui/src/workspaceResources.js'
 
+const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
+
 function gameDefinition(title: string) {
   return {
     'schema-version': '1.0.0' as const,
@@ -50,6 +52,7 @@ function createPreview() {
         host,
         logger,
         () => new MessageBus<EngineMessages>(),
+        runtime,
       ),
   )
   const controller = new EditorPreviewController(createInstance, onStateChange)
@@ -103,6 +106,8 @@ describe('editor preview', () => {
     })
     expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Workspace game'), {
       input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
     })
     expect(onStateChange.mock.calls).toEqual([['starting'], ['running']])
 
@@ -176,7 +181,11 @@ describe('editor preview', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Preview'), { input: undefined })
+    expect(host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Preview'), {
+      input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
+    })
     expect(onStateChange).toHaveBeenLastCalledWith('running')
   })
 

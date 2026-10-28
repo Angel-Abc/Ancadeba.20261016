@@ -29,6 +29,7 @@ const game = {
   input: 'input.json',
 }
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
 
 describe('input definitions', () => {
   it('accepts game-specific controls and contexts', () => {
@@ -117,6 +118,7 @@ describe('input definitions', () => {
       { mount },
       logger,
       () => new MessageBus<EngineMessages>(),
+      runtime,
     )
     await expect(engine.start()).rejects.toThrow()
     expect(engine.input).toBeUndefined()

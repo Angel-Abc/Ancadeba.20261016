@@ -1,5 +1,6 @@
 import './style.css'
 import type { EngineState } from '@ancadeba/game-runtime'
+import { createBrowserTiming } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
 import { ContainerBuilder } from './ioc/containerBuilder'
 
@@ -44,6 +45,7 @@ function clearDownload(): void {
 const container = new ContainerBuilder({
   fetcher: fetch,
   host: new EditorPreviewHost(content),
+  runtime: createBrowserTiming(window),
   download: (archive, fileName) => {
     clearDownload()
     downloadUrl = URL.createObjectURL(archive)

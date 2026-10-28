@@ -4,6 +4,7 @@ import {
   type EngineMessages,
   type IEngine,
   type IEngineHost,
+  type EngineRuntimeServices,
 } from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
@@ -18,6 +19,7 @@ import { EditorWorkspaceResources } from '../../workspaceResources.js'
 export interface PreviewDependencies {
   fetcher: typeof fetch
   host: IEngineHost
+  runtime: EngineRuntimeServices
   logger: ILogger
   onPreviewStateChange: PreviewStateListener
 }
@@ -35,6 +37,7 @@ export const previewFactories = {
     const host = resolver.resolve('host')
     const logger = resolver.resolve('logger')
     const createMessageBus = resolver.resolve('createMessageBus')
+    const runtime = resolver.resolve('runtime')
     return (folder: string) =>
       new Engine(
         new GameLoader(
@@ -43,6 +46,7 @@ export const previewFactories = {
         host,
         logger,
         createMessageBus,
+        runtime,
       )
   },
   previewController: (resolver) =>

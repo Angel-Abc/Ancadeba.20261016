@@ -229,6 +229,7 @@ starting the standalone engine or fetching its `config.json`.
 ```ts
 import { Engine, GameLoader, type EngineMessages } from '@ancadeba/game-runtime'
 import { JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
+import { createBrowserTiming } from '@ancadeba/ui-components'
 
 const engine = new Engine(
   new GameLoader(new JsonResourceLoader(resourceSource, logger)),
@@ -242,6 +243,7 @@ const engine = new Engine(
   },
   logger,
   () => new MessageBus<EngineMessages>(),
+  createBrowserTiming(window),
 )
 
 await engine.start()
@@ -250,12 +252,16 @@ engine.stop()
 ```
 
 Construct `Engine` with an `IGameLoader`, a host whose synchronous `mount(game, session)`
-returns a cleanup function, an `ILogger`, and a factory that creates a fresh
-message bus for each session. The standalone application uses
+returns a cleanup function, an `ILogger`, a factory that creates a fresh
+raw message bus for each session, and required `EngineRuntimeServices` containing
+an `ITaskScheduler` and `IMonotonicClock`. `createBrowserTiming(window)` supplies
+these through browser timers and `performance.now()`. The scheduler must always
+defer its callback and return an idempotent cancellation function. The standalone application uses
 `ContainerBuilder` to register the host, resources, JSON loader, message-bus
 factory, and engine in one container, then resolves `engine` from that container.
 The editor's IoC preview factory constructs an engine and JSON loader for each
-selected game folder, using the registered logger, host, and message-bus factory.
+selected game folder, using the registered logger, host, message-bus factory, and timing services.
+The host receives `{ input, messages, timers }` for that session during mounting.
 The host should release its mounted content, listeners, and other owned resources
 in that cleanup function. If mounting throws, the host is responsible for undoing
 any partial mount. Injected sources and loggers remain owned by the caller.
@@ -274,11 +280,14 @@ stops its instance when Vite replaces its entry module.
 
 ### Lifecycle messages
 
-Each `start()` that creates a session also creates a fresh
-`IMessageBus<EngineMessages>`, available immediately as `engine.messages`.
-It is `undefined` before the first start. Subscribe after calling `start()`;
-delivery stays queued until `engine.flushMessages()` or the bus's `flush()` is
-called. Neither starting nor stopping flushes automatically.
+Each `start()` that creates a session wraps a fresh injected raw bus in a
+`ScheduledMessageBus<EngineMessages>`, available immediately as `engine.messages`.
+It is undefined before the first start. Subscribe immediately after calling
+`start()` to observe startup messages. All session messages are delivered
+automatically in deferred host tasks; publishing never invokes handlers inline.
+Multiple publications share one pending task, and messages published by handlers
+get a later task. An idle bus schedules no work. Subscribers remain the processing
+boundary; dispatch does not itself advance turns or world time.
 
 ```ts
 const starting = engine.start()
@@ -291,9 +300,7 @@ messages?.subscribe('engine.failed', ({ error }) => {
 })
 
 await starting
-engine.flushMessages()
 engine.stop()
-engine.flushMessages()
 ```
 
 The exported `EngineMessages` interface defines these topics:
@@ -301,24 +308,77 @@ The exported `EngineMessages` interface defines these topics:
 | Topic             | Payload              | Queued when                                       |
 | ----------------- | -------------------- | ------------------------------------------------- |
 | `engine.starting` | `undefined`          | A new session is created                          |
-| `engine.started`  | `{ game: Game }`     | The game is loaded and mounted successfully       |
+| `engine.started`  | `{ game: GameData }` | The game is loaded and mounted successfully       |
 | `engine.failed`   | `{ error: unknown }` | Startup or host cleanup throws                    |
 | `engine.stopped`  | `undefined`          | The session stops, including cancellation/failure |
 
 Failures queue `engine.failed` before `engine.stopped` and keep the existing
 promise rejection or synchronous exception behavior. Cancellation queues stopped
-without failed or started. Subscriber exceptions surface only from an explicit
-flush, without becoming engine failure events.
+without failed or started. Automatic dispatch logs aggregated subscriber failures
+through the injected logger, completes the batch, and continues later dispatches.
+Failed deliveries are not retried and do not become engine failure events.
 
-After stop, `engine.messages` retains the stopped session's bus so final events
-can be flushed. A restart replaces it; subscriptions and queued messages do not
-transfer to the new session. Retained references to an old bus can still flush
-that session independently. Repeated starts while active and repeated stops do
-not create extra buses or events. Flushing before the first start does nothing.
+On stop, input is disposed, timers are cancelled, and gameplay delivery is
+disabled before host cleanup. A message already being delivered finishes its
+remaining subscribers; later queued input and timer messages are discarded,
+including those in the same batch. Final lifecycle messages are queued and the
+bus is sealed against further publication. These final messages are still
+delivered automatically, even if another session starts immediately.
+
+`engine.messages` retains the stopped session's bus. Retained references may
+subscribe to remaining lifecycle messages or explicitly flush them, but cannot
+publish more work. A restart creates a new bus, input controller, and timer
+service; subscriptions do not transfer. Repeated starts while active and repeated
+stops do not create extra buses or events.
+
+`engine.flushMessages()` and `engine.messages.flush()` remain available. They
+invalidate a pending automatic task, synchronously deliver one snapshot batch,
+and throw `AggregateError` for subscriber or delivery-predicate failures. Handler
+publications still schedule a later task, and nested flushes do nothing. Explicit
+flushes use the same session-delivery rules as automatic dispatch. Flushing before
+the first start does nothing.
 
 The application IoC registrations supply the bus factory through dependency
 injection, returning a fresh `MessageBus<EngineMessages>` on every call.
-Engine lifecycle topic contracts live in game-runtime; utilities remain generic.
+The exposed bus is the scheduled decorator rather than that raw instance; use
+`engine.messages` for publications and subscriptions. Lifecycle topic contracts
+live in game-runtime; utilities remain generic.
+
+## One-shot timers
+
+Every loaded session creates a `TimerService`, exposed through `engine.timers`
+only while running and through `session.timers` during host mounting. It uses
+injected timing services and publishes `timer.wakeup` into the session bus.
+
+```ts
+await engine.start()
+engine.messages?.subscribe('timer.wakeup', ({ timerId, dueAt, observedAt }) => {
+  console.log(timerId, dueAt, observedAt)
+})
+const timerId = engine.timers?.schedule(1000)
+// Delivery occurs automatically. To prevent a pending timer from publishing:
+if (timerId !== undefined) engine.timers?.cancel(timerId)
+```
+
+`ITimerService.schedule(delayMs)` returns a session-local numeric `TimerId`.
+Delays must be integer milliseconds from zero through `2_147_483_647`; invalid
+delays throw `RangeError`. Even a zero-delay timer is deferred. Each wakeup carries
+`{ timerId, dueAt, observedAt }` with timestamps from the monotonic clock.
+Early callbacks rearm for the remaining duration; late callbacks publish once,
+without replaying missed time. The bus preserves publication order rather than
+sorting wakeups by deadline.
+
+`cancel(id)` returns true only when it prevents a pending timer from publishing.
+Once published, cancellation returns false and does not retract the queued
+wakeup. Engine stop still discards queued gameplay triggers. Disposal cancels
+pending callbacks and disables retained service references: scheduling returns
+undefined and cancellation returns false. Stale callbacks cannot affect a new
+session.
+
+Timers continue counting while unfocused or hidden; browser execution may delay
+their wakeups until the host resumes. Input focus resets do not pause timers.
+Recurring timers, pause policies, world-clock advancement, and turn rules remain
+future work. A subscriber can schedule the next one-shot timer when appropriate.
 
 ## Game-specific input
 
@@ -366,8 +426,8 @@ engine.messages?.subscribe('input.virtual', ({ context, input, phase }) => {
 })
 engine.input?.pressKey('KeyW')
 engine.input?.releaseKey('KeyW')
-engine.flushMessages() // Delivers pressed and released; publishing does not flush.
-engine.input?.setContext('menu')
+// Pressed and released arrive automatically in a later host task.
+// Switching contexts immediately would not rewrite those queued payloads.
 ```
 
 `input.virtual` carries `{ context, input, phase }`, where phase is `pressed`,
@@ -395,8 +455,8 @@ prevent defaults without generating inputs. Cleanup removes owned listeners.
 
 This version supplies game defaults, press/release state, and one active named
 context. Player remapping, persistence, chords, repeat policies, additional devices,
-automatic bus dispatch, and gameplay processing are not implemented yet. Hosts
-do not flush the bus on keyboard events; consumers explicitly call `flushMessages()`.
+and gameplay rules are not implemented yet. Hosts do not flush the bus on keyboard
+events; the session dispatcher schedules delivery.
 
 ## Queued messaging
 
@@ -426,8 +486,15 @@ unsubscribe() // Release the subscription when its owning system stops.
 `publish` queues the payload by reference; treat it as immutable after publishing.
 `flush` synchronously delivers only the messages queued when that flush began, in
 publish order. Messages published by handlers wait for the next flush, and nested
-flush calls do nothing. The current engine has no update loop yet, so delivery is
-not scheduled automatically.
+flush calls do nothing. The generic `MessageBus` remains manually flushed;
+engine sessions add the scheduled decorator described above.
+
+An optional `flush((topic, payload) => boolean)` predicate runs once before each
+message, including messages without subscribers. Returning false discards that
+message; throwing discards it and contributes to the batch's `AggregateError`.
+The decision applies to all subscribers of that message. A scheduled bus combines
+an explicit predicate with its mandatory configured predicate, so callers cannot
+bypass the session's stop rules.
 
 Subscribers run in registration order and are selected at delivery time. New
 subscriptions added by a handler start with the next message. Unsubscribing takes

@@ -1,5 +1,6 @@
 import './styling/main.css'
 import type { IEngine } from '@ancadeba/game-runtime'
+import { createBrowserTiming } from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
@@ -27,6 +28,7 @@ try {
       applicationUrl,
       fetch,
       new DomEngineHost(app),
+      createBrowserTiming(window),
     ).build()
     engine = container.resolve('engine')
     await engine.start()

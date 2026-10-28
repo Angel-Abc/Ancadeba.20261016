@@ -87,12 +87,23 @@ describe('engine development game files', () => {
     const applicationUrl = `${origin}/nested/`
     const config = await loadRuntimeConfig(applicationUrl, fetch)
     const mount = vi.fn(() => () => {})
-    const container = new ContainerBuilder(config, applicationUrl, fetch, { mount }).build()
+    const container = new ContainerBuilder(
+      config,
+      applicationUrl,
+      fetch,
+      { mount },
+      {
+        clock: { now: () => 0 },
+        scheduler: { schedule: () => () => {} },
+      },
+    ).build()
     const engine = container.resolve('engine')
     await engine.start()
     expect(engine.state).toBe('running')
     expect(mount).toHaveBeenCalledExactlyOnceWith(gameData('Development game'), {
       input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
     })
     engine.stop()
   })

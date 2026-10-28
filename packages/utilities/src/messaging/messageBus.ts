@@ -1,4 +1,10 @@
-import type { IMessageBus, MessageHandler, MessageTopic, Unsubscribe } from './index.js'
+import type {
+  IMessageBus,
+  MessageDeliveryPredicate,
+  MessageHandler,
+  MessageTopic,
+  Unsubscribe,
+} from './index.js'
 
 interface QueuedMessage<Topics> {
   topic: MessageTopic<Topics>
@@ -36,7 +42,7 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
     }
   }
 
-  flush(): void {
+  flush(shouldDeliver?: MessageDeliveryPredicate<Topics>): void {
     if (this.flushing) return
 
     this.flushing = true
@@ -46,6 +52,13 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
 
     try {
       for (const { topic, payload } of batch) {
+        try {
+          if (shouldDeliver && !shouldDeliver(topic, payload as Topics[MessageTopic<Topics>]))
+            continue
+        } catch (error) {
+          errors.push(error)
+          continue
+        }
         const subscriptions = this.subscriptions.get(topic)
         if (!subscriptions) continue
 

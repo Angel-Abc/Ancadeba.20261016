@@ -10,6 +10,8 @@ import {
 } from '@ancadeba/game-runtime'
 import { MessageBus, type ILogger } from '@ancadeba/utilities'
 
+const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
+
 function inputData(): InputData {
   return {
     virtualKeys: ['north', 'alternate', 'confirm'],
@@ -155,6 +157,7 @@ describe('engine session input', () => {
       { mount },
       logger,
       () => new MessageBus<EngineMessages>(),
+      runtime,
     )
     expect(engine.input).toBeUndefined()
     const starting = engine.start()
@@ -164,7 +167,11 @@ describe('engine session input', () => {
     const oldBus = engine.messages!
     const handler = vi.fn()
     oldBus.subscribe('input.virtual', handler)
-    expect(mount).toHaveBeenCalledExactlyOnceWith(game, { input })
+    expect(mount).toHaveBeenCalledExactlyOnceWith(game, {
+      input,
+      messages: engine.messages,
+      timers: engine.timers,
+    })
     input.pressKey('KeyW')
     engine.flushMessages()
     expect(handler).toHaveBeenCalledTimes(1)
@@ -206,6 +213,7 @@ describe('engine session input', () => {
         },
         logger,
         () => new MessageBus<EngineMessages>(),
+        runtime,
       )
       if (stopDuringMount) await engine.start()
       else await expect(engine.start()).rejects.toThrow('Mount failed')

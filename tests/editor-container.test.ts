@@ -33,6 +33,7 @@ function createDependencies() {
   const cleanup = vi.fn<() => void>()
   const host = { mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup) }
   const dependencies = {
+    runtime: { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } },
     fetcher,
     host,
     onPreviewStateChange: vi.fn<PreviewStateListener>(),
@@ -64,6 +65,8 @@ describe('editor container', () => {
     )
     expect(dependencies.host.mount).toHaveBeenCalledExactlyOnceWith(gameData('Preview'), {
       input: undefined,
+      messages: expect.anything(),
+      timers: expect.anything(),
     })
     expect(dependencies.onPreviewStateChange.mock.calls).toEqual([['starting'], ['running']])
     expect(dependencies.onExportStateChange).not.toHaveBeenCalled()
