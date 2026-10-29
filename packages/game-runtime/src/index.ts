@@ -14,6 +14,7 @@ export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from
 export { ActionProcessor } from './actionProcessor.js'
 export type {
   ActionRequestId,
+  WorldScheduleId,
   ActionRequest,
   ActionOrigin,
   ActionContext,

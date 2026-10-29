@@ -70,6 +70,12 @@ export class GameProgression {
     )
   }
 
+  /** Project a world deadline using the same elapsed anchor without mutating progression. */
+  hostDelayUntil(dueAtWorldMs: number): number | undefined {
+    if (this.disposed || !this.started || this.mode === 'action-driven') return undefined
+    return (dueAtWorldMs - this.snapshot.worldTimeMs) / this.rate - (this.clock.now() - this.anchor)
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true

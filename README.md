@@ -431,7 +431,7 @@ const createGameRules: GameRulesFactory = (_game) => {
         'weather',
         (_request, { actions }) => {
           weather = weather === 'clear' ? 'rain' : 'clear'
-          actions.schedule('weather', 60000)
+          actions.scheduleWorld('weather', 60000)
           return { status: 'applied' } // A timer does not inherently consume a turn.
         },
       ],
@@ -450,13 +450,13 @@ engine.messages?.subscribe('action.applied', ({ request, progression }) => {
   console.log(request.id, request.origin.type, progression)
 })
 engine.actions?.request('inspect')
-engine.actions?.schedule('weather', 60000)
+engine.actions?.scheduleWorld('weather', 60000)
 ```
 
 `GameRules.handlers` maps action IDs to synchronous `GameActionHandler` functions.
 Each receives an `ActionRequest` and `{ progression, actions }`. Requests carry a
 session-local numeric ID, action ID, optional payload, and an origin: direct,
-captured virtual input, or timer wakeup. Payloads are passed by reference and must
+captured virtual input, host-timer wakeup, or world-time deadline. Payloads are passed by reference and must
 be treated as immutable. Follow-up requests are queued rather than executed
 recursively. Asynchronous work must submit a later request instead of returning
 a promise from a handler.
@@ -474,6 +474,9 @@ and invalid world-time policies fail startup before mounting.
 - `request(action, payload?)`: queue a direct request and return its request ID.
 - `schedule(action, delayMs, payload?)`: schedule a host-time action and return its `TimerId`.
 - `cancelScheduled(timerId)`: cancel a pending action-service timer without affecting unrelated timers.
+- `scheduleWorld(action, delayWorldMs, payload?)`: schedule relative to synchronized world time and return a `WorldScheduleId`.
+- `scheduleWorldAt(action, dueAtWorldMs, payload?)`: schedule at an absolute world-time deadline.
+- `cancelWorldScheduled(id)`: cancel a pending world-time schedule before its action request is published.
 
 A timer wakeup queues its associated request once. Cancellation cannot retract a
 wakeup already published to the bus. The processor handles requests in bus order,
@@ -514,7 +517,7 @@ timer wakeups, and elapsed time never implicitly consume turns.
 defaulting to one. `pulseMs` is an integer host delay from one through
 `2_147_483_647`, defaulting to 1,000. Elapsed accounting begins when the session
 becomes running, excluding loading and mounting time. It synchronizes before
-each action and on an owned timer pulse using the injected monotonic clock at
+each action, when registering world schedules, and on an owned pulse or deadline wakeup using the injected monotonic clock at
 processing time. Each elapsed interval is counted once; an action-cost jump does
 not reset the elapsed anchor. Rejection or failure can still coincide with elapsed
 world-time advancement because real time continued passing.
@@ -525,16 +528,84 @@ progression changes, not game-action outcomes. Time continues through hidden tab
 focus loss, and input-context changes. Merely reading `progression` does not
 synchronize it. Published snapshots remain unchanged as later actions execute.
 
-Stop cancels action timers and world pulses, unsubscribes runtime handlers, and
+Stop cancels action timers, world schedules, and world pulses, unsubscribes runtime handlers, and
 disables retained action-service references. Request and schedule return undefined
 after disposal; cancellation returns false. A handler that stops its session
 cannot commit its returned result. Restart creates fresh progression and invokes
 the rules factory again; stale callbacks cannot affect the new session.
 
-Actor order, turn phases, world-time alarms, dynamic pause/resume, policy switching,
+Actor order, turn phases, dynamic pause/resume, policy switching,
 game-script loading, persistence, and visual gameplay rendering are not part of
-this layer. In particular, scheduling an action uses host milliseconds, so an
-action-time jump does not make a host timer due.
+this layer. `schedule()` uses host milliseconds, so an action-time jump does not
+make a host timer due. World-time schedules use separate APIs described next.
+
+### Actions scheduled in world time
+
+World schedules become due when committed world time reaches their deadlines,
+whether through elapsed synchronization or an accepted action cost. In the weather
+example above, `scheduleWorld('weather', 60000)` changes the weather after 60,000
+world milliseconds. Waiting advances that deadline in elapsed and hybrid games;
+accepted movement costs can also reach it in action-driven and hybrid games.
+The weather handler explicitly schedules its next one-shot effect.
+
+```ts
+const weatherId = engine.actions?.scheduleWorld('weather', 60000)
+const inspectionId = engine.actions?.scheduleWorldAt('inspect', 120000)
+// One move from the example above adds 5,000 world milliseconds in hybrid mode.
+engine.actions?.request('move')
+if (inspectionId !== undefined) engine.actions?.cancelWorldScheduled(inspectionId)
+```
+
+`WorldScheduleId` is a session-local string such as `world:1`, distinct from numeric
+host `TimerId`s. Both relative delays and absolute deadlines must be finite,
+nonnegative numbers; fractional world milliseconds are supported. Invalid values
+and relative-deadline overflow throw `RangeError` without registering a schedule.
+Disposed action references return undefined from either scheduling method and
+false from world cancellation.
+
+Registration synchronizes elapsed world time before calculating or testing the
+deadline. Relative delays begin at the scheduling call, including inside a handler.
+If that handler later commits a time cost that crosses the deadline, the effect
+becomes due as the action completes. Reading `progression` still does not
+synchronize time. Mounting-time schedules are retained until the processor starts,
+with startup time excluded from elapsed accounting.
+
+Zero-delay and past-deadline schedules queue ordinary action requests once the
+session is running; they never execute handlers inline. After committed progression
+changes, the scheduler checks the latest snapshot rather than relying on an older
+queued notification. Each newly due group is sorted by deadline and then registration
+order, removed from the pending collection, and appended to the normal bus queue.
+Already queued actions keep their positions. No time is rewound: an effect due at
+5,000 during a jump to 10,000 observes at least the committed 10,000 when it executes.
+
+World-origin requests carry `{ type: 'world-time', scheduleId, dueAtWorldMs,
+observedWorldMs }`. Observed time is captured at selection; the handler's progression
+can be later because the request remains queued. Rejected, failed, or unknown actions
+use the existing outcome messages, without retrying. Due handlers can advance time
+and make additional schedules due through later bus batches, without recursion.
+Scheduling itself never consumes a turn.
+
+World cancellation succeeds only while a schedule remains pending. Once its
+`action.requested` message is published, cancellation returns false and cannot
+retract it. This permits cancellation after an underlying deadline wakeup was
+published but before it has selected the world action. Engine stop still discards
+queued gameplay requests.
+
+Elapsed and hybrid modes maintain at most one extra owned host timer for the nearest
+pending world deadline, alongside the unchanged progression pulse. The projection
+uses the progression clock's rate and elapsed anchor without independently counting
+elapsed time. Registration, cancellation, due selection, and committed world-time
+changes recompute this alarm. Action-cost jumps can shorten or eliminate the wait.
+Action-driven mode creates no deadline host timers; future schedules wait for
+action-driven world advancement.
+
+Future host waits are rounded upward with a minimum of one host millisecond to
+avoid zero-delay spinning, and clamped to the host timer maximum. Long deadlines
+use bounded waits; early callbacks recheck and rearm. Late callbacks synchronize
+to current time and select due effects once, without automatically replaying missed
+intervals. Replacement and cancellation invalidate stale wakeups. Stop clears all
+world schedules and the owned alarm; restart creates independent state. Built-in
+recurrence, persistence, pause policies, and additional UI remain future work.
 
 ## Game-specific input
 

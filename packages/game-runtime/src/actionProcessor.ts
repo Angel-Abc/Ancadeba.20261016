@@ -9,11 +9,13 @@ import type {
   IGameActions,
   InputActionBinding,
   ProgressionSnapshot,
+  WorldScheduleId,
 } from './actions.js'
 import type { VirtualInput } from './input.js'
 import type { EngineMessages } from './messages.js'
 import { GameProgression } from './progression.js'
 import type { ITimerService, TimerId, TimerWakeup } from './timers.js'
+import { WorldActionScheduler } from './worldActionScheduler.js'
 
 function bindingKey(context: string, input: string, phase: VirtualInput['phase']): string {
   return JSON.stringify([context, input, phase])
@@ -64,6 +66,7 @@ export class ActionProcessor implements IGameActions {
   private readonly bindings = new Map<string, string>()
   private readonly scheduled = new Map<TimerId, { action: string; payload: unknown }>()
   private readonly progressionState: GameProgression
+  private readonly worldSchedules: WorldActionScheduler
   private readonly subscriptions: Unsubscribe[]
   private nextRequestId = 0
   private disposed = false
@@ -83,6 +86,15 @@ export class ActionProcessor implements IGameActions {
     }
     for (const binding of rules.inputBindings ?? []) this.addBinding(binding)
     this.progressionState = new GameProgression(rules.worldTime, messages, timers, clock)
+    this.worldSchedules = new WorldActionScheduler(
+      messages,
+      timers,
+      this.progressionState,
+      (action, payload, origin) => {
+        this.enqueue(action, payload, origin)
+      },
+      isRunning,
+    )
     this.subscriptions = [
       messages.subscribe('input.virtual', (event) => this.onInput(event)),
       messages.subscribe('timer.wakeup', (event) => this.onTimer(event)),
@@ -95,7 +107,9 @@ export class ActionProcessor implements IGameActions {
   }
 
   start(): void {
-    if (!this.disposed) this.progressionState.start()
+    if (this.disposed) return
+    this.progressionState.start()
+    this.worldSchedules.start()
   }
 
   request(action: string, payload?: unknown): ActionRequestId | undefined {
@@ -115,9 +129,30 @@ export class ActionProcessor implements IGameActions {
     return true
   }
 
+  scheduleWorld(
+    action: string,
+    delayWorldMs: number,
+    payload?: unknown,
+  ): WorldScheduleId | undefined {
+    return this.worldSchedules.scheduleAfter(action, delayWorldMs, payload)
+  }
+
+  scheduleWorldAt(
+    action: string,
+    dueAtWorldMs: number,
+    payload?: unknown,
+  ): WorldScheduleId | undefined {
+    return this.worldSchedules.scheduleAt(action, dueAtWorldMs, payload)
+  }
+
+  cancelWorldScheduled(id: WorldScheduleId): boolean {
+    return this.worldSchedules.cancel(id)
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.worldSchedules.dispose()
     for (const unsubscribe of this.subscriptions) unsubscribe()
     for (const timerId of this.scheduled.keys()) this.timers.cancel(timerId)
     this.scheduled.clear()

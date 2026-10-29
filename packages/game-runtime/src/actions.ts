@@ -3,6 +3,7 @@ import type { VirtualInput } from './input.js'
 import type { TimerId, TimerWakeup } from './timers.js'
 
 export type ActionRequestId = number
+export type WorldScheduleId = `world:${number}`
 
 export interface ProgressionSnapshot {
   readonly turn: number
@@ -19,6 +20,12 @@ export type ActionOrigin =
   | { readonly type: 'direct' }
   | { readonly type: 'input'; readonly event: VirtualInput }
   | { readonly type: 'timer'; readonly event: TimerWakeup }
+  | {
+      readonly type: 'world-time'
+      readonly scheduleId: WorldScheduleId
+      readonly dueAtWorldMs: number
+      readonly observedWorldMs: number
+    }
 
 export interface ActionRequest {
   readonly id: ActionRequestId
@@ -43,6 +50,19 @@ export interface IGameActions {
   request(action: string, payload?: unknown): ActionRequestId | undefined
   schedule(action: string, delayMs: number, payload?: unknown): TimerId | undefined
   cancelScheduled(timerId: TimerId): boolean
+  /** Relative to synchronized world time at this call; handlers still execute through the bus. */
+  scheduleWorld(
+    action: string,
+    delayWorldMs: number,
+    payload?: unknown,
+  ): WorldScheduleId | undefined
+  /** Past and current deadlines queue immediately once the session is running. */
+  scheduleWorldAt(
+    action: string,
+    dueAtWorldMs: number,
+    payload?: unknown,
+  ): WorldScheduleId | undefined
+  cancelWorldScheduled(id: WorldScheduleId): boolean
 }
 
 export interface ActionContext {
