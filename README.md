@@ -261,7 +261,8 @@ defer its callback and return an idempotent cancellation function. The standalon
 factory, and engine in one container, then resolves `engine` from that container.
 The editor's IoC preview factory constructs an engine and JSON loader for each
 selected game folder, using the registered logger, host, message-bus factory, and timing services.
-The host receives `{ input, messages, timers }` for that session during mounting.
+The host receives `{ input, messages, timers, actions }` for that session during mounting.
+Timing services can also supply a `createGameRules(game)` factory, described below.
 The host should release its mounted content, listeners, and other owned resources
 in that cleanup function. If mounting throws, the host is responsible for undoing
 any partial mount. Injected sources and loggers remain owned by the caller.
@@ -318,9 +319,9 @@ without failed or started. Automatic dispatch logs aggregated subscriber failure
 through the injected logger, completes the batch, and continues later dispatches.
 Failed deliveries are not retried and do not become engine failure events.
 
-On stop, input is disposed, timers are cancelled, and gameplay delivery is
+On stop, action processing and input are disposed, timers are cancelled, and gameplay delivery is
 disabled before host cleanup. A message already being delivered finishes its
-remaining subscribers; later queued input and timer messages are discarded,
+remaining subscribers; later queued input, timer, action, and progression messages are discarded,
 including those in the same batch. Final lifecycle messages are queued and the
 bus is sealed against further publication. These final messages are still
 delivered automatically, even if another session starts immediately.
@@ -328,7 +329,7 @@ delivered automatically, even if another session starts immediately.
 `engine.messages` retains the stopped session's bus. Retained references may
 subscribe to remaining lifecycle messages or explicitly flush them, but cannot
 publish more work. A restart creates a new bus, input controller, and timer
-service; subscriptions do not transfer. Repeated starts while active and repeated
+service, action handlers, and progression; subscriptions do not transfer. Repeated starts while active and repeated
 stops do not create extra buses or events.
 
 `engine.flushMessages()` and `engine.messages.flush()` remain available. They
@@ -377,8 +378,163 @@ session.
 
 Timers continue counting while unfocused or hidden; browser execution may delay
 their wakeups until the host resumes. Input focus resets do not pause timers.
-Recurring timers, pause policies, world-clock advancement, and turn rules remain
-future work. A subscriber can schedule the next one-shot timer when appropriate.
+Recurring timer APIs and pause policies remain future work. A subscriber can
+schedule the next one-shot timer when appropriate. Game actions can associate
+these host-time timers with named handlers, and elapsed world time chains its
+own one-shot pulses as described below.
+
+## Game actions and progression
+
+`EngineRuntimeServices.createGameRules(game)` optionally supplies game-specific
+TypeScript rules once per loaded session. Return fresh handler closures or
+instances for each call so positions, inventory, weather, and other domain state
+are session-owned. The action processor owns only routing and progression.
+Without a factory, an engine has empty rules and action-driven world time; existing
+JSON games keep their behavior and an idle session does not start polling.
+
+Custom handler code must currently be supplied by application composition. Game
+JSON schemas do not define executable rules, and the loader does not import game
+scripts. Both application containers forward the supplied runtime services to
+their engines, including the editor's fresh preview instances. The placeholder UI
+is unchanged.
+
+```ts
+import {
+  Engine,
+  type EngineMessages,
+  type GameActionHandler,
+  type GameRulesFactory,
+} from '@ancadeba/game-runtime'
+import { MessageBus } from '@ancadeba/utilities'
+import { createBrowserTiming } from '@ancadeba/ui-components'
+
+const createGameRules: GameRulesFactory = (_game) => {
+  let moves = 0
+  let weather = 'clear'
+  return {
+    handlers: new Map<string, GameActionHandler>([
+      [
+        'move',
+        () => {
+          moves++
+          return { status: 'applied', advanceTurn: true, worldTimeCostMs: 5000 }
+        },
+      ],
+      [
+        'inspect',
+        () => {
+          console.log({ moves, weather })
+          return { status: 'applied' } // No turn or action-time cost.
+        },
+      ],
+      [
+        'weather',
+        (_request, { actions }) => {
+          weather = weather === 'clear' ? 'rain' : 'clear'
+          actions.schedule('weather', 60000)
+          return { status: 'applied' } // A timer does not inherently consume a turn.
+        },
+      ],
+    ]),
+    inputBindings: [{ context: 'gameplay', input: 'moveNorth', action: 'move' }],
+    worldTime: { mode: 'hybrid', rate: 1, pulseMs: 1000 },
+  }
+}
+
+const engine = new Engine(loader, host, logger, () => new MessageBus<EngineMessages>(), {
+  ...createBrowserTiming(window),
+  createGameRules,
+})
+await engine.start()
+engine.messages?.subscribe('action.applied', ({ request, progression }) => {
+  console.log(request.id, request.origin.type, progression)
+})
+engine.actions?.request('inspect')
+engine.actions?.schedule('weather', 60000)
+```
+
+`GameRules.handlers` maps action IDs to synchronous `GameActionHandler` functions.
+Each receives an `ActionRequest` and `{ progression, actions }`. Requests carry a
+session-local numeric ID, action ID, optional payload, and an origin: direct,
+captured virtual input, or timer wakeup. Payloads are passed by reference and must
+be treated as immutable. Follow-up requests are queued rather than executed
+recursively. Asynchronous work must submit a later request instead of returning
+a promise from a handler.
+
+`inputBindings` select a captured input context, input ID, and phase. Phase defaults
+to `pressed`; `released` and `cancelled` require explicit bindings. Unmatched input
+is ignored. A context change does not reinterpret already queued inputs.
+Unknown target actions, duplicate context/input/phase tuples, invalid bindings,
+and invalid world-time policies fail startup before mounting.
+
+`IGameActions` is available as `engine.actions` only while running and as
+`session.actions` during mounting. It exposes:
+
+- `progression`: a frozen `{ turn, worldTimeMs }` snapshot of the latest synchronization.
+- `request(action, payload?)`: queue a direct request and return its request ID.
+- `schedule(action, delayMs, payload?)`: schedule a host-time action and return its `TimerId`.
+- `cancelScheduled(timerId)`: cancel a pending action-service timer without affecting unrelated timers.
+
+A timer wakeup queues its associated request once. Cancellation cannot retract a
+wakeup already published to the bus. The processor handles requests in bus order,
+with trigger translation, follow-up requests, and outcome delivery separated by
+normal deferred batches. Handler maps and bindings are copied at session creation.
+
+Handlers return `{ status: 'applied', advanceTurn?, worldTimeCostMs? }` or
+`{ status: 'rejected', reason }`. Turn advancement defaults to false; time cost
+defaults to zero and must be finite and nonnegative. Unknown action IDs produce
+rejection. Exceptions, promises, and invalid results produce logged action
+failures without stopping the engine or retrying. Rejection and failure commit no
+turn or action-time cost. Handlers must validate before mutating domain state or
+enqueuing effects; the processor does not roll those effects back.
+
+The bus publishes `action.requested`, then `action.applied`, `action.rejected`, or
+`action.failed`. Outcome messages capture the request and progression snapshot;
+applied messages include the normalized outcome, rejected messages a reason, and
+failed messages the error. `turn.advanced` and `world-time.advanced` carry
+`{ previous, progression }` snapshots and are published only when values change.
+An action's progression updates are committed together before its outcome is
+queued, with turn notification preceding world-time notification when both change.
+
+### Independent turns and world time
+
+Every session starts at turn zero and world time zero. Only an applied action
+with `advanceTurn: true` increments the turn, by exactly one. Accepted actions,
+timer wakeups, and elapsed time never implicitly consume turns.
+
+`GameRules.worldTime` selects one static per-session policy:
+
+| Mode                      | Elapsed host time            | Accepted action costs |
+| ------------------------- | ---------------------------- | --------------------- |
+| `action-driven` (default) | Ignored                      | Added                 |
+| `elapsed`                 | Added at the configured rate | Ignored               |
+| `hybrid`                  | Added at the configured rate | Added independently   |
+
+`rate` is a positive finite number of world milliseconds per host millisecond,
+defaulting to one. `pulseMs` is an integer host delay from one through
+`2_147_483_647`, defaulting to 1,000. Elapsed accounting begins when the session
+becomes running, excluding loading and mounting time. It synchronizes before
+each action and on an owned timer pulse using the injected monotonic clock at
+processing time. Each elapsed interval is counted once; an action-cost jump does
+not reset the elapsed anchor. Rejection or failure can still coincide with elapsed
+world-time advancement because real time continued passing.
+
+Late pulses account for the elapsed duration once and schedule the next pulse
+from the current host time, without replaying missed intervals. Pulses publish
+progression changes, not game-action outcomes. Time continues through hidden tabs,
+focus loss, and input-context changes. Merely reading `progression` does not
+synchronize it. Published snapshots remain unchanged as later actions execute.
+
+Stop cancels action timers and world pulses, unsubscribes runtime handlers, and
+disables retained action-service references. Request and schedule return undefined
+after disposal; cancellation returns false. A handler that stops its session
+cannot commit its returned result. Restart creates fresh progression and invokes
+the rules factory again; stale callbacks cannot affect the new session.
+
+Actor order, turn phases, world-time alarms, dynamic pause/resume, policy switching,
+game-script loading, persistence, and visual gameplay rendering are not part of
+this layer. In particular, scheduling an action uses host milliseconds, so an
+action-time jump does not make a host timer due.
 
 ## Game-specific input
 
@@ -433,7 +589,8 @@ engine.input?.releaseKey('KeyW')
 `input.virtual` carries `{ context, input, phase }`, where phase is `pressed`,
 `released`, or `cancelled`. One press is published when an input becomes active,
 and one release when its final contributing key is released. Each message captures
-its context when published. Virtual input does not execute gameplay or consume a turn.
+its context when published. A configured action binding can translate it into a
+queued action; input receipt itself does not consume a turn.
 
 `IGameInput` exposes `context`, `setContext(id)`, `isKeyMapped(code)`,
 `pressKey(code)`, `releaseKey(code)`, and `reset()`. Press/release return whether
@@ -455,7 +612,7 @@ prevent defaults without generating inputs. Cleanup removes owned listeners.
 
 This version supplies game defaults, press/release state, and one active named
 context. Player remapping, persistence, chords, repeat policies, additional devices,
-and gameplay rules are not implemented yet. Hosts do not flush the bus on keyboard
+and JSON-defined executable rules are not implemented yet. Hosts do not flush the bus on keyboard
 events; the session dispatcher schedules delivery.
 
 ## Queued messaging

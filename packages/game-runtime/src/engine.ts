@@ -10,15 +10,19 @@ import type { IGameLoader } from './gameLoader.js'
 import type { EngineMessages } from './messages.js'
 import { InputController, type IGameInput } from './input.js'
 import { TimerService, type ITimerService } from './timers.js'
+import { ActionProcessor } from './actionProcessor.js'
+import type { GameRulesFactory, IGameActions } from './actions.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
 export interface EngineRuntimeServices {
+  readonly createGameRules?: GameRulesFactory
   readonly scheduler: ITaskScheduler
   readonly clock: IMonotonicClock
 }
 
 export interface EngineHostSession {
+  readonly actions: IGameActions
   readonly input: IGameInput | undefined
   readonly messages: IMessageBus<EngineMessages>
   readonly timers: ITimerService
@@ -30,6 +34,7 @@ export interface IEngineHost {
 }
 
 export interface IEngine {
+  readonly actions: IGameActions | undefined
   readonly state: EngineState
   readonly game: GameData | undefined
   readonly input: IGameInput | undefined
@@ -48,6 +53,7 @@ interface EngineSession {
   game?: GameData
   input?: InputController
   timers?: TimerService
+  actions?: ActionProcessor
   cleanup?: () => void
 }
 
@@ -85,6 +91,10 @@ export class Engine implements IEngine {
     return this.session?.game ? this.session.timers : undefined
   }
 
+  get actions(): IGameActions | undefined {
+    return this.session?.game ? this.session.actions : undefined
+  }
+
   flushMessages(): void {
     this.latestMessages?.flush()
   }
@@ -117,6 +127,7 @@ export class Engine implements IEngine {
 
     this.session = undefined
     session.cancel()
+    session.actions?.dispose()
     session.input?.dispose()
     session.timers?.dispose()
     try {
@@ -143,7 +154,18 @@ export class Engine implements IEngine {
         this.runtime.scheduler,
         this.runtime.clock,
       )
+      const rules = this.runtime.createGameRules?.(game) ?? { handlers: new Map() }
+      if (this.session !== session) return
+      session.actions = new ActionProcessor(
+        rules,
+        session.messages,
+        session.timers,
+        this.runtime.clock,
+        this.logger,
+        () => this.session === session && session.game !== undefined,
+      )
       const cleanup = this.host.mount(game, {
+        actions: session.actions,
         input: session.input,
         messages: session.messages,
         timers: session.timers,
@@ -155,6 +177,7 @@ export class Engine implements IEngine {
 
       session.cleanup = cleanup
       session.game = game
+      session.actions.start()
       this.logger.info('Engine', 'The engine workspace is ready.')
       if (this.session === session) session.messages.publish('engine.started', { game })
     } catch (error) {

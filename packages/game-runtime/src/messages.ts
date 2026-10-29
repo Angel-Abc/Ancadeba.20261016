@@ -1,8 +1,21 @@
 import type { GameData } from './gameData.js'
 import type { VirtualInput } from './input.js'
 import type { TimerWakeup } from './timers.js'
+import type {
+  ActionRequest,
+  ActionApplied,
+  ActionRejected,
+  ActionFailed,
+  ProgressionAdvanced,
+} from './actions.js'
 
 export interface EngineMessages {
+  'action.requested': ActionRequest
+  'action.applied': ActionApplied
+  'action.rejected': ActionRejected
+  'action.failed': ActionFailed
+  'turn.advanced': ProgressionAdvanced
+  'world-time.advanced': ProgressionAdvanced
   'input.virtual': VirtualInput
   'timer.wakeup': TimerWakeup
   'engine.starting': undefined

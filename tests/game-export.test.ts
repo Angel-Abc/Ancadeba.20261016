@@ -161,6 +161,7 @@ describe('standalone game export', () => {
         input: expect.objectContaining({ context: 'gameplay' }),
         messages: expect.anything(),
         timers: expect.anything(),
+        actions: expect.anything(),
       })
       engine.stop()
       await expect(

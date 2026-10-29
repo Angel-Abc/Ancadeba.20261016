@@ -108,6 +108,7 @@ describe('editor preview', () => {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
+      actions: expect.anything(),
     })
     expect(onStateChange.mock.calls).toEqual([['starting'], ['running']])
 
@@ -185,6 +186,7 @@ describe('editor preview', () => {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
+      actions: expect.anything(),
     })
     expect(onStateChange).toHaveBeenLastCalledWith('running')
   })
