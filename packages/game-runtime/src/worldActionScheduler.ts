@@ -9,17 +9,18 @@ interface WorldProgression {
   hostDelayUntil(dueAtWorldMs: number): number | undefined
 }
 
-interface WorldSchedule {
+interface WorldSchedule<Context> {
   readonly id: WorldScheduleId
   readonly order: number
   readonly action: string
   readonly dueAtWorldMs: number
   readonly payload: unknown
+  readonly context: Context | undefined
 }
 
 /** Selects one-shot world deadlines and projects a single host alarm; never executes handlers. */
-export class WorldActionScheduler {
-  private readonly pending = new Map<WorldScheduleId, WorldSchedule>()
+export class WorldActionScheduler<Context = undefined> {
+  private readonly pending = new Map<WorldScheduleId, WorldSchedule<Context>>()
   private readonly subscriptions: Unsubscribe[]
   private nextId = 0
   private alarm: TimerId | undefined
@@ -30,7 +31,12 @@ export class WorldActionScheduler {
     messages: IMessageBus<EngineMessages>,
     private readonly timers: ITimerService,
     private readonly progression: WorldProgression,
-    private readonly enqueue: (action: string, payload: unknown, origin: ActionOrigin) => void,
+    private readonly enqueue: (
+      action: string,
+      payload: unknown,
+      origin: ActionOrigin,
+      context: Context | undefined,
+    ) => void,
     private readonly isRunning: () => boolean,
   ) {
     this.subscriptions = [
@@ -54,20 +60,26 @@ export class WorldActionScheduler {
     action: string,
     delayWorldMs: number,
     payload?: unknown,
+    context?: Context,
   ): WorldScheduleId | undefined {
     if (this.disposed) return undefined
     this.validateTime(delayWorldMs)
     this.progression.synchronize()
     const dueAtWorldMs = this.progression.current.worldTimeMs + delayWorldMs
     this.validateTime(dueAtWorldMs)
-    return this.register(action, dueAtWorldMs, payload)
+    return this.register(action, dueAtWorldMs, payload, context)
   }
 
-  scheduleAt(action: string, dueAtWorldMs: number, payload?: unknown): WorldScheduleId | undefined {
+  scheduleAt(
+    action: string,
+    dueAtWorldMs: number,
+    payload?: unknown,
+    context?: Context,
+  ): WorldScheduleId | undefined {
     if (this.disposed) return undefined
     this.validateTime(dueAtWorldMs)
     this.progression.synchronize()
-    return this.register(action, dueAtWorldMs, payload)
+    return this.register(action, dueAtWorldMs, payload, context)
   }
 
   cancel(id: WorldScheduleId): boolean {
@@ -94,10 +106,15 @@ export class WorldActionScheduler {
     }
   }
 
-  private register(action: string, dueAtWorldMs: number, payload: unknown): WorldScheduleId {
+  private register(
+    action: string,
+    dueAtWorldMs: number,
+    payload: unknown,
+    context: Context | undefined,
+  ): WorldScheduleId {
     const order = ++this.nextId
     const id: WorldScheduleId = `world:${order}`
-    this.pending.set(id, { id, order, action, dueAtWorldMs, payload })
+    this.pending.set(id, { id, order, action, dueAtWorldMs, payload, context })
     this.selectDue()
     return id
   }
@@ -120,6 +137,7 @@ export class WorldActionScheduler {
           dueAtWorldMs: schedule.dueAtWorldMs,
           observedWorldMs,
         }),
+        schedule.context,
       )
     }
     this.rearm()

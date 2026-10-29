@@ -1,6 +1,13 @@
 import type { GameData } from './gameData.js'
 import type { VirtualInput } from './input.js'
 import type { TimerId, TimerWakeup } from './timers.js'
+import type {
+  ActionRequestOptions,
+  ActorAttribution,
+  InputActorSelector,
+  TurnRules,
+  TurnSnapshot,
+} from './turns.js'
 
 export type ActionRequestId = number
 export type WorldScheduleId = `world:${number}`
@@ -33,11 +40,13 @@ export interface ActionRequest {
   /** Payloads, like message-bus payloads, must be treated as immutable. */
   readonly payload?: unknown
   readonly origin: ActionOrigin
+  readonly actor?: ActorAttribution
 }
 
 export interface AppliedActionOutcome {
   readonly status: 'applied'
   readonly advanceTurn?: boolean
+  readonly advancePhase?: boolean
   readonly worldTimeCostMs?: number
 }
 
@@ -47,25 +56,38 @@ export type ActionOutcome =
 
 export interface IGameActions {
   readonly progression: ProgressionSnapshot
-  request(action: string, payload?: unknown): ActionRequestId | undefined
-  schedule(action: string, delayMs: number, payload?: unknown): TimerId | undefined
+  readonly turnState: TurnSnapshot | undefined
+  request(
+    action: string,
+    payload?: unknown,
+    options?: ActionRequestOptions,
+  ): ActionRequestId | undefined
+  schedule(
+    action: string,
+    delayMs: number,
+    payload?: unknown,
+    options?: ActionRequestOptions,
+  ): TimerId | undefined
   cancelScheduled(timerId: TimerId): boolean
   /** Relative to synchronized world time at this call; handlers still execute through the bus. */
   scheduleWorld(
     action: string,
     delayWorldMs: number,
     payload?: unknown,
+    options?: ActionRequestOptions,
   ): WorldScheduleId | undefined
   /** Past and current deadlines queue immediately once the session is running. */
   scheduleWorldAt(
     action: string,
     dueAtWorldMs: number,
     payload?: unknown,
+    options?: ActionRequestOptions,
   ): WorldScheduleId | undefined
   cancelWorldScheduled(id: WorldScheduleId): boolean
 }
 
 export interface ActionContext {
+  readonly turnState: TurnSnapshot | undefined
   readonly progression: ProgressionSnapshot
   readonly actions: IGameActions
 }
@@ -73,6 +95,7 @@ export interface ActionContext {
 export type GameActionHandler = (request: ActionRequest, context: ActionContext) => ActionOutcome
 
 export interface InputActionBinding {
+  readonly actor?: InputActorSelector
   readonly context: string
   readonly input: string
   readonly phase?: VirtualInput['phase']
@@ -80,6 +103,7 @@ export interface InputActionBinding {
 }
 
 export interface GameRules {
+  readonly turns?: TurnRules
   readonly handlers: ReadonlyMap<string, GameActionHandler>
   readonly inputBindings?: readonly InputActionBinding[]
   readonly worldTime?: WorldTimePolicy
@@ -89,18 +113,21 @@ export interface GameRules {
 export type GameRulesFactory = (game: GameData) => GameRules
 
 export interface ActionApplied {
+  readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly outcome: AppliedActionOutcome
   readonly progression: ProgressionSnapshot
 }
 
 export interface ActionRejected {
+  readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly reason: string
   readonly progression: ProgressionSnapshot
 }
 
 export interface ActionFailed {
+  readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly error: unknown
   readonly progression: ProgressionSnapshot

@@ -32,3 +32,13 @@ export type {
   ProgressionAdvanced,
   WorldTimePolicy,
 } from './actions.js'
+export type {
+  TurnSnapshot,
+  ActionTurnPolicy,
+  TurnRules,
+  ActorAttribution,
+  ActionRequestOptions,
+  InputActorSelector,
+  TurnStarted,
+  TurnTransition,
+} from './turns.js'

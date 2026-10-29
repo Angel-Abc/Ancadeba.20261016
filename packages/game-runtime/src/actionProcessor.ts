@@ -16,6 +16,13 @@ import type { EngineMessages } from './messages.js'
 import { GameProgression } from './progression.js'
 import type { ITimerService, TimerId, TimerWakeup } from './timers.js'
 import { WorldActionScheduler } from './worldActionScheduler.js'
+import { TurnCoordinator, type PreparedTurnTransition } from './turnCoordinator.js'
+import type {
+  ActionRequestOptions,
+  ActorAttribution,
+  InputActorSelector,
+  TurnSnapshot,
+} from './turns.js'
 
 function bindingKey(context: string, input: string, phase: VirtualInput['phase']): string {
   return JSON.stringify([context, input, phase])
@@ -45,31 +52,48 @@ function validateOutcome(value: unknown): ActionOutcome {
   if (value.status !== 'applied') throw new TypeError('Invalid action outcome')
   const advanceTurn =
     'advanceTurn' in value && value.advanceTurn !== undefined ? value.advanceTurn : false
+  const advancePhase =
+    'advancePhase' in value && value.advancePhase !== undefined ? value.advancePhase : false
   const cost =
     'worldTimeCostMs' in value && value.worldTimeCostMs !== undefined ? value.worldTimeCostMs : 0
   if (
     typeof advanceTurn !== 'boolean' ||
+    typeof advancePhase !== 'boolean' ||
+    (advanceTurn && advancePhase) ||
     typeof cost !== 'number' ||
     !Number.isFinite(cost) ||
     cost < 0
   ) {
     throw new TypeError(
-      'Action progression requires a boolean turn advance and a finite nonnegative time cost',
+      'Action progression requires exclusive boolean turn/phase advances and a finite nonnegative time cost',
     )
   }
-  return Object.freeze({ status: 'applied', advanceTurn, worldTimeCostMs: cost })
+  return Object.freeze({
+    status: 'applied',
+    advanceTurn,
+    worldTimeCostMs: cost,
+    ...(advancePhase ? { advancePhase: true } : {}),
+  })
 }
 
 /** Routes session triggers and serially executes synchronous action handlers. */
 export class ActionProcessor implements IGameActions {
   private readonly handlers: Map<string, GameActionHandler>
-  private readonly bindings = new Map<string, string>()
-  private readonly scheduled = new Map<TimerId, { action: string; payload: unknown }>()
+  private readonly bindings = new Map<
+    string,
+    { action: string; actor: InputActorSelector | undefined }
+  >()
+  private readonly scheduled = new Map<
+    TimerId,
+    { action: string; payload: unknown; actor: ActorAttribution | undefined }
+  >()
   private readonly progressionState: GameProgression
-  private readonly worldSchedules: WorldActionScheduler
+  private readonly worldSchedules: WorldActionScheduler<ActorAttribution>
+  private readonly turns: TurnCoordinator | undefined
   private readonly subscriptions: Unsubscribe[]
   private nextRequestId = 0
   private disposed = false
+  private started = false
 
   constructor(
     rules: GameRules,
@@ -84,14 +108,15 @@ export class ActionProcessor implements IGameActions {
       if (!id.trim() || typeof handler !== 'function')
         throw new TypeError('Action handlers require nonempty IDs and functions')
     }
+    this.turns = rules.turns ? new TurnCoordinator(rules.turns, this.handlers.keys()) : undefined
     for (const binding of rules.inputBindings ?? []) this.addBinding(binding)
     this.progressionState = new GameProgression(rules.worldTime, messages, timers, clock)
-    this.worldSchedules = new WorldActionScheduler(
+    this.worldSchedules = new WorldActionScheduler<ActorAttribution>(
       messages,
       timers,
       this.progressionState,
-      (action, payload, origin) => {
-        this.enqueue(action, payload, origin)
+      (action, payload, origin, actor) => {
+        this.enqueue(action, payload, origin, actor)
       },
       isRunning,
     )
@@ -106,20 +131,50 @@ export class ActionProcessor implements IGameActions {
     return this.progressionState.current
   }
 
+  get turnState(): TurnSnapshot | undefined {
+    return this.turns?.current
+  }
+
+  private get turnFields(): { readonly turnState?: TurnSnapshot } {
+    return this.turnState ? { turnState: this.turnState } : {}
+  }
+
   start(): void {
-    if (this.disposed) return
+    if (this.disposed || this.started) return
+    this.started = true
     this.progressionState.start()
+    if (this.turnState)
+      this.messages.publish(
+        'turn.started',
+        Object.freeze({ turnState: this.turnState, progression: this.progression }),
+      )
     this.worldSchedules.start()
   }
 
-  request(action: string, payload?: unknown): ActionRequestId | undefined {
-    return this.enqueue(action, payload, Object.freeze({ type: 'direct' }))
+  request(
+    action: string,
+    payload?: unknown,
+    options?: ActionRequestOptions,
+  ): ActionRequestId | undefined {
+    if (this.disposed) return undefined
+    return this.enqueue(
+      action,
+      payload,
+      Object.freeze({ type: 'direct' }),
+      this.captureActor(options),
+    )
   }
 
-  schedule(action: string, delayMs: number, payload?: unknown): TimerId | undefined {
+  schedule(
+    action: string,
+    delayMs: number,
+    payload?: unknown,
+    options?: ActionRequestOptions,
+  ): TimerId | undefined {
     if (this.disposed) return undefined
     const id = this.timers.schedule(delayMs)
-    if (id !== undefined) this.scheduled.set(id, { action, payload })
+    if (id !== undefined)
+      this.scheduled.set(id, { action, payload, actor: this.captureActor(options) })
     return id
   }
 
@@ -133,16 +188,25 @@ export class ActionProcessor implements IGameActions {
     action: string,
     delayWorldMs: number,
     payload?: unknown,
+    options?: ActionRequestOptions,
   ): WorldScheduleId | undefined {
-    return this.worldSchedules.scheduleAfter(action, delayWorldMs, payload)
+    if (this.disposed) return undefined
+    return this.worldSchedules.scheduleAfter(
+      action,
+      delayWorldMs,
+      payload,
+      this.captureActor(options),
+    )
   }
 
   scheduleWorldAt(
     action: string,
     dueAtWorldMs: number,
     payload?: unknown,
+    options?: ActionRequestOptions,
   ): WorldScheduleId | undefined {
-    return this.worldSchedules.scheduleAt(action, dueAtWorldMs, payload)
+    if (this.disposed) return undefined
+    return this.worldSchedules.scheduleAt(action, dueAtWorldMs, payload, this.captureActor(options))
   }
 
   cancelWorldScheduled(id: WorldScheduleId): boolean {
@@ -174,17 +238,26 @@ export class ActionProcessor implements IGameActions {
     if (!this.handlers.has(binding.action))
       throw new Error(`Unknown bound action: ${binding.action}`)
     if (this.bindings.has(key)) throw new Error('Duplicate input action binding')
-    this.bindings.set(key, binding.action)
+    if (!this.turns && binding.actor !== undefined)
+      throw new TypeError('Input actor selection requires turn configuration')
+    const actor = this.turns?.validateBinding(binding.action, binding.actor)
+    this.bindings.set(key, { action: binding.action, actor })
   }
 
   private onInput(event: VirtualInput): void {
     if (this.disposed || !this.isRunning()) return
-    const action = this.bindings.get(bindingKey(event.context, event.input, event.phase))
-    if (action !== undefined)
+    const binding = this.bindings.get(bindingKey(event.context, event.input, event.phase))
+    if (binding !== undefined)
       this.enqueue(
-        action,
+        binding.action,
         undefined,
         Object.freeze({ type: 'input', event: Object.freeze({ ...event }) }),
+        binding.actor
+          ? this.captureActor({
+              actorId:
+                binding.actor.type === 'fixed' ? binding.actor.actorId : this.turnState!.actorId,
+            })
+          : undefined,
       )
   }
 
@@ -197,6 +270,7 @@ export class ActionProcessor implements IGameActions {
       scheduled.action,
       scheduled.payload,
       Object.freeze({ type: 'timer', event: Object.freeze({ ...event }) }),
+      scheduled.actor,
     )
   }
 
@@ -204,10 +278,14 @@ export class ActionProcessor implements IGameActions {
     action: string,
     payload: unknown,
     origin: ActionOrigin,
+    actor?: ActorAttribution,
   ): ActionRequestId | undefined {
     if (this.disposed) return undefined
     const id = ++this.nextRequestId
-    this.messages.publish('action.requested', Object.freeze({ id, action, payload, origin }))
+    this.messages.publish(
+      'action.requested',
+      Object.freeze({ id, action, payload, origin, ...(actor ? { actor } : {}) }),
+    )
     return id
   }
 
@@ -223,35 +301,92 @@ export class ActionProcessor implements IGameActions {
             request,
             reason: `Unknown action: ${request.action}`,
             progression: this.progression,
+            ...this.turnFields,
+          }),
+        )
+        return
+      }
+      const rejection = this.turns
+        ? this.turns.rejection(request.action, request.actor)
+        : request.actor !== undefined
+          ? 'Actor turns are not enabled'
+          : undefined
+      if (rejection !== undefined) {
+        this.messages.publish(
+          'action.rejected',
+          Object.freeze({
+            request,
+            reason: rejection,
+            progression: this.progression,
+            ...this.turnFields,
           }),
         )
         return
       }
       const result = handler(
         request,
-        Object.freeze({ progression: this.progression, actions: this }),
+        Object.freeze({ progression: this.progression, actions: this, turnState: this.turnState }),
       )
       const outcome = validateOutcome(result)
       if (this.disposed || !this.isRunning()) return
       if (outcome.status === 'rejected') {
         this.messages.publish(
           'action.rejected',
-          Object.freeze({ request, reason: outcome.reason, progression: this.progression }),
+          Object.freeze({
+            request,
+            reason: outcome.reason,
+            progression: this.progression,
+            ...this.turnFields,
+          }),
         )
         return
       }
-      this.progressionState.apply(outcome.advanceTurn ?? false, outcome.worldTimeCostMs ?? 0)
+      if (!this.turns && outcome.advancePhase)
+        throw new TypeError('Phase advancement requires turn configuration')
+      const transition = this.turns?.prepare(request.action, outcome)
+      this.progressionState.apply(
+        transition?.advanceTurn ?? outcome.advanceTurn ?? false,
+        outcome.worldTimeCostMs ?? 0,
+      )
+      if (transition) {
+        this.turns!.commit(transition)
+        this.publishTransition(transition)
+      }
       this.messages.publish(
         'action.applied',
-        Object.freeze({ request, outcome, progression: this.progression }),
+        Object.freeze({ request, outcome, progression: this.progression, ...this.turnFields }),
       )
     } catch (error) {
       if (this.disposed || !this.isRunning()) return
       this.messages.publish(
         'action.failed',
-        Object.freeze({ request, error, progression: this.progression }),
+        Object.freeze({ request, error, progression: this.progression, ...this.turnFields }),
       )
       this.logger.error('ActionProcessor', 'Action failed', error)
     }
+  }
+
+  private captureActor(options: ActionRequestOptions | undefined): ActorAttribution | undefined {
+    return options === undefined
+      ? undefined
+      : Object.freeze({ actorId: options.actorId, turnRevision: this.turnState?.revision ?? 0 })
+  }
+
+  private publishTransition(transition: PreparedTurnTransition): void {
+    const event = Object.freeze({
+      previous: transition.previous,
+      turnState: transition.turnState,
+      progression: this.progression,
+    })
+    if (!transition.advanceTurn) {
+      this.messages.publish('turn.phaseChanged', event)
+      return
+    }
+    this.messages.publish('turn.ended', event)
+    if (transition.roundAdvanced) this.messages.publish('turn.roundAdvanced', event)
+    this.messages.publish(
+      'turn.started',
+      Object.freeze({ turnState: transition.turnState, progression: this.progression }),
+    )
   }
 }

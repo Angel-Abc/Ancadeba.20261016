@@ -454,7 +454,7 @@ engine.actions?.scheduleWorld('weather', 60000)
 ```
 
 `GameRules.handlers` maps action IDs to synchronous `GameActionHandler` functions.
-Each receives an `ActionRequest` and `{ progression, actions }`. Requests carry a
+Each receives an `ActionRequest` and `{ progression, actions, turnState }`. Requests carry a
 session-local numeric ID, action ID, optional payload, and an origin: direct,
 captured virtual input, host-timer wakeup, or world-time deadline. Payloads are passed by reference and must
 be treated as immutable. Follow-up requests are queued rather than executed
@@ -471,11 +471,12 @@ and invalid world-time policies fail startup before mounting.
 `session.actions` during mounting. It exposes:
 
 - `progression`: a frozen `{ turn, worldTimeMs }` snapshot of the latest synchronization.
-- `request(action, payload?)`: queue a direct request and return its request ID.
-- `schedule(action, delayMs, payload?)`: schedule a host-time action and return its `TimerId`.
+- `turnState`: a frozen actor/phase snapshot when actor turns are configured, otherwise undefined.
+- `request(action, payload?, options?)`: queue a direct request and return its request ID.
+- `schedule(action, delayMs, payload?, options?)`: schedule a host-time action and return its `TimerId`.
 - `cancelScheduled(timerId)`: cancel a pending action-service timer without affecting unrelated timers.
-- `scheduleWorld(action, delayWorldMs, payload?)`: schedule relative to synchronized world time and return a `WorldScheduleId`.
-- `scheduleWorldAt(action, dueAtWorldMs, payload?)`: schedule at an absolute world-time deadline.
+- `scheduleWorld(action, delayWorldMs, payload?, options?)`: schedule relative to synchronized world time and return a `WorldScheduleId`.
+- `scheduleWorldAt(action, dueAtWorldMs, payload?, options?)`: schedule at an absolute world-time deadline.
 - `cancelWorldScheduled(id)`: cancel a pending world-time schedule before its action request is published.
 
 A timer wakeup queues its associated request once. Cancellation cannot retract a
@@ -483,7 +484,7 @@ wakeup already published to the bus. The processor handles requests in bus order
 with trigger translation, follow-up requests, and outcome delivery separated by
 normal deferred batches. Handler maps and bindings are copied at session creation.
 
-Handlers return `{ status: 'applied', advanceTurn?, worldTimeCostMs? }` or
+Handlers return `{ status: 'applied', advanceTurn?, advancePhase?, worldTimeCostMs? }` or
 `{ status: 'rejected', reason }`. Turn advancement defaults to false; time cost
 defaults to zero and must be finite and nonnegative. Unknown action IDs produce
 rejection. Exceptions, promises, and invalid results produce logged action
@@ -493,7 +494,8 @@ enqueuing effects; the processor does not roll those effects back.
 
 The bus publishes `action.requested`, then `action.applied`, `action.rejected`, or
 `action.failed`. Outcome messages capture the request and progression snapshot;
-applied messages include the normalized outcome, rejected messages a reason, and
+When actor turns are configured, outcomes also capture `turnState`.
+Applied messages include the normalized outcome, rejected messages a reason, and
 failed messages the error. `turn.advanced` and `world-time.advanced` carry
 `{ previous, progression }` snapshots and are published only when values change.
 An action's progression updates are committed together before its outcome is
@@ -501,9 +503,10 @@ queued, with turn notification preceding world-time notification when both chang
 
 ### Independent turns and world time
 
-Every session starts at turn zero and world time zero. Only an applied action
-with `advanceTurn: true` increments the turn, by exactly one. Accepted actions,
-timer wakeups, and elapsed time never implicitly consume turns.
+Every session starts at turn zero and world time zero. An applied action with
+`advanceTurn: true` increments the completed-turn counter by exactly one. With
+actor turns configured, advancing the final phase also completes one actor turn.
+Accepted actions, timer wakeups, and elapsed time never implicitly consume turns.
 
 `GameRules.worldTime` selects one static per-session policy:
 
@@ -534,10 +537,139 @@ after disposal; cancellation returns false. A handler that stops its session
 cannot commit its returned result. Restart creates fresh progression and invokes
 the rules factory again; stale callbacks cannot affect the new session.
 
-Actor order, turn phases, dynamic pause/resume, policy switching,
+Dynamic pause/resume, policy switching,
 game-script loading, persistence, and visual gameplay rendering are not part of
 this layer. `schedule()` uses host milliseconds, so an action-time jump does not
 make a host timer due. World-time schedules use separate APIs described next.
+
+### Actor turns and per-actor phases
+
+`GameRules.turns` optionally adds a fixed cyclic actor roster, a named phase
+sequence repeated for each actor, and an action-policy map. Actor and phase lists
+must contain unique nonempty IDs. The first actor starts in the first phase,
+at round one and revision zero. Numeric `progression.turn` still starts at zero
+and counts completed actor turns.
+
+```ts
+import {
+  type ActionTurnPolicy,
+  type GameActionHandler,
+  type GameRulesFactory,
+} from '@ancadeba/game-runtime'
+
+const createGameRules: GameRulesFactory = () => ({
+  handlers: new Map<string, GameActionHandler>([
+    ['nextPhase', () => ({ status: 'applied', advancePhase: true })],
+    ['endTurn', () => ({ status: 'applied', advanceTurn: true })],
+    ['move', () => ({ status: 'applied', worldTimeCostMs: 1000 })],
+    ['weather', () => ({ status: 'applied' })],
+  ]),
+  turns: {
+    actors: ['player', 'opponent'],
+    phases: ['prepare', 'act', 'cleanup'],
+    actionPolicies: new Map<string, ActionTurnPolicy>([
+      ['nextPhase', { scope: 'actor' }],
+      ['endTurn', { scope: 'actor' }],
+      ['move', { scope: 'actor', allowedPhases: ['act'] }],
+      ['weather', { scope: 'global' }],
+    ]),
+  },
+  inputBindings: [
+    {
+      context: 'gameplay',
+      input: 'moveNorth',
+      action: 'move',
+      actor: { type: 'fixed', actorId: 'player' },
+    },
+    { context: 'gameplay', input: 'interact', action: 'nextPhase', actor: { type: 'active' } },
+  ],
+  worldTime: { mode: 'hybrid' },
+})
+
+// Supply createGameRules through the engine's runtime services as above.
+await engine.start()
+engine.actions?.request('nextPhase', undefined, { actorId: 'player' })
+engine.actions?.scheduleWorld('weather', 60000) // Actorless and independent of turns.
+```
+
+When turns are enabled, every registered action must declare `scope: 'actor'` or
+`scope: 'global'`. Actor policies may restrict `allowedPhases`; omitting it permits
+all phases. Provided lists must be nonempty, unique, and reference declared phases.
+Missing or unknown action policies, phase restrictions on global actions, and
+invalid actor selectors reject startup before mounting. Configuration is copied
+for the session; changing source arrays or policies does not change live turns.
+
+`IGameActions.turnState` and `ActionContext.turnState` contain the frozen
+`{ actorId, phaseId, round, revision }` snapshot. They are undefined when actor
+turns are not configured. Input bindings for actor actions must choose either a
+fixed declared actor or the active actor; global bindings must omit `actor`.
+Input attribution is captured when the virtual input becomes an action request.
+Fixed controls cannot take over another actor's turn; active controls support
+local hot-seat play.
+
+For direct or timed requests, pass a final `ActionRequestOptions` argument with
+`actorId`. The service captures immutable `request.actor` metadata containing
+`{ actorId, turnRevision }`. Host and world schedules retain that original metadata,
+and their schedulers do not interpret it. Actor identity is not inherited from
+the calling handler; a follow-up actor request also needs explicit options.
+
+The runtime synchronizes elapsed time, then checks ownership before invoking the
+handler. Missing or unknown actors, inactive actors, disallowed phases, and stale
+revisions produce `action.rejected` without calling the handler or applying a
+turn/action-time cost. Every committed phase or actor transition increments the
+revision. Requests submitted before a transition become stale even if their actor
+and phase later match again. In particular, follow-up requests queued by a handler
+that then advances the phase retain the old revision. Submit work for the new
+phase in response to a transition notification instead.
+
+Global actions must be actorless and bypass turn and phase eligibility checks.
+Their target actors, if any, belong in their payloads. A global action that returns
+phase or actor-turn advancement fails with `action.failed`; it cannot commit its
+requested costs. With no turn configuration, existing numeric `advanceTurn`
+behavior remains compatible, `advancePhase` is invalid, and actor attribution or
+input actor selectors cannot be used.
+
+An applied `advancePhase` moves to the next phase without incrementing the numeric
+turn counter. Advancing the final phase ends the actor's turn and starts the next
+actor at its first phase. An applied `advanceTurn` ends the actor's turn directly
+from its current phase, skipping the remaining phases. Requesting both is invalid.
+After the last actor, the roster wraps and the round increments. A single-actor,
+single-phase roster still completes one turn, starts a new round, and changes
+revision even though the actor and phase IDs remain the same.
+
+Transition preparation validates the next state before progression costs are
+committed. Numeric progression commits first, then coordinator state, then the
+action outcome is queued. A failed progression update or handler-triggered stop
+cannot partially transition the actor or phase. Domain mutations remain owned by
+handlers and are not rolled back.
+
+The coordinator publishes these deferred notifications with captured snapshots:
+
+| Topic                | When published                                                         | Payload                                |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------------------- |
+| `turn.started`       | Initial start and each actor-turn start, including a reset first phase | `{ turnState, progression }`           |
+| `turn.phaseChanged`  | Advancement within the same actor's turn                               | `{ previous, turnState, progression }` |
+| `turn.ended`         | Completion of the actor turn identified by `previous`                  | `{ previous, turnState, progression }` |
+| `turn.roundAdvanced` | Roster wrap to the first actor                                         | `{ previous, turnState, progression }` |
+
+Transition payload `turnState` is the committed new state; `previous` identifies
+the prior state, including the ended actor. Existing `turn.advanced` and
+`world-time.advanced` progression notifications precede coordinator notifications.
+Actor boundaries then publish ended, optional round-advanced, started, and finally
+the action outcome. Skipped phases do not emit synthetic phase changes. Observers
+should use event snapshots because later queued actions may already have committed.
+
+Actor/phase transitions add no implicit world time and never pause elapsed time
+or change world deadlines. Only existing elapsed policies and explicit action
+costs advance the world. Global weather actions can execute in any turn or phase;
+world-time changes alone do not change the turn revision. A stale timed actor
+action is rejected once rather than postponed or retried. Stop and restart reset
+the coordinator with the rest of the session, while retained references expose
+frozen final snapshots and cannot submit new work.
+
+Dynamic membership and eligibility, initiative strategies, phase lifecycle hooks,
+AI, persistence, and additional UI remain future work. Actor IDs and phases are
+programmatic runtime rules; no actor/entity schemas or game JSON changes are added.
 
 ### Actions scheduled in world time
 
