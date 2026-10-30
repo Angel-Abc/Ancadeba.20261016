@@ -41,4 +41,10 @@ export type {
   InputActorSelector,
   TurnStarted,
   TurnTransition,
+  TurnEnded,
+  TurnIdle,
+  TurnRosterChanged,
+  RosterChanges,
+  ActorRosterEntry,
+  ActorRosterSnapshot,
 } from './turns.js'

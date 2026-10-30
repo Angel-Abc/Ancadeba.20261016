@@ -8,11 +8,19 @@ import type {
   ActionFailed,
   ProgressionAdvanced,
 } from './actions.js'
-import type { TurnStarted, TurnTransition } from './turns.js'
+import type {
+  TurnStarted,
+  TurnTransition,
+  TurnEnded,
+  TurnIdle,
+  TurnRosterChanged,
+} from './turns.js'
 
 export interface EngineMessages {
   'turn.started': TurnStarted
-  'turn.ended': TurnTransition
+  'turn.ended': TurnEnded
+  'turn.idle': TurnIdle
+  'turn.rosterChanged': TurnRosterChanged
   'turn.phaseChanged': TurnTransition
   'turn.roundAdvanced': TurnTransition
   'action.requested': ActionRequest

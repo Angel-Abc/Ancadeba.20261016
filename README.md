@@ -471,7 +471,8 @@ and invalid world-time policies fail startup before mounting.
 `session.actions` during mounting. It exposes:
 
 - `progression`: a frozen `{ turn, worldTimeMs }` snapshot of the latest synchronization.
-- `turnState`: a frozen actor/phase snapshot when actor turns are configured, otherwise undefined.
+- `turnState`: a frozen actor/phase snapshot when a turn is active, otherwise undefined.
+- `rosterState`: a frozen registration snapshot when actor turns are configured, including while idle.
 - `request(action, payload?, options?)`: queue a direct request and return its request ID.
 - `schedule(action, delayMs, payload?, options?)`: schedule a host-time action and return its `TimerId`.
 - `cancelScheduled(timerId)`: cancel a pending action-service timer without affecting unrelated timers.
@@ -484,7 +485,7 @@ wakeup already published to the bus. The processor handles requests in bus order
 with trigger translation, follow-up requests, and outcome delivery separated by
 normal deferred batches. Handler maps and bindings are copied at session creation.
 
-Handlers return `{ status: 'applied', advanceTurn?, advancePhase?, worldTimeCostMs? }` or
+Handlers return `{ status: 'applied', advanceTurn?, advancePhase?, worldTimeCostMs?, rosterChanges? }` or
 `{ status: 'rejected', reason }`. Turn advancement defaults to false; time cost
 defaults to zero and must be finite and nonnegative. Unknown action IDs produce
 rejection. Exceptions, promises, and invalid results produce logged action
@@ -494,7 +495,7 @@ enqueuing effects; the processor does not roll those effects back.
 
 The bus publishes `action.requested`, then `action.applied`, `action.rejected`, or
 `action.failed`. Outcome messages capture the request and progression snapshot;
-When actor turns are configured, outcomes also capture `turnState`.
+When actor turns are configured, outcomes also capture `rosterState` and the active `turnState`, if any.
 Applied messages include the normalized outcome, rejected messages a reason, and
 failed messages the error. `turn.advanced` and `world-time.advanced` carry
 `{ previous, progression }` snapshots and are published only when values change.
@@ -544,9 +545,9 @@ make a host timer due. World-time schedules use separate APIs described next.
 
 ### Actor turns and per-actor phases
 
-`GameRules.turns` optionally adds a fixed cyclic actor roster, a named phase
+`GameRules.turns` optionally adds an initial cyclic actor roster, a named phase
 sequence repeated for each actor, and an action-policy map. Actor and phase lists
-must contain unique nonempty IDs. The first actor starts in the first phase,
+must contain unique nonempty IDs and cannot be empty. The first actor starts in the first phase,
 at round one and revision zero. Numeric `progression.turn` still starts at zero
 and counts completed actor turns.
 
@@ -601,21 +602,21 @@ for the session; changing source arrays or policies does not change live turns.
 
 `IGameActions.turnState` and `ActionContext.turnState` contain the frozen
 `{ actorId, phaseId, round, revision }` snapshot. They are undefined when actor
-turns are not configured. Input bindings for actor actions must choose either a
-fixed declared actor or the active actor; global bindings must omit `actor`.
+turns are not configured or the roster is idle. Input bindings for actor actions must choose either a
+fixed initially declared actor or the active actor; global bindings must omit `actor`.
 Input attribution is captured when the virtual input becomes an action request.
 Fixed controls cannot take over another actor's turn; active controls support
 local hot-seat play.
 
 For direct or timed requests, pass a final `ActionRequestOptions` argument with
 `actorId`. The service captures immutable `request.actor` metadata containing
-`{ actorId, turnRevision }`. Host and world schedules retain that original metadata,
+`{ actorId, actorGeneration, turnRevision }`. Host and world schedules retain that original metadata,
 and their schedulers do not interpret it. Actor identity is not inherited from
 the calling handler; a follow-up actor request also needs explicit options.
 
 The runtime synchronizes elapsed time, then checks ownership before invoking the
-handler. Missing or unknown actors, inactive actors, disallowed phases, and stale
-revisions produce `action.rejected` without calling the handler or applying a
+handler. Missing or unknown actors, removed registrations, actors awaiting the next round,
+inactive actors, disallowed phases, and stale revisions produce `action.rejected` without calling the handler or applying a
 turn/action-time cost. Every committed phase or actor transition increments the
 revision. Requests submitted before a transition become stale even if their actor
 and phase later match again. In particular, follow-up requests queued by a handler
@@ -645,17 +646,20 @@ handlers and are not rolled back.
 
 The coordinator publishes these deferred notifications with captured snapshots:
 
-| Topic                | When published                                                         | Payload                                |
-| -------------------- | ---------------------------------------------------------------------- | -------------------------------------- |
-| `turn.started`       | Initial start and each actor-turn start, including a reset first phase | `{ turnState, progression }`           |
-| `turn.phaseChanged`  | Advancement within the same actor's turn                               | `{ previous, turnState, progression }` |
-| `turn.ended`         | Completion of the actor turn identified by `previous`                  | `{ previous, turnState, progression }` |
-| `turn.roundAdvanced` | Roster wrap to the first actor                                         | `{ previous, turnState, progression }` |
+| Topic                | When published                                                         | Payload                                              |
+| -------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| `turn.started`       | Initial start and each actor-turn start, including a reset first phase | `{ turnState, rosterState, progression }`            |
+| `turn.phaseChanged`  | Advancement within the same actor's turn                               | `{ previous, turnState, rosterState, progression }`  |
+| `turn.ended`         | Completion of the actor turn identified by `previous`                  | `{ previous, turnState?, rosterState, progression }` |
+| `turn.roundAdvanced` | Start of the next round, including resume from idle                    | `{ previous, turnState, rosterState, progression }`  |
+| `turn.rosterChanged` | One committed nonempty membership batch                                | `{ previous, turnState?, rosterState, progression }` |
+| `turn.idle`          | Active removal leaves the roster empty                                 | `{ previous, rosterState, progression }`             |
 
 Transition payload `turnState` is the committed new state; `previous` identifies
 the prior state, including the ended actor. Existing `turn.advanced` and
 `world-time.advanced` progression notifications precede coordinator notifications.
-Actor boundaries then publish ended, optional round-advanced, started, and finally
+Membership edits publish `turn.rosterChanged` first; its `previous` is the old roster.
+Actor boundaries then publish ended, optional round-advanced, started (or idle), and finally
 the action outcome. Skipped phases do not emit synthetic phase changes. Observers
 should use event snapshots because later queued actions may already have committed.
 
@@ -667,9 +671,76 @@ action is rejected once rather than postponed or retried. Stop and restart reset
 the coordinator with the rest of the session, while retained references expose
 frozen final snapshots and cannot submit new work.
 
-Dynamic membership and eligibility, initiative strategies, phase lifecycle hooks,
+Initiative strategies, temporary actor disabling, phase lifecycle hooks,
 AI, persistence, and additional UI remain future work. Actor IDs and phases are
 programmatic runtime rules; no actor/entity schemas or game JSON changes are added.
+
+### Adding and removing actors
+
+Applied outcomes can include `rosterChanges: { add?: readonly string[], remove?: readonly string[] }`.
+Both global and eligible actor handlers can return edits. For example, extend the
+two-actor rules above with these global handlers and corresponding policies:
+
+```ts
+// Add these entries to handlers:
+;(['recruit', () => ({ status: 'applied', rosterChanges: { add: ['companion'] } })],
+  ['dismiss', () => ({ status: 'applied', rosterChanges: { remove: ['companion'] } })],
+  // Add these entries to turns.actionPolicies:
+  ['recruit', { scope: 'global' }],
+  ['dismiss', { scope: 'global' }],
+  engine.actions?.request('recruit')) // Appends companion, eligible next round.
+// After processing, and only while companion is registered:
+engine.actions?.request('dismiss') // Removes the registration immediately.
+// After processing the removal:
+engine.actions?.request('recruit') // Fresh generation, again eligible next round.
+```
+
+`IGameActions.rosterState` and `ActionContext.rosterState` expose frozen
+`{ revision, actors }` snapshots. Each ordered actor entry contains
+`{ actorId, generation, eligibleFromRound }`. The roster revision starts at zero
+and increments once per nonempty committed edit batch. Entries, arrays, and
+snapshots stay immutable after subsequent changes. Initial registrations have
+generation one; each re-registration of the same ID increments that ID's generation.
+Restart resets all registration history.
+
+Each round captures its participant registrations in roster order. New actors
+append to the persistent roster but do not join that captured sequence. Removing
+a future participant skips it; removing an actor whose turn already finished or
+whose first round has not arrived consumes no turn. Removing and re-adding an ID
+never restores its old place in the current round. Fixed input selectors remain
+limited to initially declared IDs; new IDs use active selectors or explicit requests.
+
+Removing the active actor ends its turn immediately, increments `progression.turn`
+once, and starts the next remaining participant in the first phase. This forced
+completion takes precedence over an explicit phase or turn advance without double
+counting. Explicitly requesting both flags is still invalid. Global handlers cannot
+request either flag, but their roster edits may force completion through removal.
+If no current-round participants remain, the next round starts from the surviving
+roster, including newcomers. Round increments only when a new round actually starts.
+
+Removing every actor leaves `turnState` undefined and `rosterState.actors` empty.
+The engine remains running: global actions, timers, elapsed time, and world schedules
+continue. Adding a batch while idle immediately starts the next round with its first
+actor; every actor in that batch is eligible in that resumed round. Resuming adds no
+completed turn. A separate later addition waits for the following round as usual.
+Idle entry and resume each increment the internal turn revision. Resume emits
+`turn.roundAdvanced` followed by `turn.started`; the round event's `previous`
+identifies the last ended turn. No second `turn.ended` is emitted on resume.
+
+Inactive membership edits preserve the active turn revision, so unrelated queued
+requests remain valid. Captured actor generations prevent old requests from targeting
+a new registration of the same ID. Requests captured for an unknown ID use generation
+zero and cannot become valid by adding that ID later. Host and world schedules keep
+their original metadata: actor removal does not cancel them, retarget them, or retry
+their rejected requests. Active input while idle produces a rejected action.
+
+Batch validation rejects blank IDs, duplicate IDs in either list, overlapping lists,
+adding existing actors, and removing unknown actors. Empty batches are no-ops.
+Invalid edits produce `action.failed` without committing membership, turn changes,
+or action costs. Roster edits require turn configuration. Preparation and progression
+validation finish before any coordinator state commits; handler-triggered stop also
+prevents a commit. Independent elapsed-time synchronization still occurs before the
+handler, including when its edits later fail.
 
 ### Actions scheduled in world time
 

@@ -14,12 +14,14 @@ import type {
 import type { VirtualInput } from './input.js'
 import type { EngineMessages } from './messages.js'
 import { GameProgression } from './progression.js'
+import { copyRosterChanges } from './actorRoster.js'
 import type { ITimerService, TimerId, TimerWakeup } from './timers.js'
 import { WorldActionScheduler } from './worldActionScheduler.js'
 import { TurnCoordinator, type PreparedTurnTransition } from './turnCoordinator.js'
 import type {
   ActionRequestOptions,
   ActorAttribution,
+  ActorRosterSnapshot,
   InputActorSelector,
   TurnSnapshot,
 } from './turns.js'
@@ -73,6 +75,9 @@ function validateOutcome(value: unknown): ActionOutcome {
     advanceTurn,
     worldTimeCostMs: cost,
     ...(advancePhase ? { advancePhase: true } : {}),
+    ...('rosterChanges' in value && value.rosterChanges !== undefined
+      ? { rosterChanges: copyRosterChanges(value.rosterChanges) }
+      : {}),
   })
 }
 
@@ -135,8 +140,18 @@ export class ActionProcessor implements IGameActions {
     return this.turns?.current
   }
 
-  private get turnFields(): { readonly turnState?: TurnSnapshot } {
-    return this.turnState ? { turnState: this.turnState } : {}
+  get rosterState(): ActorRosterSnapshot | undefined {
+    return this.turns?.rosterState
+  }
+
+  private get turnFields(): {
+    readonly turnState?: TurnSnapshot
+    readonly rosterState?: ActorRosterSnapshot
+  } {
+    return {
+      ...(this.turnState ? { turnState: this.turnState } : {}),
+      ...(this.rosterState ? { rosterState: this.rosterState } : {}),
+    }
   }
 
   start(): void {
@@ -146,7 +161,11 @@ export class ActionProcessor implements IGameActions {
     if (this.turnState)
       this.messages.publish(
         'turn.started',
-        Object.freeze({ turnState: this.turnState, progression: this.progression }),
+        Object.freeze({
+          turnState: this.turnState,
+          rosterState: this.rosterState!,
+          progression: this.progression,
+        }),
       )
     this.worldSchedules.start()
   }
@@ -247,18 +266,19 @@ export class ActionProcessor implements IGameActions {
   private onInput(event: VirtualInput): void {
     if (this.disposed || !this.isRunning()) return
     const binding = this.bindings.get(bindingKey(event.context, event.input, event.phase))
-    if (binding !== undefined)
-      this.enqueue(
-        binding.action,
-        undefined,
-        Object.freeze({ type: 'input', event: Object.freeze({ ...event }) }),
-        binding.actor
-          ? this.captureActor({
-              actorId:
-                binding.actor.type === 'fixed' ? binding.actor.actorId : this.turnState!.actorId,
-            })
-          : undefined,
-      )
+    if (binding === undefined) return
+    const actorId =
+      binding.actor?.type === 'fixed'
+        ? binding.actor.actorId
+        : binding.actor?.type === 'active'
+          ? this.turnState?.actorId
+          : undefined
+    this.enqueue(
+      binding.action,
+      undefined,
+      Object.freeze({ type: 'input', event: Object.freeze({ ...event }) }),
+      this.captureActor(actorId === undefined ? undefined : { actorId }),
+    )
   }
 
   private onTimer(event: TimerWakeup): void {
@@ -325,7 +345,12 @@ export class ActionProcessor implements IGameActions {
       }
       const result = handler(
         request,
-        Object.freeze({ progression: this.progression, actions: this, turnState: this.turnState }),
+        Object.freeze({
+          progression: this.progression,
+          actions: this,
+          turnState: this.turnState,
+          rosterState: this.rosterState,
+        }),
       )
       const outcome = validateOutcome(result)
       if (this.disposed || !this.isRunning()) return
@@ -343,6 +368,8 @@ export class ActionProcessor implements IGameActions {
       }
       if (!this.turns && outcome.advancePhase)
         throw new TypeError('Phase advancement requires turn configuration')
+      if (!this.turns && outcome.rosterChanges !== undefined)
+        throw new TypeError('Roster changes require turn configuration')
       const transition = this.turns?.prepare(request.action, outcome)
       this.progressionState.apply(
         transition?.advanceTurn ?? outcome.advanceTurn ?? false,
@@ -369,24 +396,43 @@ export class ActionProcessor implements IGameActions {
   private captureActor(options: ActionRequestOptions | undefined): ActorAttribution | undefined {
     return options === undefined
       ? undefined
-      : Object.freeze({ actorId: options.actorId, turnRevision: this.turnState?.revision ?? 0 })
+      : (this.turns?.captureActor(options.actorId) ??
+          Object.freeze({ actorId: options.actorId, actorGeneration: 0, turnRevision: 0 }))
   }
 
   private publishTransition(transition: PreparedTurnTransition): void {
-    const event = Object.freeze({
-      previous: transition.previous,
-      turnState: transition.turnState,
-      progression: this.progression,
-    })
-    if (!transition.advanceTurn) {
-      this.messages.publish('turn.phaseChanged', event)
-      return
+    const common = { progression: this.progression, rosterState: this.rosterState! }
+    const { previous, turnState } = transition
+    if (transition.rosterChange) {
+      this.messages.publish(
+        'turn.rosterChanged',
+        Object.freeze({
+          ...common,
+          previous: transition.rosterChange.previous,
+          ...(turnState ? { turnState } : {}),
+        }),
+      )
     }
-    this.messages.publish('turn.ended', event)
-    if (transition.roundAdvanced) this.messages.publish('turn.roundAdvanced', event)
-    this.messages.publish(
-      'turn.started',
-      Object.freeze({ turnState: transition.turnState, progression: this.progression }),
-    )
+    if (transition.advanceTurn && previous)
+      this.messages.publish(
+        'turn.ended',
+        Object.freeze({ ...common, previous, ...(turnState ? { turnState } : {}) }),
+      )
+    if (turnState) {
+      if (transition.roundAdvanced)
+        this.messages.publish(
+          'turn.roundAdvanced',
+          Object.freeze({ ...common, previous: transition.lastEnded!, turnState }),
+        )
+      if (transition.advanceTurn || previous === undefined)
+        this.messages.publish('turn.started', Object.freeze({ ...common, turnState }))
+      else if (turnState !== previous)
+        this.messages.publish(
+          'turn.phaseChanged',
+          Object.freeze({ ...common, previous, turnState }),
+        )
+    } else if (transition.advanceTurn && previous) {
+      this.messages.publish('turn.idle', Object.freeze({ ...common, previous }))
+    }
   }
 }

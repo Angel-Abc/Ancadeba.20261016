@@ -4,6 +4,8 @@ import type { TimerId, TimerWakeup } from './timers.js'
 import type {
   ActionRequestOptions,
   ActorAttribution,
+  ActorRosterSnapshot,
+  RosterChanges,
   InputActorSelector,
   TurnRules,
   TurnSnapshot,
@@ -44,6 +46,7 @@ export interface ActionRequest {
 }
 
 export interface AppliedActionOutcome {
+  readonly rosterChanges?: RosterChanges
   readonly status: 'applied'
   readonly advanceTurn?: boolean
   readonly advancePhase?: boolean
@@ -55,6 +58,7 @@ export type ActionOutcome =
   | { readonly status: 'rejected'; readonly reason: string }
 
 export interface IGameActions {
+  readonly rosterState: ActorRosterSnapshot | undefined
   readonly progression: ProgressionSnapshot
   readonly turnState: TurnSnapshot | undefined
   request(
@@ -87,6 +91,7 @@ export interface IGameActions {
 }
 
 export interface ActionContext {
+  readonly rosterState: ActorRosterSnapshot | undefined
   readonly turnState: TurnSnapshot | undefined
   readonly progression: ProgressionSnapshot
   readonly actions: IGameActions
@@ -113,6 +118,7 @@ export interface GameRules {
 export type GameRulesFactory = (game: GameData) => GameRules
 
 export interface ActionApplied {
+  readonly rosterState?: ActorRosterSnapshot
   readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly outcome: AppliedActionOutcome
@@ -120,6 +126,7 @@ export interface ActionApplied {
 }
 
 export interface ActionRejected {
+  readonly rosterState?: ActorRosterSnapshot
   readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly reason: string
@@ -127,6 +134,7 @@ export interface ActionRejected {
 }
 
 export interface ActionFailed {
+  readonly rosterState?: ActorRosterSnapshot
   readonly turnState?: TurnSnapshot
   readonly request: ActionRequest
   readonly error: unknown

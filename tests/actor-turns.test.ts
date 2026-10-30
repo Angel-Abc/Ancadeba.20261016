@@ -10,6 +10,7 @@ import {
   type GameRules,
   type IEngineHost,
   type InputActionBinding,
+  type RosterChanges,
   type WorldTimePolicy,
 } from '@ancadeba/game-runtime'
 import { MessageBus, type ILogger } from '@ancadeba/utilities'
@@ -157,6 +158,675 @@ function actorAction(instance: ReturnType<typeof setup>, action: string): void {
   instance.timing.drain()
 }
 
+async function dynamicStart(options: Parameters<typeof configured>[0] = {}) {
+  return start({
+    rules: configured({
+      ...options,
+      handlers: {
+        edit: (request) => ({ status: 'applied', rosterChanges: request.payload as RosterChanges }),
+        ...options.handlers,
+      },
+      policies: new Map([['edit', { scope: 'global' }], ...(options.policies ?? [])]),
+    }),
+  })
+}
+
+function edit(instance: ReturnType<typeof setup>, changes: RosterChanges): void {
+  instance.engine.actions!.request('edit', changes)
+  instance.timing.drain()
+}
+
+describe('dynamic actor membership', () => {
+  it('appends newcomers in order for the next round without changing the current revision', async () => {
+    const instance = await dynamicStart()
+    const actions = instance.engine.actions!
+    const initial = actions.turnState
+    actorAction(instance, 'phase')
+    const active = actions.turnState
+    edit(instance, { add: ['c', 'd'] })
+    expect(actions.turnState).toBe(active)
+    expect(actions.rosterState).toEqual({
+      revision: 1,
+      actors: [
+        { actorId: 'a', generation: 1, eligibleFromRound: 1 },
+        { actorId: 'b', generation: 1, eligibleFromRound: 1 },
+        { actorId: 'c', generation: 1, eligibleFromRound: 2 },
+        { actorId: 'd', generation: 1, eligibleFromRound: 2 },
+      ],
+    })
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'b', round: 1 })
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'a', round: 2 })
+    actorAction(instance, 'end')
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'c', phaseId: 'setup', round: 2 })
+    actorAction(instance, 'end')
+    expect(actions.turnState?.actorId).toBe('d')
+    expect(initial?.revision).toBe(0)
+    stop(instance)
+  })
+
+  it('rejects pending actors before invoking their handler or committing costs', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied', worldTimeCostMs: 10 }))
+    const instance = await dynamicStart({ handlers: { act } })
+    const rejected = vi.fn()
+    instance.engine.messages!.subscribe('action.rejected', rejected)
+    edit(instance, { add: ['c'] })
+    instance.engine.actions!.request('act', undefined, { actorId: 'c' })
+    instance.timing.drain()
+    expect(rejected.mock.calls[0]![0].reason).toContain('next round')
+    expect(act).not.toHaveBeenCalled()
+    expect(instance.engine.actions!.progression.worldTimeMs).toBe(0)
+    stop(instance)
+  })
+
+  it('preserves queued requests when future, completed, or pending actors are removed', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ actors: ['a', 'b', 'c'], handlers: { act } })
+    const actions = instance.engine.actions!
+    actorAction(instance, 'end')
+    edit(instance, { add: ['d'] })
+    const active = actions.turnState
+    actions.request('edit', { remove: ['a', 'c', 'd'] })
+    actions.request('act', undefined, { actorId: 'b' })
+    instance.timing.drain()
+    expect(act).toHaveBeenCalledTimes(1)
+    expect(actions.turnState).toBe(active)
+    expect(actions.progression.turn).toBe(1)
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'b', round: 2, revision: 2 })
+    stop(instance)
+  })
+
+  it.each(['advancePhase', 'advanceTurn', 'neither'] as const)(
+    'finishes active removal once and resets the next actor phase with %s',
+    async (flag) => {
+      const instance = await dynamicStart({
+        handlers: {
+          act: () => ({
+            status: 'applied',
+            rosterChanges: { remove: ['a'] },
+            ...(flag === 'neither' ? {} : { [flag]: true }),
+            worldTimeCostMs: 5,
+          }),
+        },
+      })
+      actorAction(instance, 'phase')
+      const events: string[] = []
+      for (const topic of [
+        'turn.advanced',
+        'world-time.advanced',
+        'turn.rosterChanged',
+        'turn.ended',
+        'turn.phaseChanged',
+        'turn.started',
+        'action.applied',
+      ] as const)
+        instance.engine.messages!.subscribe(topic, () => events.push(topic))
+      actorAction(instance, 'act')
+      expect(instance.engine.actions!.turnState).toEqual({
+        actorId: 'b',
+        phaseId: 'setup',
+        round: 1,
+        revision: 2,
+      })
+      expect(instance.engine.actions!.progression).toEqual({ turn: 1, worldTimeMs: 5 })
+      expect(events).toEqual([
+        'turn.advanced',
+        'world-time.advanced',
+        'turn.rosterChanged',
+        'turn.ended',
+        'turn.started',
+        'action.applied',
+      ])
+      stop(instance)
+    },
+  )
+
+  it('lets a global action remove the active actor and skips removed future participants', async () => {
+    const instance = await dynamicStart({ actors: ['a', 'b', 'c', 'd'] })
+    edit(instance, { remove: ['a', 'b', 'd'], add: ['e'] })
+    expect(instance.engine.actions!.turnState).toEqual({
+      actorId: 'c',
+      phaseId: 'setup',
+      round: 1,
+      revision: 1,
+    })
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'c', round: 2 })
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'e', round: 2 })
+    stop(instance)
+  })
+
+  it('keeps idle globals and elapsed deadlines running and resumes the next round with a whole batch', async () => {
+    const weather = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ worldTime: { mode: 'hybrid' }, handlers: { weather } })
+    const actions = instance.engine.actions!
+    const events: string[] = []
+    let ended: EngineMessages['turn.ended'] | undefined
+    instance.engine.messages!.subscribe('turn.ended', (event) => {
+      ended = event
+    })
+    for (const topic of [
+      'turn.advanced',
+      'turn.rosterChanged',
+      'turn.ended',
+      'turn.idle',
+      'turn.roundAdvanced',
+      'turn.started',
+      'action.applied',
+    ] as const)
+      instance.engine.messages!.subscribe(topic, () => events.push(topic))
+    actions.schedule('weather', 10)
+    actions.scheduleWorldAt('weather', 10)
+    edit(instance, { remove: ['a', 'b'] })
+    expect(events).toEqual([
+      'turn.advanced',
+      'turn.rosterChanged',
+      'turn.ended',
+      'turn.idle',
+      'action.applied',
+    ])
+    expect(actions.turnState).toBeUndefined()
+    expect(actions.rosterState).toEqual({ revision: 1, actors: [] })
+    expect(ended).not.toHaveProperty('turnState')
+    expect(instance.engine.state).toBe('running')
+    instance.timing.now = 10
+    instance.timing.drain()
+    expect(weather).toHaveBeenCalledTimes(2)
+    expect(weather.mock.calls[0]![1].turnState).toBeUndefined()
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 10 })
+    events.length = 0
+    edit(instance, { add: ['c', 'd'] })
+    expect(events).toEqual([
+      'turn.rosterChanged',
+      'turn.roundAdvanced',
+      'turn.started',
+      'action.applied',
+    ])
+    expect(actions.turnState).toEqual({ actorId: 'c', phaseId: 'setup', round: 2, revision: 2 })
+    expect(actions.rosterState!.actors.map((actor) => actor.eligibleFromRound)).toEqual([2, 2])
+    expect(actions.progression.turn).toBe(1)
+    edit(instance, { add: ['e'] })
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'd', round: 2 })
+    actorAction(instance, 'end')
+    expect(actions.turnState).toMatchObject({ actorId: 'c', round: 3 })
+    stop(instance)
+  })
+
+  it('handles repeated single-actor idle/resume cycles without reusing revisions or generations', async () => {
+    const instance = await dynamicStart({ actors: ['a'], phases: ['only'] })
+    const actions = instance.engine.actions!
+    for (let cycle = 1; cycle <= 3; cycle++) {
+      edit(instance, { remove: ['a'] })
+      expect(actions.turnState).toBeUndefined()
+      edit(instance, { add: ['a'] })
+      expect(actions.turnState).toEqual({
+        actorId: 'a',
+        phaseId: 'only',
+        round: cycle + 1,
+        revision: cycle * 2,
+      })
+      expect(actions.rosterState!.actors[0]!.generation).toBe(cycle + 1)
+      expect(actions.progression.turn).toBe(cycle)
+    }
+    stop(instance)
+  })
+
+  it('starts the next round immediately when one batch replaces every current participant', async () => {
+    const instance = await dynamicStart()
+    const idle = vi.fn()
+    const round = vi.fn()
+    instance.engine.messages!.subscribe('turn.idle', idle)
+    instance.engine.messages!.subscribe('turn.roundAdvanced', round)
+    edit(instance, { remove: ['a', 'b'], add: ['c', 'd'] })
+    expect(instance.engine.actions!.turnState).toEqual({
+      actorId: 'c',
+      phaseId: 'setup',
+      round: 2,
+      revision: 1,
+    })
+    expect(instance.engine.actions!.progression.turn).toBe(1)
+    expect(idle).not.toHaveBeenCalled()
+    expect(round).toHaveBeenCalledTimes(1)
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'd', round: 2 })
+    stop(instance)
+  })
+
+  it('starts a fresh registration next round rather than restoring its old round position', async () => {
+    const instance = await dynamicStart({ actors: ['a', 'b', 'c'] })
+    edit(instance, { remove: ['b'] })
+    edit(instance, { add: ['b'] })
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'c', round: 1 })
+    actorAction(instance, 'end')
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'c', round: 2 })
+    actorAction(instance, 'end')
+    expect(instance.engine.actions!.turnState).toMatchObject({ actorId: 'b', round: 2 })
+    expect(instance.engine.actions!.rosterState!.actors.at(-1)!.generation).toBe(2)
+    stop(instance)
+  })
+
+  it('treats empty edits as no-ops and freezes copied outcome, roster, and handler snapshots', async () => {
+    const changes = { add: ['c'] }
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ handlers: { act } })
+    const applied: EngineMessages['action.applied'][] = []
+    const changed: EngineMessages['turn.rosterChanged'][] = []
+    instance.engine.messages!.subscribe('action.applied', (event) => applied.push(event))
+    instance.engine.messages!.subscribe('turn.rosterChanged', (event) => changed.push(event))
+    const actions = instance.engine.actions!
+    const initial = actions.rosterState!
+    edit(instance, {})
+    edit(instance, { add: [], remove: [] })
+    expect(actions.rosterState).toBe(initial)
+    expect(changed).toEqual([])
+    edit(instance, changes)
+    const captured = actions.rosterState!
+    changes.add[0] = 'mutated'
+    expect(applied.at(-1)!.outcome.rosterChanges?.add).toEqual(['c'])
+    expect(changed[0]!.previous).toBe(initial)
+    expect(changed[0]!.rosterState).toBe(captured)
+    expect(applied.at(-1)!.rosterState).toBe(captured)
+    actorAction(instance, 'act')
+    expect(act.mock.calls[0]![1].rosterState).toBe(captured)
+    for (const value of [
+      initial,
+      captured,
+      captured.actors,
+      ...captured.actors,
+      applied[2]!.outcome.rosterChanges,
+      applied[2]!.outcome.rosterChanges!.add,
+      applied[2]!.outcome.rosterChanges!.remove,
+    ])
+      expect(Object.isFrozen(value)).toBe(true)
+    edit(instance, { remove: ['c'] })
+    expect(captured.actors.at(-1)!.actorId).toBe('c')
+    stop(instance)
+  })
+
+  it.each([
+    null,
+    [],
+    { add: 'c' },
+    { remove: 'a' },
+    { add: [''] },
+    { remove: [' '] },
+    { add: [1] },
+    { add: Array<string>(1) },
+    { add: ['c', 'c'] },
+    { remove: ['a', 'a'] },
+    { add: ['c'], remove: ['c'] },
+    { add: ['a'] },
+    { remove: ['unknown'] },
+    { add: ['c'], remove: ['unknown'] },
+    { add: ['b'], remove: ['a'] },
+  ])('fails invalid roster batches atomically: %#', async (changes) => {
+    const instance = await dynamicStart({
+      handlers: {
+        act: () => ({
+          status: 'applied',
+          rosterChanges: changes as RosterChanges,
+          advancePhase: true,
+          worldTimeCostMs: 10,
+        }),
+      },
+    })
+    const actions = instance.engine.actions!
+    const initialRoster = actions.rosterState
+    const initialTurn = actions.turnState
+    const failed = vi.fn()
+    const changed = vi.fn()
+    instance.engine.messages!.subscribe('action.failed', failed)
+    instance.engine.messages!.subscribe('turn.rosterChanged', changed)
+    actorAction(instance, 'act')
+    expect(failed).toHaveBeenCalledTimes(1)
+    expect(changed).not.toHaveBeenCalled()
+    expect(actions.rosterState).toBe(initialRoster)
+    expect(actions.turnState).toBe(initialTurn)
+    expect(actions.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    stop(instance)
+  })
+
+  it.each([
+    { advancePhase: true, advanceTurn: true },
+    { advancePhase: true },
+    { advanceTurn: true },
+  ])('does not allow roster changes to bypass global advancement rules: %#', async (flags) => {
+    const instance = await dynamicStart({
+      handlers: {
+        edit: () => ({
+          status: 'applied',
+          ...flags,
+          rosterChanges: { remove: ['a'] },
+          worldTimeCostMs: 10,
+        }),
+      },
+    })
+    const failed = vi.fn()
+    instance.engine.messages!.subscribe('action.failed', failed)
+    const initial = instance.engine.actions!.rosterState
+    edit(instance, {})
+    expect(failed).toHaveBeenCalledTimes(1)
+    expect(instance.engine.actions!.rosterState).toBe(initial)
+    expect(instance.engine.actions!.turnState?.actorId).toBe('a')
+    expect(instance.engine.actions!.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    stop(instance)
+  })
+
+  it('does not commit membership or consume generations when progression fails', async () => {
+    const instance = await dynamicStart({
+      handlers: {
+        act: () => ({
+          status: 'applied',
+          rosterChanges: { add: ['c'], remove: ['a'] },
+          worldTimeCostMs: Number.MAX_VALUE,
+        }),
+      },
+    })
+    const actions = instance.engine.actions!
+    actions.request('cost', Number.MAX_VALUE)
+    instance.timing.drain()
+    const initial = actions.rosterState
+    actorAction(instance, 'act')
+    expect(actions.rosterState).toBe(initial)
+    expect(actions.turnState?.revision).toBe(0)
+    expect(actions.progression.turn).toBe(0)
+    edit(instance, { add: ['c'] })
+    expect(actions.rosterState!.actors.at(-1)!.generation).toBe(1)
+    stop(instance)
+  })
+
+  it('does not commit roster edits after a handler stops the session', async () => {
+    const instance = await dynamicStart({
+      handlers: {
+        edit: () => {
+          instance.engine.stop()
+          return {
+            status: 'applied',
+            rosterChanges: { remove: ['a'], add: ['c'] },
+            worldTimeCostMs: 10,
+          }
+        },
+      },
+    })
+    const retained = instance.engine.actions!
+    const initial = retained.rosterState
+    edit(instance, {})
+    expect(retained.rosterState).toBe(initial)
+    expect(retained.turnState?.revision).toBe(0)
+    expect(retained.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+  })
+
+  it('rejects roster changes without turn configuration and omits roster fields in legacy outcomes', async () => {
+    const instance = await start({
+      rules: {
+        handlers: new Map<string, GameActionHandler>([
+          [
+            'edit',
+            () => ({
+              status: 'applied',
+              rosterChanges: {},
+              advanceTurn: true,
+              worldTimeCostMs: 10,
+            }),
+          ],
+          ['act', () => ({ status: 'applied' })],
+        ]),
+      },
+    })
+    const failed = vi.fn()
+    const applied = vi.fn()
+    instance.engine.messages!.subscribe('action.failed', failed)
+    instance.engine.messages!.subscribe('action.applied', applied)
+    instance.engine.actions!.request('edit')
+    instance.engine.actions!.request('act')
+    instance.timing.drain()
+    expect(instance.engine.actions!.rosterState).toBeUndefined()
+    expect(failed).toHaveBeenCalledTimes(1)
+    expect(applied.mock.calls[0]![0]).not.toHaveProperty('rosterState')
+    expect(instance.engine.actions!.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    stop(instance)
+  })
+})
+
+describe('dynamic actor attribution and session isolation', () => {
+  it.each(['direct', 'host', 'world-relative', 'world-absolute'] as const)(
+    'keeps original registration metadata for %s requests after removal and re-addition',
+    async (kind) => {
+      const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+      const instance = await dynamicStart({ handlers: { act } })
+      const actions = instance.engine.actions!
+      const rejected: EngineMessages['action.rejected'][] = []
+      instance.engine.messages!.subscribe('action.rejected', (event) => rejected.push(event))
+      if (kind === 'direct') {
+        actions.request('edit', { remove: ['b'] })
+        actions.request('edit', { add: ['b'] })
+        actions.request('act', undefined, { actorId: 'b' })
+      } else if (kind === 'host') actions.schedule('act', 10, undefined, { actorId: 'b' })
+      else if (kind === 'world-relative')
+        actions.scheduleWorld('act', 10, undefined, { actorId: 'b' })
+      else actions.scheduleWorldAt('act', 10, undefined, { actorId: 'b' })
+      instance.timing.drain()
+      if (kind !== 'direct') {
+        edit(instance, { remove: ['b'] })
+        edit(instance, { add: ['b'] })
+        actorAction(instance, 'end')
+        actorAction(instance, 'end')
+        expect(actions.turnState).toMatchObject({ actorId: 'b', round: 2 })
+        if (kind === 'host') instance.timing.now = 10
+        else actions.request('cost', 10)
+        instance.timing.drain()
+      }
+      expect(act).not.toHaveBeenCalled()
+      expect(rejected).toHaveLength(1)
+      expect(rejected[0]!.reason).toContain('registration')
+      expect(rejected[0]!.request.actor).toEqual({
+        actorId: 'b',
+        actorGeneration: 1,
+        turnRevision: 0,
+      })
+      expect(actions.rosterState!.actors.at(-1)!.generation).toBe(2)
+      if (kind !== 'direct') {
+        actorAction(instance, 'act')
+        expect(act.mock.calls[0]![0].actor?.actorGeneration).toBe(2)
+      }
+      stop(instance)
+    },
+  )
+
+  it('never attaches a request captured for an unknown actor to its first registration', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ actors: ['a'], handlers: { act } })
+    const actions = instance.engine.actions!
+    const rejected = vi.fn()
+    instance.engine.messages!.subscribe('action.rejected', rejected)
+    actions.schedule('act', 10, undefined, { actorId: 'new' })
+    edit(instance, { remove: ['a'] })
+    edit(instance, { add: ['new'] })
+    instance.timing.now = 10
+    instance.timing.drain()
+    expect(rejected.mock.calls[0]![0].request.actor).toEqual({
+      actorId: 'new',
+      actorGeneration: 0,
+      turnRevision: 0,
+    })
+    expect(act).not.toHaveBeenCalled()
+    actorAction(instance, 'act')
+    expect(act.mock.calls[0]![0].actor?.actorGeneration).toBe(1)
+    stop(instance)
+  })
+
+  it('rejects removed registrations and keeps unrelated active-actor schedules valid', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ handlers: { act } })
+    const actions = instance.engine.actions!
+    const rejected = vi.fn()
+    instance.engine.messages!.subscribe('action.rejected', rejected)
+    actions.schedule('act', 10, undefined, { actorId: 'a' })
+    actions.schedule('act', 10, undefined, { actorId: 'b' })
+    edit(instance, { remove: ['b'], add: ['c'] })
+    instance.timing.now = 10
+    instance.timing.drain()
+    expect(act).toHaveBeenCalledTimes(1)
+    expect(act.mock.calls[0]![0].actor?.actorId).toBe('a')
+    expect(rejected.mock.calls[0]![0].reason).toBe('Unknown actor: b')
+    expect(actions.progression.turn).toBe(0)
+    stop(instance)
+  })
+
+  it('retains the original revision for a schedule registered while an actor is pending', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ actors: ['a'], handlers: { act } })
+    edit(instance, { add: ['b'] })
+    instance.engine.actions!.schedule('act', 10, undefined, { actorId: 'b' })
+    actorAction(instance, 'end')
+    actorAction(instance, 'end')
+    const rejected = vi.fn()
+    instance.engine.messages!.subscribe('action.rejected', rejected)
+    instance.timing.now = 10
+    instance.timing.drain()
+    expect(rejected.mock.calls[0]![0].reason).toContain('Stale actor action')
+    expect(act).not.toHaveBeenCalled()
+    stop(instance)
+  })
+
+  it('captures fixed input generations at conversion and handles active input while idle', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({
+      actors: ['a'],
+      handlers: { act },
+      bindings: [
+        { context: 'game', input: 'move', action: 'act', actor: { type: 'fixed', actorId: 'a' } },
+        { context: 'game', input: 'end', action: 'act', actor: { type: 'active' } },
+      ],
+    })
+    const actions = instance.engine.actions!
+    const rejected: EngineMessages['action.rejected'][] = []
+    instance.engine.messages!.subscribe('action.rejected', (event) => rejected.push(event))
+    instance.engine.input!.pressKey('KeyM')
+    instance.engine.input!.releaseKey('KeyM')
+    // Convert input first, then process removal/re-add before the generated request.
+    actions.request('edit', { remove: ['a'] })
+    actions.request('edit', { add: ['a'] })
+    instance.timing.drain()
+    expect(rejected[0]!.request.actor?.actorGeneration).toBe(1)
+    expect(rejected[0]!.reason).toContain('registration')
+    instance.engine.input!.pressKey('KeyM')
+    instance.engine.input!.releaseKey('KeyM')
+    instance.timing.drain()
+    expect(act.mock.calls[0]![0].actor).toEqual({
+      actorId: 'a',
+      actorGeneration: 2,
+      turnRevision: 2,
+    })
+    edit(instance, { remove: ['a'] })
+    instance.engine.input!.pressKey('KeyM')
+    instance.engine.input!.pressKey('KeyE')
+    instance.engine.input!.releaseKey('KeyE')
+    instance.engine.input!.releaseKey('KeyM')
+    instance.timing.drain()
+    expect(rejected).toHaveLength(3)
+    expect(act).toHaveBeenCalledTimes(1)
+    expect(instance.logger.error).not.toHaveBeenCalled()
+    stop(instance)
+  })
+
+  it('keeps due global world actions in bus order across a removal caused by action time costs', async () => {
+    const order: string[] = []
+    const instance = await dynamicStart({
+      handlers: {
+        edit: (request) => ({
+          status: 'applied',
+          rosterChanges: request.payload as RosterChanges,
+          worldTimeCostMs: 10,
+        }),
+        weather: (_request, context) => {
+          order.push(`weather:${context.turnState?.actorId}`)
+          return { status: 'applied' }
+        },
+      },
+    })
+    instance.engine.actions!.scheduleWorld('weather', 5)
+    instance.engine.messages!.subscribe('turn.rosterChanged', () => order.push('roster'))
+    instance.engine.messages!.subscribe('action.applied', (event) =>
+      order.push(`applied:${event.request.action}`),
+    )
+    edit(instance, { remove: ['a'] })
+    expect(order).toEqual(['roster', 'applied:edit', 'weather:b', 'applied:weather'])
+    expect(instance.engine.actions!.progression).toEqual({ turn: 1, worldTimeMs: 10 })
+    stop(instance)
+  })
+
+  it('retains cancellation behavior for scheduled requests after actor removal', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const instance = await dynamicStart({ handlers: { act } })
+    const actions = instance.engine.actions!
+    const host = actions.schedule('act', 10, undefined, { actorId: 'b' })!
+    const world = actions.scheduleWorld('act', 10, undefined, { actorId: 'b' })!
+    edit(instance, { remove: ['b'] })
+    expect(actions.cancelScheduled(host)).toBe(true)
+    expect(actions.cancelWorldScheduled(world)).toBe(true)
+    expect(actions.cancelScheduled(host)).toBe(false)
+    expect(actions.cancelWorldScheduled(world)).toBe(false)
+    instance.timing.now = 10
+    actions.request('cost', 10)
+    instance.timing.drain()
+    expect(act).not.toHaveBeenCalled()
+    stop(instance)
+  })
+
+  it('resets generation history on restart, preserves frozen final snapshots, and isolates engines', async () => {
+    const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+    const first = await dynamicStart({ handlers: { act } })
+    const second = await dynamicStart()
+    edit(first, { remove: ['b'] })
+    edit(first, { add: ['b'] })
+    const retained = first.engine.actions!
+    const final = retained.rosterState
+    retained.schedule('act', 10, undefined, { actorId: 'a' })
+    const stale = first.timing.tasks.at(-1)!
+    first.engine.stop()
+    await first.engine.start()
+    stale.run()
+    first.timing.now = 10
+    first.timing.drain()
+    expect(act).not.toHaveBeenCalled()
+    expect(first.engine.actions!.rosterState).toEqual(second.engine.actions!.rosterState)
+    expect(first.engine.actions!.rosterState!.revision).toBe(0)
+    expect(retained.rosterState).toBe(final)
+    expect(final!.actors.at(-1)!.generation).toBe(2)
+    expect(retained.request('edit', { remove: ['a'] })).toBeUndefined()
+    expect(retained.scheduleWorld('edit', 0, { remove: ['a'] })).toBeUndefined()
+    stop(first)
+    stop(second)
+  })
+
+  it('exposes initial frozen membership during mounting and preserves it on startup failure', async () => {
+    let retained: Engine['actions']
+    const instance = setup({
+      host: {
+        mount: (_game, session) => {
+          retained = session.actions
+          expect(retained.rosterState!.actors.map((actor) => actor.actorId)).toEqual(['a', 'b'])
+          expect(Object.isFrozen(retained.rosterState)).toBe(true)
+          retained.request('end', undefined, { actorId: 'a' })
+          throw new Error('Mount failed')
+        },
+      },
+    })
+    await expect(instance.engine.start()).rejects.toThrow('Mount failed')
+    instance.timing.drain()
+    expect(retained!.rosterState!.revision).toBe(0)
+    expect(retained!.request('end', undefined, { actorId: 'a' })).toBeUndefined()
+  })
+})
+
 describe('cyclic actor turns and phases', () => {
   it('starts with the first actor and phase and publishes a frozen initial snapshot', async () => {
     const instance = setup()
@@ -172,6 +842,7 @@ describe('cyclic actor turns and phases', () => {
     instance.timing.drain()
     expect(started).toHaveBeenCalledExactlyOnceWith({
       turnState: initial,
+      rosterState: instance.engine.actions!.rosterState,
       progression: { turn: 0, worldTimeMs: 0 },
     })
     stop(instance)
@@ -243,6 +914,7 @@ describe('cyclic actor turns and phases', () => {
     actorAction(instance, 'end')
     expect(changed).not.toHaveBeenCalled()
     expect(ended.mock.calls[0]![0]).toEqual({
+      rosterState: instance.engine.actions!.rosterState,
       previous: { actorId: 'a', phaseId: 'setup', round: 1, revision: 0 },
       turnState: { actorId: 'b', phaseId: 'setup', round: 1, revision: 1 },
       progression: { turn: 1, worldTimeMs: 0 },
@@ -376,7 +1048,11 @@ describe('actor request eligibility and attribution', () => {
     instance.engine.messages!.subscribe('action.rejected', rejected)
     actorAction(instance, 'phase')
     expect(instance.act).not.toHaveBeenCalled()
-    expect(rejected.mock.calls[0]![0].request.actor).toEqual({ actorId: 'a', turnRevision: 0 })
+    expect(rejected.mock.calls[0]![0].request.actor).toEqual({
+      actorId: 'a',
+      actorGeneration: 1,
+      turnRevision: 0,
+    })
     expect(instance.engine.actions!.turnState?.revision).toBe(1)
     stop(instance)
   })
@@ -403,7 +1079,7 @@ describe('actor request eligibility and attribution', () => {
     engine.input!.pressKey('KeyE')
     engine.input!.releaseKey('KeyE')
     timing.drain()
-    expect(requests.at(-1)!.actor).toEqual({ actorId: 'b', turnRevision: 1 })
+    expect(requests.at(-1)!.actor).toEqual({ actorId: 'b', actorGeneration: 1, turnRevision: 1 })
     expect(engine.actions!.turnState?.actorId).toBe('a')
     stop(instance)
   })
@@ -418,7 +1094,11 @@ describe('actor request eligibility and attribution', () => {
     instance.engine.actions!.request('end', undefined, { actorId: 'a' })
     instance.timing.drain()
     expect(instance.act).not.toHaveBeenCalled()
-    expect(rejected.mock.calls[0]![0].request.actor).toEqual({ actorId: 'a', turnRevision: 0 })
+    expect(rejected.mock.calls[0]![0].request.actor).toEqual({
+      actorId: 'a',
+      actorGeneration: 1,
+      turnRevision: 0,
+    })
     expect(instance.engine.actions!.turnState?.actorId).toBe('b')
     stop(instance)
   })
@@ -430,7 +1110,11 @@ describe('actor request eligibility and attribution', () => {
     options.actorId = 'b'
     instance.timing.now = 5
     instance.timing.drain()
-    expect(instance.act.mock.calls[0]![0].actor).toEqual({ actorId: 'a', turnRevision: 0 })
+    expect(instance.act.mock.calls[0]![0].actor).toEqual({
+      actorId: 'a',
+      actorGeneration: 1,
+      turnRevision: 0,
+    })
     expect(Object.isFrozen(instance.act.mock.calls[0]![0].actor)).toBe(true)
     instance.engine.actions!.request('act')
     instance.timing.drain()
@@ -463,7 +1147,11 @@ describe('actor request eligibility and attribution', () => {
       expect(instance.act).not.toHaveBeenCalled()
       expect(instance.weather).toHaveBeenCalledTimes(1)
       expect(rejected.mock.calls[0]![0].reason).toContain('Stale')
-      expect(rejected.mock.calls[0]![0].request.actor).toEqual({ actorId: 'a', turnRevision: 0 })
+      expect(rejected.mock.calls[0]![0].request.actor).toEqual({
+        actorId: 'a',
+        actorGeneration: 1,
+        turnRevision: 0,
+      })
       expect(engine.actions!.turnState?.phaseId).toBe('play')
       stop(instance)
     },
@@ -643,6 +1331,7 @@ describe('turn configuration and session lifecycle', () => {
     { actors: [] },
     { actors: ['a', 'a'] },
     { actors: [''] },
+    { actors: Array<string>(1) },
     { phases: [] },
     { phases: ['play', 'play'] },
     { phases: [' '] },

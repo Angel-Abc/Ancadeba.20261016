@@ -19,7 +19,24 @@ export interface TurnRules {
 
 export interface ActorAttribution {
   readonly actorId: string
+  readonly actorGeneration: number
   readonly turnRevision: number
+}
+
+export interface RosterChanges {
+  readonly add?: readonly string[]
+  readonly remove?: readonly string[]
+}
+
+export interface ActorRosterEntry {
+  readonly actorId: string
+  readonly generation: number
+  readonly eligibleFromRound: number
+}
+
+export interface ActorRosterSnapshot {
+  readonly revision: number
+  readonly actors: readonly ActorRosterEntry[]
 }
 
 export interface ActionRequestOptions {
@@ -33,8 +50,29 @@ export type InputActorSelector =
 export interface TurnStarted {
   readonly turnState: TurnSnapshot
   readonly progression: ProgressionSnapshot
+  readonly rosterState: ActorRosterSnapshot
 }
 
 export interface TurnTransition extends TurnStarted {
   readonly previous: TurnSnapshot
+}
+
+export interface TurnEnded {
+  readonly previous: TurnSnapshot
+  readonly turnState?: TurnSnapshot
+  readonly progression: ProgressionSnapshot
+  readonly rosterState: ActorRosterSnapshot
+}
+
+export interface TurnIdle {
+  readonly previous: TurnSnapshot
+  readonly progression: ProgressionSnapshot
+  readonly rosterState: ActorRosterSnapshot
+}
+
+export interface TurnRosterChanged {
+  readonly previous: ActorRosterSnapshot
+  readonly rosterState: ActorRosterSnapshot
+  readonly turnState?: TurnSnapshot
+  readonly progression: ProgressionSnapshot
 }
