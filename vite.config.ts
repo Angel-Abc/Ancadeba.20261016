@@ -32,6 +32,7 @@ export default defineConfig({
       {
         files: [
           'packages/schemas/src/**',
+          'packages/editor-core/src/**',
           'packages/game-runtime/src/**',
           'packages/utilities/src/**',
         ],

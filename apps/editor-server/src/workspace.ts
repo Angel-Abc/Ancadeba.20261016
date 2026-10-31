@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
+import { link, lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { WorkspaceListing } from '@ancadeba/schemas'
@@ -164,6 +164,37 @@ export class FileWorkspace implements WorkspaceService {
       throw new WorkspaceError(409, 'Expected a game directory')
     }
     return target
+  }
+
+  async create(path: string, contents: Uint8Array): Promise<void> {
+    const target = await this.locate(path, false, true)
+    const temporary = resolve(dirname(target), `.ancadeba-save-${randomUUID()}.tmp`)
+    const file = await open(temporary, 'wx')
+    try {
+      try {
+        await file.writeFile(contents)
+      } finally {
+        await file.close()
+      }
+      try {
+        // A hard link publishes complete bytes without replacing an existing destination.
+        await link(temporary, target)
+      } catch (error) {
+        if (hasCode(error, 'EEXIST')) throw new WorkspaceError(409, 'File already exists')
+        throw error
+      }
+    } finally {
+      await rm(temporary, { force: true })
+    }
+  }
+
+  async removeCreated(path: string, contents: Uint8Array): Promise<void> {
+    const target = await this.locate(path)
+    const current = await this.read(path)
+    if (!Buffer.from(current).equals(contents)) {
+      throw new WorkspaceError(409, 'Scene changed before cleanup')
+    }
+    await rm(target)
   }
 
   async write(path: string, contents: Uint8Array): Promise<boolean> {

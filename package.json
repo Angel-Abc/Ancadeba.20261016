@@ -19,6 +19,7 @@
     "test:watch": "pnpm build:packages && vp test watch"
   },
   "devDependencies": {
+    "@ancadeba/editor-core": "workspace:*",
     "@ancadeba/game-runtime": "workspace:*",
     "@ancadeba/schemas": "workspace:*",
     "@ancadeba/ui-components": "workspace:*",

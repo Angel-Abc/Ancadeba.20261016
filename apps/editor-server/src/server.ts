@@ -9,6 +9,9 @@ import {
   type HealthResponse,
 } from '@ancadeba/schemas'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
+import { capabilities, EditorError } from '@ancadeba/editor-core'
+import { EditorCoordinator } from './editorCoordinator.js'
+import type { EditorProjectService } from './editorProjectService.js'
 import type { GameExportService } from './gameExports.js'
 
 export const maxWriteBytes = 10 * 1024 * 1024
@@ -48,12 +51,22 @@ export function createEditorServer(
   config: EditorServerConfig,
   workspace: WorkspaceService,
   exports?: GameExportService,
+  projects?: EditorProjectService,
 ): Server {
   parseEditorServerConfig(config)
+  const coordinator = projects?.coordinator ?? new EditorCoordinator()
   return createServer((request, response) => {
     void handle(request, response).catch((error: unknown) => {
       if (response.headersSent || response.destroyed) {
         response.destroy()
+        return
+      }
+      if (error instanceof EditorError) {
+        json(response, error.status, {
+          error: error.message,
+          code: error.code,
+          diagnostics: error.diagnostics,
+        })
         return
       }
       const failure = workspaceError(error)
@@ -69,6 +82,41 @@ export function createEditorServer(
       return
     }
     const path = url.searchParams.get('path') ?? ''
+    if (url.pathname.startsWith('/api/editor/')) {
+      response.setHeader('Cache-Control', 'no-store')
+      if (request.method === 'GET' && url.pathname === '/api/editor/capabilities') {
+        json(response, 200, capabilities)
+        return
+      }
+      if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
+      if (request.method === 'GET' && url.pathname === '/api/editor/project') {
+        json(response, 200, await projects.inspect(path))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/api/editor/scene') {
+        json(response, 200, await projects.scene(path, url.searchParams.get('id') ?? ''))
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/api/editor/commands') {
+        if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
+          throw new WorkspaceError(415, 'Editing requests must use application/json')
+        }
+        const bytes = await readBody(request)
+        let body: unknown
+        try {
+          body = JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown
+        } catch {
+          throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
+        }
+        const result = await projects.apply(body)
+        json(response, 200, {
+          ...result.view,
+          changedFiles: result.changedFiles,
+          summary: result.summary,
+        })
+        return
+      }
+    }
     if (request.method === 'POST' && url.pathname === '/api/exports') {
       if (!exports) throw new WorkspaceError(503, 'Game exports are not available')
       if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
@@ -106,14 +154,14 @@ export function createEditorServer(
       return
     }
     if (request.method === 'GET' && url.pathname === '/api/files') {
-      const contents = await workspace.read(path)
+      const contents = await coordinator.run(() => workspace.read(path))
       response.writeHead(200, { 'Content-Type': 'application/octet-stream' })
       response.end(contents)
       return
     }
     if (request.method === 'PUT' && url.pathname === '/api/files') {
       const contents = await readBody(request)
-      const created = await workspace.write(path, contents)
+      const created = await coordinator.run(() => workspace.write(path, contents))
       response.writeHead(created ? 201 : 204)
       response.end()
       return

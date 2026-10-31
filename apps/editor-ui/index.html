@@ -46,6 +46,64 @@
           <p id="preview-empty" class="preview-empty">Start the engine to preview the game.</p>
         </div>
       </section>
+      <section id="project-editor" class="preview-panel" aria-labelledby="editor-heading">
+        <h2 id="editor-heading">Game project</h2>
+        <p class="help">Edit saved game files. Restart the preview to see changes.</p>
+        <label for="editor-folder">Game folder</label>
+        <input
+          id="editor-folder"
+          placeholder="Workspace root"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div class="preview-actions editor-actions">
+          <button id="editor-load" type="button">Load project</button>
+          <button id="editor-reload" type="button" disabled>Reload latest (keep entries)</button>
+        </div>
+        <p id="editor-status" class="help" role="status"></p>
+        <p id="editor-error" class="error" role="alert" hidden></p>
+        <fieldset id="editor-fields" disabled>
+          <legend>Project properties</legend>
+          <form id="editor-metadata">
+            <label for="editor-title">Game title</label><input id="editor-title" required />
+            <label for="editor-description">Description</label
+            ><textarea id="editor-description"></textarea>
+            <label for="editor-version">Version</label><input id="editor-version" required />
+            <button type="submit">Save game properties</button>
+          </form>
+          <label for="editor-scenes">Scene</label
+          ><select id="editor-scenes"></select>
+          <form id="scene-metadata" hidden>
+            <label for="scene-title">Scene title</label><input id="scene-title" required />
+            <label for="scene-description">Description</label
+            ><textarea id="scene-description"></textarea>
+            <button type="submit">Save scene properties</button>
+          </form>
+          <form id="scene-layout" hidden>
+            <label for="scene-rows">Rows</label
+            ><input id="scene-rows" type="number" min="1" step="1" required />
+            <label for="scene-columns">Columns</label
+            ><input id="scene-columns" type="number" min="1" step="1" required />
+            <button type="submit">Save grid</button>
+          </form>
+          <form id="scene-create">
+            <h3>Add scene</h3>
+            <label for="new-scene-id">ID</label
+            ><input id="new-scene-id" pattern="[a-zA-Z0-9_-]+" required />
+            <label for="new-scene-title">Title</label><input id="new-scene-title" required />
+            <label for="new-scene-type">Type</label>
+            <select id="new-scene-type">
+              <option value="stand-alone">Stand-alone</option>
+              <option value="game">Game</option>
+            </select>
+            <label for="new-scene-rows">Rows</label
+            ><input id="new-scene-rows" type="number" min="1" step="1" value="12" required />
+            <label for="new-scene-columns">Columns</label
+            ><input id="new-scene-columns" type="number" min="1" step="1" value="16" required />
+            <button type="submit">Create scene</button>
+          </form>
+        </fieldset>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
