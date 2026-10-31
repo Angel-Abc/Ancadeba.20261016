@@ -9,6 +9,13 @@ export {
 export type { EngineMessages } from './messages.js'
 export { GameLoader, type IGameLoader } from './gameLoader.js'
 export { assembleGameData, type GameData, type SceneData, type InputData } from './gameData.js'
+export {
+  GameLifecycle,
+  type IGameLifecycle,
+  type GameLifecycleFactories,
+  type GameInstance,
+  type SceneInstance,
+} from './gameLifecycle.js'
 export { InputController, type IGameInput, type VirtualInput } from './input.js'
 export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from './timers.js'
 export { ActionProcessor } from './actionProcessor.js'

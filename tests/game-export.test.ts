@@ -162,6 +162,7 @@ describe('standalone game export', () => {
         messages: expect.anything(),
         timers: expect.anything(),
         actions: expect.anything(),
+        lifecycle: expect.anything(),
       })
       engine.stop()
       await expect(

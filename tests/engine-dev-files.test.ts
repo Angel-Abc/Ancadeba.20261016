@@ -105,6 +105,7 @@ describe('engine development game files', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     engine.stop()
   })

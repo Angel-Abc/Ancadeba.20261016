@@ -103,6 +103,7 @@ describe('engine lifecycle', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     expect(engine.state).toBe('running')
     expect(engine.game).toEqual(gameData('Loaded'))
@@ -240,6 +241,7 @@ describe('engine lifecycle', () => {
         messages: expect.anything(),
         timers: expect.anything(),
         actions: expect.anything(),
+        lifecycle: expect.anything(),
       })
     },
   )
@@ -292,6 +294,7 @@ describe('engine lifecycle', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
   })
 })

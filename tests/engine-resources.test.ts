@@ -289,6 +289,7 @@ describe('engine game resources', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     expect(info).toHaveBeenCalledWith('Engine', 'The engine workspace is ready.')
     expect(started).not.toHaveBeenCalled()
@@ -344,12 +345,14 @@ describe('engine game resources', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     expect(secondHost.mount).toHaveBeenCalledExactlyOnceWith(gameData('Second'), {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     secondEngine.stop()
   })

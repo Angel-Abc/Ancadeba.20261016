@@ -179,7 +179,7 @@ letters, digits, underscores, and hyphens. An empty scene list is valid.
 
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
-`stand-alone` scenes with a `grid` screen, positive integer rows and columns,
+`stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
 and an empty `components` array. Component definitions are not supported yet.
 Every scene must declare the ID used by its manifest reference.
 
@@ -261,7 +261,7 @@ defer its callback and return an idempotent cancellation function. The standalon
 factory, and engine in one container, then resolves `engine` from that container.
 The editor's IoC preview factory constructs an engine and JSON loader for each
 selected game folder, using the registered logger, host, message-bus factory, and timing services.
-The host receives `{ input, messages, timers, actions }` for that session during mounting.
+The host receives `{ input, messages, timers, actions, lifecycle }` for that session during mounting.
 Timing services can also supply a `createGameRules(game)` factory, described below.
 The host should release its mounted content, listeners, and other owned resources
 in that cleanup function. If mounting throws, the host is responsible for undoing
@@ -278,6 +278,79 @@ Underlying resource reads can finish in the background because `IResourceSource`
 does not yet expose transport cancellation. `stop()` clears the loaded game and
 runs host cleanup synchronously. The standalone page uses this lifecycle and
 stops its instance when Vite replaces its entry module.
+
+### Current games and scenes
+
+Loaded `GameData` and `SceneData` are reusable definitions. `GameLifecycle` owns
+the mutable state of a playthrough and its scene instances separately from the
+engine's technical session. Loading content does not start a playthrough or select
+a scene. The lifecycle is available as `engine.lifecycle` while running and as
+`session.lifecycle` during host mounting. Engine stop and failed startup dispose it;
+restart creates a fresh lifecycle.
+
+| Scope                             | Owner                 | Lifetime                                                           |
+| --------------------------------- | --------------------- | ------------------------------------------------------------------ |
+| Loaded game and scene definitions | Loaded content        | Until the engine session releases the content                      |
+| Playthrough state                 | Current game instance | From `startGame()` until replacement, `endGame()`, or engine stop  |
+| Stand-alone scene state           | Scene instance        | From scene entry until exit, replacement, or engine stop           |
+| Game scene presentation state     | Scene instance        | From scene entry until exit, replacement, game end, or engine stop |
+
+`game` scenes require a current game and expose that same instance through
+`scene.game`. `stand-alone` scenes have no game context, can run without a
+playthrough, and retain an existing playthrough while displayed. Starting,
+replacing, or ending a game leaves an active stand-alone scene intact. Replacing
+or ending a game removes an active game scene because its context has expired.
+Scene purposes such as inventory or navigation are names and component
+configurations, not additional scene types.
+
+State is supplied through injected factories rather than a built-in RPG model.
+For example, with loaded definitions containing two `game` scenes named `standard`
+and `inventory`, and a `stand-alone` scene named `settings`:
+
+```ts
+import { GameLifecycle } from '@ancadeba/game-runtime'
+
+const lifecycle = new GameLifecycle(game, {
+  createGameState: () => ({ score: 0 }),
+  createSceneState: () => ({ selected: 0 }),
+})
+
+const playthrough = lifecycle.startGame()
+playthrough.state!.score = 12
+lifecycle.enterScene('standard')
+lifecycle.enterScene('inventory') // Same playthrough, fresh scene-local state.
+lifecycle.enterScene('settings') // Independent context; playthrough retained.
+lifecycle.enterScene('standard') // Fresh scene instance; score still 12.
+lifecycle.endGame() // Releases the game state and active game scene.
+lifecycle.dispose()
+```
+
+To configure engine-owned state, supply `createGameLifecycle: (game) => new
+GameLifecycle(game, factories)` in `EngineRuntimeServices`. Return a fresh lifecycle
+for each session. Without this factory, the default lifecycle tracks instances
+with undefined application state. The existing input, timers, and action processor
+remain engine-session services; these transitions do not automatically pause,
+reset, or rebind their action rules or progression.
+
+Factories must create fresh state and may provide `disposeGameState(state)` and
+`disposeSceneState(state)` callbacks to release owned resources. Scene state is
+recreated on re-entry; entering the already active scene is a no-op. `leaveScene()`
+retains the current game. Invalid scene entry and state factory failures leave the
+existing contexts intact. No transition modifies the loaded definitions, and no
+save/restore or state-change notifications are added here.
+
+Disposed instances expose `disposed: true` and release their `state`; callers must
+discard retained references to that state. Cleanup releases all affected scopes
+even if a callback throws, then reports failures in an `AggregateError`. A cleanup
+error does not roll back a completed transition. Transition calls from factories
+or cleanup are rejected to prevent overlapping changes; disposal requested from
+inside a transition is completed as that transition unwinds. Lifecycle disposal
+is idempotent, and later transition calls throw.
+
+The fixture in `tests/scene-lifecycle.test.ts` exercises both game scenes and the
+stand-alone scene through the JSON loader and verifies state retention, resets,
+failure cleanup, engine restart, and instance isolation. Both browser hosts still
+render their existing placeholders.
 
 ### Lifecycle messages
 

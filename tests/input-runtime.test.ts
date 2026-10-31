@@ -172,6 +172,7 @@ describe('engine session input', () => {
       messages: engine.messages,
       timers: engine.timers,
       actions: engine.actions,
+      lifecycle: engine.lifecycle,
     })
     input.pressKey('KeyW')
     engine.flushMessages()

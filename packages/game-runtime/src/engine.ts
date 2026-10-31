@@ -12,16 +12,20 @@ import { InputController, type IGameInput } from './input.js'
 import { TimerService, type ITimerService } from './timers.js'
 import { ActionProcessor } from './actionProcessor.js'
 import type { GameRulesFactory, IGameActions } from './actions.js'
+import { GameLifecycle, type IGameLifecycle } from './gameLifecycle.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
 export interface EngineRuntimeServices {
   readonly createGameRules?: GameRulesFactory
+  /** Return a fresh lifecycle for each loaded engine session. */
+  readonly createGameLifecycle?: (game: GameData) => IGameLifecycle
   readonly scheduler: ITaskScheduler
   readonly clock: IMonotonicClock
 }
 
 export interface EngineHostSession {
+  readonly lifecycle: IGameLifecycle
   readonly actions: IGameActions
   readonly input: IGameInput | undefined
   readonly messages: IMessageBus<EngineMessages>
@@ -34,6 +38,7 @@ export interface IEngineHost {
 }
 
 export interface IEngine {
+  readonly lifecycle: IGameLifecycle | undefined
   readonly actions: IGameActions | undefined
   readonly state: EngineState
   readonly game: GameData | undefined
@@ -54,6 +59,7 @@ interface EngineSession {
   input?: InputController
   timers?: TimerService
   actions?: ActionProcessor
+  lifecycle?: IGameLifecycle
   cleanup?: () => void
 }
 
@@ -77,6 +83,10 @@ export class Engine implements IEngine {
 
   get game(): GameData | undefined {
     return this.session?.game
+  }
+
+  get lifecycle(): IGameLifecycle | undefined {
+    return this.session?.game ? this.session.lifecycle : undefined
   }
 
   get messages(): IMessageBus<EngineMessages> | undefined {
@@ -131,7 +141,16 @@ export class Engine implements IEngine {
     session.input?.dispose()
     session.timers?.dispose()
     try {
-      session.cleanup?.()
+      const errors: unknown[] = []
+      for (const cleanup of [() => session.lifecycle?.dispose(), () => session.cleanup?.()]) {
+        try {
+          cleanup()
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1) throw new AggregateError(errors, 'Engine cleanup failed')
     } catch (error) {
       session.messages.publish('engine.failed', { error })
       throw error
@@ -148,6 +167,17 @@ export class Engine implements IEngine {
       const game = await Promise.race([this.loader.load(), session.cancelled])
       if (this.session !== session || !game) return
 
+      const lifecycle =
+        this.runtime.createGameLifecycle?.(game) ??
+        new GameLifecycle(game, {
+          createGameState: () => undefined,
+          createSceneState: () => undefined,
+        })
+      if (this.session !== session) {
+        lifecycle.dispose()
+        return
+      }
+      session.lifecycle = lifecycle
       if (game.input) session.input = new InputController(game.input, session.messages)
       session.timers = new TimerService(
         session.messages,
@@ -165,6 +195,7 @@ export class Engine implements IEngine {
         () => this.session === session && session.game !== undefined,
       )
       const cleanup = this.host.mount(game, {
+        lifecycle,
         actions: session.actions,
         input: session.input,
         messages: session.messages,

@@ -206,6 +206,7 @@ describe('game data pipeline', () => {
       messages: expect.anything(),
       timers: expect.anything(),
       actions: expect.anything(),
+      lifecycle: expect.anything(),
     })
     expect(started).toHaveBeenCalledExactlyOnceWith({ game: engine.game })
     engine.stop()

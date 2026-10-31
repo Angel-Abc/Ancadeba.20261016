@@ -6,7 +6,7 @@ export const sceneSchema = z.object({
   id: gameIdSchema,
   title: z.string().trim().min(1),
   description: z.string(),
-  type: z.literal('stand-alone'),
+  type: z.enum(['stand-alone', 'game']),
   screen: z.object({
     type: z.literal('grid'),
     grid: z.object({
