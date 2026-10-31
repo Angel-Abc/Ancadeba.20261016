@@ -1,6 +1,4 @@
-import type { IMessageBus } from '@ancadeba/utilities'
 import type { InputData } from './gameData.js'
-import type { EngineMessages } from './messages.js'
 
 export interface VirtualInput {
   readonly context: string
@@ -30,7 +28,7 @@ export class InputController implements IGameInput {
 
   constructor(
     data: InputData,
-    private readonly messages: IMessageBus<EngineMessages>,
+    private readonly messages: { publish(topic: 'input.virtual', payload: VirtualInput): void },
   ) {
     this.keyboard = new Map(Object.entries(data.keyboard))
     this.contexts = new Map(

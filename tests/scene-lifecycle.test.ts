@@ -402,13 +402,11 @@ describe('engine-owned game lifecycle', () => {
       return { score: 0, locations: new Map() }
     })
 
-    const game = lifecycle.startGame()
-
+    expect(() => lifecycle.startGame()).toThrow('Engine stopped while creating game rules')
     expect(engine.state).toBe('stopped')
     expect(engine.lifecycle).toBeUndefined()
     expect(lifecycle.disposed).toBe(true)
-    expect(game.disposed).toBe(true)
-    expect(game.state).toBeUndefined()
+    expect(lifecycle.currentGame).toBeUndefined()
     expect(factories.disposeGameState).toHaveBeenCalledTimes(1)
     expect(cleanup).toHaveBeenCalledTimes(1)
   })

@@ -107,7 +107,12 @@ function setup(
   const mount = vi.fn<IEngineHost['mount']>(() => () => {})
   const engine = new Engine(
     options.loader ?? { load: async () => game },
-    options.host ?? { mount },
+    {
+      mount(data, session) {
+        session.lifecycle.startGame()
+        return (options.host ?? { mount }).mount(data, session)
+      },
+    },
     logger,
     () => new MessageBus<EngineMessages>(),
     runtime,
@@ -548,7 +553,7 @@ describe('action failures and lifecycle', () => {
         mount: (_game, session) => {
           captured = session
           expect(engine.actions).toBeUndefined()
-          session.actions.request('ready')
+          session.actions!.request('ready')
           return () => {}
         },
       },
@@ -665,7 +670,7 @@ describe('action failures and lifecycle', () => {
     engine.stop()
     await engine.start()
     expect(factory).toHaveBeenCalledTimes(2)
-    expect(factory).toHaveBeenLastCalledWith(game)
+    expect(factory).toHaveBeenLastCalledWith(game, engine.lifecycle!.currentGame)
     expect(engine.actions).not.toBe(oldActions)
     expect(engine.actions!.progression).toEqual({ turn: 0, worldTimeMs: 0 })
     timing.now = 10
@@ -686,7 +691,7 @@ describe('action failures and lifecycle', () => {
         host: {
           mount: (_game, session) => {
             captured = session.actions
-            session.actions.schedule('anything', 0)
+            session.actions!.schedule('anything', 0)
             if (shouldThrow) throw new Error('Mount failed')
             engine.stop()
             return () => {}

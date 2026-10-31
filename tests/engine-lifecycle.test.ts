@@ -102,7 +102,7 @@ describe('engine lifecycle', () => {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
-      actions: expect.anything(),
+      actions: undefined,
       lifecycle: expect.anything(),
     })
     expect(engine.state).toBe('running')
@@ -240,7 +240,7 @@ describe('engine lifecycle', () => {
         input: undefined,
         messages: expect.anything(),
         timers: expect.anything(),
-        actions: expect.anything(),
+        actions: undefined,
         lifecycle: expect.anything(),
       })
     },
@@ -293,7 +293,7 @@ describe('engine lifecycle', () => {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
-      actions: expect.anything(),
+      actions: undefined,
       lifecycle: expect.anything(),
     })
   })

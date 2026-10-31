@@ -127,7 +127,12 @@ function setup(
   const factory = vi.fn(() => rules)
   const engine = new Engine(
     { load: async () => game },
-    options.host ?? { mount },
+    {
+      mount(data, session) {
+        session.lifecycle.startGame()
+        return (options.host ?? { mount }).mount(data, session)
+      },
+    },
     logger,
     () => new MessageBus<EngineMessages>(),
     {
@@ -812,7 +817,7 @@ describe('dynamic actor attribution and session isolation', () => {
     const instance = setup({
       host: {
         mount: (_game, session) => {
-          retained = session.actions
+          retained = session.actions!
           expect(retained.rosterState!.actors.map((actor) => actor.actorId)).toEqual(['a', 'b'])
           expect(Object.isFrozen(retained.rosterState)).toBe(true)
           retained.request('end', undefined, { actorId: 'a' })
@@ -1468,14 +1473,14 @@ describe('turn configuration and session lifecycle', () => {
       host: {
         mount: (_game, session) => {
           retained = session.actions
-          expect(session.actions.turnState).toEqual({
+          expect(session.actions!.turnState).toEqual({
             actorId: 'a',
             phaseId: 'setup',
             round: 1,
             revision: 0,
           })
           expect(instance.engine.actions).toBeUndefined()
-          session.actions.request('phase', undefined, { actorId: 'a' })
+          session.actions!.request('phase', undefined, { actorId: 'a' })
           throw new Error('Mount failed')
         },
       },

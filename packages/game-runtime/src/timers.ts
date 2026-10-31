@@ -29,6 +29,7 @@ export class TimerService implements ITimerService {
     private readonly messages: IMessageBus<EngineMessages>,
     private readonly scheduler: ITaskScheduler,
     private readonly clock: IMonotonicClock,
+    private readonly allocateId: () => TimerId = () => ++this.nextId,
   ) {}
 
   schedule(delayMs: number): TimerId | undefined {
@@ -36,7 +37,7 @@ export class TimerService implements ITimerService {
     if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 2_147_483_647) {
       throw new RangeError('Timer delay must be an integer from 0 through 2147483647 milliseconds')
     }
-    const id = ++this.nextId
+    const id = this.allocateId()
     const timer: PendingTimer = { dueAt: this.clock.now() + delayMs }
     this.pending.set(id, timer)
     this.arm(id, timer, delayMs)

@@ -81,7 +81,7 @@ function validateOutcome(value: unknown): ActionOutcome {
   })
 }
 
-/** Routes session triggers and serially executes synchronous action handlers. */
+/** Routes playthrough-owned triggers and serially executes synchronous action handlers. */
 export class ActionProcessor implements IGameActions {
   private readonly handlers: Map<string, GameActionHandler>
   private readonly bindings = new Map<

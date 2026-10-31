@@ -327,16 +327,36 @@ lifecycle.dispose()
 
 To configure engine-owned state, supply `createGameLifecycle: (game) => new
 GameLifecycle(game, factories)` in `EngineRuntimeServices`. Return a fresh lifecycle
-for each session. Without this factory, the default lifecycle tracks instances
-with undefined application state. The existing input, timers, and action processor
-remain engine-session services; these transitions do not automatically pause,
-reset, or rebind their action rules or progression.
+for each session, without starting a game inside the factory. Without this factory,
+the default lifecycle tracks instances with undefined application state. The engine
+binds a `GameRuntimeFactory` through `lifecycle.bindGameRuntime(factory)` before
+mounting. Each current game owns its action processor, turn roster, progression,
+host action timers, world schedules, and world-time pulses. Input and
+`engine.timers` remain engine-session services.
+
+`startGame()` creates fresh action rules and progression at turn zero and world
+time zero. `game.actions`, `engine.actions`, and the live `session.actions` getter
+refer to that game's service; the latter two are undefined without a current game.
+Ending or replacing the game disposes its runtime, even while the engine remains
+running. Scene changes retain it. A stand-alone scene does not pause the retained
+game: direct requests, existing schedules, and elapsed time continue, while its
+keyboard events are excluded from gameplay action bindings.
+
+Queued input, requests, timer wakeups, progression, and outcome messages carry
+internal playthrough ownership. Disposed games' messages are discarded before
+delivery, including when another game starts before a flush. Held input is reset
+on game start, and releases retain the ownership of their original press. Engine
+timers keep working across game transitions and have IDs distinct from game timers
+within the same engine session.
+Submit gameplay requests through the action service; publishing an unscoped
+`action.requested` directly on `engine.messages` does not execute a game handler.
 
 Factories must create fresh state and may provide `disposeGameState(state)` and
 `disposeSceneState(state)` callbacks to release owned resources. Scene state is
 recreated on re-entry; entering the already active scene is a no-op. `leaveScene()`
 retains the current game. Invalid scene entry and state factory failures leave the
-existing contexts intact. No transition modifies the loaded definitions, and no
+existing contexts intact. Invalid rules or runtime startup failure also preserve
+the previous game and scene. No transition modifies the loaded definitions, and no
 save/restore or state-change notifications are added here.
 
 Disposed instances expose `disposed: true` and release their `state`; callers must
@@ -351,6 +371,9 @@ The fixture in `tests/scene-lifecycle.test.ts` exercises both game scenes and th
 stand-alone scene through the JSON loader and verifies state retention, resets,
 failure cleanup, engine restart, and instance isolation. Both browser hosts still
 render their existing placeholders.
+`tests/game-lifecycle-actions.test.ts` covers runtime resets, retained progression,
+stand-alone input isolation, stale queued work, replacement during dispatch, and
+runtime startup rollback.
 
 ### Lifecycle messages
 
@@ -401,8 +424,9 @@ delivered automatically, even if another session starts immediately.
 
 `engine.messages` retains the stopped session's bus. Retained references may
 subscribe to remaining lifecycle messages or explicitly flush them, but cannot
-publish more work. A restart creates a new bus, input controller, and timer
-service, action handlers, and progression; subscriptions do not transfer. Repeated starts while active and repeated
+publish more work. A restart creates a new bus, input controller, timer service,
+and idle game lifecycle; subscriptions do not transfer. A subsequent `startGame()`
+creates fresh action handlers and progression. Repeated starts while active and repeated
 stops do not create extra buses or events.
 
 `engine.flushMessages()` and `engine.messages.flush()` remain available. They
@@ -458,12 +482,13 @@ own one-shot pulses as described below.
 
 ## Game actions and progression
 
-`EngineRuntimeServices.createGameRules(game)` optionally supplies game-specific
-TypeScript rules once per loaded session. Return fresh handler closures or
+`EngineRuntimeServices.createGameRules(data, game)` optionally supplies game-specific
+TypeScript rules for each new playthrough. The second argument is the new game
+instance, whose application state is already initialized. Return fresh handler closures or
 instances for each call so positions, inventory, weather, and other domain state
-are session-owned. The action processor owns only routing and progression.
-Without a factory, an engine has empty rules and action-driven world time; existing
-JSON games keep their behavior and an idle session does not start polling.
+are game-owned. The action processor owns only routing and progression.
+Without a factory, a started game has empty rules and action-driven world time.
+Loading content alone creates no action processor or world-time polling.
 
 Custom handler code must currently be supplied by application composition. Game
 JSON schemas do not define executable rules, and the loader does not import game
@@ -519,6 +544,7 @@ const engine = new Engine(loader, host, logger, () => new MessageBus<EngineMessa
   createGameRules,
 })
 await engine.start()
+engine.lifecycle!.startGame()
 engine.messages?.subscribe('action.applied', ({ request, progression }) => {
   console.log(request.id, request.origin.type, progression)
 })
@@ -528,7 +554,7 @@ engine.actions?.scheduleWorld('weather', 60000)
 
 `GameRules.handlers` maps action IDs to synchronous `GameActionHandler` functions.
 Each receives an `ActionRequest` and `{ progression, actions, turnState }`. Requests carry a
-session-local numeric ID, action ID, optional payload, and an origin: direct,
+playthrough-local numeric ID, action ID, optional payload, and an origin: direct,
 captured virtual input, host-timer wakeup, or world-time deadline. Payloads are passed by reference and must
 be treated as immutable. Follow-up requests are queued rather than executed
 recursively. Asynchronous work must submit a later request instead of returning
@@ -538,10 +564,11 @@ a promise from a handler.
 to `pressed`; `released` and `cancelled` require explicit bindings. Unmatched input
 is ignored. A context change does not reinterpret already queued inputs.
 Unknown target actions, duplicate context/input/phase tuples, invalid bindings,
-and invalid world-time policies fail startup before mounting.
+and invalid world-time policies reject `startGame()` before replacing the current game.
 
-`IGameActions` is available as `engine.actions` only while running and as
-`session.actions` during mounting. It exposes:
+`IGameActions` is available as `game.actions` and through `engine.actions` while
+running with a current game. The live `session.actions` getter is also available
+during mounting after an explicit `session.lifecycle.startGame()`. It exposes:
 
 - `progression`: a frozen `{ turn, worldTimeMs }` snapshot of the latest synchronization.
 - `turnState`: a frozen actor/phase snapshot when a turn is active, otherwise undefined.
@@ -556,7 +583,7 @@ and invalid world-time policies fail startup before mounting.
 A timer wakeup queues its associated request once. Cancellation cannot retract a
 wakeup already published to the bus. The processor handles requests in bus order,
 with trigger translation, follow-up requests, and outcome delivery separated by
-normal deferred batches. Handler maps and bindings are copied at session creation.
+normal deferred batches. Handler maps and bindings are copied at game creation.
 
 Handlers return `{ status: 'applied', advanceTurn?, advancePhase?, worldTimeCostMs?, rosterChanges? }` or
 `{ status: 'rejected', reason }`. Turn advancement defaults to false; time cost
@@ -577,12 +604,12 @@ queued, with turn notification preceding world-time notification when both chang
 
 ### Independent turns and world time
 
-Every session starts at turn zero and world time zero. An applied action with
+Every playthrough starts at turn zero and world time zero. An applied action with
 `advanceTurn: true` increments the completed-turn counter by exactly one. With
 actor turns configured, advancing the final phase also completes one actor turn.
 Accepted actions, timer wakeups, and elapsed time never implicitly consume turns.
 
-`GameRules.worldTime` selects one static per-session policy:
+`GameRules.worldTime` selects one static per-playthrough policy:
 
 | Mode                      | Elapsed host time            | Accepted action costs |
 | ------------------------- | ---------------------------- | --------------------- |
@@ -592,8 +619,9 @@ Accepted actions, timer wakeups, and elapsed time never implicitly consume turns
 
 `rate` is a positive finite number of world milliseconds per host millisecond,
 defaulting to one. `pulseMs` is an integer host delay from one through
-`2_147_483_647`, defaulting to 1,000. Elapsed accounting begins when the session
-becomes running, excluding loading and mounting time. It synchronizes before
+`2_147_483_647`, defaulting to 1,000. Elapsed accounting begins at game start,
+or when the engine becomes running if the game starts during mounting. Loading,
+mounting, and time without a current game are excluded. It synchronizes before
 each action, when registering world schedules, and on an owned pulse or deadline wakeup using the injected monotonic clock at
 processing time. Each elapsed interval is counted once; an action-cost jump does
 not reset the elapsed anchor. Rejection or failure can still coincide with elapsed
@@ -605,11 +633,13 @@ progression changes, not game-action outcomes. Time continues through hidden tab
 focus loss, and input-context changes. Merely reading `progression` does not
 synchronize it. Published snapshots remain unchanged as later actions execute.
 
-Stop cancels action timers, world schedules, and world pulses, unsubscribes runtime handlers, and
+Game end, game replacement, and engine stop cancel action timers, world schedules,
+and world pulses, unsubscribe runtime handlers, and
 disables retained action-service references. Request and schedule return undefined
-after disposal; cancellation returns false. A handler that stops its session
-cannot commit its returned result. Restart creates fresh progression and invokes
-the rules factory again; stale callbacks cannot affect the new session.
+after disposal; cancellation returns false. A handler that ends or replaces its
+game, or stops the engine, cannot commit its returned result. Starting another
+game creates fresh progression and invokes the rules factory again; stale callbacks
+cannot affect the new playthrough.
 
 Dynamic pause/resume, policy switching,
 game-script loading, persistence, and visual gameplay rendering are not part of
@@ -662,6 +692,7 @@ const createGameRules: GameRulesFactory = () => ({
 
 // Supply createGameRules through the engine's runtime services as above.
 await engine.start()
+engine.lifecycle!.startGame()
 engine.actions?.request('nextPhase', undefined, { actorId: 'player' })
 engine.actions?.scheduleWorld('weather', 60000) // Actorless and independent of turns.
 ```
@@ -670,8 +701,8 @@ When turns are enabled, every registered action must declare `scope: 'actor'` or
 `scope: 'global'`. Actor policies may restrict `allowedPhases`; omitting it permits
 all phases. Provided lists must be nonempty, unique, and reference declared phases.
 Missing or unknown action policies, phase restrictions on global actions, and
-invalid actor selectors reject startup before mounting. Configuration is copied
-for the session; changing source arrays or policies does not change live turns.
+invalid actor selectors reject game creation. Configuration is copied
+for the playthrough; changing source arrays or policies does not change live turns.
 
 `IGameActions.turnState` and `ActionContext.turnState` contain the frozen
 `{ actorId, phaseId, round, revision }` snapshot. They are undefined when actor
@@ -740,8 +771,8 @@ Actor/phase transitions add no implicit world time and never pause elapsed time
 or change world deadlines. Only existing elapsed policies and explicit action
 costs advance the world. Global weather actions can execute in any turn or phase;
 world-time changes alone do not change the turn revision. A stale timed actor
-action is rejected once rather than postponed or retried. Stop and restart reset
-the coordinator with the rest of the session, while retained references expose
+action is rejected once rather than postponed or retried. Game end or replacement
+disposes the coordinator, while retained references expose
 frozen final snapshots and cannot submit new work.
 
 Initiative strategies, temporary actor disabling, phase lifecycle hooks,
@@ -832,7 +863,7 @@ engine.actions?.request('move')
 if (inspectionId !== undefined) engine.actions?.cancelWorldScheduled(inspectionId)
 ```
 
-`WorldScheduleId` is a session-local string such as `world:1`, distinct from numeric
+`WorldScheduleId` is a playthrough-local string such as `world:1`, distinct from numeric
 host `TimerId`s. Both relative delays and absolute deadlines must be finite,
 nonnegative numbers; fractional world milliseconds are supported. Invalid values
 and relative-deadline overflow throw `RangeError` without registering a schedule.
@@ -847,7 +878,7 @@ synchronize time. Mounting-time schedules are retained until the processor start
 with startup time excluded from elapsed accounting.
 
 Zero-delay and past-deadline schedules queue ordinary action requests once the
-session is running; they never execute handlers inline. After committed progression
+game runtime is running; they never execute handlers inline. After committed progression
 changes, the scheduler checks the latest snapshot rather than relying on an older
 queued notification. Each newly due group is sorted by deadline and then registration
 order, removed from the pending collection, and appended to the normal bus queue.

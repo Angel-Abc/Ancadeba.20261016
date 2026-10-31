@@ -67,7 +67,7 @@ describe('editor container', () => {
       input: undefined,
       messages: expect.anything(),
       timers: expect.anything(),
-      actions: expect.anything(),
+      actions: undefined,
       lifecycle: expect.anything(),
     })
     expect(dependencies.onPreviewStateChange.mock.calls).toEqual([['starting'], ['running']])

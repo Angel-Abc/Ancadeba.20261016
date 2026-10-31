@@ -1,4 +1,5 @@
 import type { GameData } from './gameData.js'
+import type { GameInstance } from './gameLifecycle.js'
 import type { VirtualInput } from './input.js'
 import type { TimerId, TimerWakeup } from './timers.js'
 import type {
@@ -80,7 +81,7 @@ export interface IGameActions {
     payload?: unknown,
     options?: ActionRequestOptions,
   ): WorldScheduleId | undefined
-  /** Past and current deadlines queue immediately once the session is running. */
+  /** Past and current deadlines queue immediately once this game's runtime is running. */
   scheduleWorldAt(
     action: string,
     dueAtWorldMs: number,
@@ -114,8 +115,8 @@ export interface GameRules {
   readonly worldTime?: WorldTimePolicy
 }
 
-/** Called once per loaded session; return handlers with fresh, session-owned domain state. */
-export type GameRulesFactory = (game: GameData) => GameRules
+/** Called for each new playthrough; return handlers with fresh, game-owned domain state. */
+export type GameRulesFactory = (data: GameData, game: GameInstance) => GameRules
 
 export interface ActionApplied {
   readonly rosterState?: ActorRosterSnapshot

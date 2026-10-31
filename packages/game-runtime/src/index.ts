@@ -12,6 +12,8 @@ export { assembleGameData, type GameData, type SceneData, type InputData } from 
 export {
   GameLifecycle,
   type IGameLifecycle,
+  type IGameRuntime,
+  type GameRuntimeFactory,
   type GameLifecycleFactories,
   type GameInstance,
   type SceneInstance,

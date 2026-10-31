@@ -1,7 +1,17 @@
 import type { GameData, SceneData } from './gameData.js'
+import type { IGameActions } from './actions.js'
+
+export interface IGameRuntime {
+  readonly actions: IGameActions
+  start(): void
+  dispose(): void
+}
+
+export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
   readonly data: GameData
+  readonly actions: IGameActions | undefined
   /** Released on disposal. Retained instances must no longer be used. */
   readonly state: TState | undefined
   readonly disposed: boolean
@@ -34,6 +44,8 @@ export interface IGameLifecycle<TGameState = unknown, TSceneState = unknown> {
   readonly currentGame: GameInstance<TGameState> | undefined
   readonly activeScene: SceneInstance<TGameState, TSceneState> | undefined
   readonly disposed: boolean
+  /** Bind once, before starting a playthrough. The lifecycle owns each returned runtime. */
+  bindGameRuntime(factory: GameRuntimeFactory): void
   startGame(): GameInstance<TGameState>
   enterScene(id: string): SceneInstance<TGameState, TSceneState>
   leaveScene(): void
@@ -68,12 +80,59 @@ class OwnedInstance<TData, TState> {
   }
 }
 
+class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
+  private runtime: IGameRuntime | undefined
+
+  get actions(): IGameActions | undefined {
+    return this.runtime?.actions
+  }
+
+  initialize(factory: GameRuntimeFactory | undefined): void {
+    this.runtime = factory?.(this)
+  }
+
+  start(): void {
+    this.runtime?.start()
+  }
+
+  override dispose(): void {
+    const runtime = this.runtime
+    this.runtime = undefined
+    const errors: unknown[] = []
+    try {
+      runtime?.dispose()
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
+      super.dispose()
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length === 1) throw errors[0]
+    if (errors.length > 1) throw new AggregateError(errors, 'Game cleanup failed')
+  }
+}
+
+function release(...instances: ({ dispose(): void } | undefined)[]): void {
+  const errors: unknown[] = []
+  for (const instance of instances) {
+    try {
+      instance?.dispose()
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Lifecycle cleanup failed')
+}
+
 /** Owns playthrough and scene lifetimes independently of the engine's technical session. */
 export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
   TGameState,
   TSceneState
 > {
-  private game: OwnedInstance<GameData, TGameState> | undefined
+  private game: OwnedGameInstance<TGameState> | undefined
+  private runtimeFactory: GameRuntimeFactory | undefined
   private scene:
     | {
         instance: OwnedInstance<SceneData, TSceneState>
@@ -101,17 +160,46 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     return this.isDisposed
   }
 
+  bindGameRuntime(factory: GameRuntimeFactory): void {
+    this.transition(() => {
+      if (this.runtimeFactory || this.game)
+        throw new Error('Bind a game runtime once, before starting a game')
+      this.runtimeFactory = factory
+    })
+  }
+
   startGame(): GameInstance<TGameState> {
     return this.transition(() => {
-      const next = new OwnedInstance(
+      const next = new OwnedGameInstance(
         this.data,
         this.factories.createGameState(this.data),
         this.factories.disposeGameState,
       )
+      try {
+        next.initialize(this.runtimeFactory)
+      } catch (error) {
+        try {
+          next.dispose()
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'Game runtime creation failed')
+        }
+        throw error
+      }
       const previous = this.game
-      const scene = this.detachGameScene()
       this.game = next
-      this.release(scene, previous)
+      try {
+        next.start()
+      } catch (error) {
+        this.game = previous
+        try {
+          next.dispose()
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'Game runtime startup failed')
+        }
+        throw error
+      }
+      const scene = this.detachGameScene()
+      release(scene, previous)
       return next
     })
   }
@@ -145,7 +233,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
       })
       const previous = this.scene
       this.scene = { instance, context }
-      this.release(previous?.instance)
+      release(previous?.instance)
       return context
     })
   }
@@ -154,7 +242,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     this.transition(() => {
       const previous = this.scene
       this.scene = undefined
-      this.release(previous?.instance)
+      release(previous?.instance)
     })
   }
 
@@ -163,7 +251,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
       const previous = this.game
       const scene = this.detachGameScene()
       this.game = undefined
-      this.release(scene, previous)
+      release(scene, previous)
     })
   }
 
@@ -180,7 +268,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
       const game = this.game
       this.scene = undefined
       this.game = undefined
-      this.release(scene?.instance, game)
+      release(scene?.instance, game)
     })
   }
 
@@ -204,17 +292,5 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
         this.dispose()
       }
     }
-  }
-
-  private release(...instances: ({ dispose(): void } | undefined)[]): void {
-    const errors: unknown[] = []
-    for (const instance of instances) {
-      try {
-        instance?.dispose()
-      } catch (error) {
-        errors.push(error)
-      }
-    }
-    if (errors.length) throw new AggregateError(errors, 'Lifecycle cleanup failed')
   }
 }

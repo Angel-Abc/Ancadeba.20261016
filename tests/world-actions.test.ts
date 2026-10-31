@@ -82,7 +82,12 @@ function setup(
   const mount = vi.fn<IEngineHost['mount']>(() => () => {})
   const engine = new Engine(
     { load: async () => game },
-    options.host ?? { mount },
+    {
+      mount(data, session) {
+        session.lifecycle.startGame()
+        return (options.host ?? { mount }).mount(data, session)
+      },
+    },
     logger,
     () => new MessageBus<EngineMessages>(),
     {
@@ -620,8 +625,8 @@ describe('world schedule action boundaries and lifecycle', () => {
       host: {
         mount: (_game, services) => {
           session = services
-          services.actions.scheduleWorld('capture', 0, 'start')
-          services.actions.scheduleWorld('capture', 20, 'later')
+          services.actions!.scheduleWorld('capture', 0, 'start')
+          services.actions!.scheduleWorld('capture', 20, 'later')
           timing.now = 1000
           return () => {}
         },
@@ -649,8 +654,8 @@ describe('world schedule action boundaries and lifecycle', () => {
       host: {
         mount: (_game, session) => {
           retained = session.actions
-          session.actions.scheduleWorld('capture', 0)
-          session.actions.scheduleWorld('capture', 10)
+          session.actions!.scheduleWorld('capture', 0)
+          session.actions!.scheduleWorld('capture', 10)
           throw new Error('Mount failed')
         },
       },
