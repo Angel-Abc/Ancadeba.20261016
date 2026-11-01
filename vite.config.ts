@@ -22,6 +22,7 @@ export default defineConfig({
       {
         files: [
           'apps/editor-server/**',
+          'apps/editor-mcp/**',
           'apps/engine/tooling/**',
           'tooling/**',
           'tests/**',
