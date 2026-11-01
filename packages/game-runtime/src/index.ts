@@ -8,12 +8,21 @@ export {
 } from './engine.js'
 export type { EngineMessages } from './messages.js'
 export { GameLoader, type IGameLoader } from './gameLoader.js'
-export { assembleGameData, type GameData, type SceneData, type InputData } from './gameData.js'
+export {
+  assembleGameData,
+  type GameData,
+  type SceneData,
+  type InputData,
+  type TextComponentData,
+  type SceneComponentData,
+} from './gameData.js'
 export {
   GameLifecycle,
   type IGameLifecycle,
   type IGameRuntime,
   type GameRuntimeFactory,
+  type SceneChange,
+  type SceneChangeHandler,
   type GameLifecycleFactories,
   type GameInstance,
   type SceneInstance,

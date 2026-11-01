@@ -3,18 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "files": [
-    "dist"
+    "dist",
+    "src/scene.css",
+    "src/game.css",
+    "src/variables.css"
   ],
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./scene.css": "./src/scene.css",
+    "./game.css": "./src/game.css",
+    "./variables.css": "./src/variables.css"
   },
   "scripts": {
     "dev": "tsc --watch --preserveWatchOutput",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ancadeba/game-runtime": "workspace:*"
   }
 }

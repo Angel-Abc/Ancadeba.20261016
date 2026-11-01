@@ -1,0 +1,36 @@
+{
+  "schema-version": "1.0.0",
+  "id": "inventory",
+  "title": "Inventory",
+  "description": "A second view of the same playthrough",
+  "type": "game",
+  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "components": [
+    {
+      "id": "title",
+      "type": "text",
+      "placement": { "row": 1, "column": 1, "rowSpan": 2, "columnSpan": 12 },
+      "text": "Inventory",
+      "presentation": { "variant": "heading", "align": "center" }
+    },
+    {
+      "id": "items",
+      "type": "text",
+      "placement": { "row": 3, "column": 1, "rowSpan": 8, "columnSpan": 4 },
+      "text": "Carried items\n\nFolded letter\nOld map\nBrass key\nNotebook"
+    },
+    {
+      "id": "details",
+      "type": "text",
+      "placement": { "row": 3, "column": 5, "rowSpan": 8, "columnSpan": 8 },
+      "text": "Folded letter\n\nA carefully folded letter with a blue wax seal. The paper is worn at the edges, but the writing is still clear.\n\nThe crest matches the one above the museum's locked gallery."
+    },
+    {
+      "id": "footer",
+      "type": "text",
+      "placement": { "row": 11, "column": 1, "rowSpan": 2, "columnSpan": 12 },
+      "text": "Every object has a story.",
+      "presentation": { "align": "end" }
+    }
+  ]
+}

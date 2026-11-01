@@ -21,6 +21,11 @@ class TestElement extends EventTarget {
   className = ''
   textContent = ''
   isContentEditable = false
+  readonly attributes = new Map<string, string>()
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value)
+  }
 
   constructor(
     readonly ownerDocument: TestDocument,

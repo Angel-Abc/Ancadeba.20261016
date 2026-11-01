@@ -111,7 +111,11 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/ui-components: {}
+  packages/ui-components:
+    dependencies:
+      '@ancadeba/game-runtime':
+        specifier: workspace:*
+        version: link:../game-runtime
 
   packages/utilities:
     dependencies:

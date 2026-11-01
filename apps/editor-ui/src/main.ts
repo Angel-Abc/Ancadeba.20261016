@@ -1,4 +1,5 @@
 import './style.css'
+import '@ancadeba/ui-components/game.css'
 import type { EngineState } from '@ancadeba/game-runtime'
 import { createBrowserTiming } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'

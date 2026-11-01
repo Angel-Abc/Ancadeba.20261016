@@ -1,4 +1,19 @@
-import type { GameDefinition, InputDefinition, SceneDefinition } from '@ancadeba/schemas'
+import type {
+  GameDefinition,
+  InputDefinition,
+  SceneDefinition,
+  TextComponentDefinition,
+} from '@ancadeba/schemas'
+
+export interface TextComponentData {
+  readonly id: string
+  readonly type: 'text'
+  readonly text: string
+  readonly placement: Readonly<TextComponentDefinition['placement']>
+  readonly presentation: Readonly<TextComponentDefinition['presentation']>
+}
+
+export type SceneComponentData = TextComponentData
 
 export interface InputData {
   readonly virtualKeys: readonly string[]
@@ -16,7 +31,7 @@ export interface SceneData {
     readonly type: 'grid'
     readonly grid: { readonly rows: number; readonly columns: number }
   }
-  readonly components: readonly never[]
+  readonly components: readonly SceneComponentData[]
 }
 
 export interface GameData {
@@ -52,7 +67,11 @@ export function assembleGameData(
       description: scene.description,
       type: scene.type,
       screen: { type: scene.screen.type, grid: { ...scene.screen.grid } },
-      components: [...scene.components],
+      components: scene.components.map((component) => ({
+        ...component,
+        placement: { ...component.placement },
+        presentation: { ...component.presentation },
+      })),
     })
   }
   if (sceneDefinitions.size !== scenes.size) {

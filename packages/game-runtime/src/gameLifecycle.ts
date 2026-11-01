@@ -32,6 +32,15 @@ export type SceneInstance<
     | { readonly type: 'game'; readonly game: GameInstance<TGameState> }
   )
 
+export interface SceneChange<TGameState = unknown, TSceneState = unknown> {
+  readonly previous: SceneInstance<TGameState, TSceneState> | undefined
+  readonly current: SceneInstance<TGameState, TSceneState> | undefined
+}
+
+export type SceneChangeHandler<TGameState = unknown, TSceneState = unknown> = (
+  change: SceneChange<TGameState, TSceneState>,
+) => void
+
 export interface GameLifecycleFactories<TGameState, TSceneState> {
   /** Return fresh state for each playthrough or scene activation. */
   readonly createGameState: (data: GameData) => TGameState
@@ -44,6 +53,8 @@ export interface IGameLifecycle<TGameState = unknown, TSceneState = unknown> {
   readonly currentGame: GameInstance<TGameState> | undefined
   readonly activeScene: SceneInstance<TGameState, TSceneState> | undefined
   readonly disposed: boolean
+  /** Observe committed scene changes synchronously; callbacks must not start transitions. */
+  subscribeSceneChanges(handler: SceneChangeHandler<TGameState, TSceneState>): () => void
   /** Bind once, before starting a playthrough. The lifecycle owns each returned runtime. */
   bindGameRuntime(factory: GameRuntimeFactory): void
   startGame(): GameInstance<TGameState>
@@ -142,6 +153,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
   private isDisposed = false
   private transitioning = false
   private disposalRequested = false
+  private readonly sceneSubscribers = new Set<SceneChangeHandler<TGameState, TSceneState>>()
 
   constructor(
     private readonly data: GameData,
@@ -158,6 +170,15 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
 
   get disposed(): boolean {
     return this.isDisposed
+  }
+
+  subscribeSceneChanges(handler: SceneChangeHandler<TGameState, TSceneState>): () => void {
+    if (this.isDisposed) throw new Error('Game lifecycle is disposed')
+    const subscription: SceneChangeHandler<TGameState, TSceneState> = (change) => handler(change)
+    this.sceneSubscribers.add(subscription)
+    return () => {
+      this.sceneSubscribers.delete(subscription)
+    }
   }
 
   bindGameRuntime(factory: GameRuntimeFactory): void {
@@ -262,14 +283,16 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
       this.disposalRequested = true
       return
     }
-    this.transition(() => {
-      this.isDisposed = true
-      const scene = this.scene
-      const game = this.game
-      this.scene = undefined
-      this.game = undefined
-      release(scene?.instance, game)
-    })
+    this.transition(() => this.disposeScopes())
+  }
+
+  private disposeScopes(): void {
+    this.isDisposed = true
+    const scene = this.scene
+    const game = this.game
+    this.scene = undefined
+    this.game = undefined
+    release(scene?.instance, game)
   }
 
   private detachGameScene(): OwnedInstance<SceneData, TSceneState> | undefined {
@@ -283,14 +306,47 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     if (this.isDisposed) throw new Error('Game lifecycle is disposed')
     if (this.transitioning) throw new Error('A lifecycle transition is already in progress')
     this.transitioning = true
+    let previous = this.activeScene
+    let result!: T
+    const errors: unknown[] = []
     try {
-      return perform()
+      try {
+        result = perform()
+      } catch (error) {
+        errors.push(error)
+      }
+      do {
+        if (this.disposalRequested) {
+          this.disposalRequested = false
+          try {
+            this.disposeScopes()
+          } catch (error) {
+            errors.push(error)
+          }
+        }
+        const current = this.activeScene
+        if (current !== previous) {
+          const change = Object.freeze({ previous, current })
+          previous = current
+          const failures: unknown[] = []
+          for (const handler of [...this.sceneSubscribers]) {
+            if (!this.sceneSubscribers.has(handler)) continue
+            try {
+              handler(change)
+            } catch (error) {
+              failures.push(error)
+            }
+          }
+          if (failures.length)
+            errors.push(new AggregateError(failures, 'Scene change subscribers failed'))
+        }
+      } while (this.disposalRequested)
     } finally {
       this.transitioning = false
-      if (this.disposalRequested) {
-        this.disposalRequested = false
-        this.dispose()
-      }
+      if (this.isDisposed) this.sceneSubscribers.clear()
     }
+    if (errors.length === 1) throw errors[0]
+    if (errors.length > 1) throw new AggregateError(errors, 'Lifecycle transition failed')
+    return result
   }
 }

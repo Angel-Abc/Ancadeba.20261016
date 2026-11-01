@@ -1,0 +1,57 @@
+.ancadeba-scene-viewport {
+  flex: 1;
+}
+
+.ancadeba-scene {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: repeat(var(--ge-scene-grid-columns), 1fr);
+  grid-template-rows: repeat(var(--ge-scene-grid-rows), 1fr);
+  gap: var(--ge-scene-gap);
+  padding: var(--ge-scene-padding);
+  background: var(--ge-scene-background);
+  color: var(--ge-scene-color);
+  font-family: var(--ge-scene-font-family);
+  font-size: var(--ge-scene-font-size);
+}
+
+.ancadeba-text {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  grid-row: var(--ge-component-row) / span var(--ge-component-row-span);
+  grid-column: var(--ge-component-column) / span var(--ge-component-column-span);
+  text-align: var(--ge-component-text-align);
+  padding: var(--ge-scene-text-padding);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: var(--ge-scene-line-height);
+  color: var(--ge-scene-text-color);
+  background: var(--ge-scene-text-background);
+}
+
+.ancadeba-text--heading {
+  font-size: var(--ge-scene-heading-size);
+  font-weight: var(--ge-scene-heading-weight);
+}
+
+.ancadeba-scene-picker {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ge-scene-picker-gap);
+  margin: var(--ge-scene-picker-margin);
+}
+
+.ancadeba-scene-picker select {
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--ge-scene-picker-padding);
+  border-width: var(--ge-scene-picker-border-width);
+  font: inherit;
+}

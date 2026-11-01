@@ -32,7 +32,7 @@ so a global `vp` installation is optional. Scripts resolve the local CLI.
 | `sample-games`           | —                         | Sample game projects                                    | —                     |
 
 Every app depends on schemas, game-runtime, and utilities through `workspace:*`.
-Both web apps also depend on ui-components. Game-runtime depends on schemas and
+Both web apps also depend on ui-components, which depends on game-runtime. Game-runtime depends on schemas and
 utilities. Shared packages expose compiled ESM and TypeScript declarations from
 `dist/`; export new code from each package's `src/index.ts`.
 
@@ -123,7 +123,7 @@ The engine's injected `gameResources` service reads text and bytes beneath that
 directory and reports HTTP/network failures. Startup loads and validates
 `game.json` and its referenced scene files through `JsonResourceLoader` and
 `GameLoader`. Each file is validated before its definition is assembled into
-`GameData`; game execution is not implemented yet. The
+`GameData`; the browser host then mounts the initial scene. The
 editor file API is a separate interface and is not a directory URL for this service.
 `readText` and `readBytes` accept literal game-relative filenames, including `#`
 and `%`, and encode each path segment for HTTP. `fetchResource` accepts relative
@@ -180,19 +180,167 @@ letters, digits, underscores, and hyphens. An empty scene list is valid.
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and an empty `components` array. Component definitions are not supported yet.
+and a `components` array of static text components (or an empty array).
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
 game metadata and a `ReadonlyMap<string, SceneData>` in manifest order. The data
 excludes file schema versions: `schema-version` belongs to validation, while all
 supported file formats assemble into the same runtime data model. Scene objects are
-copied into the assembled structure. Readonly types describe the consumer API;
+copied into the assembled structure, including nested component placement and presentation.
+Readonly types describe the consumer API;
 these objects are not frozen at runtime. No initial scene is selected.
 
 The engine exposes and mounts the assembled game only after every referenced
 scene loads and validates. Rendering and mutable play state remain separate from
-this data pipeline; both existing hosts still display their placeholders.
+this data pipeline.
+
+## Scene rendering
+
+Both browser hosts use `mountGameView` and `SceneRenderer` from
+`@ancadeba/ui-components`. The host opens the first scene listed in `game.json`,
+unless the lifecycle already has an active scene. Entering a `game` scene creates
+a playthrough if needed; entering a `stand-alone` scene does not. Empty scene lists
+remain valid and produce an empty surface. The renderer itself follows the active
+scene without choosing one or owning game state.
+
+The basic sample has `standard` and `inventory` game scenes plus an independent
+`settings` scene. Start the editor preview and use its **Scene** selector to switch
+between them. **No active scene** leaves the screen while retaining the current
+game. Standalone play starts in `standard`. All sample text is static; inventory,
+narrative passage selection, action-choice components, and live bindings are future work.
+
+An authored text component looks like this:
+
+```json
+{
+  "id": "narrative",
+  "type": "text",
+  "placement": { "row": 3, "column": 3, "rowSpan": 8, "columnSpan": 8 },
+  "text": "First paragraph.\n\nSecond paragraph.",
+  "presentation": { "variant": "body", "align": "start" }
+}
+```
+
+Placement is one-based. Rows and columns are required; spans default to one.
+Positions and spans must be positive integers and fit inside the scene's grid.
+Component IDs must be unique within a scene. Overlaps are allowed, with later
+components painting above earlier ones; no automatic collision resolution or
+layer model is introduced. `variant` defaults to `body`, with `heading` using a
+semantic `<h2>`. `align` is `start`, `center`, or `end` and defaults to `start`.
+Text is assigned through `textContent`: line breaks are preserved and HTML is
+displayed literally rather than interpreted.
+
+### Geometry and appearance
+
+The renderer supplies only data values through element-local CSS custom
+properties. It sets `--ge-scene-grid-rows` and `--ge-scene-grid-columns` on the
+scene, and `--ge-component-row`, `--ge-component-column`,
+`--ge-component-row-span`, `--ge-component-column-span`, and
+`--ge-component-text-align` on each text component. It does not write layout or
+alignment declarations directly.
+
+`scene.css` interprets these values with
+`grid-template-columns: repeat(var(--ge-scene-grid-columns), 1fr)` and the same
+rule for rows. Component placement uses
+`grid-row: var(--ge-component-row) / span var(--ge-component-row-span)` and its
+column equivalent. The narrative example therefore covers rows and columns 3
+through 10. The values stay local to each element so separate previews can have
+different grid dimensions without overwriting each other.
+
+The scene fills its host's available width and height. The standalone host fills
+`#app`, whose height follows the browser viewport. The editor sets its game view
+height to `--ge-preview-height` (650 game units by default); the selector sits above the scene and takes
+its own space. Rows divide the remaining height equally and columns divide the
+width equally. Cells are not forced to be square. Resizing preserves placement
+and proportions; there is no breakpoint-based rearrangement yet.
+
+Both applications import `@ancadeba/ui-components/game.css`. This entry point
+imports `variables.css` for defaults and `scene.css` for rendering rules, and
+defines the game container layout. Defaults are centralized in `variables.css`
+rather than repeated as `var()` fallbacks: a 4-row/3-column grid, one-based
+component positions, one-cell spans, and start-aligned text. Loaded scene data
+overrides the applicable variables on its own elements.
+
+Text has no default margin, 15 game units of inner padding, wrapping, preserved line
+breaks, zero minimum component sizes, and `overflow: auto` so long content scrolls
+inside its assigned rectangle. Components are ordinary grid items, without
+absolute positioning. Default gap and outer padding are zero. Text and heading
+appearance and scene-picker spacing also read their defaults from `variables.css`.
+
+Appearance can be adjusted on a containing element through CSS custom properties:
+
+```css
+.my-game {
+  --ge-scene-gap: calc(10 * var(--ge-unit-size));
+  --ge-scene-padding: calc(20 * var(--ge-unit-size));
+  --ge-scene-font-family: Georgia, serif;
+  --ge-scene-font-size: calc(20 * var(--ge-unit-size));
+  --ge-scene-line-height: 1.7;
+  --ge-scene-color: #e5e7eb;
+  --ge-scene-background: #161616;
+  --ge-scene-text-background: #202020;
+  --ge-scene-text-padding: calc(15 * var(--ge-unit-size));
+  --ge-scene-heading-size: calc(30 * var(--ge-unit-size));
+  --ge-scene-heading-weight: 600;
+}
+```
+
+The base unit is defined once in the shared `variables.css` for both hosts:
+
+```css
+:root {
+  --ge-min-root-size: min(100vw, 100vh);
+  --ge-unit-size: calc(0.001 * var(--ge-min-root-size));
+  --ge-font-size: calc(20 * var(--ge-unit-size));
+}
+```
+
+One game unit is one thousandth of the browser's shorter viewport dimension.
+At a shorter dimension of 800 pixels, a unit is 0.8 pixels: body text is 16 pixels,
+headings are 22.4 pixels (28 units), and text padding is 12 pixels. Shared defaults
+use unit multiples for text, headings, spacing, scene-picker padding and borders,
+and preview height. The editor's surrounding controls, spacing, borders, outlines,
+and maximum width use the same unit. There are no fixed `px`, `rem`, or `em`
+lengths in these authored game or editor styles.
+
+Override `--ge-unit-size` on `:root` to change the global scale; all dependent
+default values are defined there too. Viewport resizing recalculates the unit
+automatically. Percentages and fractional grid tracks still fill the available
+host; zero values, grid counts and spans, font weights, and the line-height ratio
+remain unitless. Scaling does not introduce a fixed aspect ratio or rearrange the
+layout at breakpoints.
+
+Font families and colors inherit from the containing app unless overridden, so
+the editor and standalone host currently inherit different application themes.
+Both use the shared, unit-based text sizing.
+`--ge-scene-text-color` can override text color separately. Scene-picker spacing
+uses `--ge-scene-picker-gap`, `--ge-scene-picker-margin`, and
+`--ge-scene-picker-padding`, and `--ge-scene-picker-border-width`. Gaps and outer padding
+reduce the space available for tracks; component padding is inside its assigned
+rectangle. Stable `data-scene-id` and `data-component-id` attributes allow CSS
+selectors such as `[data-scene-id='standard'] [data-component-id='narrative']` for
+individual styling. Theme files in game definitions, automatic reflow, component
+alignment within cells, and richer text formatting are not defined yet.
+
+### Scene notifications and cleanup
+
+`lifecycle.subscribeSceneChanges(handler)` returns an idempotent unsubscribe
+function. It synchronously reports a frozen `{ previous, current }` event after
+a committed scene change and cleanup of the previous scene. It does not replay
+the initial value: read `activeScene` when subscribing. Redundant entry, failed
+validation, and game changes that leave a stand-alone scene active do not notify.
+Scene exit, game end/replacement that removes a game scene, and lifecycle disposal
+notify with `current: undefined`.
+
+Callbacks can read state or queue work but cannot invoke lifecycle transitions
+directly. All subscribed callbacks are attempted; observer errors are reported as
+an `AggregateError` without rolling back the committed scene or suppressing other
+observers. Disposal requested from a callback is completed after the current
+notification. Notifications still run if old-state cleanup fails, and disposal
+clears subscriptions. `SceneRenderer` removes its old DOM on each notification;
+host cleanup unsubscribes, removes keyboard listeners, and removes the whole game
+view. No browser globals are introduced into schemas or game-runtime.
 
 ## Engine instances
 
@@ -204,8 +352,7 @@ caching disabled, and mounts a preview after the complete game is validated and
 assembled. Stop also works while loading. Each new start
 uses a fresh instance and reads the latest saved files; unsaved edits are not yet
 part of the resource source. Failures appear beside the controls and allow retrying.
-The preview currently confirms that the game definition loaded; gameplay rendering
-is not implemented yet.
+The preview renders the active scene and offers a selector for switching scenes.
 
 The editor UI composes its services in `apps/editor-ui/src/ioc/containerBuilder.ts`.
 The `factories/` folder registers console logging, preview engine creation, and
@@ -357,7 +504,8 @@ recreated on re-entry; entering the already active scene is a no-op. `leaveScene
 retains the current game. Invalid scene entry and state factory failures leave the
 existing contexts intact. Invalid rules or runtime startup failure also preserve
 the previous game and scene. No transition modifies the loaded definitions, and no
-save/restore or state-change notifications are added here.
+save/restore or general gameplay-state notifications are added here. Scene changes
+have the dedicated subscription described above.
 
 Disposed instances expose `disposed: true` and release their `state`; callers must
 discard retained references to that state. Cleanup releases all affected scopes
@@ -369,8 +517,8 @@ is idempotent, and later transition calls throw.
 
 The fixture in `tests/scene-lifecycle.test.ts` exercises both game scenes and the
 stand-alone scene through the JSON loader and verifies state retention, resets,
-failure cleanup, engine restart, and instance isolation. Both browser hosts still
-render their existing placeholders.
+failure cleanup, engine restart, and instance isolation. Both browser hosts share
+the scene renderer described above.
 `tests/game-lifecycle-actions.test.ts` covers runtime resets, retained progression,
 stand-alone input isolation, stale queued work, replacement during dispatch, and
 runtime startup rollback.
@@ -493,8 +641,8 @@ Loading content alone creates no action processor or world-time polling.
 Custom handler code must currently be supplied by application composition. Game
 JSON schemas do not define executable rules, and the loader does not import game
 scripts. Both application containers forward the supplied runtime services to
-their engines, including the editor's fresh preview instances. The placeholder UI
-is unchanged.
+their engines, including the editor's fresh preview instances. Scene text remains
+static and does not yet bind to gameplay state.
 
 ```ts
 import {

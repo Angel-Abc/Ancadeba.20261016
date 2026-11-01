@@ -7,3 +7,7 @@
   font-size: var(--ge-font-size);
   background-color: var(--ge-background-color);
 }
+
+#app {
+  height: 100%;
+}

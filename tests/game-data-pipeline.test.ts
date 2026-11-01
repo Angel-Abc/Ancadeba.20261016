@@ -69,7 +69,7 @@ describe('game data pipeline', () => {
     }
     const game = await new GameLoader(new JsonResourceLoader(source, logger)).load()
 
-    expect(game).toEqual({
+    expect(game).toMatchObject({
       id: 'basic-game',
       title: 'Basic Game',
       description: 'A basic game example',
@@ -83,20 +83,22 @@ describe('game data pipeline', () => {
         },
         initialContext: 'gameplay',
       },
-      scenes: new Map([
-        [
-          'start-screen',
-          {
-            id: 'start-screen',
-            title: 'Start Screen',
-            description: 'The start screen of the game',
-            type: 'stand-alone',
-            screen: { type: 'grid', grid: { rows: 20, columns: 20 } },
-            components: [],
-          },
-        ],
-      ]),
     })
+    expect([...game.scenes.keys()]).toEqual(['standard', 'inventory', 'settings'])
+    expect([...game.scenes.values()].map(({ type }) => type)).toEqual([
+      'game',
+      'game',
+      'stand-alone',
+    ])
+    expect(game.scenes.get('standard')?.components[0]).toEqual({
+      id: 'location-title',
+      type: 'text',
+      text: 'In the Museum',
+      placement: { row: 1, column: 3, rowSpan: 2, columnSpan: 8 },
+      presentation: { variant: 'heading', align: 'center' },
+    })
+    expect(game.scenes.get('inventory')?.components.length).toBe(4)
+    expect(game.scenes.get('settings')?.components.length).toBe(2)
   })
 
   it('assembles scenes in manifest order without sharing mutable definition objects', () => {

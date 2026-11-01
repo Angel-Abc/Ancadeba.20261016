@@ -1,5 +1,6 @@
 :root {
   font-family: system-ui, sans-serif;
+  font-size: var(--ge-font-size);
   color: #e5e7eb;
   background: #111827;
   color-scheme: dark;
@@ -14,9 +15,9 @@ body {
 }
 
 main {
-  max-width: 64rem;
+  max-width: calc(1280 * var(--ge-unit-size));
   margin: 0 auto;
-  padding: 4rem 2rem;
+  padding: calc(80 * var(--ge-unit-size)) calc(40 * var(--ge-unit-size));
 }
 
 .intro,
@@ -26,10 +27,10 @@ main {
 }
 
 .preview-panel {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  border: 1px solid #334155;
-  border-radius: 0.75rem;
+  margin-top: calc(40 * var(--ge-unit-size));
+  padding: calc(30 * var(--ge-unit-size));
+  border: calc(1.25 * var(--ge-unit-size)) solid #334155;
+  border-radius: calc(15 * var(--ge-unit-size));
   background: #172033;
 }
 
@@ -37,24 +38,24 @@ main {
 .preview-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: calc(15 * var(--ge-unit-size));
 }
 
 .preview-heading {
   justify-content: space-between;
-  margin-bottom: 1.5rem;
+  margin-bottom: calc(30 * var(--ge-unit-size));
 }
 
 .preview-heading h2 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: calc(22.5 * var(--ge-unit-size));
 }
 
 .status {
-  padding: 0.25rem 0.65rem;
-  border-radius: 1rem;
+  padding: calc(5 * var(--ge-unit-size)) calc(13 * var(--ge-unit-size));
+  border-radius: calc(20 * var(--ge-unit-size));
   background: #334155;
-  font-size: 0.875rem;
+  font-size: calc(17.5 * var(--ge-unit-size));
 }
 
 [data-state='running'] .status {
@@ -69,31 +70,31 @@ main {
 
 label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: calc(10 * var(--ge-unit-size));
 }
 
 input,
 button {
-  min-height: 2.75rem;
-  border: 1px solid #475569;
-  border-radius: 0.375rem;
+  min-height: calc(55 * var(--ge-unit-size));
+  border: calc(1.25 * var(--ge-unit-size)) solid #475569;
+  border-radius: calc(7.5 * var(--ge-unit-size));
   font: inherit;
 }
 
 input {
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  padding: calc(12 * var(--ge-unit-size)) calc(15 * var(--ge-unit-size));
   color: inherit;
   background: #111827;
 }
 
 .help {
-  margin: 0.5rem 0 1rem;
-  font-size: 0.875rem;
+  margin: calc(10 * var(--ge-unit-size)) 0 calc(20 * var(--ge-unit-size));
+  font-size: calc(17.5 * var(--ge-unit-size));
 }
 
 button {
-  padding: 0.5rem 1.25rem;
+  padding: calc(10 * var(--ge-unit-size)) calc(25 * var(--ge-unit-size));
   color: inherit;
   background: #334155;
   cursor: pointer;
@@ -112,8 +113,8 @@ input:disabled {
 
 input:focus-visible,
 button:focus-visible {
-  outline: 2px solid #93c5fd;
-  outline-offset: 3px;
+  outline: calc(2.5 * var(--ge-unit-size)) solid #93c5fd;
+  outline-offset: calc(3.75 * var(--ge-unit-size));
 }
 
 .error {
@@ -122,16 +123,16 @@ button:focus-visible {
 }
 
 .preview-content {
-  min-height: 12rem;
-  margin-top: 1.5rem;
-  padding: 1.5rem;
-  border: 1px dashed #475569;
-  border-radius: 0.5rem;
+  min-height: calc(240 * var(--ge-unit-size));
+  margin-top: calc(30 * var(--ge-unit-size));
+  padding: calc(30 * var(--ge-unit-size));
+  border: calc(1.25 * var(--ge-unit-size)) dashed #475569;
+  border-radius: calc(10 * var(--ge-unit-size));
   background: #111827;
 }
 
-.game-preview h3 {
-  margin-top: 0;
+.preview-content > .ancadeba-game {
+  height: var(--ge-preview-height);
 }
 
 .export-download {

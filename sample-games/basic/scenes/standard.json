@@ -1,0 +1,42 @@
+{
+  "schema-version": "1.0.0",
+  "id": "standard",
+  "title": "Standard view",
+  "description": "A text-heavy RPG layout",
+  "type": "game",
+  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "components": [
+    {
+      "id": "location-title",
+      "type": "text",
+      "placement": { "row": 1, "column": 3, "rowSpan": 2, "columnSpan": 8 },
+      "text": "In the Museum",
+      "presentation": { "variant": "heading", "align": "center" }
+    },
+    {
+      "id": "player-status",
+      "type": "text",
+      "placement": { "row": 3, "column": 1, "rowSpan": 8, "columnSpan": 2 },
+      "text": "Player\n\nLevel 1\nHealth 40 / 40\nGold 12\n\nMuseum\nLobby"
+    },
+    {
+      "id": "narrative",
+      "type": "text",
+      "placement": { "row": 3, "column": 3, "rowSpan": 8, "columnSpan": 8 },
+      "text": "Afternoon light falls through the museum's high windows. Beyond the entrance hall, voices drift between the marble pillars.\n\nA curator waits beside a display of old maps. She looks up from her notes as you approach.\n\n\"You arrived just in time,\" she says. \"We have found something unusual in the archives.\"\n\nOn the table lies a folded letter. Its seal bears the same crest you noticed above the locked gallery. Somewhere in the building, a clock begins to strike.\n\nYou take a closer look at the map. A route has been marked in faded blue ink, running from the old harbour to a place beyond the northern hills.\n\nThe curator turns a page in her notebook and waits for your answer."
+    },
+    {
+      "id": "nearby",
+      "type": "text",
+      "placement": { "row": 3, "column": 11, "rowSpan": 8, "columnSpan": 2 },
+      "text": "Characters\n\nThe curator\nA few visitors\n\nItems\n\nFolded letter\nOld map"
+    },
+    {
+      "id": "footer",
+      "type": "text",
+      "placement": { "row": 11, "column": 1, "rowSpan": 2, "columnSpan": 12 },
+      "text": "Museum lobby\n30 May · 14:40",
+      "presentation": { "align": "center" }
+    }
+  ]
+}

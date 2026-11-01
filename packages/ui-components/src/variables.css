@@ -1,0 +1,35 @@
+:root {
+  --ge-min-root-size: min(100vw, 100vh);
+  --ge-unit-size: calc(0.001 * var(--ge-min-root-size));
+  --ge-font-size: calc(20 * var(--ge-unit-size));
+
+  --ge-scene-grid-rows: 4;
+  --ge-scene-grid-columns: 3;
+
+  --ge-scene-gap: calc(0 * var(--ge-unit-size));
+  --ge-scene-padding: calc(0 * var(--ge-unit-size));
+  --ge-scene-background: transparent;
+  --ge-scene-color: inherit;
+  --ge-scene-font-family: inherit;
+  --ge-scene-font-size: var(--ge-font-size);
+
+  --ge-component-row: 1;
+  --ge-component-column: 1;
+  --ge-component-row-span: 1;
+  --ge-component-column-span: 1;
+  --ge-component-text-align: start;
+
+  --ge-scene-text-padding: calc(15 * var(--ge-unit-size));
+  --ge-scene-line-height: 1.6;
+  --ge-scene-text-color: inherit;
+  --ge-scene-text-background: transparent;
+  --ge-scene-heading-size: calc(28 * var(--ge-unit-size));
+  --ge-scene-heading-weight: 600;
+
+  --ge-scene-picker-gap: calc(15 * var(--ge-unit-size));
+  --ge-scene-picker-margin: 0 0 calc(15 * var(--ge-unit-size));
+  --ge-scene-picker-padding: calc(8 * var(--ge-unit-size)) calc(12 * var(--ge-unit-size));
+  --ge-scene-picker-border-width: calc(1.25 * var(--ge-unit-size));
+
+  --ge-preview-height: calc(650 * var(--ge-unit-size));
+}

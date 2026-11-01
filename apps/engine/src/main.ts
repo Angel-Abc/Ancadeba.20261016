@@ -1,4 +1,5 @@
 import './styling/main.css'
+import '@ancadeba/ui-components/game.css'
 import type { IEngine } from '@ancadeba/game-runtime'
 import { createBrowserTiming } from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
