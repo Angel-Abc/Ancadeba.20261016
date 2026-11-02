@@ -208,8 +208,9 @@ scene without choosing one or owning game state.
 The basic sample has `standard` and `inventory` game scenes plus an independent
 `settings` scene. Start the editor preview and use its **Scene** selector to switch
 between them. **No active scene** leaves the screen while retaining the current
-game. Standalone play starts in `standard`. All sample text is static; inventory,
-narrative passage selection, action-choice components, and rendering live bindings are future work.
+game. Standalone play starts in `standard`. The two game scenes share health and
+progression bindings; Settings stays independent. Inventory interactions, narrative
+passage selection, and action-choice components are future work.
 
 An authored text component looks like this:
 
@@ -432,9 +433,29 @@ reach a new game's source. Disposal releases its state readers and observers.
 Retained sources return `source-unavailable` on reads and reject new subscriptions.
 The instance's `bindings` accessor becomes `undefined`, like `actions`.
 
-The renderer and sample scenes still display static text. Connecting these APIs to
-component rendering, with the editor host selecting editor mode and the game host
-selecting standalone mode, is the next step. There is no visible preview change yet.
+`SceneRenderer` now observes bound text in the active game scene and updates each
+component's `textContent` in place. Static text keeps its literal behavior, and
+layout and appearance still use the existing CSS variables. Scene changes, game
+replacement, and renderer disposal release the old component observers, including
+when scene construction fails. Stand-alone scenes never borrow the current game's
+binding source. A game scene without a runtime source resolves unavailable-value
+diagnostics and fallbacks rather than displaying raw placeholders.
+
+`SceneRendererOptions` and `GameViewOptions` accept `bindingMode`, defaulting to
+`standalone`. `EditorPreviewHost` explicitly selects `editor`: unresolved components
+show markers and a title tooltip containing each alias, source, path, and reason.
+The tooltip clears when the values resolve. `DomEngineHost` explicitly selects
+`standalone`, displaying fallback text without editor diagnostic metadata.
+
+The basic sample's Standard view binds health in the player panel and turn/world
+time in the footer. Inventory reads the same values in its footer, while Settings
+has no game bindings. The default browser composition supplies no RPG state or
+game rules: health therefore shows a marker in preview and the authored fallback
+of `40` in standalone play; progression starts at zero. Games supply live values
+and actions through the existing lifecycle and rules factories. Renderer integration
+tests inject health-changing actions and elapsed time to verify updates, recovery
+from missing values, and transitions through all three sample scenes without
+hard-coding sample gameplay into either browser host.
 
 ## Engine instances
 

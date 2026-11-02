@@ -17,7 +17,10 @@
       "id": "player-status",
       "type": "text",
       "placement": { "row": 3, "column": 1, "rowSpan": 8, "columnSpan": 2 },
-      "text": "Player\n\nLevel 1\nHealth 40 / 40\nGold 12\n\nMuseum\nLobby"
+      "text": "Player\n\nLevel 1\nHealth {{health}} / 40\nGold 12\n\nMuseum\nLobby",
+      "bindings": {
+        "health": { "source": "game.state", "path": ["player", "health"], "fallback": "40" }
+      }
     },
     {
       "id": "narrative",
@@ -35,7 +38,11 @@
       "id": "footer",
       "type": "text",
       "placement": { "row": 11, "column": 1, "rowSpan": 2, "columnSpan": 12 },
-      "text": "Museum lobby\n30 May · 14:40",
+      "text": "Museum lobby\nTurn {{turn}} · World time {{worldTimeMs}} ms",
+      "bindings": {
+        "turn": { "source": "game.progression", "path": ["turn"] },
+        "worldTimeMs": { "source": "game.progression", "path": ["worldTimeMs"] }
+      },
       "presentation": { "align": "center" }
     }
   ]

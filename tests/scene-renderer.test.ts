@@ -8,6 +8,8 @@ import {
   type EngineMessages,
   type GameData,
   type IEngineHost,
+  type GameActionHandler,
+  type EngineRuntimeServices,
 } from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
@@ -41,6 +43,7 @@ class TestElement extends EventTarget {
   parent: TestElement | undefined
   className = ''
   tabIndex = -1
+  title = ''
   value = ''
   private content = ''
 
@@ -121,6 +124,73 @@ function setup(game: GameData) {
   const document = new TestDocument()
   const target = document.createElement('main')
   return { lifecycle, document, target }
+}
+
+interface BindingDemoState {
+  player: { health?: unknown }
+}
+
+function bindingEngine(
+  game: GameData,
+  host: IEngineHost,
+  services: Pick<EngineRuntimeServices, 'clock' | 'scheduler'> = timing,
+  elapsed = false,
+) {
+  return new Engine(
+    { load: async () => game },
+    host,
+    logger,
+    () => new MessageBus<EngineMessages>(),
+    {
+      ...services,
+      createGameLifecycle: (content) =>
+        new GameLifecycle(content, {
+          createGameState: (): BindingDemoState => ({ player: { health: 40 } }),
+          createSceneState: () => undefined,
+        }),
+      createGameRules: (_content, instance) => {
+        const state = instance.state as BindingDemoState
+        return {
+          handlers: new Map<string, GameActionHandler>([
+            [
+              'damage',
+              () => {
+                state.player.health = Number(state.player.health) - 7
+                return { status: 'applied', advanceTurn: true, worldTimeCostMs: 1000 }
+              },
+            ],
+            [
+              'forget',
+              () => {
+                delete state.player.health
+                return { status: 'applied' }
+              },
+            ],
+            [
+              'heal',
+              () => {
+                state.player.health = 40
+                return { status: 'applied' }
+              },
+            ],
+            [
+              'markup',
+              () => {
+                state.player.health = '<b>{{turn}}</b>'
+                return { status: 'applied' }
+              },
+            ],
+          ]),
+          inputBindings: [{ context: 'gameplay', input: 'interact', action: 'damage' }],
+          ...(elapsed ? { worldTime: { mode: 'elapsed' as const, pulseMs: 10 } } : {}),
+        }
+      },
+    },
+  )
+}
+
+function flush(engine: Engine): void {
+  for (let batch = 0; batch < 4; batch++) engine.flushMessages()
 }
 
 describe('scene renderer', () => {
@@ -273,12 +343,218 @@ describe('scene renderer', () => {
     expect(target.children).toHaveLength(0)
     renderer.dispose()
   })
+
+  it('unsubscribes on renderer disposal and cleans partially mounted bound components after a failure', async () => {
+    const content = await loader.load()
+    const { target, document } = setup(content)
+    const engine = bindingEngine(content, { mount: () => () => {} })
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const game = lifecycle.startGame()
+    lifecycle.enterScene('standard')
+    const read = vi.spyOn(game.bindings!, 'read')
+    const createElement = document.createElement.bind(document)
+    let calls = 0
+    const create = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      if (++calls === 4) throw new Error('Cannot mount narrative')
+      return createElement(tag)
+    })
+    expect(() => new SceneRenderer(target.asElement(), lifecycle)).toThrow('Cannot mount narrative')
+    create.mockRestore()
+    expect(target.children).toHaveLength(0)
+    read.mockClear()
+    game.actions!.request('damage')
+    flush(engine)
+    expect(read).not.toHaveBeenCalled()
+
+    const renderer = new SceneRenderer(target.asElement(), lifecycle)
+    expect(
+      target.find((element) => element.dataset.componentId === 'player-status')?.textContent,
+    ).toContain('Health 33 / 40')
+    renderer.dispose()
+    renderer.dispose()
+    read.mockClear()
+    game.actions!.request('damage')
+    flush(engine)
+    expect(read).not.toHaveBeenCalled()
+    expect(target.children).toHaveLength(0)
+    expect(lifecycle.activeScene?.data.id).toBe('standard')
+    engine.stop()
+  })
+
+  it('updates rendered progression from elapsed time without actions and resumes after Settings', async () => {
+    let now = 0
+    let pulse: (() => void) | undefined
+    const content = await loader.load()
+    const { target } = setup(content)
+    const engine = bindingEngine(
+      content,
+      new EditorPreviewHost(target.asElement()),
+      {
+        clock: { now: () => now },
+        scheduler: {
+          schedule(run, delay) {
+            if (delay === 10) pulse = run
+            return () => {}
+          },
+        },
+      },
+      true,
+    )
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const standard = target.find((element) => element.dataset.sceneId === 'standard')!
+    now = 25
+    pulse!()
+    flush(engine)
+    expect(
+      standard.find((element) => element.dataset.componentId === 'footer')?.textContent,
+    ).toContain('Turn 0 · World time 25 ms')
+    lifecycle.enterScene('settings')
+    const read = vi.spyOn(lifecycle.currentGame!.bindings!, 'read')
+    now = 40
+    pulse!()
+    flush(engine)
+    expect(read).not.toHaveBeenCalled()
+    lifecycle.enterScene('inventory')
+    expect(
+      target.find((element) => element.dataset.componentId === 'footer')?.textContent,
+    ).toContain('Turn 0 · World time 40 ms')
+    engine.stop()
+  })
 })
 
 describe.each([
   ['engine', (element: HTMLElement): IEngineHost => new DomEngineHost(element)],
   ['editor preview', (element: HTMLElement): IEngineHost => new EditorPreviewHost(element)],
 ] as const)('%s rendering integration', (_name, createHost) => {
+  it('updates bound text in place, diagnoses missing values, and follows all three scenes', async () => {
+    const content = await loader.load()
+    const { target } = setup(content)
+    const engine = bindingEngine(content, createHost(target.asElement()))
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const game = lifecycle.currentGame!
+    const standard = target.find((element) => element.dataset.sceneId === 'standard')!
+    const status = standard.find((element) => element.dataset.componentId === 'player-status')!
+    const heading = standard.find((element) => element.dataset.componentId === 'location-title')!
+    const footer = standard.find((element) => element.dataset.componentId === 'footer')!
+    expect(status.textContent).toContain('Health 40 / 40')
+    expect(footer.textContent).toContain('Turn 0 · World time 0 ms')
+    engine.input!.pressKey('Enter')
+    engine.input!.releaseKey('Enter')
+    flush(engine)
+    expect(status.textContent).toContain('Health 33 / 40')
+    expect(footer.textContent).toContain('Turn 1 · World time 1000 ms')
+    expect(target.find((element) => element.dataset.sceneId === 'standard')).toBe(standard)
+    expect(standard.find((element) => element.dataset.componentId === 'location-title')).toBe(
+      heading,
+    )
+
+    game.actions!.request('forget')
+    flush(engine)
+    if (_name === 'editor preview') {
+      expect(status.textContent).toContain('Health [unresolved: health] / 40')
+      expect(status.title).toBe('health: game.state ["player","health"] (missing-path)')
+      expect(status.dataset.bindingStatus).toBe('unresolved')
+    } else {
+      expect(status.textContent).toContain('Health 40 / 40')
+      expect(status.textContent).not.toContain('[unresolved:')
+      expect(status.title).toBe('')
+      expect(status.dataset.bindingStatus).toBeUndefined()
+    }
+    game.actions!.request('heal')
+    flush(engine)
+    expect(status.textContent).toContain('Health 40 / 40')
+    expect(status.title).toBe('')
+    if (_name === 'editor preview') expect(status.dataset.bindingStatus).toBe('resolved')
+
+    const detachedText = status.textContent
+    const oldWrites = vi.spyOn(status, 'textContent', 'set')
+    lifecycle.enterScene('inventory')
+    const inventory = target.find((element) => element.dataset.sceneId === 'inventory')!
+    const inventoryFooter = inventory.find((element) => element.dataset.componentId === 'footer')!
+    expect(inventoryFooter.textContent).toContain('Health 40 / 40 · Turn 1')
+    game.actions!.request('damage')
+    flush(engine)
+    expect(inventoryFooter.textContent).toContain('Health 33 / 40 · Turn 2 · World time 2000 ms')
+    expect(status.textContent).toBe(detachedText)
+    expect(oldWrites).not.toHaveBeenCalled()
+
+    lifecycle.enterScene('settings')
+    const settings = target.find((element) => element.dataset.sceneId === 'settings')!
+    const settingsText = settings.textContent
+    const read = vi.spyOn(game.bindings!, 'read')
+    game.actions!.request('damage')
+    flush(engine)
+    expect(read).not.toHaveBeenCalled() // Settings owns no subscriptions to current-game data.
+    expect(settings.textContent).toBe(settingsText)
+    expect(lifecycle.currentGame).toBe(game)
+    lifecycle.enterScene('standard')
+    expect(
+      target.find((element) => element.dataset.componentId === 'player-status')?.textContent,
+    ).toContain('Health 26 / 40')
+    expect(
+      target.find((element) => element.dataset.componentId === 'footer')?.textContent,
+    ).toContain('Turn 3 · World time 3000 ms')
+    engine.stop()
+    expect(target.children).toHaveLength(0)
+  })
+
+  it('renders bound values as literal text and rebinds after game replacement and engine restart', async () => {
+    const content = await loader.load()
+    const { target } = setup(content)
+    const engine = bindingEngine(content, createHost(target.asElement()))
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const first = lifecycle.currentGame!
+    const firstBindings = first.bindings
+    first.actions!.request('markup')
+    flush(engine)
+    const status = target.find((element) => element.dataset.componentId === 'player-status')!
+    expect(status.textContent).toContain('<b>{{turn}}</b>')
+    expect(status.children).toEqual([])
+    first.actions!.request('heal')
+    engine.flushMessages() // Leave old outcome notifications queued.
+    const second = lifecycle.startGame()
+    lifecycle.enterScene('inventory')
+    flush(engine)
+    expect(
+      target.find((element) => element.dataset.componentId === 'footer')?.textContent,
+    ).toContain('Health 40 / 40 · Turn 0 · World time 0 ms')
+    expect(second.bindings).not.toBe(firstBindings)
+    expect(status.textContent).toContain('<b>{{turn}}</b>')
+    lifecycle.endGame()
+    expect(target.find((element) => element.dataset.sceneId === 'inventory')).toBeUndefined()
+    lifecycle.enterScene('settings')
+    lifecycle.startGame()
+    expect(target.find((element) => element.dataset.sceneId === 'settings')).toBeDefined()
+    engine.stop()
+    await engine.start()
+    expect(
+      target.find((element) => element.dataset.componentId === 'player-status')?.textContent,
+    ).toContain('Health 40 / 40')
+    engine.stop()
+  })
+
+  it('shows editor diagnostics or standalone fallbacks without an application-state factory', async () => {
+    const { target } = setup(await loader.load())
+    const engine = new Engine(
+      loader,
+      createHost(target.asElement()),
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      timing,
+    )
+    await engine.start()
+    const status = target.find((element) => element.dataset.componentId === 'player-status')!
+    expect(status.textContent).toContain(
+      _name === 'editor preview' ? 'Health [unresolved: health] / 40' : 'Health 40 / 40',
+    )
+    if (_name === 'editor preview') expect(status.title).toContain('(source-unavailable)')
+    engine.stop()
+  })
+
   it('selects the first scene, follows changes, and disposes and remounts with the engine', async () => {
     const { target } = setup(await loader.load())
     const engine = new Engine(

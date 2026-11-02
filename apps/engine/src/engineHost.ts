@@ -5,6 +5,6 @@ export class DomEngineHost implements IEngineHost {
   constructor(private readonly element: HTMLElement) {}
 
   mount(game: GameData, session: EngineHostSession): () => void {
-    return mountGameView(this.element, game, session)
+    return mountGameView(this.element, game, session, { bindingMode: 'standalone' })
   }
 }

@@ -1,13 +1,13 @@
 import type { GameData, IGameLifecycle, SceneData } from '@ancadeba/game-runtime'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
-import { SceneRenderer } from './sceneRenderer.js'
+import { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
 
 export interface GameViewSession {
   readonly lifecycle: IGameLifecycle
   readonly input: KeyboardInputSink | undefined
 }
 
-export interface GameViewOptions {
+export interface GameViewOptions extends SceneRendererOptions {
   readonly scenePicker?: boolean
 }
 
@@ -92,7 +92,7 @@ export function mountGameView(
 
     root.append(viewport)
     target.append(root)
-    const renderer = new SceneRenderer(viewport, session.lifecycle)
+    const renderer = new SceneRenderer(viewport, session.lifecycle, options)
     cleanups.push(() => renderer.dispose())
     if (session.input) cleanups.push(bindKeyboardInput(root, session.input))
     if (!session.lifecycle.activeScene) {

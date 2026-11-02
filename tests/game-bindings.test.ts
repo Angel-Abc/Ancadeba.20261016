@@ -152,6 +152,18 @@ describe('game binding reads', () => {
 })
 
 describe('plain text binding resolution', () => {
+  it('resolves unavailable sources consistently before a game runtime is attached', () => {
+    const result = resolveText(template, undefined)
+    expect(result.text).toBe('Health: — / — — Turn ')
+    expect(result.diagnostics.map(({ alias, reason }) => ({ alias, reason }))).toEqual([
+      { alias: 'health', reason: 'source-unavailable' },
+      { alias: 'turn', reason: 'source-unavailable' },
+    ])
+    expect(resolveText(template, undefined, { mode: 'editor' }).text).toBe(
+      'Health: [unresolved: health] / [unresolved: health] — Turn [unresolved: turn]',
+    )
+  })
+
   it('resolves repeated aliases once and leaves static text untouched', () => {
     const { source } = setup()
     const read = vi.spyOn(source, 'read')

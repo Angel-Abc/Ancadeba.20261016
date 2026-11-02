@@ -26,7 +26,7 @@ export interface TextResolutionOptions {
 /** Resolve plain text without evaluating expressions, markup, or substituted placeholders. */
 export function resolveText(
   template: TextTemplate,
-  source: IGameBindings,
+  source: IGameBindings | undefined,
   options: TextResolutionOptions = {},
 ): TextResolution {
   if (template.bindings === undefined) return { text: template.text, diagnostics: [] }
@@ -39,7 +39,16 @@ export function resolveText(
       const binding = Object.getOwnPropertyDescriptor(template.bindings, alias)?.value as
         | GameBinding
         | undefined
-      const result = binding ? source.read(binding) : undefined
+      const result = binding
+        ? (source?.read(binding) ?? {
+            status: 'unresolved' as const,
+            diagnostic: {
+              source: binding.source,
+              path: [...binding.path],
+              reason: 'source-unavailable' as const,
+            },
+          })
+        : undefined
       if (result?.status === 'resolved') replacements.set(alias, String(result.value))
       else {
         diagnostics.push({
