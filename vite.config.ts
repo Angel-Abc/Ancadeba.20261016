@@ -22,6 +22,7 @@ export default defineConfig({
       {
         files: [
           'apps/editor-server/**',
+          'apps/editor-mcp/**',
           'apps/engine/tooling/**',
           'tooling/**',
           'tests/**',
@@ -32,6 +33,7 @@ export default defineConfig({
       {
         files: [
           'packages/schemas/src/**',
+          'packages/editor-core/src/**',
           'packages/game-runtime/src/**',
           'packages/utilities/src/**',
         ],

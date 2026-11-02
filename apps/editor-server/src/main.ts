@@ -5,10 +5,18 @@ import { WorkspaceGameExporter } from './gameExports.js'
 import { buildGame } from './buildGame.js'
 import { writeGameArchive } from './gameArchive.js'
 
+import { EditorCoordinator } from './editorCoordinator.js'
+import { WorkspaceProjectRepository } from './editorProjectRepository.js'
+import { EditorProjectService } from './editorProjectService.js'
+
 const config = await loadEditorServerConfig()
 const workspace = await FileWorkspace.open(config.workFolder)
 const exports = new WorkspaceGameExporter(workspace, buildGame, writeGameArchive)
-const server = createEditorServer(config, workspace, exports)
+const projects = new EditorProjectService(
+  new WorkspaceProjectRepository(workspace),
+  new EditorCoordinator(),
+)
+const server = createEditorServer(config, workspace, exports, projects)
 
 server.on('error', (error) => {
   console.error(error)

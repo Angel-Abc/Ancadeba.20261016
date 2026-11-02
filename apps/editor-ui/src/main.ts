@@ -1,5 +1,6 @@
 import './style.css'
 import '@ancadeba/ui-components/game.css'
+import { bindProjectPanel } from './projectPanel.js'
 import type { EngineState } from '@ancadeba/game-runtime'
 import { createBrowserTiming } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
@@ -98,8 +99,10 @@ form.addEventListener('submit', onStart)
 stop.addEventListener('click', onStop)
 exportButton.addEventListener('click', onExport)
 controller.stop()
+const disposeProjectPanel = bindProjectPanel(element<HTMLElement>('#project-editor'), fetch)
 
 import.meta.hot?.dispose(() => {
+  disposeProjectPanel()
   form.removeEventListener('submit', onStart)
   stop.removeEventListener('click', onStop)
   exportButton.removeEventListener('click', onExport)

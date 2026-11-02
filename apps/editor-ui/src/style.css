@@ -138,3 +138,49 @@ button:focus-visible {
 .export-download {
   color: #93c5fd;
 }
+
+fieldset {
+  min-width: 0;
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+#project-editor form {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+#project-editor [hidden] {
+  display: none;
+}
+#project-editor label {
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+select,
+textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #475569;
+  border-radius: 0.375rem;
+  color: inherit;
+  background: #111827;
+  font: inherit;
+}
+textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 3px;
+}
+.editor-actions {
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+#editor-error {
+  white-space: pre-wrap;
+}

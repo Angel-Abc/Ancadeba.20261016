@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json"
   },
   "dependencies": {
+    "@ancadeba/editor-core": "workspace:*",
     "@ancadeba/game-runtime": "workspace:*",
     "@ancadeba/schemas": "workspace:*",
     "@ancadeba/ui-components": "workspace:*",

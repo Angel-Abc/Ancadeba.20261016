@@ -1,0 +1,44 @@
+import type { CallToolResult } from '@modelcontextprotocol/server'
+import { EditorApiError } from './editorApiClient.js'
+
+export async function toolResult(
+  operation: () => Promise<Record<string, unknown>>,
+): Promise<CallToolResult> {
+  let output: Record<string, unknown>
+  let isError = false
+  try {
+    output = { ok: true, data: await operation() }
+  } catch (error) {
+    isError = true
+    const failure =
+      error instanceof EditorApiError
+        ? error
+        : new EditorApiError(
+            'adapter_error',
+            'The adapter could not complete the operation',
+            [],
+            'unknown',
+          )
+    output = {
+      ok: false,
+      error: {
+        code: failure.code,
+        message: failure.message,
+        diagnostics: failure.diagnostics,
+        outcome: failure.outcome,
+        ...(failure.status === undefined ? {} : { status: failure.status }),
+        recovery:
+          failure.outcome === 'unknown'
+            ? 'Inspect the game before another edit; the previous write may have been saved. Do not retry automatically.'
+            : failure.code === 'revision_conflict'
+              ? 'Inspect the game again, review the newer content, then submit a deliberate change with that revision.'
+              : 'Correct the reported problem and inspect the game before editing.',
+      },
+    }
+  }
+  return {
+    isError,
+    structuredContent: output,
+    content: [{ type: 'text', text: JSON.stringify(output) }],
+  }
+}
