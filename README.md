@@ -1066,17 +1066,32 @@ programmatic runtime rules; no actor/entity schemas or game JSON changes are add
 ### Adding and removing actors
 
 Applied outcomes can include `rosterChanges: { add?: readonly string[], remove?: readonly string[] }`.
-Both global and eligible actor handlers can return edits. For example, extend the
-two-actor rules above with these global handlers and corresponding policies:
+Both global and eligible actor handlers can return edits. For example, this rules
+factory starts with two actors and registers global recruit and dismiss actions:
 
 ```ts
-// Add these entries to handlers:
-;(['recruit', () => ({ status: 'applied', rosterChanges: { add: ['companion'] } })],
-  ['dismiss', () => ({ status: 'applied', rosterChanges: { remove: ['companion'] } })],
-  // Add these entries to turns.actionPolicies:
-  ['recruit', { scope: 'global' }],
-  ['dismiss', { scope: 'global' }],
-  engine.actions?.request('recruit')) // Appends companion, eligible next round.
+const createGameRules: GameRulesFactory = () => ({
+  handlers: new Map<string, GameActionHandler>([
+    ['recruit', () => ({ status: 'applied', rosterChanges: { add: ['companion'] } })],
+    ['dismiss', () => ({ status: 'applied', rosterChanges: { remove: ['companion'] } })],
+  ]),
+  turns: {
+    actors: ['player', 'opponent'],
+    phases: ['prepare', 'act', 'cleanup'],
+    actionPolicies: new Map<string, ActionTurnPolicy>([
+      ['recruit', { scope: 'global' }],
+      ['dismiss', { scope: 'global' }],
+    ]),
+  },
+})
+```
+
+Supply this factory through the engine's runtime services before starting the session,
+as in the examples above. Then submit requests:
+
+```ts
+await engine.start()
+engine.actions?.request('recruit') // Appends companion, eligible next round.
 // After processing, and only while companion is registered:
 engine.actions?.request('dismiss') // Removes the registration immediately.
 // After processing the removal:
