@@ -1,8 +1,10 @@
 import type { GameData, SceneData } from './gameData.js'
 import type { IGameActions } from './actions.js'
+import type { IGameBindings } from './gameBindings.js'
 
 export interface IGameRuntime {
   readonly actions: IGameActions
+  readonly bindings: IGameBindings
   start(): void
   dispose(): void
 }
@@ -12,6 +14,7 @@ export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 export interface GameInstance<TState = unknown> {
   readonly data: GameData
   readonly actions: IGameActions | undefined
+  readonly bindings: IGameBindings | undefined
   /** Released on disposal. Retained instances must no longer be used. */
   readonly state: TState | undefined
   readonly disposed: boolean
@@ -96,6 +99,10 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
 
   get actions(): IGameActions | undefined {
     return this.runtime?.actions
+  }
+
+  get bindings(): IGameBindings | undefined {
+    return this.runtime?.bindings
   }
 
   initialize(factory: GameRuntimeFactory | undefined): void {

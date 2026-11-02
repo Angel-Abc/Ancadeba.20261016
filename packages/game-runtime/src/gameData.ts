@@ -4,8 +4,9 @@ import type {
   SceneDefinition,
   TextComponentDefinition,
 } from '@ancadeba/schemas'
+import type { TextTemplate } from './textBindings.js'
 
-export interface TextComponentData {
+export interface TextComponentData extends TextTemplate {
   readonly id: string
   readonly type: 'text'
   readonly text: string
@@ -71,6 +72,16 @@ export function assembleGameData(
         ...component,
         placement: { ...component.placement },
         presentation: { ...component.presentation },
+        ...(component.bindings === undefined
+          ? {}
+          : {
+              bindings: Object.fromEntries(
+                Object.entries(component.bindings).map(([alias, binding]) => [
+                  alias,
+                  { ...binding, path: [...binding.path] },
+                ]),
+              ),
+            }),
       })),
     })
   }

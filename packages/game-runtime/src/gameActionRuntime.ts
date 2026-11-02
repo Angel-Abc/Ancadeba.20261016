@@ -1,18 +1,21 @@
 import type { ILogger, IMonotonicClock, ITaskScheduler } from '@ancadeba/utilities'
 import { ActionProcessor } from './actionProcessor.js'
 import type { GameRules } from './actions.js'
-import type { IGameRuntime } from './gameLifecycle.js'
+import type { GameInstance, IGameRuntime } from './gameLifecycle.js'
+import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
 
-/** Owns the action processor and its private host timers for one playthrough. */
+/** Owns actions, bindings, and private host timers for one playthrough. */
 export class GameActionRuntime implements IGameRuntime {
   readonly actions: ActionProcessor
+  readonly bindings: GameBindings
   private readonly timers: TimerService
   private started = false
   private disposed = false
 
   constructor(
+    game: GameInstance,
     rules: GameRules,
     readonly messages: GameMessageScope,
     scheduler: ITaskScheduler,
@@ -26,6 +29,10 @@ export class GameActionRuntime implements IGameRuntime {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
     try {
       this.actions = new ActionProcessor(rules, messages, this.timers, clock, logger, isRunning)
+      this.bindings = new GameBindings(
+        { state: () => game.state, progression: () => this.actions.progression },
+        messages,
+      )
     } catch (error) {
       this.timers.dispose()
       messages.dispose()
@@ -43,6 +50,7 @@ export class GameActionRuntime implements IGameRuntime {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.bindings.dispose()
     try {
       this.actions.dispose()
     } finally {

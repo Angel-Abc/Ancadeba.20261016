@@ -7,6 +7,23 @@ export {
   type EngineRuntimeServices,
 } from './engine.js'
 export type { EngineMessages } from './messages.js'
+export {
+  GameBindings,
+  type IGameBindings,
+  type GameBinding,
+  type BindingValue,
+  type BindingFailure,
+  type BindingDiagnostic,
+  type BindingResult,
+} from './gameBindings.js'
+export {
+  resolveText,
+  observeText,
+  type TextTemplate,
+  type TextResolution,
+  type TextResolutionOptions,
+  type TextBindingDiagnostic,
+} from './textBindings.js'
 export { GameLoader, type IGameLoader } from './gameLoader.js'
 export {
   assembleGameData,

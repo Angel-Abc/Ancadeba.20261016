@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { gameIdSchema } from './game.js'
+import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
 
 export const gridPlacementSchema = z.object({
   row: z.number().int().positive(),
@@ -8,18 +9,31 @@ export const gridPlacementSchema = z.object({
   columnSpan: z.number().int().positive().default(1),
 })
 
-export const textComponentSchema = z.object({
-  id: gameIdSchema,
-  type: z.literal('text'),
-  placement: gridPlacementSchema,
-  text: z.string(),
-  presentation: z
-    .object({
-      variant: z.enum(['body', 'heading']).default('body'),
-      align: z.enum(['start', 'center', 'end']).default('start'),
-    })
-    .default({ variant: 'body', align: 'start' }),
-})
+export const textComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('text'),
+    placement: gridPlacementSchema,
+    text: z.string(),
+    bindings: textBindingsSchema.optional(),
+    presentation: z
+      .object({
+        variant: z.enum(['body', 'heading']).default('body'),
+        align: z.enum(['start', 'center', 'end']).default('start'),
+      })
+      .default({ variant: 'body', align: 'start' }),
+  })
+  .superRefine((component, context) => {
+    if (component.bindings === undefined) return
+    for (const { alias } of textPlaceholders(component.text)) {
+      if (!bindingAliasSchema.safeParse(alias).success || !Object.hasOwn(component.bindings, alias))
+        context.addIssue({
+          code: 'custom',
+          path: ['text'],
+          message: `Undeclared or invalid text binding: ${alias}`,
+        })
+    }
+  })
 
 export const sceneComponentSchema = textComponentSchema
 
@@ -42,6 +56,12 @@ export const sceneSchema = z
   .superRefine((scene, context) => {
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (scene.type === 'stand-alone' && Object.keys(component.bindings ?? {}).length > 0)
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index, 'bindings'],
+          message: 'Game bindings require a game scene',
+        })
       if (ids.has(component.id))
         context.addIssue({
           code: 'custom',

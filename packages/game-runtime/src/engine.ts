@@ -195,6 +195,7 @@ export class Engine implements IEngine {
           session.game !== undefined &&
           lifecycle.currentGame === instance
         const runtime = new GameActionRuntime(
+          instance,
           rules,
           scopes.create(
             session.messages,

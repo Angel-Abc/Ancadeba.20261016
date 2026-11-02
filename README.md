@@ -180,14 +180,15 @@ letters, digits, underscores, and hyphens. An empty scene list is valid.
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and a `components` array of static text components (or an empty array).
+and a `components` array of text components (or an empty array).
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
 game metadata and a `ReadonlyMap<string, SceneData>` in manifest order. The data
 excludes file schema versions: `schema-version` belongs to validation, while all
 supported file formats assemble into the same runtime data model. Scene objects are
-copied into the assembled structure, including nested component placement and presentation.
+copied into the assembled structure, including nested component placement, presentation,
+and binding definitions and paths.
 Readonly types describe the consumer API;
 these objects are not frozen at runtime. No initial scene is selected.
 
@@ -208,7 +209,7 @@ The basic sample has `standard` and `inventory` game scenes plus an independent
 `settings` scene. Start the editor preview and use its **Scene** selector to switch
 between them. **No active scene** leaves the screen while retaining the current
 game. Standalone play starts in `standard`. All sample text is static; inventory,
-narrative passage selection, action-choice components, and live bindings are future work.
+narrative passage selection, action-choice components, and rendering live bindings are future work.
 
 An authored text component looks like this:
 
@@ -341,6 +342,99 @@ notification. Notifications still run if old-state cleanup fails, and disposal
 clears subscriptions. `SceneRenderer` removes its old DOM on each notification;
 host cleanup unsubscribes, removes keyboard listeners, and removes the whole game
 view. No browser globals are introduced into schemas or game-runtime.
+
+## Current-game data binding
+
+`@ancadeba/game-runtime` provides data binding independently of the browser renderer.
+Each engine-managed playthrough owns an `IGameBindings` service at `game.bindings`,
+alongside `game.actions`. Application state comes from the existing `createGameState`
+factory and game rules own its writes. No application state store is added.
+
+Game-scene text definitions can opt into named bindings:
+
+```json
+{
+  "id": "health",
+  "type": "text",
+  "placement": { "row": 1, "column": 1 },
+  "text": "Health: {{health}} — Turn {{turn}}",
+  "bindings": {
+    "health": {
+      "source": "game.state",
+      "path": ["player", "health"],
+      "fallback": "—"
+    },
+    "turn": {
+      "source": "game.progression",
+      "path": ["turn"]
+    }
+  }
+}
+```
+
+`gameBindingSchema` and `textBindingsSchema` are reusable schemas. Sources are
+`game.state` (the application state) and `game.progression` (`turn`, `worldTimeMs`).
+Paths must be nonempty arrays of nonempty string keys or nonnegative safe integer
+indices. Objects use own data properties, arrays use numeric indices, and Maps use
+string keys. Getters are not invoked and inherited properties are not read.
+Resolved values are strings, finite numbers, or booleans; `0`, `false`, and `''`
+remain valid. Missing paths, unavailable sources, accessors, `null`, and other leaf
+types produce structured diagnostics instead of throwing or exposing mutable values.
+
+Placeholder aliases contain letters, digits, underscores, or hyphens; whitespace
+inside `{{ health }}` is allowed. Complete brace pairs must name a declared alias
+when `bindings` is present. Without `bindings`, all text remains literal for
+compatibility. Scene validation rejects game bindings in stand-alone scenes.
+This is an additive extension of the existing scene format version.
+
+Use `game.bindings.read(binding)` to obtain either `{ status: 'resolved', value }`
+or `{ status: 'unresolved', diagnostic: { source, path, reason } }`.
+`subscribeChanges(handler)` returns an idempotent unsubscribe function and does
+not replay an initial event. Its callback signals invalidation: read again for
+the latest values. `resolveText` returns `{ text, diagnostics }`, with diagnostics
+also naming the alias. `observeText` emits immediately and subsequently only when
+the text or diagnostics change:
+
+```ts
+import { observeText, resolveText } from '@ancadeba/game-runtime'
+
+// game is the current GameInstance and definition is a TextTemplate.
+const current = resolveText(definition, game.bindings!)
+const unsubscribe = observeText(
+  definition,
+  game.bindings!,
+  ({ text, diagnostics }) => handleResolvedText(text, diagnostics),
+  { mode: 'editor' },
+)
+
+// Release the observer when its consumer is removed.
+unsubscribe()
+```
+
+The default mode is `standalone`: unresolved aliases use their string fallback,
+defaulting to `''`. Editor mode displays `[unresolved: health]` even when a fallback
+exists. Both modes return diagnostics. Repeated aliases share a read and diagnostic
+within one resolution. Values and fallbacks become plain text; markup, expressions,
+and placeholders within substituted values are never interpreted.
+
+Invalidation uses the playthrough's existing `action.applied`, `turn.advanced`, and
+`world-time.advanced` notifications, so elapsed world time updates without an action.
+Reads return the latest state at delivery, not per-action snapshots; several queued
+actions can result in a single changed text emission. Rejected and failed actions
+do not themselves invalidate bindings, though independent progression events still
+can. Direct state writes do not schedule notifications, and action-state rollback
+is not added. Binding subscriber errors use the existing message error reporting
+path while other subscribers are still attempted.
+
+The source survives scene changes, including visits to stand-alone scenes. It is
+disposed on game replacement, game end, or engine stop; old queued events cannot
+reach a new game's source. Disposal releases its state readers and observers.
+Retained sources return `source-unavailable` on reads and reject new subscriptions.
+The instance's `bindings` accessor becomes `undefined`, like `actions`.
+
+The renderer and sample scenes still display static text. Connecting these APIs to
+component rendering, with the editor host selecting editor mode and the game host
+selecting standalone mode, is the next step. There is no visible preview change yet.
 
 ## Engine instances
 

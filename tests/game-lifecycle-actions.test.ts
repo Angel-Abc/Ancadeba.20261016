@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test'
 import {
   Engine,
   GameLifecycle,
+  observeText,
   type EngineHostSession,
   type EngineMessages,
   type GameActionHandler,
@@ -10,6 +11,7 @@ import {
   type GameRulesFactory,
   type IEngineHost,
   type SceneData,
+  type TextTemplate,
 } from '@ancadeba/game-runtime'
 import { MessageBus, type ILogger } from '@ancadeba/utilities'
 
@@ -116,6 +118,206 @@ function setup(options: { factory?: GameRulesFactory; host?: IEngineHost } = {})
   )
   return { engine, timing, handler, factory, disposedStates, logger, host }
 }
+
+const scoreTemplate: TextTemplate = {
+  text: 'Score {{score}}, turn {{turn}}, time {{time}}',
+  bindings: {
+    score: { source: 'game.state', path: ['score'] },
+    turn: { source: 'game.progression', path: ['turn'] },
+    time: { source: 'game.progression', path: ['worldTimeMs'] },
+  },
+}
+
+const scoreRules: GameRulesFactory = (_data, game) => ({
+  handlers: new Map<string, GameActionHandler>([
+    [
+      'act',
+      () => {
+        const state = game.state as { score: number }
+        state.score++
+        return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
+      },
+    ],
+    ['noop', () => ({ status: 'applied' })],
+    ['reject', () => ({ status: 'rejected', reason: 'test' })],
+    [
+      'fail',
+      () => {
+        throw new Error('test failure')
+      },
+    ],
+  ]),
+})
+
+describe('playthrough-owned bindings', () => {
+  it('updates through actions and preserves its source across game and stand-alone scenes', async () => {
+    const { engine, timing } = setup({ factory: scoreRules })
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const game = lifecycle.startGame()
+    const bindings = game.bindings!
+    const listener = vi.fn()
+    const unsubscribe = observeText(scoreTemplate, bindings, listener)
+    expect(listener).toHaveBeenLastCalledWith({ text: 'Score 0, turn 0, time 0', diagnostics: [] })
+    for (const scene of ['standard', 'inventory', 'settings']) {
+      lifecycle.enterScene(scene)
+      expect(game.bindings).toBe(bindings)
+      game.actions!.request('act')
+      timing.drain()
+    }
+    expect(listener).toHaveBeenCalledTimes(4)
+    expect(listener).toHaveBeenLastCalledWith({ text: 'Score 3, turn 3, time 30', diagnostics: [] })
+    game.actions!.request('noop')
+    timing.drain()
+    expect(listener).toHaveBeenCalledTimes(4)
+    unsubscribe()
+    game.actions!.request('act')
+    timing.drain()
+    expect(listener).toHaveBeenCalledTimes(4)
+    engine.stop()
+    timing.drain()
+  })
+
+  it('reads the latest state after a batch of applied actions', async () => {
+    const { engine, timing } = setup({ factory: scoreRules })
+    await engine.start()
+    const game = engine.lifecycle!.startGame()
+    const listener = vi.fn()
+    observeText(scoreTemplate, game.bindings!, listener)
+    game.actions!.request('act')
+    game.actions!.request('act')
+    timing.drain()
+    expect(listener.mock.calls.map(([result]) => result.text)).toEqual([
+      'Score 0, turn 0, time 0',
+      'Score 2, turn 2, time 20',
+    ])
+    engine.stop()
+    timing.drain()
+  })
+
+  it('does not invalidate state for rejected or failed actions or direct writes', async () => {
+    const { engine, timing } = setup({ factory: scoreRules })
+    await engine.start()
+    timing.drain()
+    const game = engine.lifecycle!.startGame()
+    const changed = vi.fn()
+    game.bindings!.subscribeChanges(changed)
+    const state = game.state as { score: number }
+    state.score = 7
+    timing.drain()
+    for (const action of ['reject', 'fail', 'unknown']) {
+      game.actions!.request(action)
+      timing.drain()
+    }
+    expect(changed).not.toHaveBeenCalled()
+    game.actions!.request('noop')
+    timing.drain()
+    expect(changed).toHaveBeenCalledOnce()
+    expect(game.bindings!.read(scoreTemplate.bindings!.score!)).toEqual({
+      status: 'resolved',
+      value: 7,
+    })
+    engine.stop()
+    timing.drain()
+  })
+
+  it('observes elapsed world time without applied actions, including in stand-alone scenes', async () => {
+    const { engine, timing } = setup({
+      factory: () => ({ handlers: new Map(), worldTime: { mode: 'elapsed', pulseMs: 10 } }),
+    })
+    await engine.start()
+    const game = engine.lifecycle!.startGame()
+    const listener = vi.fn()
+    observeText(scoreTemplate, game.bindings!, listener)
+    engine.lifecycle!.enterScene('settings')
+    timing.now = 20
+    timing.drain()
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(listener).toHaveBeenLastCalledWith({ text: 'Score 0, turn 0, time 20', diagnostics: [] })
+    engine.stop()
+    timing.drain()
+  })
+
+  it.each(['replace', 'end', 'stop'] as const)(
+    'releases bindings on %s and discards queued outcomes',
+    async (transition) => {
+      const { engine, timing } = setup({ factory: scoreRules })
+      await engine.start()
+      timing.drain()
+      const lifecycle = engine.lifecycle!
+      const game = lifecycle.startGame()
+      const bindings = game.bindings!
+      const listener = vi.fn()
+      observeText(scoreTemplate, bindings, listener)
+      game.actions!.request('act')
+      engine.flushMessages() // Apply, but leave progression and outcome notifications queued.
+      expect(listener).toHaveBeenCalledOnce()
+      if (transition === 'replace') lifecycle.startGame()
+      else if (transition === 'end') lifecycle.endGame()
+      else engine.stop()
+      const fresh = vi.fn()
+      const next = lifecycle.currentGame
+      next?.bindings!.subscribeChanges(fresh)
+      timing.drain()
+      expect(listener).toHaveBeenCalledOnce()
+      expect(fresh).not.toHaveBeenCalled()
+      expect(game.bindings).toBeUndefined()
+      expect(bindings.read(scoreTemplate.bindings!.score!)).toMatchObject({
+        status: 'unresolved',
+        diagnostic: { reason: 'source-unavailable' },
+      })
+      expect(() => bindings.subscribeChanges(listener)).toThrow('disposed')
+      if (next) {
+        next.actions!.request('act')
+        timing.drain()
+        expect(fresh).toHaveBeenCalled()
+        expect(listener).toHaveBeenCalledOnce()
+      }
+      engine.stop()
+      timing.drain()
+    },
+  )
+
+  it('reports observer failures through the engine without blocking other observers', async () => {
+    const { engine, timing, logger } = setup({ factory: scoreRules })
+    const error = vi.spyOn(logger, 'error')
+    await engine.start()
+    timing.drain()
+    const game = engine.lifecycle!.startGame()
+    game.bindings!.subscribeChanges(() => {
+      throw new Error('binding callback')
+    })
+    const healthy = vi.fn()
+    observeText(scoreTemplate, game.bindings!, healthy)
+    game.actions!.request('act')
+    timing.drain()
+    expect(error).toHaveBeenCalled()
+    expect(healthy).toHaveBeenCalledTimes(2)
+    expect(healthy).toHaveBeenLastCalledWith({ text: 'Score 1, turn 1, time 10', diagnostics: [] })
+    engine.stop()
+    timing.drain()
+  })
+
+  it('stops notifying old subscribers when a binding callback replaces the game', async () => {
+    const { engine, timing } = setup({ factory: scoreRules })
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const game = lifecycle.startGame()
+    game.bindings!.subscribeChanges(() => lifecycle.startGame())
+    const stale = vi.fn()
+    game.bindings!.subscribeChanges(stale)
+    game.actions!.request('act')
+    timing.drain()
+    expect(stale).not.toHaveBeenCalled()
+    expect(lifecycle.currentGame).not.toBe(game)
+    expect(lifecycle.currentGame!.bindings!.read(scoreTemplate.bindings!.score!)).toEqual({
+      status: 'resolved',
+      value: 0,
+    })
+    engine.stop()
+    timing.drain()
+  })
+})
 
 describe('playthrough-owned actions and progression', () => {
   it('creates services only on explicit game start and updates host accessors across games', async () => {
