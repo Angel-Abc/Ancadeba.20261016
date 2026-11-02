@@ -31,6 +31,7 @@ export {
   type SceneData,
   type InputData,
   type TextComponentData,
+  type ButtonComponentData,
   type SceneComponentData,
 } from './gameData.js'
 export {

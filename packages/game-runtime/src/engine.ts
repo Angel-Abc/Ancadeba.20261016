@@ -241,6 +241,12 @@ export class Engine implements IEngine {
         this.runtime.clock,
         () => ++session.nextTimerId,
       )
+      if (game.initialScene !== undefined && !lifecycle.activeScene) {
+        const initial = game.scenes.get(game.initialScene)
+        if (!initial) throw new Error(`Missing initial scene: ${game.initialScene}`)
+        if (initial.type === 'game' && !lifecycle.currentGame) lifecycle.startGame()
+        lifecycle.enterScene(initial.id)
+      }
       const cleanup = this.host.mount(game, {
         lifecycle,
         get actions() {

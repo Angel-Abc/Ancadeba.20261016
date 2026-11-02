@@ -17,7 +17,13 @@ import {
   type ILogger,
   type IResourceSource,
 } from '@ancadeba/utilities'
-import { mountGameView, SceneRenderer } from '@ancadeba/ui-components'
+import {
+  ComponentRenderer,
+  TextComponentRenderer,
+  mountGameView,
+  SceneRenderer,
+  type IComponentRenderer,
+} from '@ancadeba/ui-components'
 import { DomEngineHost } from '../apps/engine/src/engineHost.js'
 import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
 
@@ -45,6 +51,7 @@ class TestElement extends EventTarget {
   tabIndex = -1
   title = ''
   value = ''
+  disabled = false
   private content = ''
 
   constructor(
@@ -189,11 +196,90 @@ function bindingEngine(
   )
 }
 
+function startSampleGame(target: TestElement): void {
+  const button = target.find((element) => element.dataset.componentId === 'new-game')!
+  button.dispatchEvent(new Event('click'))
+}
+
 function flush(engine: Engine): void {
   for (let batch = 0; batch < 4; batch++) engine.flushMessages()
 }
 
 describe('scene renderer', () => {
+  it('uses injected component renderers while owning placement and component lifetimes', async () => {
+    const game = await loader.load()
+    const { lifecycle, target, document } = setup(game)
+    lifecycle.enterScene('start-screen')
+    const dispose = vi.fn()
+    const buttonRenderer: IComponentRenderer = {
+      render: vi.fn((component, context) => {
+        expect(component.type).toBe('button')
+        expect(context.document).toBe(document)
+        expect(context.bindings).toBeUndefined()
+        const element = document.createElement('aside')
+        return { element: element.asElement(), dispose }
+      }),
+    }
+    const renderer = new SceneRenderer(
+      target.asElement(),
+      lifecycle,
+      {},
+      new ComponentRenderer({
+        text: new TextComponentRenderer(),
+        button: buttonRenderer,
+      }),
+    )
+    const menu = target.children[0]!
+    expect(menu.children[0]!.tagName).toBe('H2')
+    const button = menu.children[1]!
+    expect(button.tagName).toBe('ASIDE')
+    expect(button.dataset.componentId).toBe('new-game')
+    expect(button.style.getPropertyValue('--ge-component-row')).toBe('5')
+    expect(button.style.getPropertyValue('--ge-component-column-span')).toBe('4')
+    lifecycle.leaveScene()
+    expect(dispose).toHaveBeenCalledTimes(3)
+    expect(target.children).toHaveLength(0)
+    renderer.dispose()
+    renderer.dispose()
+    expect(dispose).toHaveBeenCalledTimes(3)
+  })
+
+  it('releases earlier components if a later component renderer fails', async () => {
+    const { lifecycle, target, document } = setup(await loader.load())
+    lifecycle.enterScene('start-screen')
+    const dispose = vi.fn()
+    const components: IComponentRenderer = {
+      render: vi
+        .fn()
+        .mockReturnValueOnce({ element: document.createElement('div').asElement(), dispose })
+        .mockImplementationOnce(() => {
+          throw new Error('Button renderer failed')
+        }),
+    }
+    expect(() => new SceneRenderer(target.asElement(), lifecycle, {}, components)).toThrow(
+      'Button renderer failed',
+    )
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(target.children).toHaveLength(0)
+  })
+
+  it('releases both scenes when a component cleanup fails during scene replacement', async () => {
+    const { lifecycle, target, document } = setup(await loader.load())
+    lifecycle.enterScene('start-screen')
+    const dispose = vi.fn().mockImplementationOnce(() => {
+      throw new Error('Cleanup failed')
+    })
+    const components: IComponentRenderer = {
+      render: () => ({ element: document.createElement('div').asElement(), dispose }),
+    }
+    const renderer = new SceneRenderer(target.asElement(), lifecycle, {}, components)
+    expect(() => lifecycle.enterScene('settings')).toThrow()
+    expect(dispose).toHaveBeenCalledTimes(7)
+    expect(target.children).toHaveLength(0)
+    renderer.dispose()
+    expect(dispose).toHaveBeenCalledTimes(7)
+  })
+
   it('renders the three sample scenes with exact grid placement and semantic text', async () => {
     const game = await loader.load()
     const { lifecycle, target } = setup(game)
@@ -250,6 +336,8 @@ describe('scene renderer', () => {
   it('keeps grid and placement variables local to each renderer instance', async () => {
     const game = await loader.load()
     const settings = game.scenes.get('settings')!
+    const heading = settings.components[0]!
+    if (heading.type !== 'text') throw new Error('Expected text')
     const smaller: GameData = {
       ...game,
       scenes: new Map([
@@ -260,7 +348,7 @@ describe('scene renderer', () => {
             screen: { type: 'grid', grid: { rows: 6, columns: 8 } },
             components: [
               {
-                ...settings.components[0]!,
+                ...heading,
                 placement: { row: 2, column: 2, rowSpan: 3, columnSpan: 4 },
                 presentation: { variant: 'heading', align: 'end' },
               },
@@ -310,6 +398,8 @@ describe('scene renderer', () => {
     const game = await loader.load()
     const literal = '<img src=x onerror="alert(1)">\n<script>example()</script>'
     const settings = game.scenes.get('settings')!
+    const heading = settings.components[0]!
+    if (heading.type !== 'text') throw new Error('Expected text')
     const modified: GameData = {
       ...game,
       scenes: new Map([
@@ -317,7 +407,7 @@ describe('scene renderer', () => {
           'settings',
           {
             ...settings,
-            components: [{ ...settings.components[0]!, text: literal }],
+            components: [{ ...heading, text: literal }],
           },
         ],
       ]),
@@ -402,6 +492,7 @@ describe('scene renderer', () => {
       true,
     )
     await engine.start()
+    startSampleGame(target)
     const lifecycle = engine.lifecycle!
     const standard = target.find((element) => element.dataset.sceneId === 'standard')!
     now = 25
@@ -428,11 +519,54 @@ describe.each([
   ['engine', (element: HTMLElement): IEngineHost => new DomEngineHost(element)],
   ['editor preview', (element: HTMLElement): IEngineHost => new EditorPreviewHost(element)],
 ] as const)('%s rendering integration', (_name, createHost) => {
+  it('opens the menu without a playthrough and routes buttons with listener cleanup', async () => {
+    const { target } = setup(await loader.load())
+    const engine = new Engine(
+      loader,
+      createHost(target.asElement()),
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      timing,
+    )
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    const menu = target.find((element) => element.dataset.sceneId === 'start-screen')!
+    const buttons = menu.children.filter((element) => element.tagName === 'BUTTON')
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'New game',
+      'Load Game',
+      'Settings',
+    ])
+    expect(buttons.map((button) => button.disabled)).toEqual([false, true, false])
+    expect(lifecycle.currentGame).toBeUndefined()
+    buttons[2]!.dispatchEvent(new Event('click'))
+    expect(lifecycle.activeScene?.data.id).toBe('settings')
+    expect(lifecycle.currentGame).toBeUndefined()
+    buttons[0]!.dispatchEvent(new Event('click'))
+    expect(lifecycle.currentGame).toBeUndefined()
+    target
+      .find((element) => element.dataset.componentId === 'back')!
+      .dispatchEvent(new Event('click'))
+    startSampleGame(target)
+    const first = lifecycle.currentGame!
+    expect(lifecycle.activeScene?.data.id).toBe('standard')
+    lifecycle.enterScene('start-screen')
+    startSampleGame(target)
+    expect(first.disposed).toBe(true)
+    expect(lifecycle.currentGame).not.toBe(first)
+    lifecycle.enterScene('start-screen')
+    const detached = target.find((element) => element.dataset.componentId === 'new-game')!
+    engine.stop()
+    detached.dispatchEvent(new Event('click'))
+    expect(target.children).toHaveLength(0)
+  })
+
   it('updates bound text in place, diagnoses missing values, and follows all three scenes', async () => {
     const content = await loader.load()
     const { target } = setup(content)
     const engine = bindingEngine(content, createHost(target.asElement()))
     await engine.start()
+    startSampleGame(target)
     const lifecycle = engine.lifecycle!
     const game = lifecycle.currentGame!
     const standard = target.find((element) => element.dataset.sceneId === 'standard')!
@@ -506,6 +640,7 @@ describe.each([
     const { target } = setup(content)
     const engine = bindingEngine(content, createHost(target.asElement()))
     await engine.start()
+    startSampleGame(target)
     const lifecycle = engine.lifecycle!
     const first = lifecycle.currentGame!
     const firstBindings = first.bindings
@@ -531,6 +666,7 @@ describe.each([
     expect(target.find((element) => element.dataset.sceneId === 'settings')).toBeDefined()
     engine.stop()
     await engine.start()
+    startSampleGame(target)
     expect(
       target.find((element) => element.dataset.componentId === 'player-status')?.textContent,
     ).toContain('Health 40 / 40')
@@ -547,6 +683,7 @@ describe.each([
       timing,
     )
     await engine.start()
+    startSampleGame(target)
     const status = target.find((element) => element.dataset.componentId === 'player-status')!
     expect(status.textContent).toContain(
       _name === 'editor preview' ? 'Health [unresolved: health] / 40' : 'Health 40 / 40',
@@ -555,7 +692,7 @@ describe.each([
     engine.stop()
   })
 
-  it('selects the first scene, follows changes, and disposes and remounts with the engine', async () => {
+  it('selects the configured initial scene, follows changes, and remounts with the engine', async () => {
     const { target } = setup(await loader.load())
     const engine = new Engine(
       loader,
@@ -566,7 +703,9 @@ describe.each([
     )
     await engine.start()
     const lifecycle = engine.lifecycle!
-    expect(lifecycle.activeScene?.data.id).toBe('standard')
+    expect(lifecycle.activeScene?.data.id).toBe('start-screen')
+    expect(lifecycle.currentGame).toBeUndefined()
+    startSampleGame(target)
     expect(engine.actions).toBe(lifecycle.currentGame?.actions)
     expect(target.find((element) => element.dataset.sceneId === 'standard')).toBeDefined()
     lifecycle.enterScene('inventory')
@@ -579,7 +718,7 @@ describe.each([
     engine.stop()
     expect(target.children).toHaveLength(0)
     await engine.start()
-    expect(target.find((element) => element.dataset.sceneId === 'standard')).toBeDefined()
+    expect(target.find((element) => element.dataset.sceneId === 'start-screen')).toBeDefined()
     engine.stop()
   })
 })
@@ -595,7 +734,8 @@ describe('editor scene picker', () => {
       { scenePicker: true },
     )
     const select = target.find((element) => element.tagName === 'SELECT')!
-    expect(select.value).toBe('standard')
+    expect(select.value).toBe('start-screen')
+    startSampleGame(target)
     const playthrough = lifecycle.currentGame
     for (const id of ['inventory', 'settings', 'standard', '']) {
       select.value = id

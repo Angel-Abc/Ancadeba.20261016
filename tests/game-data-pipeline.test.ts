@@ -60,6 +60,24 @@ function createPipeline(
 }
 
 describe('game data pipeline', () => {
+  it.each(['stand-alone', 'game'] as const)(
+    'activates the initial %s scene before mounting a headless host',
+    async (type) => {
+      const { engine, host } = createPipeline({
+        'game.json': { ...definition, 'initial-scene': 'start-screen' },
+        'scenes/start-screen.json': { ...scene, type },
+      })
+      host.mount.mockImplementation((_game, session) => {
+        expect(session.lifecycle.activeScene?.data.id).toBe('start-screen')
+        expect(Boolean(session.lifecycle.currentGame)).toBe(type === 'game')
+        return () => {}
+      })
+      await engine.start()
+      expect(host.mount).toHaveBeenCalledOnce()
+      engine.stop()
+    },
+  )
+
   it('loads the actual basic example into game data without a renderer', async () => {
     const source: IResourceSource = {
       readText: (path) =>
@@ -74,6 +92,7 @@ describe('game data pipeline', () => {
       title: 'Basic Game',
       description: 'A basic game example',
       version: '1.0.0',
+      initialScene: 'start-screen',
       input: {
         virtualKeys: ['north', 'confirm'],
         keyboard: { KeyW: 'north', ArrowUp: 'north', Enter: 'confirm' },
@@ -84,10 +103,11 @@ describe('game data pipeline', () => {
         initialContext: 'gameplay',
       },
     })
-    expect([...game.scenes.keys()]).toEqual(['standard', 'inventory', 'settings'])
+    expect([...game.scenes.keys()]).toEqual(['standard', 'inventory', 'settings', 'start-screen'])
     expect([...game.scenes.values()].map(({ type }) => type)).toEqual([
       'game',
       'game',
+      'stand-alone',
       'stand-alone',
     ])
     expect(game.scenes.get('standard')?.components[0]).toEqual({
@@ -98,7 +118,7 @@ describe('game data pipeline', () => {
       presentation: { variant: 'heading', align: 'center' },
     })
     expect(game.scenes.get('inventory')?.components.length).toBe(4)
-    expect(game.scenes.get('settings')?.components.length).toBe(2)
+    expect(game.scenes.get('settings')?.components.length).toBe(3)
   })
 
   it('assembles scenes in manifest order without sharing mutable definition objects', () => {
@@ -132,6 +152,8 @@ describe('game data pipeline', () => {
     ['invalid ID', { ...definition, id: '' }],
     ['invalid version', { ...definition, version: 123 }],
     ['duplicate references', { ...definition, scenes: ['start-screen', 'start-screen'] }],
+    ['unknown initial scene', { ...definition, 'initial-scene': 'missing' }],
+    ['invalid initial scene', { ...definition, 'initial-scene': '../escape' }],
     ...['../escape', 'a/b', 'a\\b', '%2e%2e', 'https:remote', '.', '..', ''].map(
       (id): [string, unknown] => [`unsafe scene reference ${id}`, { ...definition, scenes: [id] }],
     ),

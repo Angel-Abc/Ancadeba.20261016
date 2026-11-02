@@ -4,6 +4,7 @@
   "title": "Basic Game",
   "description": "A basic game example",
   "version": "1.0.0",
-  "scenes": ["standard", "inventory", "settings"],
+  "initial-scene": "start-screen",
+  "scenes": ["standard", "inventory", "settings", "start-screen"],
   "input": "input.json"
 }

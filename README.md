@@ -176,11 +176,14 @@ The pipeline is `JSON files → validated definitions → assembled game data`.
 `SceneDefinition`. The manifest requires `schema-version` (`1.0.0`), `id`, `title`,
 `description`, `version`, and a `scenes` array of unique IDs. IDs contain only
 letters, digits, underscores, and hyphens. An empty scene list is valid.
+The optional `initial-scene` property selects the startup scene by ID and must
+reference an entry in `scenes`. Older manifests without it open the first listed
+scene in the browser hosts.
 
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and a `components` array of text components (or an empty array).
+and a `components` array of text and button components (or an empty array).
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
@@ -199,16 +202,28 @@ this data pipeline.
 ## Scene rendering
 
 Both browser hosts use `mountGameView` and `SceneRenderer` from
-`@ancadeba/ui-components`. The host opens the first scene listed in `game.json`,
-unless the lifecycle already has an active scene. Entering a `game` scene creates
+`@ancadeba/ui-components`. The engine opens the scene selected by `initial-scene`
+before mounting the host, unless the lifecycle already has an active scene.
+Entering a `game` scene creates
 a playthrough if needed; entering a `stand-alone` scene does not. Empty scene lists
 remain valid and produce an empty surface. The renderer itself follows the active
 scene without choosing one or owning game state.
 
-The basic sample has `standard` and `inventory` game scenes plus an independent
-`settings` scene. Start the editor preview and use its **Scene** selector to switch
+`SceneRenderer` delegates component content to an injected `IComponentRenderer`
+(its fourth constructor argument). The default `ComponentRenderer` dispatches to
+`TextComponentRenderer` and `ButtonComponentRenderer`; its constructor accepts a
+typed renderer map for overrides. Each renderer returns an element and an
+idempotent `dispose()` method that releases its listeners or binding subscriptions.
+The scene renderer owns grid placement and disposes all components when the scene
+changes or the view unmounts.
+
+The basic sample has `standard` and `inventory` game scenes plus independent
+`start-screen` and `settings` scenes. Start the editor preview and use its **Scene** selector to switch
 between them. **No active scene** leaves the screen while retaining the current
-game. Standalone play starts in `standard`. The two game scenes share health and
+game. Standalone play starts in `start-screen`, with **New game**, **Load Game**,
+and **Settings** buttons. New game creates a fresh playthrough and opens `standard`;
+Settings opens the independent settings scene, whose Back button returns to the
+menu. Load Game is disabled until save/load support is available. The two game scenes share health and
 progression bindings; Settings stays independent. Inventory interactions, narrative
 passage selection, and action-choice components are future work.
 
@@ -232,6 +247,12 @@ layer model is introduced. `variant` defaults to `body`, with `heading` using a
 semantic `<h2>`. `align` is `start`, `center`, or `end` and defaults to `start`.
 Text is assigned through `textContent`: line breaks are preserved and HTML is
 displayed literally rather than interpreted.
+
+Button components use `type: "button"`, `label`, and the same `id` and `placement`
+fields. An optional `action` has `type: "new-game"` or `"enter-scene"` and a `scene`
+target ID. New-game targets must be game scenes. Buttons without an action are
+disabled. Labels are rendered as literal text in native HTML buttons, with
+keyboard activation and focus styling.
 
 ### Geometry and appearance
 

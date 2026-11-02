@@ -1,0 +1,37 @@
+{
+  "schema-version": "1.0.0",
+  "id": "start-screen",
+  "title": "Start Screen",
+  "description": "The main menu of the basic sample game",
+  "type": "stand-alone",
+  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "components": [
+    {
+      "id": "title",
+      "type": "text",
+      "placement": { "row": 2, "column": 3, "rowSpan": 2, "columnSpan": 8 },
+      "text": "Basic Game",
+      "presentation": { "variant": "heading", "align": "center" }
+    },
+    {
+      "id": "new-game",
+      "type": "button",
+      "placement": { "row": 5, "column": 5, "columnSpan": 4 },
+      "label": "New game",
+      "action": { "type": "new-game", "scene": "standard" }
+    },
+    {
+      "id": "load-game",
+      "type": "button",
+      "placement": { "row": 7, "column": 5, "columnSpan": 4 },
+      "label": "Load Game"
+    },
+    {
+      "id": "settings",
+      "type": "button",
+      "placement": { "row": 9, "column": 5, "columnSpan": 4 },
+      "label": "Settings",
+      "action": { "type": "enter-scene", "scene": "settings" }
+    }
+  ]
+}

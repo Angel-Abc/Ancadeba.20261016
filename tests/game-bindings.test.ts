@@ -79,11 +79,15 @@ describe('binding definitions', () => {
       }),
       new Map([['standard', definition]]),
     )
-    const bindings = definition.components[0]!.bindings!
+    const component = definition.components[0]!
+    if (component.type !== 'text') throw new Error('Expected text')
+    const bindings = component.bindings!
     bindings.health!.path[0] = 'other'
     bindings.health!.fallback = 'changed'
     delete bindings.turn
-    expect(content.scenes.get('standard')!.components[0]!.bindings).toEqual({ health, turn })
+    expect(content.scenes.get('standard')!.components[0]).toMatchObject({
+      bindings: { health, turn },
+    })
   })
 })
 

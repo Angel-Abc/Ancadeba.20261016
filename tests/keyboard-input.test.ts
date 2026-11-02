@@ -48,10 +48,13 @@ class TestElement extends EventTarget {
     )
   }
 
-  closest(): TestElement | null {
-    return ['input', 'textarea', 'select'].includes(this.tagName)
+  closest(selector: string): TestElement | null {
+    return selector
+      .split(',')
+      .map((tag) => tag.trim())
+      .includes(this.tagName)
       ? this
-      : (this.parent?.closest() ?? null)
+      : (this.parent?.closest(selector) ?? null)
   }
 
   remove(): void {
@@ -175,7 +178,7 @@ describe('shared keyboard adapter', () => {
     const { document, surface, messages, handler, cleanup } = setup()
     expect(document.activeElement).toBeNull()
     expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(false)
-    const child = document.createElement('button')
+    const child = document.createElement('div')
     surface.append(child)
     document.activeElement = child
     expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(true)
@@ -217,22 +220,25 @@ describe('shared keyboard adapter', () => {
     cleanup()
   })
 
-  it.each(['input', 'textarea', 'select', 'contenteditable'])(
-    'ignores editable %s controls',
+  it.each(['input', 'textarea', 'select', 'button', 'contenteditable'])(
+    'preserves native keyboard behavior for %s controls',
     (tag) => {
-      const { document, surface, messages, handler, cleanup } = setup()
+      const { document, surface, messages, input, handler, cleanup } = setup()
+      input.setContext('menu')
       const editable = document.createElement(tag)
       editable.isContentEditable = tag === 'contenteditable'
       surface.append(editable)
       document.activeElement = editable
       expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(false)
+      expect(key(surface, 'keydown', 'Enter').defaultPrevented).toBe(false)
+      expect(key(surface, 'keyup', 'Enter').defaultPrevented).toBe(false)
       messages.flush()
       expect(handler).not.toHaveBeenCalled()
       cleanup()
     },
   )
 
-  it.each(['outside', 'editable', 'window', 'hidden'])(
+  it.each(['outside', 'editable', 'button', 'window', 'hidden'])(
     'cancels held input on focus loss: %s',
     (kind) => {
       const { document, surface, messages, handler, cleanup } = setup()
@@ -243,8 +249,10 @@ describe('shared keyboard adapter', () => {
         document.hidden = true
         document.dispatchEvent(new Event('visibilitychange'))
       } else {
-        const target = document.createElement(kind === 'editable' ? 'input' : 'section')
-        if (kind === 'editable') surface.append(target)
+        const target = document.createElement(
+          kind === 'editable' ? 'input' : kind === 'button' ? 'button' : 'section',
+        )
+        if (kind === 'editable' || kind === 'button') surface.append(target)
         document.activeElement = target
         const event = new Event('focusout')
         Object.assign(event, { relatedTarget: target })
@@ -264,7 +272,7 @@ describe('shared keyboard adapter', () => {
 
   it('does not reset when focus moves between noneditable descendants', () => {
     const { document, surface, messages, handler, cleanup } = setup()
-    const child = document.createElement('button')
+    const child = document.createElement('div')
     surface.append(child)
     document.activeElement = surface
     key(surface, 'keydown', 'KeyW')

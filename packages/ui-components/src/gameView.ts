@@ -92,11 +92,23 @@ export function mountGameView(
 
     root.append(viewport)
     target.append(root)
-    const renderer = new SceneRenderer(viewport, session.lifecycle, options)
+    const renderer = new SceneRenderer(viewport, session.lifecycle, {
+      ...options,
+      onButtonActivate: (action) => {
+        if (disposed) return
+        const scene = game.scenes.get(action.scene)
+        if (!scene) throw new Error(`Missing button target scene: ${action.scene}`)
+        if (action.type === 'new-game') session.lifecycle.startGame()
+        enter(scene)
+      },
+    })
     cleanups.push(() => renderer.dispose())
     if (session.input) cleanups.push(bindKeyboardInput(root, session.input))
     if (!session.lifecycle.activeScene) {
-      const first = game.scenes.values().next().value
+      const first =
+        game.initialScene === undefined
+          ? game.scenes.values().next().value
+          : game.scenes.get(game.initialScene)
       if (first) enter(first)
     }
     return cleanup

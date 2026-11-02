@@ -18,6 +18,13 @@
       "type": "text",
       "placement": { "row": 3, "column": 3, "rowSpan": 8, "columnSpan": 8 },
       "text": "Reading preferences\n\nA place for comfortable text, clear contrast, and room to read.\n\nThis layout example uses static text. Interactive settings will follow later."
+    },
+    {
+      "id": "back",
+      "type": "button",
+      "placement": { "row": 11, "column": 5, "columnSpan": 4 },
+      "label": "Back",
+      "action": { "type": "enter-scene", "scene": "start-screen" }
     }
   ]
 }

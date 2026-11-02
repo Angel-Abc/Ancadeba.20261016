@@ -35,7 +35,24 @@ export const textComponentSchema = z
     }
   })
 
-export const sceneComponentSchema = textComponentSchema
+export const buttonActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
+  z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
+])
+
+export const buttonComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('button'),
+  placement: gridPlacementSchema,
+  label: z.string().trim().min(1),
+  /** Buttons without an action are rendered disabled. */
+  action: buttonActionSchema.optional(),
+})
+
+export const sceneComponentSchema = z.discriminatedUnion('type', [
+  textComponentSchema,
+  buttonComponentSchema,
+])
 
 export const sceneSchema = z
   .object({
@@ -56,7 +73,11 @@ export const sceneSchema = z
   .superRefine((scene, context) => {
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
-      if (scene.type === 'stand-alone' && Object.keys(component.bindings ?? {}).length > 0)
+      if (
+        scene.type === 'stand-alone' &&
+        component.type === 'text' &&
+        Object.keys(component.bindings ?? {}).length > 0
+      )
         context.addIssue({
           code: 'custom',
           path: ['components', index, 'bindings'],
@@ -88,4 +109,6 @@ export const sceneSchema = z
 export type SceneDefinition = z.infer<typeof sceneSchema>
 export type SceneComponentDefinition = z.infer<typeof sceneComponentSchema>
 export type TextComponentDefinition = z.infer<typeof textComponentSchema>
+export type ButtonComponentDefinition = z.infer<typeof buttonComponentSchema>
+export type ButtonActionDefinition = z.infer<typeof buttonActionSchema>
 export type GridPlacementDefinition = z.infer<typeof gridPlacementSchema>

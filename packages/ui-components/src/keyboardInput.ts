@@ -6,10 +6,10 @@ export interface KeyboardInputSink {
   reset(): void
 }
 
-function isEditable(element: Element | null): boolean {
+function usesNativeKeyboard(element: Element | null): boolean {
   return Boolean(
     element &&
-    (element.closest('input, textarea, select') ||
+    (element.closest('input, textarea, select, button') ||
       ('isContentEditable' in element && element.isContentEditable === true)),
   )
 }
@@ -28,7 +28,7 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
   const hasFocus = () =>
     !document.hidden &&
     surface.contains(document.activeElement) &&
-    !isEditable(document.activeElement)
+    !usesNativeKeyboard(document.activeElement)
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (!hasFocus() || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
@@ -45,11 +45,11 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     if (input.releaseKey(event.code)) event.preventDefault()
   }
   const onFocusIn = () => {
-    if (isEditable(document.activeElement)) reset()
+    if (usesNativeKeyboard(document.activeElement)) reset()
   }
   const onFocusOut = (event: FocusEvent) => {
     const target = event.relatedTarget as Element | null
-    if (!surface.contains(target) || isEditable(target)) reset()
+    if (!surface.contains(target) || usesNativeKeyboard(target)) reset()
   }
   const onVisibilityChange = () => {
     if (document.hidden) reset()
