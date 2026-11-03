@@ -78,6 +78,7 @@ function configured(
       ['end', () => ({ status: 'applied', advanceTurn: true })],
       ['act', () => ({ status: 'applied' })],
       ['weather', () => ({ status: 'applied' })],
+      // SAFETY: cost requests in this suite supply numeric world-time costs.
       ['cost', (request) => ({ status: 'applied', worldTimeCostMs: request.payload as number })],
       ...Object.entries(options.handlers ?? {}),
     ]),
@@ -168,6 +169,7 @@ async function dynamicStart(options: Parameters<typeof configured>[0] = {}) {
     rules: configured({
       ...options,
       handlers: {
+        // SAFETY: edit() supplies RosterChanges through this fixture's private action payload.
         edit: (request) => ({ status: 'applied', rosterChanges: request.payload as RosterChanges }),
         ...options.handlers,
       },
@@ -476,6 +478,7 @@ describe('dynamic actor membership', () => {
       handlers: {
         act: () => ({
           status: 'applied',
+          // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Deliberately invalid roster data exercises atomic runtime rejection.
           rosterChanges: changes as RosterChanges,
           advancePhase: true,
           worldTimeCostMs: 10,
@@ -748,6 +751,7 @@ describe('dynamic actor attribution and session isolation', () => {
       handlers: {
         edit: (request) => ({
           status: 'applied',
+          // SAFETY: edit() supplies the roster-change payload used by this test.
           rosterChanges: request.payload as RosterChanges,
           worldTimeCostMs: 10,
         }),
@@ -1110,7 +1114,7 @@ describe('actor request eligibility and attribution', () => {
 
   it('copies actor options at registration and does not inherit ambient actor identity', async () => {
     const instance = await start()
-    const options: { actorId: string } = { actorId: 'a' }
+    const options = { actorId: 'a' }
     instance.engine.actions!.schedule('act', 5, 'payload', options)
     options.actorId = 'b'
     instance.timing.now = 5
@@ -1235,6 +1239,7 @@ describe('turn outcome validation and atomic commits', () => {
     { status: 'applied', advancePhase: 1, worldTimeCostMs: 10 },
     { status: 'applied', advancePhase: null, worldTimeCostMs: 10 },
   ])('fails invalid turn outcomes without committing state: %#', async (outcome) => {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Deliberately invalid outcomes exercise runtime rejection before a commit.
     const instance = await start({ handlers: { act: () => outcome as ActionOutcome } })
     const failed = vi.fn()
     instance.engine.messages!.subscribe('action.failed', failed)
@@ -1352,6 +1357,7 @@ describe('turn configuration and session lifecycle', () => {
     { scope: 'invalid' },
   ]) {
     invalidConfigurations.push(
+      // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Includes an invalid policy discriminator to exercise runtime validation.
       configured({ policies: new Map([['act', policy as ActionTurnPolicy]]) }),
     )
   }
@@ -1365,8 +1371,10 @@ describe('turn configuration and session lifecycle', () => {
     { context: 'game', input: 'move', action: 'act', actor: { type: 'fixed', actorId: 'unknown' } },
     { context: 'game', input: 'move', action: 'weather', actor: { type: 'active' } },
     { context: 'game', input: 'move', action: 'act', actor: { type: 'invalid' } },
-  ])
+  ]) {
+    // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Includes an invalid actor selector to exercise runtime validation.
     invalidConfigurations.push(configured({ bindings: [binding as InputActionBinding] }))
+  }
   invalidConfigurations.push({
     handlers: new Map([['act', () => ({ status: 'applied' })]]),
     inputBindings: [{ context: 'game', input: 'move', action: 'act', actor: { type: 'active' } }],

@@ -24,6 +24,7 @@ function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Configuration must be a JSON object')
   }
+  // SAFETY: the checks above exclude null, primitives, and arrays; config fields remain unknown.
   return value as Record<string, unknown>
 }
 

@@ -121,7 +121,7 @@ describe('game binding reads', () => {
 
   it('never invokes getters or reads inherited properties', () => {
     const getter = vi.fn(() => 99)
-    const state = Object.create({ inherited: 8 }) as Record<string, unknown>
+    const state: Record<string, unknown> = Object.create({ inherited: 8 })
     Object.defineProperty(state, 'secret', { get: getter })
     const { source } = setup(state)
     expect(source.read({ source: 'game.state', path: ['secret'] })).toMatchObject({
@@ -219,7 +219,10 @@ describe('plain text binding resolution', () => {
   })
 
   it('emits immediately and only on changed text or diagnostics, with independent subscriptions', () => {
-    const state: { player?: { health: unknown } } = { player: { health: 10 } }
+    interface MutableState {
+      player?: { health: number | string }
+    }
+    const state: MutableState = { player: { health: 10 } }
     const { source, invalidate } = setup(state)
     const listener = vi.fn()
     const unsubscribe = observeText(template, source, listener)

@@ -30,7 +30,7 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
       this.subscriptions.set(topic, subscriptions)
     }
 
-    // Erase the payload type only inside the topic-indexed storage. Publish and
+    // SAFETY: erase the payload type only inside the topic-indexed storage. Publish and
     // subscribe enforce the same topic/payload relationship at the public boundary.
     const subscription: MessageHandler<unknown> = (payload) => handler(payload as Topics[Topic])
     const topicSubscriptions = subscriptions
@@ -53,6 +53,7 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
     try {
       for (const { topic, payload } of batch) {
         try {
+          // SAFETY: publish enqueues each payload with its matching Topics key; the queue is private.
           if (shouldDeliver && !shouldDeliver(topic, payload as Topics[MessageTopic<Topics>]))
             continue
         } catch (error) {

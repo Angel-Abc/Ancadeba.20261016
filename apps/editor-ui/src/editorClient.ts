@@ -1,4 +1,5 @@
 import type { CommandRequest, Diagnostic, ProjectView } from '@ancadeba/editor-core'
+import { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
   constructor(
@@ -29,13 +30,18 @@ export class HttpEditorClient implements IEditorClient {
   private async request(url: string, init?: RequestInit): Promise<ProjectView> {
     const fetcher = this.fetcher
     const response = await fetcher(url, { ...init, cache: 'no-store' })
-    const value = (await response.json()) as ProjectView & { error?: string; code?: string }
-    if (!response.ok)
+    const value: unknown = await response.json()
+    if (!response.ok) {
+      const parsed = apiErrorSchema.safeParse(value)
       throw new EditorClientError(
-        value.code ?? 'request_failed',
-        value.error ?? 'Editor request failed',
-        value.diagnostics ?? [],
+        parsed.success ? (parsed.data.code ?? 'request_failed') : 'request_failed',
+        parsed.success ? parsed.data.error : 'Editor request failed',
+        parsed.success ? parsed.data.diagnostics : [],
       )
-    return value
+    }
+    const parsed = projectViewSchema.safeParse(value)
+    if (!parsed.success)
+      throw new EditorClientError('invalid_response', 'Editor response was malformed')
+    return parsed.data
   }
 }

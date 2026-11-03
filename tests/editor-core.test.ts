@@ -3,6 +3,7 @@ import {
   applyCommand,
   capabilities,
   inspectProject,
+  object,
   validateProject,
   type ProjectSnapshot,
 } from '@ancadeba/editor-core'
@@ -161,7 +162,7 @@ describe('editor core', () => {
     ).toThrow('Fix project diagnostics')
     expect(
       validateProject({
-        'game.json': { ...(project().documents['game.json'] as object), input: 'input.json' },
+        'game.json': { ...object(project().documents['game.json']), input: 'input.json' },
       }).map((d) => d.file),
     ).toContain('input.json')
   })

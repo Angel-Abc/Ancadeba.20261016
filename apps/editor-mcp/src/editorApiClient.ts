@@ -141,7 +141,7 @@ export class EditorApiClient implements IEditorApi {
       })
       let value: unknown
       try {
-        value = (await response.json()) as unknown
+        value = await response.json()
       } catch (error) {
         if (signal.aborted) throw error
         throw new EditorApiError(

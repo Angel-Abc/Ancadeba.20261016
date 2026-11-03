@@ -144,10 +144,7 @@ export class ActionProcessor implements IGameActions {
     return this.turns?.rosterState
   }
 
-  private get turnFields(): {
-    readonly turnState?: TurnSnapshot
-    readonly rosterState?: ActorRosterSnapshot
-  } {
+  private get turnFields() {
     return {
       ...(this.turnState ? { turnState: this.turnState } : {}),
       ...(this.rosterState ? { rosterState: this.rosterState } : {}),

@@ -110,6 +110,7 @@ describe('scheduled message bus', () => {
     tasks[0]!.run()
     expect(calls).toEqual([1, 2])
     expect(onError).toHaveBeenCalledTimes(1)
+    // SAFETY: the source MessageBus aggregates subscriber failures before onError receives them.
     expect((onError.mock.calls[0]![0] as AggregateError).errors).toEqual([failure, failure])
     unsubscribe()
     tasks[1]!.run()

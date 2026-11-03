@@ -1,7 +1,4 @@
-export function formatMessageForConsole(
-  message: string,
-  ...args: unknown[]
-): { formattedMessage: string; extraArgs: unknown[] } {
+export function formatMessageForConsole(message: string, ...args: unknown[]) {
   const extraArgs: unknown[] = []
   const usedIndices = new Set<number>()
 

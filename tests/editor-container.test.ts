@@ -12,7 +12,7 @@ function gameDefinition(title: string) {
     title,
     description: 'Test game',
     version: '1.0.0',
-    scenes: [] as string[],
+    scenes: Array<string>(),
   }
 }
 

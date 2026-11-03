@@ -1,7 +1,11 @@
+interface BrowserTimingSource {
+  readonly performance: Pick<Performance, 'now'>
+  setTimeout(callback: () => void, delayMs: number): number
+  clearTimeout(id: number): void
+}
+
 /** Browser timing supplied explicitly by the application's composition root. */
-export function createBrowserTiming(
-  window: Pick<Window, 'setTimeout' | 'clearTimeout' | 'performance'>,
-) {
+export function createBrowserTiming(window: BrowserTimingSource) {
   return {
     clock: { now: () => window.performance.now() },
     scheduler: {

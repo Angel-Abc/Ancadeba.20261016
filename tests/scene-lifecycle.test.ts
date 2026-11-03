@@ -274,6 +274,7 @@ describe('game and scene lifetimes', () => {
       failure = error
     }
     expect(failure).toBeInstanceOf(AggregateError)
+    // SAFETY: the preceding assertion checked the captured failure is an AggregateError.
     expect((failure as AggregateError).errors).toEqual([sceneError, gameError])
     expect(lifecycle.currentGame).toBeUndefined()
     expect(lifecycle.activeScene).toBeUndefined()
@@ -494,8 +495,10 @@ describe('engine-owned game lifecycle', () => {
     }
 
     expect(failure).toBeInstanceOf(AggregateError)
-    const errors = (failure as AggregateError).errors as unknown[]
+    // SAFETY: the preceding assertion checked failure is an AggregateError; its entries stay unknown.
+    const errors: unknown[] = (failure as AggregateError).errors
     expect(errors[0]).toBeInstanceOf(AggregateError)
+    // SAFETY: the preceding assertion checked the nested failure is an AggregateError.
     expect((errors[0] as AggregateError).errors).toEqual([stateError])
     expect(errors[1]).toBe(hostError)
     expect(engine.state).toBe('stopped')

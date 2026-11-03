@@ -101,7 +101,8 @@ class TestElement extends EventTarget {
     return undefined
   }
   asElement(): HTMLElement {
-    return this as unknown as HTMLElement
+    // @ts-expect-error -- Deliberately partial DOM fixture supplies only the operations used by these renderers.
+    return this
   }
 }
 
@@ -156,6 +157,7 @@ function bindingEngine(
           createSceneState: () => undefined,
         }),
       createGameRules: (_content, instance) => {
+        // SAFETY: the paired lifecycle factory creates BindingDemoState for this engine.
         const state = instance.state as BindingDemoState
         return {
           handlers: new Map<string, GameActionHandler>([

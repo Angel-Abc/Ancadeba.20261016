@@ -189,7 +189,7 @@ describe('project editor controller', () => {
 
   it('uses the same HTTP contract and returns structured diagnostics', async () => {
     const requests: { url: string; init: RequestInit | undefined }[] = []
-    const fetcher = async function (this: unknown, url, init) {
+    const fetcher: typeof fetch = async function (this: unknown, url, init) {
       expect(this).toBeUndefined()
       requests.push({
         url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
@@ -205,7 +205,7 @@ describe('project editor controller', () => {
         }),
         { status: 422 },
       )
-    } as typeof fetch
+    }
     const client = new HttpEditorClient(fetcher)
     await expect(
       client.apply({
@@ -219,5 +219,31 @@ describe('project editor controller', () => {
     })
     expect(requests[0]?.url).toBe('/api/editor/commands')
     expect(requests[0]?.init?.cache).toBe('no-store')
+  })
+
+  it.each([
+    {},
+    { ...view('one'), revision: 123 },
+    { ...view('one'), diagnostics: [{ code: 'invalid_document' }] },
+  ])('rejects malformed successful project responses: %#', async (body) => {
+    const client = new HttpEditorClient(async () => new Response(JSON.stringify(body)))
+    await expect(client.inspect('basic')).rejects.toMatchObject({
+      code: 'invalid_response',
+      message: 'Editor response was malformed',
+    })
+  })
+
+  it('normalizes malformed error responses without trusting their diagnostics', async () => {
+    const client = new HttpEditorClient(
+      async () =>
+        new Response(JSON.stringify({ error: ['unexpected'], diagnostics: 'invalid' }), {
+          status: 500,
+        }),
+    )
+    await expect(client.inspect('basic')).rejects.toMatchObject({
+      code: 'request_failed',
+      message: 'Editor request failed',
+      diagnostics: [],
+    })
   })
 })

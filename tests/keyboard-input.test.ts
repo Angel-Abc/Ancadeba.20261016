@@ -15,6 +15,7 @@ import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
 // A focused EventTarget harness exercises real listener registration and cleanup
 // without introducing DOM globals into the runtime or a browser-test dependency.
 class TestElement extends EventTarget {
+  readonly nodeType = 1
   readonly children: TestElement[] = []
   parent: TestElement | undefined
   tabIndex = -1
@@ -64,7 +65,8 @@ class TestElement extends EventTarget {
   }
 
   asElement(): HTMLElement {
-    return this as unknown as HTMLElement
+    // @ts-expect-error -- Deliberately partial DOM fixture supplies only the operations used by these adapters.
+    return this
   }
 }
 
@@ -154,7 +156,7 @@ function setup() {
 describe('browser timing adapter', () => {
   it('uses the injected window for deferred tasks, idempotent cancellation, and monotonic time', () => {
     const window = new TestWindow()
-    const timing = createBrowserTiming(window as unknown as Window)
+    const timing = createBrowserTiming(window)
     const received = vi.fn()
     const cancel = timing.scheduler.schedule(received, 10)
     const task = window.tasks.values().next().value!
@@ -287,6 +289,21 @@ describe('shared keyboard adapter', () => {
     cleanup()
   })
 
+  it.each([null, new EventTarget(), Object.assign(new EventTarget(), { nodeType: 3 })])(
+    'cancels input when focus moves to a non-element target: %#',
+    (relatedTarget) => {
+      const { document, surface, messages, handler, cleanup } = setup()
+      document.activeElement = surface
+      key(surface, 'keydown', 'KeyW')
+      const event = new Event('focusout')
+      Object.assign(event, { relatedTarget })
+      surface.dispatchEvent(event)
+      messages.flush()
+      expect(handler.mock.calls.map(([message]) => message.phase)).toEqual(['pressed', 'cancelled'])
+      cleanup()
+    },
+  )
+
   it('removes all listeners and cleans up idempotently', () => {
     const { document, surface, input, messages, handler, cleanup } = setup()
     document.activeElement = surface
@@ -334,7 +351,7 @@ describe.each([
       createHost(container.asElement()),
       logger,
       () => new MessageBus<EngineMessages>(),
-      createBrowserTiming(document.defaultView as unknown as Window),
+      createBrowserTiming(document.defaultView),
     )
     await engine.start()
     document.defaultView.drain()

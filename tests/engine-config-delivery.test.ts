@@ -22,6 +22,7 @@ describe('engine runtime configuration delivery', () => {
     })
     try {
       await server.listen()
+      // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
       const address = server.httpServer?.address() as AddressInfo
       const response = await fetch(`http://127.0.0.1:${address.port}/nested/config.json?fresh=1`)
       expect(response.headers.get('content-type')).toContain('application/json')
@@ -38,6 +39,7 @@ describe('engine runtime configuration delivery', () => {
         preview: { host: '127.0.0.1', port: 0, strictPort: true },
       })
       try {
+        // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
         const previewAddress = production.httpServer.address() as AddressInfo
         const runtime = await fetch(`http://127.0.0.1:${previewAddress.port}/nested/config.json`)
         await expect(runtime.json()).resolves.toEqual({ gameUrl: 'https://cdn.example/changed/' })

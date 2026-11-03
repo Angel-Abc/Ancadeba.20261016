@@ -25,6 +25,7 @@
     "@ancadeba/ui-components": "workspace:*",
     "@ancadeba/utilities": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
+    "@oxlint/plugins": "1.88.0",
     "@types/node": "^24.19.2",
     "fflate": "^0.8.3",
     "tsx": "4.23.15",

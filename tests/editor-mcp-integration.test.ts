@@ -54,6 +54,7 @@ describe('MCP and shared editor integration', () => {
     )
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
     mcp = createMcpServer(
       new EditorApiClient({ editorServerUrl: base, game: 'basic', timeoutMs: 2000 }, fetch),
@@ -75,6 +76,7 @@ describe('MCP and shared editor integration', () => {
   async function inspect() {
     const result = await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(result.isError).toBe(false)
+    // SAFETY: the successful inspect tool wraps our fixture game and revision in data.
     return (
       result.structuredContent as {
         data: { revision: string; game: typeof manifest; diagnostics: unknown[] }
@@ -105,6 +107,7 @@ describe('MCP and shared editor integration', () => {
         arguments: { ...operation.arguments, expectedRevision: revision },
       })
       expect(result.isError).toBe(false)
+      // SAFETY: each successful mutation returns the newly saved revision in data.
       const data = (result.structuredContent as { data: { revision: string } }).data
       expect(data.revision).not.toBe(revision)
       revision = data.revision

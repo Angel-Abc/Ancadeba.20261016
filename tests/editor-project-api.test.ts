@@ -58,6 +58,7 @@ describe('shared editor project API', () => {
     )
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   })
   afterEach(async () => {
@@ -66,6 +67,7 @@ describe('shared editor project API', () => {
     )
     await rm(root, { recursive: true, force: true })
   })
+  // SAFETY: this helper calls our editor project route, whose success response is ProjectView.
   const inspect = async () =>
     (await fetch(`${base}/api/editor/project?path=basic`)).json() as Promise<ProjectView>
   const command = (revision: string, operation: unknown, path = 'basic') =>
@@ -81,6 +83,7 @@ describe('shared editor project API', () => {
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)
+    // SAFETY: the successful scene.create route returns the updated ProjectView.
     const first = (await created.json()) as ProjectView
     expect(first.revision).not.toBe(initial.revision)
     expect(first.game?.scenes).toEqual(['shop'])

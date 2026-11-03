@@ -32,7 +32,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
       throw new EditorError(409, 'scene_exists', 'Scene ID already exists')
     }
     // Clone the validated scene, including extension properties and normalized metadata.
-    documents[file] = JSON.parse(JSON.stringify(command.scene)) as unknown
+    documents[file] = JSON.parse(JSON.stringify(command.scene))
     documents['game.json'] = {
       ...object(documents['game.json']),
       scenes: [...game.scenes, command.scene.id],

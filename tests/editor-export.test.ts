@@ -22,7 +22,7 @@ function gameDefinition(title: string) {
     title,
     description: 'Test game',
     version: '1.0.0',
-    scenes: [] as string[],
+    scenes: Array<string>(),
   }
 }
 
@@ -60,6 +60,7 @@ describe('editor game export API', () => {
     )
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   })
 
@@ -222,6 +223,7 @@ describe('editor game export API', () => {
     )
     disconnected.listen(0, '127.0.0.1')
     await once(disconnected, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const port = (disconnected.address() as AddressInfo).port
     const abort = new AbortController()
     try {

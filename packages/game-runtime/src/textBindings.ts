@@ -36,6 +36,7 @@ export function resolveText(
   let offset = 0
   for (const { alias, index, length } of textPlaceholders(template.text)) {
     if (!replacements.has(alias)) {
+      // SAFETY: an own data property of the typed binding map is a GameBinding; absent/accessor properties yield undefined.
       const binding = Object.getOwnPropertyDescriptor(template.bindings, alias)?.value as
         | GameBinding
         | undefined

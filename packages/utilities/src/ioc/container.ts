@@ -16,6 +16,7 @@ export class Container<S> implements Resolver<S> {
   resolve<K extends keyof S>(key: K): S[K] {
     // Reuse an existing instance.
     if (this.instances.has(key)) {
+      // SAFETY: only factories[key] populates this cache entry, and it returns S[K].
       return this.instances.get(key) as S[K]
     }
 

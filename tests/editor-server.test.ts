@@ -29,6 +29,7 @@ describe('editor server', () => {
     server = createEditorServer({ workFolder: root, host: '127.0.0.1', port: 3100 }, workspace)
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const address = server.address() as AddressInfo
     baseUrl = `http://127.0.0.1:${address.port}`
   })
@@ -155,6 +156,7 @@ describe('editor server', () => {
     const link = join(root, 'linked')
     await symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
     const listing = await fetch(`${baseUrl}/api/workspace`)
+    // SAFETY: this request targets our workspace-listing route, whose entries have string names.
     const body = (await listing.json()) as { entries: { name: string }[] }
     expect(body.entries.some((entry) => entry.name === 'linked')).toBe(false)
     for (const [method, path] of [

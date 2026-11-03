@@ -68,6 +68,17 @@ Tests belong in `tests/**/*.test.ts` and import test APIs from `vite-plus/test`.
 The integration tests exercise compiled workspace exports and real HTTP requests
 to the server on an automatically allocated local port.
 
+Lint also runs a selective set of vendored anti-slop rules: no chained assertions,
+known-value widening, module mocking, broad `object` parameters, reflective
+`get`/`apply`, or widen-then-assert flows. Necessary assertions require a specific
+`// SAFETY:` invariant. Boundary `unknown` values, runtime type checks, raw JSON
+dictionaries, and existing spacing remain supported. Tests that deliberately
+violate types use a line-scoped, explained exception; there is no blanket test
+override. Unused lint suppressions fail lint, and TypeScript checks unused
+`@ts-expect-error` directives. See
+[`tools/oxlint/anti-slop/UPSTREAM.md`](tools/oxlint/anti-slop/UPSTREAM.md) for
+provenance and upgrade notes.
+
 VS Code recommendations include the Vite+ extension pack and TypeScript Native
 Preview extension, with Oxc formatting and fix actions on save.
 

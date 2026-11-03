@@ -48,8 +48,14 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     if (usesNativeKeyboard(document.activeElement)) reset()
   }
   const onFocusOut = (event: FocusEvent) => {
-    const target = event.relatedTarget as Element | null
-    if (!surface.contains(target) || usesNativeKeyboard(target)) reset()
+    const target = event.relatedTarget
+    if (!target || !('nodeType' in target) || target.nodeType !== 1) {
+      reset()
+      return
+    }
+    // SAFETY: nodeType 1 identifies an Element, including elements from another browsing context.
+    const element = target as Element
+    if (!surface.contains(element) || usesNativeKeyboard(element)) reset()
   }
   const onVisibilityChange = () => {
     if (document.hidden) reset()

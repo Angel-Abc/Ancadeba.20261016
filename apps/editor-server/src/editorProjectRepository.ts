@@ -45,7 +45,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       }
       sources.push([file, Buffer.from(bytes).toString('base64')])
       try {
-        documents[file] = JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown
+        documents[file] = JSON.parse(Buffer.from(bytes).toString('utf8'))
       } catch {
         sourceDiagnostics.push({
           code: 'invalid_json',
@@ -96,7 +96,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           const currentBytes = await this.workspace.read(manifestPath)
           if (Buffer.from(currentBytes).equals(manifestBytes)) return
           const manifest = gameSchema.safeParse(
-            JSON.parse(Buffer.from(currentBytes).toString('utf8')) as unknown,
+            JSON.parse(Buffer.from(currentBytes).toString('utf8')),
           )
           if (!manifest.success || manifest.data.scenes.includes(sceneId)) {
             throw new Error('Cannot confirm that the manifest does not reference the scene')

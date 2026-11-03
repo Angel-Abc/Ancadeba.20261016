@@ -35,6 +35,7 @@ export class EditorError extends Error {
   }
 }
 export function object(value: unknown): Record<string, unknown> {
+  // SAFETY: the true branch checks for a non-null, non-array object; fields remain unknown.
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}

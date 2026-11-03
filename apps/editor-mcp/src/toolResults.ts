@@ -1,15 +1,10 @@
 import type { CallToolResult } from '@modelcontextprotocol/server'
 import { EditorApiError } from './editorApiClient.js'
 
-export async function toolResult(
-  operation: () => Promise<Record<string, unknown>>,
-): Promise<CallToolResult> {
-  let output: Record<string, unknown>
-  let isError = false
+async function executeOperation(operation: () => Promise<Record<string, unknown>>) {
   try {
-    output = { ok: true, data: await operation() }
+    return { ok: true as const, data: await operation() }
   } catch (error) {
-    isError = true
     const failure =
       error instanceof EditorApiError
         ? error
@@ -19,8 +14,8 @@ export async function toolResult(
             [],
             'unknown',
           )
-    output = {
-      ok: false,
+    return {
+      ok: false as const,
       error: {
         code: failure.code,
         message: failure.message,
@@ -36,8 +31,14 @@ export async function toolResult(
       },
     }
   }
+}
+
+export async function toolResult(
+  operation: () => Promise<Record<string, unknown>>,
+): Promise<CallToolResult> {
+  const output = await executeOperation(operation)
   return {
-    isError,
+    isError: !output.ok,
     structuredContent: output,
     content: [{ type: 'text', text: JSON.stringify(output) }],
   }

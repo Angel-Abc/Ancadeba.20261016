@@ -48,6 +48,7 @@ describe('MessageBus delivery filters', () => {
       aggregate = error
     }
     expect(aggregate).toBeInstanceOf(AggregateError)
+    // SAFETY: the preceding assertion checked the captured failure is an AggregateError.
     expect((aggregate as AggregateError).errors).toEqual([predicateFailure, subscriberFailure])
     expect(calls).toEqual([2, 3])
     expect(() => bus.flush()).not.toThrow()
@@ -265,6 +266,7 @@ describe('MessageBus', () => {
     }
 
     expect(caught).toBeInstanceOf(AggregateError)
+    // SAFETY: the preceding assertion checked the captured failure is an AggregateError.
     expect((caught as AggregateError).errors).toEqual([
       failure,
       'non-Error failure',

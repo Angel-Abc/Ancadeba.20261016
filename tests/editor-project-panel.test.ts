@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
-import type { CommandRequest, ProjectView } from '@ancadeba/editor-core'
+import { commandRequestSchema, type CommandRequest, type ProjectView } from '@ancadeba/editor-core'
 import { bindProjectPanel } from '../apps/editor-ui/src/projectPanel.js'
 
 // A small DOM surface for testing form reconciliation without a browser runtime.
@@ -71,14 +71,16 @@ function panel() {
     querySelector: (selector: string) => control(selector.slice(1)),
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
-  const fetcher = (async (_url, init) => {
+  const fetcher: typeof fetch = async (_url, init) => {
     if (init?.method === 'POST') {
-      requests.push(JSON.parse(init.body as string) as CommandRequest)
+      if (typeof init.body !== 'string') throw new Error('Expected a JSON request body')
+      requests.push(commandRequestSchema.parse(JSON.parse(init.body)))
     }
     return new Response(JSON.stringify(latest))
-  }) as typeof fetch
+  }
   const dispose = bindProjectPanel(
-    root as unknown as Parameters<typeof bindProjectPanel>[0],
+    // @ts-expect-error -- Deliberately partial DOM fixture supplies only the query and control operations used by the panel.
+    root,
     fetcher,
   )
   return {

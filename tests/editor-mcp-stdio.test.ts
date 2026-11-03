@@ -53,6 +53,7 @@ describe('MCP stdio process', () => {
     )
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   })
   afterEach(async () => {
@@ -96,6 +97,7 @@ describe('MCP stdio process', () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
     expect((await activeClient.listTools()).tools).toHaveLength(7)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
     const result = await activeClient.callTool({
       name: 'ancadeba_update_game_metadata',
@@ -117,6 +119,7 @@ describe('MCP stdio process', () => {
     if (pid !== null) expect(() => process.kill(pid, 0)).toThrow()
   })
   it('can list tools while the editor is offline and recovers when that same server returns', async () => {
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const port = (server.address() as AddressInfo).port
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

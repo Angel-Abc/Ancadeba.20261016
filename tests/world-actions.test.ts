@@ -98,6 +98,7 @@ function setup(
           ['capture', capture],
           [
             'cost',
+            // SAFETY: cost requests in this suite supply numeric world-time costs.
             (request) => ({ status: 'applied', worldTimeCostMs: request.payload as number }),
           ],
           ...Object.entries(options.handlers ?? {}),

@@ -1,13 +1,14 @@
 import { createWriteStream } from 'node:fs'
+import { Readable } from 'node:stream'
 import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { ZipFile } from 'yazl'
 
 export async function writeGameArchive(source: string, destination: string): Promise<void> {
   const zip = new ZipFile()
-  const output = zip.outputStream as Readable
+  const output = zip.outputStream
+  if (!(output instanceof Readable)) throw new TypeError('ZIP output must be a readable stream')
   zip.on('error', (error: Error) => output.destroy(error))
   const completed = pipeline(output, createWriteStream(destination, { flags: 'wx' }))
   // Handle early stream failures while file metadata is still being collected.

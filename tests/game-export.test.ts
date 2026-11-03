@@ -134,6 +134,7 @@ describe('standalone game export', () => {
       preview: { host: '127.0.0.1', port: 0, strictPort: true },
     })
     try {
+      // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
       const address = server.httpServer.address() as AddressInfo
       const applicationUrl = `http://127.0.0.1:${address.port}/nested/game/`
       const html = await (await fetch(applicationUrl)).text()
@@ -188,6 +189,7 @@ describe('standalone game export', () => {
       fileServer.listen(0, '127.0.0.1')
       await once(fileServer, 'listening')
       try {
+        // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
         const address = fileServer.address() as AddressInfo
         const resources = new HttpGameResources(
           '/game/',

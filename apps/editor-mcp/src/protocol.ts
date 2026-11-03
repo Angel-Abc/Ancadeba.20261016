@@ -1,18 +1,8 @@
 import { z } from 'zod'
-import { gameSchema, sceneSchema } from '@ancadeba/schemas'
+import { sceneSchema } from '@ancadeba/schemas'
+import { diagnosticSchema, projectViewSchema } from '@ancadeba/editor-core'
 
-export const diagnosticSchema = z.object({
-  code: z.string(),
-  file: z.string(),
-  path: z.array(z.union([z.string(), z.number()])),
-  message: z.string(),
-})
-export const projectViewSchema = z.object({
-  revision: z.string().min(1),
-  game: gameSchema.nullable(),
-  scenes: z.array(sceneSchema),
-  diagnostics: z.array(diagnosticSchema),
-})
+export { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
 export const sceneViewSchema = z.object({
   revision: z.string().min(1),
   scene: sceneSchema,
@@ -26,11 +16,6 @@ export const capabilitiesSchema = z.object({
 export const appliedChangeSchema = projectViewSchema.extend({
   changedFiles: z.array(z.string()),
   summary: z.string(),
-})
-export const apiErrorSchema = z.object({
-  error: z.string(),
-  code: z.string().optional(),
-  diagnostics: z.array(diagnosticSchema).default([]),
 })
 export const toolErrorSchema = z.object({
   code: z.string(),

@@ -104,7 +104,7 @@ export function createEditorServer(
         const bytes = await readBody(request)
         let body: unknown
         try {
-          body = JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown
+          body = JSON.parse(Buffer.from(bytes).toString('utf8'))
         } catch {
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
         }

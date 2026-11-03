@@ -7,9 +7,13 @@ import type {
   Unsubscribe,
 } from './index.js'
 
+interface PendingDelivery {
+  cancel?: Unsubscribe
+}
+
 /** Schedules one deferred snapshot batch at a time around a caller-owned raw bus. */
 export class ScheduledMessageBus<Topics> implements IMessageBus<Topics> {
-  private pending: { cancel?: Unsubscribe } | undefined
+  private pending: PendingDelivery | undefined
   private flushing = false
   private sealed = false
 
@@ -56,7 +60,7 @@ export class ScheduledMessageBus<Topics> implements IMessageBus<Topics> {
 
   private requestDelivery(): void {
     if (this.pending) return
-    const task: { cancel?: Unsubscribe } = {}
+    const task: PendingDelivery = {}
     this.pending = task
     task.cancel = this.scheduler.schedule(() => {
       if (this.pending !== task) return

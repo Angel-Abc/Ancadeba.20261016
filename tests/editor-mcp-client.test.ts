@@ -31,21 +31,21 @@ function requestUrl(value: Parameters<typeof fetch>[0]): string {
 function json(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), { status })
 }
-const cancelledFetch = (async (_url, init) =>
-  new Promise((_resolve, reject) => {
+const cancelledFetch: typeof fetch = async (_url, init) =>
+  new Promise<Response>((_resolve, reject) => {
     const signal = init?.signal
     if (signal?.aborted) reject(signal.reason)
     else signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
-  })) as typeof fetch
+  })
 
 describe('MCP editor HTTP client', () => {
   it('uses only the configured project, validates responses, and never binds native fetch to a client receiver', async () => {
     const requests: { url: string; init?: RequestInit }[] = []
-    const fetcher = async function (this: unknown, url, init) {
+    const fetcher: typeof fetch = async function (this: unknown, url, init) {
       expect(this).toBeUndefined()
       requests.push({ url: requestUrl(url), ...(init ? { init } : {}) })
       return json(requestUrl(url).endsWith('capabilities') ? capabilities : view)
-    } as typeof fetch
+    }
     const client = new EditorApiClient(config, fetcher)
     await client.inspectGame()
     await client.apply('old', metadata)
@@ -54,7 +54,9 @@ describe('MCP editor HTTP client', () => {
       'http://127.0.0.1:3100/api/editor/capabilities',
       'http://127.0.0.1:3100/api/editor/commands',
     ])
-    expect(JSON.parse(requests[2]?.init?.body as string)).toEqual({
+    const body = requests[2]?.init?.body
+    if (typeof body !== 'string') throw new Error('Expected a JSON request body')
+    expect(JSON.parse(body)).toEqual({
       path: config.game,
       expectedRevision: 'old',
       command: metadata,
@@ -68,10 +70,10 @@ describe('MCP editor HTTP client', () => {
       { ...capabilities, commands: [] },
     ]) {
       let calls = 0
-      const client = new EditorApiClient(config, (async () => {
+      const client = new EditorApiClient(config, async () => {
         calls++
         return json(remote)
-      }) as typeof fetch)
+      })
       await expect(client.apply('old', metadata)).rejects.toMatchObject({
         code: remote.version === 2 ? 'incompatible_api' : 'unsupported_command',
         outcome: 'not_applied',
@@ -83,18 +85,20 @@ describe('MCP editor HTTP client', () => {
     const diagnostics = [
       { code: 'invalid_document', file: 'game.json', path: ['title'], message: 'Required' },
     ]
-    const client = new EditorApiClient(config, (async (url) =>
+    const client = new EditorApiClient(config, async (url) =>
       requestUrl(url).endsWith('capabilities')
         ? json(capabilities)
-        : json({ error: 'Changed', code: 'revision_conflict', diagnostics }, 409)) as typeof fetch)
+        : json({ error: 'Changed', code: 'revision_conflict', diagnostics }, 409),
+    )
     await expect(client.apply('old', metadata)).rejects.toMatchObject({
       code: 'revision_conflict',
       status: 409,
       diagnostics,
       outcome: 'not_applied',
     })
-    const legacy = new EditorApiClient(config, (async () =>
-      json({ error: 'Resource not found' }, 404)) as typeof fetch)
+    const legacy = new EditorApiClient(config, async () =>
+      json({ error: 'Resource not found' }, 404),
+    )
     await expect(legacy.inspectGame()).rejects.toMatchObject({
       code: 'not_found',
       status: 404,
@@ -108,11 +112,11 @@ describe('MCP editor HTTP client', () => {
       () => json({ notAnError: true }, 500),
     ]) {
       let posts = 0
-      const client = new EditorApiClient(config, (async (url) => {
+      const client = new EditorApiClient(config, async (url) => {
         if (requestUrl(url).endsWith('capabilities')) return json(capabilities)
         posts++
         return response()
-      }) as typeof fetch)
+      })
       await expect(client.apply('old', metadata)).rejects.toMatchObject({
         code: 'invalid_response',
         outcome: 'unknown',
@@ -123,12 +127,12 @@ describe('MCP editor HTTP client', () => {
   it('does not retry disconnected or timed-out writes and tells the model to inspect first', async () => {
     for (const disconnect of [true, false]) {
       let posts = 0
-      const client = new EditorApiClient({ ...config, timeoutMs: 15 }, (async (url, init) => {
+      const client = new EditorApiClient({ ...config, timeoutMs: 15 }, async (url, init) => {
         if (requestUrl(url).endsWith('capabilities')) return json(capabilities)
         posts++
         if (disconnect) throw new Error('Socket closed after saving')
         return cancelledFetch(url, init)
-      }) as typeof fetch)
+      })
       const result = await toolResult(() => client.apply('old', metadata))
       expect(result.isError).toBe(true)
       expect(result.structuredContent).toMatchObject({
@@ -147,10 +151,10 @@ describe('MCP editor HTTP client', () => {
   })
   it('reports cancellation before dispatch as not applied and aborts requests on shutdown', async () => {
     let requests = 0
-    const client = new EditorApiClient(config, (async () => {
+    const client = new EditorApiClient(config, async () => {
       requests++
       return json(view)
-    }) as typeof fetch)
+    })
     await expect(client.inspectGame(AbortSignal.abort())).rejects.toMatchObject({
       code: 'cancelled',
       outcome: 'not_applied',
@@ -164,10 +168,10 @@ describe('MCP editor HTTP client', () => {
   })
   it('classifies a failed capability check as not applied, without posting a mutation', async () => {
     let calls = 0
-    const client = new EditorApiClient(config, (async () => {
+    const client = new EditorApiClient(config, async () => {
       calls++
       throw new Error('Offline')
-    }) as typeof fetch)
+    })
     await expect(client.apply('old', metadata)).rejects.toMatchObject({
       code: 'server_unavailable',
       outcome: 'not_applied',
@@ -181,12 +185,12 @@ describe('MCP editor HTTP client', () => {
       markSent = resolve
     })
     let posts = 0
-    const client = new EditorApiClient(config, (async (url, init) => {
+    const client = new EditorApiClient(config, async (url, init) => {
       if (requestUrl(url).endsWith('capabilities')) return json(capabilities)
       posts++
       markSent()
       return cancelledFetch(url, init)
-    }) as typeof fetch)
+    })
     const pending = client.apply('old', metadata, cancelled.signal)
     await sent
     cancelled.abort()
@@ -196,7 +200,7 @@ describe('MCP editor HTTP client', () => {
   it('keeps the timeout active while consuming the response body', async () => {
     const client = new EditorApiClient(
       { ...config, timeoutMs: 15 },
-      (async (_url, init) =>
+      async (_url, init) =>
         new Response(
           new ReadableStream({
             start(controller) {
@@ -205,7 +209,7 @@ describe('MCP editor HTTP client', () => {
               })
             },
           }),
-        )) as typeof fetch,
+        ),
     )
     await expect(client.inspectGame()).rejects.toMatchObject({
       code: 'timeout',
@@ -213,13 +217,14 @@ describe('MCP editor HTTP client', () => {
     })
   })
   it('treats server-side storage failures as uncertain writes and preserves their diagnostics', async () => {
-    const client = new EditorApiClient(config, (async (url) =>
+    const client = new EditorApiClient(config, async (url) =>
       requestUrl(url).endsWith('capabilities')
         ? json(capabilities)
         : json(
             { error: 'Reload before retrying', code: 'scene_cleanup_failed', diagnostics: [] },
             500,
-          )) as typeof fetch)
+          ),
+    )
     await expect(client.apply('old', metadata)).rejects.toMatchObject({
       code: 'scene_cleanup_failed',
       status: 500,
@@ -231,11 +236,11 @@ describe('MCP editor HTTP client', () => {
     'reports a legacy workspace HTTP %i write error as uncertain',
     async (status) => {
       let posts = 0
-      const client = new EditorApiClient(config, (async (url) => {
+      const client = new EditorApiClient(config, async (url) => {
         if (requestUrl(url).endsWith('capabilities')) return json(capabilities)
         posts++
         return json({ error: 'Workspace reread failed' }, status)
-      }) as typeof fetch)
+      })
       const result = await toolResult(() => client.apply('old', metadata))
       expect(result.structuredContent).toMatchObject({
         ok: false,
@@ -260,10 +265,11 @@ describe('MCP editor HTTP client', () => {
   ] as const)(
     'recognizes a definite rejection %s with HTTP %i before persistence',
     async (code, status) => {
-      const client = new EditorApiClient(config, (async (url) =>
+      const client = new EditorApiClient(config, async (url) =>
         requestUrl(url).endsWith('capabilities')
           ? json(capabilities)
-          : json({ error: 'Rejected', ...(code ? { code } : {}) }, status)) as typeof fetch)
+          : json({ error: 'Rejected', ...(code ? { code } : {}) }, status),
+      )
       await expect(client.apply('old', metadata)).rejects.toMatchObject({
         status,
         outcome: 'not_applied',
@@ -272,19 +278,20 @@ describe('MCP editor HTTP client', () => {
   )
 
   it('does not trust rejection codes returned with inconsistent status codes', async () => {
-    const client = new EditorApiClient(config, (async (url) =>
+    const client = new EditorApiClient(config, async (url) =>
       requestUrl(url).endsWith('capabilities')
         ? json(capabilities)
-        : json({ error: 'Unexpected failure', code: 'revision_conflict' }, 500)) as typeof fetch)
+        : json({ error: 'Unexpected failure', code: 'revision_conflict' }, 500),
+    )
     await expect(client.apply('old', metadata)).rejects.toMatchObject({ outcome: 'unknown' })
   })
 
   it('reports local invalid revisions and commands as not applied without any HTTP requests', async () => {
     let calls = 0
-    const client = new EditorApiClient(config, (async () => {
+    const client = new EditorApiClient(config, async () => {
       calls++
       throw new Error('Should not send')
-    }) as typeof fetch)
+    })
     for (const request of [
       () => client.apply('', metadata),
       () =>

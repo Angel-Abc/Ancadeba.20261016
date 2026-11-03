@@ -311,7 +311,8 @@ describe('independent action progression', () => {
     const old = events.applied.mock.calls[0]![0].progression
     expect(Object.isFrozen(old)).toBe(true)
     expect(() => {
-      ;(old as { turn: number }).turn = 99
+      // @ts-expect-error -- Deliberately write to a readonly snapshot to verify it is frozen at runtime.
+      old.turn = 99
     }).toThrow(TypeError)
     expect(engine.actions!.progression).toEqual({ turn: 2, worldTimeMs: 12.5 })
     engine.stop()
@@ -462,6 +463,7 @@ describe('action failures and lifecycle', () => {
   ])('fails invalid outcomes without committing progression: %#', async (invalid) => {
     const { engine, timing, logger } = await start({
       rules: rules({
+        // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Deliberately invalid outcomes exercise runtime validation.
         invalid: () => invalid as ActionOutcome,
         valid: () => ({ status: 'applied', advanceTurn: true }),
       }),
@@ -488,8 +490,10 @@ describe('action failures and lifecycle', () => {
           throws: () => {
             throw failure
           },
-          async: () =>
-            Promise.reject(new Error('Unexpected async rejection')) as unknown as ActionOutcome,
+          async: (): ActionOutcome => {
+            // @ts-expect-error -- Deliberately return a rejected promise to verify synchronous-handler enforcement.
+            return Promise.reject(new Error('Unexpected async rejection'))
+          },
         },
         [],
         { mode: 'hybrid' },
@@ -505,6 +509,7 @@ describe('action failures and lifecycle', () => {
     await Promise.resolve()
     expect(events.failed).toHaveBeenCalledTimes(2)
     expect(events.failed.mock.calls[0]![0].error).toBe(failure)
+    // SAFETY: the runtime constructs an Error when the handler returns a promise.
     expect((events.failed.mock.calls[1]![0].error as Error).message).toContain('synchronous')
     expect(logger.error).toHaveBeenCalledTimes(2)
     expect(engineFailed).not.toHaveBeenCalled()
@@ -525,7 +530,8 @@ describe('action failures and lifecycle', () => {
       { context: '', input: 'moveNorth', action: 'known' },
     ]),
     rules({ '': () => ({ status: 'applied' }) }),
-    rules({}, [], { mode: 'invalid' } as unknown as WorldTimePolicy),
+    // @ts-expect-error -- Deliberately invalid mode exercises rule validation before mounting.
+    rules({}, [], { mode: 'invalid' }),
     rules({}, [], { mode: 'elapsed', rate: 0 }),
     rules({}, [], { mode: 'elapsed', rate: Infinity }),
     rules({}, [], { mode: 'elapsed', pulseMs: 0 }),

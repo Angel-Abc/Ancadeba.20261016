@@ -133,6 +133,7 @@ const scoreRules: GameRulesFactory = (_data, game) => ({
     [
       'act',
       () => {
+        // SAFETY: setup pairs these rules with a lifecycle factory that creates { score: 0 }.
         const state = game.state as { score: number }
         state.score++
         return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
@@ -202,6 +203,7 @@ describe('playthrough-owned bindings', () => {
     const game = engine.lifecycle!.startGame()
     const changed = vi.fn()
     game.bindings!.subscribeChanges(changed)
+    // SAFETY: setup creates { score: 0 } for every live game instance.
     const state = game.state as { score: number }
     state.score = 7
     timing.drain()
