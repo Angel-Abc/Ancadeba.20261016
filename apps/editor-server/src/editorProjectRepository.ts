@@ -71,6 +71,10 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       for (const id of game.data.scenes) await read(`scenes/${id}.json`)
 
       if (game.data.input) await read(game.data.input)
+
+      for (const language of game.data.languages?.available ?? []) {
+        await read(`languages/${language}/messages.json`)
+      }
     }
 
     return {

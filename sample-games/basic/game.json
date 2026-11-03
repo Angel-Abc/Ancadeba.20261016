@@ -1,10 +1,14 @@
 {
   "schema-version": "1.0.0",
   "id": "basic-game",
-  "title": "Basic Game",
-  "description": "A basic game example",
   "version": "1.0.0",
   "initial-scene": "start-screen",
   "scenes": ["standard", "inventory", "settings", "start-screen"],
-  "input": "input.json"
+  "input": "input.json",
+  "titleKey": "game.title",
+  "descriptionKey": "game.description",
+  "languages": {
+    "default": "en",
+    "available": ["en", "nl"]
+  }
 }

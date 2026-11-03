@@ -47,6 +47,45 @@ function createDependencies() {
 }
 
 describe('editor container', () => {
+  it('reads the current game language preference each time the preview restarts', async () => {
+    const { dependencies } = createDependencies()
+    let language = 'en'
+    dependencies.fetcher.mockImplementation(async (url) => {
+      const path = new URL(
+        url instanceof Request ? url.url : url,
+        'http://localhost',
+      ).searchParams.get('path')!
+
+      const document = path.endsWith('game.json')
+        ? {
+            ...gameDefinition('Base'),
+            titleKey: 'title',
+            languages: { default: 'en', available: ['en', 'nl'] },
+          }
+        : { title: path.includes('/nl/') ? 'Nederlands' : 'English' }
+
+      return new Response(JSON.stringify(document))
+    })
+
+    const container = new ContainerBuilder({
+      ...dependencies,
+      getPreferredGameLanguages: () => [language],
+    }).build()
+
+    const controller = container.resolve('previewController')
+
+    try {
+      await controller.start('localized')
+      expect(dependencies.host.mount.mock.calls.at(-1)?.[0].title).toBe('English')
+      controller.stop()
+      language = 'nl'
+      await controller.start('localized')
+      expect(dependencies.host.mount.mock.calls.at(-1)?.[0].title).toBe('Nederlands')
+    } finally {
+      controller.dispose()
+    }
+  })
+
   it('builds lazily and wires the preview controller to its registered dependencies', async () => {
     const { dependencies, cleanup } = createDependencies()
     const container = new ContainerBuilder(dependencies).build()

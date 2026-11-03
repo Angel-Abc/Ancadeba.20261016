@@ -22,6 +22,7 @@ export interface PreviewDependencies {
   runtime: EngineRuntimeServices
   logger: ILogger
   onPreviewStateChange: PreviewStateListener
+  getPreferredGameLanguages?: () => readonly string[]
 }
 
 export interface PreviewServices {
@@ -38,11 +39,13 @@ export const previewFactories = {
     const logger = resolver.resolve('logger')
     const createMessageBus = resolver.resolve('createMessageBus')
     const runtime = resolver.resolve('runtime')
+    const getPreferredLanguages = resolver.resolve('getPreferredGameLanguages')
 
     return (folder: string) =>
       new Engine(
         new GameLoader(
           new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+          getPreferredLanguages?.() ?? [],
         ),
         host,
         logger,

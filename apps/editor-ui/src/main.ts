@@ -5,6 +5,37 @@ import type { EngineState } from '@ancadeba/game-runtime'
 import { createBrowserTiming } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
 import { ContainerBuilder } from './ioc/containerBuilder'
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
+import type { ExportState } from './exportController.js'
+
+let localization = editorLocalization()
+const t: Translate = (key, values) => localization.t(key, values)
+const languageListeners = new Set<() => void>()
+
+const subscribeLanguageChanges = (listener: () => void) => {
+  languageListeners.add(listener)
+
+  return () => {
+    languageListeners.delete(listener)
+  }
+}
+
+function translatePage(): void {
+  document.documentElement.lang = localization.language
+
+  for (const node of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
+    node.textContent = t(node.dataset.i18n!)
+  }
+
+  for (const attribute of ['placeholder', 'aria-label']) {
+    for (const node of document.querySelectorAll<HTMLElement>(`[data-i18n-${attribute}]`)) {
+      node.setAttribute(attribute, t(node.getAttribute(`data-i18n-${attribute}`)!))
+    }
+  }
+}
+
+translatePage()
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector)
@@ -16,6 +47,11 @@ function element<T extends HTMLElement>(selector: string): T {
 
 const form = element<HTMLFormElement>('#preview-form')
 const folder = element<HTMLInputElement>('#game-folder')
+const gameLanguage = element<HTMLInputElement>('#game-language')
+const editorLanguage = element<HTMLSelectElement>('#editor-language')
+
+editorLanguage.value = localization.language
+
 const start = element<HTMLButtonElement>('#preview-start')
 const stop = element<HTMLButtonElement>('#preview-stop')
 const panel = element<HTMLElement>('.preview-panel')
@@ -31,11 +67,34 @@ const exportDownload = element<HTMLAnchorElement>('#export-download')
 let previewState: EngineState = 'stopped'
 let exporting = false
 let downloadUrl: string | undefined
+let exportState: ExportState = 'idle'
+let exportMessage: string | undefined
+let previewMessage: string | undefined
+
+function renderExportState(): void {
+  exportButton.textContent = t(exporting ? 'export.exporting' : 'export.button')
+  exportStatus.textContent = exporting
+    ? t('export.building')
+    : exportState === 'ready'
+      ? t('export.ready', { file: exportMessage ?? 'game.zip' })
+      : ''
+  exportError.textContent =
+    exportState === 'error'
+      ? t('export.error', { message: exportMessage ?? t('export.failed') })
+      : ''
+}
+
+function renderPreviewState(): void {
+  status.textContent = t(`preview.${previewState}`)
+  empty.textContent = t(previewState === 'starting' ? 'preview.loading' : 'preview.empty')
+  error.textContent = previewMessage ? t('preview.error', { message: previewMessage }) : ''
+}
 
 function updateControls(): void {
   start.disabled = previewState !== 'stopped' || exporting
   stop.disabled = previewState === 'stopped'
   folder.disabled = previewState !== 'stopped' || exporting
+  gameLanguage.disabled = previewState !== 'stopped' || exporting
   exportButton.disabled = exporting || previewState === 'starting'
 }
 
@@ -48,7 +107,10 @@ function clearDownload(): void {
 
 const container = new ContainerBuilder({
   fetcher: fetch,
-  host: new EditorPreviewHost(content),
+  host: new EditorPreviewHost(content, t, subscribeLanguageChanges),
+  getPreferredGameLanguages: () => {
+    return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []
+  },
   runtime: createBrowserTiming(window),
   download: (archive, fileName) => {
     clearDownload()
@@ -60,14 +122,9 @@ const container = new ContainerBuilder({
   },
   onExportStateChange: (state, message) => {
     exporting = state === 'exporting'
-    exportButton.textContent = exporting ? 'Exporting…' : 'Export'
-    exportStatus.textContent = exporting
-      ? 'Building the game from its saved workspace files…'
-      : state === 'ready'
-        ? `Export ready: ${message ?? 'game.zip'}`
-        : ''
-    exportError.textContent =
-      state === 'error' ? `Unable to export game: ${message ?? 'Export failed'}` : ''
+    exportState = state
+    exportMessage = message
+    renderExportState()
     exportError.hidden = state !== 'error'
 
     if (state === 'exporting' || state === 'error') clearDownload()
@@ -75,14 +132,12 @@ const container = new ContainerBuilder({
   },
   onPreviewStateChange: (state, message) => {
     previewState = state
+    previewMessage = message
     panel.dataset.state = state
-    status.textContent = { stopped: 'Stopped', starting: 'Starting…', running: 'Running' }[state]
+    renderPreviewState()
     updateControls()
     content.setAttribute('aria-busy', String(state === 'starting'))
     empty.hidden = state === 'running'
-    empty.textContent =
-      state === 'starting' ? 'Loading game.json…' : 'Start the engine to preview the game.'
-    error.textContent = message ? `Unable to start preview: ${message}` : ''
     error.hidden = !message
   },
 }).build()
@@ -109,10 +164,27 @@ exportButton.addEventListener('click', onExport)
 
 controller.stop()
 
-const disposeProjectPanel = bindProjectPanel(element<HTMLElement>('#project-editor'), fetch)
+const disposeProjectPanel = bindProjectPanel(
+  element<HTMLElement>('#project-editor'),
+  fetch,
+  t,
+  subscribeLanguageChanges,
+)
+
+const onLanguageChange = () => {
+  localization = editorLocalization([editorLanguage.value])
+  translatePage()
+  renderExportState()
+  renderPreviewState()
+
+  for (const listener of languageListeners) listener()
+}
+
+editorLanguage.addEventListener('change', onLanguageChange)
 
 import.meta.hot?.dispose(() => {
   disposeProjectPanel()
+  editorLanguage.removeEventListener('change', onLanguageChange)
   form.removeEventListener('submit', onStart)
   stop.removeEventListener('click', onStop)
   exportButton.removeEventListener('click', onExport)

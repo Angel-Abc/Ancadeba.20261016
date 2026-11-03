@@ -1,0 +1,10 @@
+{
+  "schema-version": "1.0.0",
+  "id": "localized-game",
+  "titleKey": "game.title",
+  "descriptionKey": "game.description",
+  "version": "1.0.0",
+  "languages": { "default": "en", "available": ["en", "nl"] },
+  "initial-scene": "welcome",
+  "scenes": ["welcome"]
+}

@@ -1,49 +1,95 @@
 {
   "schema-version": "1.0.0",
   "id": "standard",
-  "title": "Standard view",
-  "description": "A text-heavy RPG layout",
   "type": "game",
-  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
   "components": [
     {
       "id": "location-title",
       "type": "text",
-      "placement": { "row": 1, "column": 3, "rowSpan": 2, "columnSpan": 8 },
-      "text": "In the Museum",
-      "presentation": { "variant": "heading", "align": "center" }
+      "placement": {
+        "row": 1,
+        "column": 3,
+        "rowSpan": 2,
+        "columnSpan": 8
+      },
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      },
+      "textKey": "scenes.standard.components.location-title.text"
     },
     {
       "id": "player-status",
       "type": "text",
-      "placement": { "row": 3, "column": 1, "rowSpan": 8, "columnSpan": 2 },
-      "text": "Player\n\nLevel 1\nHealth {{health}} / 40\nGold 12\n\nMuseum\nLobby",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 2
+      },
       "bindings": {
-        "health": { "source": "game.state", "path": ["player", "health"], "fallback": "40" }
-      }
+        "health": {
+          "source": "game.state",
+          "path": ["player", "health"],
+          "fallback": "40"
+        }
+      },
+      "textKey": "scenes.standard.components.player-status.text"
     },
     {
       "id": "narrative",
       "type": "text",
-      "placement": { "row": 3, "column": 3, "rowSpan": 8, "columnSpan": 8 },
-      "text": "Afternoon light falls through the museum's high windows. Beyond the entrance hall, voices drift between the marble pillars.\n\nA curator waits beside a display of old maps. She looks up from her notes as you approach.\n\n\"You arrived just in time,\" she says. \"We have found something unusual in the archives.\"\n\nOn the table lies a folded letter. Its seal bears the same crest you noticed above the locked gallery. Somewhere in the building, a clock begins to strike.\n\nYou take a closer look at the map. A route has been marked in faded blue ink, running from the old harbour to a place beyond the northern hills.\n\nThe curator turns a page in her notebook and waits for your answer."
+      "placement": {
+        "row": 3,
+        "column": 3,
+        "rowSpan": 8,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.standard.components.narrative.text"
     },
     {
       "id": "nearby",
       "type": "text",
-      "placement": { "row": 3, "column": 11, "rowSpan": 8, "columnSpan": 2 },
-      "text": "Characters\n\nThe curator\nA few visitors\n\nItems\n\nFolded letter\nOld map"
+      "placement": {
+        "row": 3,
+        "column": 11,
+        "rowSpan": 8,
+        "columnSpan": 2
+      },
+      "textKey": "scenes.standard.components.nearby.text"
     },
     {
       "id": "footer",
       "type": "text",
-      "placement": { "row": 11, "column": 1, "rowSpan": 2, "columnSpan": 12 },
-      "text": "Museum lobby\nTurn {{turn}} · World time {{worldTimeMs}} ms",
-      "bindings": {
-        "turn": { "source": "game.progression", "path": ["turn"] },
-        "worldTimeMs": { "source": "game.progression", "path": ["worldTimeMs"] }
+      "placement": {
+        "row": 11,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
       },
-      "presentation": { "align": "center" }
+      "bindings": {
+        "turn": {
+          "source": "game.progression",
+          "path": ["turn"]
+        },
+        "worldTimeMs": {
+          "source": "game.progression",
+          "path": ["worldTimeMs"]
+        }
+      },
+      "presentation": {
+        "align": "center"
+      },
+      "textKey": "scenes.standard.components.footer.text"
     }
-  ]
+  ],
+  "titleKey": "scenes.standard.title",
+  "descriptionKey": "scenes.standard.description"
 }

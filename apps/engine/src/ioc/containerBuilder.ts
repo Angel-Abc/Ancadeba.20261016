@@ -23,6 +23,7 @@ export class ContainerBuilder implements IContainerBuilder {
     private readonly fetcher: typeof fetch,
     private readonly host: IEngineHost,
     private readonly runtime: EngineRuntimeServices,
+    private readonly preferredLanguages: readonly string[] = [],
   ) {}
 
   build(): Container<EngineServices> {
@@ -40,7 +41,8 @@ export class ContainerBuilder implements IContainerBuilder {
           resolver.resolve('createMessageBus'),
           resolver.resolve('runtime'),
         ),
-      gameLoader: (resolver) => new GameLoader(resolver.resolve('jsonResourceLoader')),
+      gameLoader: (resolver) =>
+        new GameLoader(resolver.resolve('jsonResourceLoader'), this.preferredLanguages),
       jsonResourceLoader: (resolver) =>
         new JsonResourceLoader(resolver.resolve('gameResources'), resolver.resolve('logger')),
       gameResources: (resolver) =>

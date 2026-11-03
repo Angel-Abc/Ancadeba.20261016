@@ -1,30 +1,56 @@
 {
   "schema-version": "1.0.0",
   "id": "settings",
-  "title": "Settings",
-  "description": "An independent scene",
   "type": "stand-alone",
-  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
   "components": [
     {
       "id": "title",
       "type": "text",
-      "placement": { "row": 1, "column": 1, "rowSpan": 2, "columnSpan": 12 },
-      "text": "Settings",
-      "presentation": { "variant": "heading", "align": "center" }
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      },
+      "textKey": "scenes.settings.components.title.text"
     },
     {
       "id": "reading-preferences",
       "type": "text",
-      "placement": { "row": 3, "column": 3, "rowSpan": 8, "columnSpan": 8 },
-      "text": "Reading preferences\n\nA place for comfortable text, clear contrast, and room to read.\n\nThis layout example uses static text. Interactive settings will follow later."
+      "placement": {
+        "row": 3,
+        "column": 3,
+        "rowSpan": 8,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.settings.components.reading-preferences.text"
     },
     {
       "id": "back",
       "type": "button",
-      "placement": { "row": 11, "column": 5, "columnSpan": 4 },
-      "label": "Back",
-      "action": { "type": "enter-scene", "scene": "start-screen" }
+      "placement": {
+        "row": 11,
+        "column": 5,
+        "columnSpan": 4
+      },
+      "action": {
+        "type": "enter-scene",
+        "scene": "start-screen"
+      },
+      "labelKey": "scenes.settings.components.back.label"
     }
-  ]
+  ],
+  "titleKey": "scenes.settings.title",
+  "descriptionKey": "scenes.settings.description"
 }

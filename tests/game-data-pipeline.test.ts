@@ -99,6 +99,7 @@ describe('game data pipeline', () => {
       id: 'basic-game',
       title: 'Basic Game',
       description: 'A basic game example',
+      language: 'en',
       version: '1.0.0',
       initialScene: 'start-screen',
       input: {
@@ -122,6 +123,7 @@ describe('game data pipeline', () => {
       id: 'location-title',
       type: 'text',
       text: 'In the Museum',
+      textKey: 'scenes.standard.components.location-title.text',
       placement: { row: 1, column: 3, rowSpan: 2, columnSpan: 8 },
       presentation: { variant: 'heading', align: 'center' },
     })

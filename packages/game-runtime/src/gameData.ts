@@ -6,6 +6,7 @@ import type {
   ButtonComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
+import { assertGameLanguages } from '@ancadeba/schemas'
 
 export interface TextComponentData extends TextTemplate {
   readonly id: string
@@ -45,6 +46,7 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly language?: string
   readonly id: string
   readonly title: string
   readonly description: string
@@ -61,6 +63,8 @@ export function assembleGameData(
   sceneDefinitions: ReadonlyMap<string, SceneDefinition>,
   inputDefinition?: InputDefinition,
 ): GameData {
+  assertGameLanguages(definition, sceneDefinitions)
+
   if (Boolean(definition.input) !== Boolean(inputDefinition)) {
     throw new Error('Input definition must match the game input reference')
   }

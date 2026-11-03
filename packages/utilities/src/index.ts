@@ -33,3 +33,5 @@ export { JsonResourceLoader } from './resourceLoaders/json.js'
 export type { IJsonResourceLoader } from './resourceLoaders/index.js'
 
 export type { IResourceSource } from './resourceSources/index.js'
+
+export { createTranslator, type Translate } from './localization.js'

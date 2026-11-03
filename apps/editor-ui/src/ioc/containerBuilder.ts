@@ -15,6 +15,7 @@ export class ContainerBuilder implements IContainerBuilder {
       host: () => this.dependencies.host,
       runtime: () => this.dependencies.runtime,
       onPreviewStateChange: () => this.dependencies.onPreviewStateChange,
+      getPreferredGameLanguages: () => this.dependencies.getPreferredGameLanguages,
       download: () => this.dependencies.download,
       onExportStateChange: () => this.dependencies.onExportStateChange,
     })

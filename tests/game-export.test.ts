@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
@@ -104,6 +114,29 @@ describe('standalone game export', () => {
 
   afterAll(async () => {
     await rm(temp, { recursive: true, force: true })
+  })
+
+  it('packages language catalogs and validates languages beyond the configured default', async () => {
+    const localized = join(temp, 'localized')
+    const output = join(temp, 'localized-export')
+    await cp(new URL('../sample-games/localized/', import.meta.url), localized, { recursive: true })
+    await exportGame({ gameDirectory: localized, outputDirectory: output })
+    expect(
+      JSON.parse(await readFile(join(output, 'game/languages/nl/messages.json'), 'utf8')),
+    ).toHaveProperty('welcome.greeting', 'Hallo, avonturier!')
+
+    await writeFile(
+      join(localized, 'languages/nl/messages.json'),
+      JSON.stringify({ 'welcome.again': '' }),
+    )
+    const invalidOutput = join(temp, 'invalid-language-export')
+    await expect(
+      exportGame({ gameDirectory: localized, outputDirectory: invalidOutput }),
+    ).rejects.toThrow('language catalog')
+    await expect(readFile(join(invalidOutput, 'index.html'))).rejects.toHaveProperty(
+      'code',
+      'ENOENT',
+    )
   })
 
   it('packages the engine and game, then runs from a relocated nested URL', async () => {
@@ -267,7 +300,7 @@ describe('standalone game export', () => {
     if (contents !== undefined) await writeFile(join(invalid, 'game.json'), contents)
 
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
-      'game.json, a referenced scene, or input definition is missing, malformed, or invalid',
+      'game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid',
     )
     await expect(readdir(output)).rejects.toHaveProperty('code', 'ENOENT')
     expect((await readdir(temp)).filter((name) => name.startsWith('.game-export-'))).toEqual([])

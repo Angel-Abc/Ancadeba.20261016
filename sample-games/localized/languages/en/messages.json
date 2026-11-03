@@ -1,0 +1,7 @@
+{
+  "game.title": "Language example",
+  "game.description": "A game with English and Dutch translations.",
+  "welcome.title": "Welcome",
+  "welcome.greeting": "Hello, adventurer!",
+  "welcome.again": "Show welcome again"
+}

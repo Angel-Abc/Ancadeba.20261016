@@ -1,0 +1,23 @@
+{
+  "schema-version": "1.0.0",
+  "id": "welcome",
+  "titleKey": "welcome.title",
+  "type": "stand-alone",
+  "screen": { "type": "grid", "grid": { "rows": 6, "columns": 6 } },
+  "components": [
+    {
+      "id": "greeting",
+      "type": "text",
+      "placement": { "row": 2, "column": 1, "columnSpan": 6 },
+      "textKey": "welcome.greeting",
+      "presentation": { "variant": "heading", "align": "center" }
+    },
+    {
+      "id": "again",
+      "type": "button",
+      "placement": { "row": 4, "column": 2, "columnSpan": 4 },
+      "labelKey": "welcome.again",
+      "action": { "type": "enter-scene", "scene": "welcome" }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
 import { commandRequestSchema, type CommandRequest, type ProjectView } from '@ancadeba/editor-core'
 import { bindProjectPanel } from '../apps/editor-ui/src/projectPanel.js'
+import { editorLocalization } from '../apps/editor-ui/src/localization.js'
 
 // A small DOM surface for testing form reconciliation without a browser runtime.
 class Control extends EventTarget {
@@ -72,6 +73,8 @@ function panel() {
 
   let latest = project('one')
   const requests: CommandRequest[] = []
+  let localization = editorLocalization()
+  let languageChanged = () => {}
 
   const root = {
     querySelector: (selector: string) => control(selector.slice(1)),
@@ -91,12 +94,24 @@ function panel() {
     // @ts-expect-error -- Deliberately partial DOM fixture supplies only the query and control operations used by the panel.
     root,
     fetcher,
+    (key, values) => localization.t(key, values),
+    (listener) => {
+      languageChanged = listener
+
+      return () => {
+        languageChanged = () => {}
+      }
+    },
   )
 
   return {
     control,
     requests,
     dispose,
+    setLanguage: (language: string) => {
+      localization = editorLocalization([language])
+      languageChanged()
+    },
     setLatest: (view: ProjectView) => {
       latest = view
     },
@@ -104,6 +119,25 @@ function panel() {
 }
 
 describe('project panel form reconciliation', () => {
+  it('preserves unsaved drafts and selection while translating status messages', async () => {
+    const { control, requests, setLanguage, dispose } = panel()
+
+    try {
+      control('editor-load').fire('click')
+      await vi.waitFor(() => expect(control('scene-title').value).toBe('shop'))
+      control('scene-title').value = 'Unsaved draft'
+      control('scene-metadata').fire('input')
+      setLanguage('nl')
+      expect(control('scene-title').value).toBe('Unsaved draft')
+      expect(control('editor-scenes').value).toBe('shop')
+      expect(control('editor-scenes').disabled).toBe(true)
+      expect(control('editor-status').textContent).toContain('geladen uit')
+      expect(requests).toEqual([])
+    } finally {
+      dispose()
+    }
+  })
+
   it('reloads clean forms while preserving only dirty form values', async () => {
     const { control, requests, setLatest, dispose } = panel()
 

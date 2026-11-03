@@ -1,4 +1,11 @@
-import { gameSchema, inputSchema, sceneSchema } from '@ancadeba/schemas'
+import {
+  gameSchema,
+  inputSchema,
+  languageCatalogSchema,
+  localizeDefinitions,
+  sceneSchema,
+  selectLanguage,
+} from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
 
@@ -7,7 +14,10 @@ export interface IGameLoader {
 }
 
 export class GameLoader implements IGameLoader {
-  constructor(private readonly resources: IJsonResourceLoader) {}
+  constructor(
+    private readonly resources: IJsonResourceLoader,
+    private readonly preferredLanguages: readonly string[] = [],
+  ) {}
 
   async load(): Promise<GameData> {
     const definition = await this.resources.load('game.json', gameSchema)
@@ -24,6 +34,31 @@ export class GameLoader implements IGameLoader {
       ? await this.resources.load(definition.input, inputSchema)
       : undefined
 
-    return assembleGameData(definition, new Map(scenes), input)
+    if (!definition.languages) return assembleGameData(definition, new Map(scenes), input)
+
+    const { available, default: fallbackLanguage } = definition.languages
+    const language = selectLanguage(available, fallbackLanguage, this.preferredLanguages)
+
+    const fallback = await this.resources.load(
+      `languages/${fallbackLanguage}/messages.json`,
+      languageCatalogSchema,
+    )
+
+    const fallbackDefinitions = localizeDefinitions(definition, new Map(scenes), {
+      fallback,
+      messages: fallback,
+    })
+
+    const messages =
+      language === fallbackLanguage
+        ? fallback
+        : await this.resources.load(`languages/${language}/messages.json`, languageCatalogSchema)
+
+    const localized =
+      language === fallbackLanguage
+        ? fallbackDefinitions
+        : localizeDefinitions(definition, new Map(scenes), { fallback, messages })
+
+    return { ...assembleGameData(localized.game, localized.scenes, input), language }
   }
 }

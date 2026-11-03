@@ -1,41 +1,82 @@
 {
   "schema-version": "1.0.0",
   "id": "inventory",
-  "title": "Inventory",
-  "description": "A second view of the same playthrough",
   "type": "game",
-  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
   "components": [
     {
       "id": "title",
       "type": "text",
-      "placement": { "row": 1, "column": 1, "rowSpan": 2, "columnSpan": 12 },
-      "text": "Inventory",
-      "presentation": { "variant": "heading", "align": "center" }
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      },
+      "textKey": "scenes.inventory.components.title.text"
     },
     {
       "id": "items",
       "type": "text",
-      "placement": { "row": 3, "column": 1, "rowSpan": 8, "columnSpan": 4 },
-      "text": "Carried items\n\nFolded letter\nOld map\nBrass key\nNotebook"
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 4
+      },
+      "textKey": "scenes.inventory.components.items.text"
     },
     {
       "id": "details",
       "type": "text",
-      "placement": { "row": 3, "column": 5, "rowSpan": 8, "columnSpan": 8 },
-      "text": "Folded letter\n\nA carefully folded letter with a blue wax seal. The paper is worn at the edges, but the writing is still clear.\n\nThe crest matches the one above the museum's locked gallery."
+      "placement": {
+        "row": 3,
+        "column": 5,
+        "rowSpan": 8,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.inventory.components.details.text"
     },
     {
       "id": "footer",
       "type": "text",
-      "placement": { "row": 11, "column": 1, "rowSpan": 2, "columnSpan": 12 },
-      "text": "Every object has a story.\nHealth {{health}} / 40 · Turn {{turn}} · World time {{worldTimeMs}} ms",
-      "bindings": {
-        "health": { "source": "game.state", "path": ["player", "health"], "fallback": "40" },
-        "turn": { "source": "game.progression", "path": ["turn"] },
-        "worldTimeMs": { "source": "game.progression", "path": ["worldTimeMs"] }
+      "placement": {
+        "row": 11,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
       },
-      "presentation": { "align": "end" }
+      "bindings": {
+        "health": {
+          "source": "game.state",
+          "path": ["player", "health"],
+          "fallback": "40"
+        },
+        "turn": {
+          "source": "game.progression",
+          "path": ["turn"]
+        },
+        "worldTimeMs": {
+          "source": "game.progression",
+          "path": ["worldTimeMs"]
+        }
+      },
+      "presentation": {
+        "align": "end"
+      },
+      "textKey": "scenes.inventory.components.footer.text"
     }
-  ]
+  ],
+  "titleKey": "scenes.inventory.title",
+  "descriptionKey": "scenes.inventory.description"
 }

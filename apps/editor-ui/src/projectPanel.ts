@@ -1,8 +1,15 @@
 import type { ProjectView } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
-import { ProjectEditorController } from './projectController.js'
+import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 
-export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () => void {
+export function bindProjectPanel(
+  root: HTMLElement,
+  fetcher: typeof fetch,
+  t: Translate = editorLocalization().t,
+  subscribeLanguageChanges?: (listener: () => void) => () => void,
+): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
     const element = root.querySelector<T>(`#${id}`)
 
@@ -50,89 +57,93 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
     }
   }
 
-  const controller = new ProjectEditorController(
-    new HttpEditorClient(fetcher),
-    (state, replaceFields) => {
-      view = state.view
-      loadedPath = state.path
-      load.disabled = state.busy
-      reload.disabled = state.busy || !view
-      folder.disabled = state.busy
-      scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
-      fields.disabled = state.busy || !view?.game || Boolean(view.diagnostics.length)
-      status.textContent = state.busy
-        ? 'Working...'
-        : state.conflict
-          ? 'Your entries are preserved. Reload latest, then save again to retry.'
-          : state.changedElsewhere
-            ? 'Saved files changed. Your entries are preserved; reload latest before saving.'
-            : view
-              ? `Loaded ${view.game?.title ?? 'project with errors'} from ${state.path || 'workspace root'}. Changes save immediately.`
-              : ''
-      error.textContent =
-        state.error ||
-        view?.diagnostics
-          .map(
-            (diagnostic) =>
-              `${diagnostic.file} ${diagnostic.path.join('.')}: ${diagnostic.message}`,
-          )
-          .join('\n') ||
-        ''
-      error.hidden = !error.textContent
+  let refreshLanguage = () => {}
 
-      if (!replaceFields || !view?.game) return
+  const render: ProjectEditorListener = (state, replaceFields) => {
+    refreshLanguage = () => render(state, false)
+    view = state.view
+    loadedPath = state.path
+    load.disabled = state.busy
+    reload.disabled = state.busy || !view
+    folder.disabled = state.busy
+    scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
+    fields.disabled = state.busy || !view?.game || Boolean(view.diagnostics.length)
+    status.textContent = state.busy
+      ? t('project.working')
+      : state.conflict
+        ? t('project.conflict')
+        : state.changedElsewhere
+          ? t('project.changed')
+          : view
+            ? t('project.loaded', {
+                title: view.game?.title ?? t('project.withErrors'),
+                path: state.path || t('workspace.root'),
+              })
+            : ''
+    error.textContent =
+      state.error ||
+      view?.diagnostics
+        .map(
+          (diagnostic) => `${diagnostic.file} ${diagnostic.path.join('.')}: ${diagnostic.message}`,
+        )
+        .join('\n') ||
+      ''
+    error.hidden = !error.textContent
 
-      const savedForm = state.lastCommand
-        ? {
-            'game.updateMetadata': metadata.id,
-            'scene.updateMetadata': sceneMetadata.id,
-            'scene.updateLayout': layout.id,
-            'scene.create': create.id,
-          }[state.lastCommand]
-        : undefined
+    if (!replaceFields || !view?.game) return
 
-      if (savedForm) dirtyForms.delete(savedForm)
-      else if (!state.preserveDrafts) dirtyForms.clear()
+    const savedForm = state.lastCommand
+      ? {
+          'game.updateMetadata': metadata.id,
+          'scene.updateMetadata': sceneMetadata.id,
+          'scene.updateLayout': layout.id,
+          'scene.create': create.id,
+        }[state.lastCommand]
+      : undefined
 
-      if (!dirtyForms.has(create.id)) create.reset()
-      scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
+    if (savedForm) dirtyForms.delete(savedForm)
+    else if (!state.preserveDrafts) dirtyForms.clear()
 
-      if (!dirtyForms.has(metadata.id)) {
-        set('editor-title', view.game.title)
-        set('editor-description', view.game.description)
-        set('editor-version', view.game.version)
-      }
+    if (!dirtyForms.has(create.id)) create.reset()
+    scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
 
-      const selected = scenes.value
-      scenes.replaceChildren(
-        ...view.scenes.map((scene) => {
-          const option = root.ownerDocument.createElement('option')
-          option.value = scene.id
-          option.textContent = `${scene.title} (${scene.id})`
+    if (!dirtyForms.has(metadata.id)) {
+      set('editor-title', view.game.title)
+      set('editor-description', view.game.description)
+      set('editor-version', view.game.version)
+    }
 
-          return option
-        }),
-      )
+    const selected = scenes.value
+    scenes.replaceChildren(
+      ...view.scenes.map((scene) => {
+        const option = root.ownerDocument.createElement('option')
+        option.value = scene.id
+        option.textContent = `${scene.title} (${scene.id})`
 
-      if (
-        selected &&
-        !view.scenes.some((scene) => scene.id === selected) &&
-        (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))
-      ) {
-        // A reload must never attach a removed scene's draft to another scene.
-        const missing = root.ownerDocument.createElement('option')
-        missing.value = selected
-        missing.textContent = `Unavailable scene (${selected})`
-        scenes.append(missing)
-        scenes.value = selected
-        status.textContent =
-          'The selected scene is unavailable. Load the project again to discard its drafts.'
-      }
+        return option
+      }),
+    )
 
-      if (view.scenes.some((scene) => scene.id === selected)) scenes.value = selected
-      fillScene()
-    },
-  )
+    if (
+      selected &&
+      !view.scenes.some((scene) => scene.id === selected) &&
+      (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))
+    ) {
+      // A reload must never attach a removed scene's draft to another scene.
+      const missing = root.ownerDocument.createElement('option')
+      missing.value = selected
+      missing.textContent = t('project.unavailableScene', { id: selected })
+      scenes.append(missing)
+      scenes.value = selected
+      status.textContent = t('project.missingScene')
+    }
+
+    if (view.scenes.some((scene) => scene.id === selected)) scenes.value = selected
+    fillScene()
+  }
+
+  const controller = new ProjectEditorController(new HttpEditorClient(fetcher), render)
+  const unsubscribeLanguage = subscribeLanguageChanges?.(() => refreshLanguage())
 
   const listeners: (() => void)[] = []
 
@@ -216,6 +227,7 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
 
   return () => {
     controller.dispose()
+    unsubscribeLanguage?.()
 
     for (const remove of listeners) remove()
   }

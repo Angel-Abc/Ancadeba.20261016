@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { gameIdSchema } from './game.js'
+import { translationKeySchema } from './languages.js'
 import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
 
 export const gridPlacementSchema = z.object({
@@ -14,7 +15,8 @@ export const textComponentSchema = z
     id: gameIdSchema,
     type: z.literal('text'),
     placement: gridPlacementSchema,
-    text: z.string(),
+    text: z.string().default(''),
+    textKey: translationKeySchema.optional(),
     bindings: textBindingsSchema.optional(),
     presentation: z
       .object({
@@ -41,14 +43,20 @@ export const buttonActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
 ])
 
-export const buttonComponentSchema = z.object({
-  id: gameIdSchema,
-  type: z.literal('button'),
-  placement: gridPlacementSchema,
-  label: z.string().trim().min(1),
-  /** Buttons without an action are rendered disabled. */
-  action: buttonActionSchema.optional(),
-})
+export const buttonComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('button'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+    /** Buttons without an action are rendered disabled. */
+    action: buttonActionSchema.optional(),
+  })
+  .refine((button) => Boolean(button.label || button.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
 
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
@@ -59,8 +67,10 @@ export const sceneSchema = z
   .object({
     'schema-version': z.literal('1.0.0'),
     id: gameIdSchema,
-    title: z.string().trim().min(1),
-    description: z.string(),
+    title: z.string().trim().default(''),
+    description: z.string().default(''),
+    titleKey: translationKeySchema.optional(),
+    descriptionKey: translationKeySchema.optional(),
     type: z.enum(['stand-alone', 'game']),
     screen: z.object({
       type: z.literal('grid'),
@@ -72,6 +82,12 @@ export const sceneSchema = z
     components: z.array(sceneComponentSchema),
   })
   .superRefine((scene, context) => {
+    if (!scene.title && !scene.titleKey)
+      context.addIssue({
+        code: 'custom',
+        path: ['title'],
+        message: 'A title or titleKey is required',
+      })
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
       if (

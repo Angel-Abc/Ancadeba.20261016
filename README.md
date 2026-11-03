@@ -211,6 +211,79 @@ The engine exposes and mounts the assembled game only after every referenced
 scene loads and validates. Rendering and mutable play state remain separate from
 this data pipeline.
 
+## Languages
+
+Game translations live inside each game, independently of the editor's language:
+
+```text
+game.json
+scenes/welcome.json
+languages/en/messages.json
+languages/nl/messages.json
+```
+
+Declare the default and available language tags in `game.json`:
+
+```json
+{
+  "schema-version": "1.0.0",
+  "id": "example",
+  "titleKey": "game.title",
+  "version": "1.0.0",
+  "languages": { "default": "en", "available": ["en", "nl"] },
+  "scenes": ["welcome"]
+}
+```
+
+Each `messages.json` is a flat JSON object of stable keys and plain-text values:
+
+```json
+{
+  "game.title": "My adventure",
+  "welcome.title": "Welcome",
+  "welcome.greeting": "Hello, adventurer!",
+  "welcome.next": "Continue"
+}
+```
+
+Game and scene metadata support `titleKey` and `descriptionKey`. Text components
+support `textKey`; buttons support `labelKey`. Keys take precedence over literal
+`title`, `description`, `text`, and `label` fields, which can be omitted when a key
+is supplied. Existing games with literal text continue to work without a
+`languages` declaration. IDs, actions, input mappings, and binding aliases stay
+language-independent. Edit translations in the JSON catalogs; the editor's
+existing metadata forms edit literal source fields.
+
+The default catalog must contain every referenced key. Other catalogs may omit
+keys to use the default translation. Explicit empty strings are supported for
+body text and descriptions; translated titles and button labels must be nonempty.
+Every declared language requires a valid catalog file. Missing files, invalid JSON,
+and invalid translated binding placeholders are errors, rather than silent fallback.
+Editor project revisions include catalogs, and exports validate every declared
+language and include the language folders.
+
+`GameLoader` accepts an injected array of preferred language tags as its second
+constructor argument. Preferences match case-insensitively, try regional tags
+before their base language (for example, `nl-NL` then `nl`), and fall back to the
+game's declared default. The engine and editor preview start in the game's declared
+default language, independently of browser language preferences. Override the standalone engine with `?language=nl`, or enter a tag
+in the editor's **Game language** field before starting the preview. Restarting
+loads a new language; switching languages during an active game is not yet exposed.
+Resolved `GameData.language` and the rendered game's `lang` attribute identify
+the selected language. Game binding templates use the existing `{{alias}}`
+syntax inside translations; translation happens before binding resolution.
+
+The editor has its own catalogs under `apps/editor-ui/languages/{language}/messages.json`,
+currently English and Dutch, with an independent **Editor language** selector.
+The editor starts in English, independently of browser language preferences.
+Changing editor language preserves form drafts and the active game. Browser and
+server diagnostics, IDs, log messages, and diagnostic codes remain developer-facing.
+The engine's small browser shell also has separate catalogs for its startup error;
+the headless runtime has no application UI catalog or browser-language dependency.
+Both `sample-games/basic` and `sample-games/localized` have complete English and
+Dutch catalogs. The basic sample includes translated narrative, inventory text,
+menus, and status templates.
+
 ## Scene rendering
 
 Both browser hosts use `mountGameView` and `SceneRenderer` from

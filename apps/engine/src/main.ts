@@ -5,6 +5,10 @@ import { createBrowserTiming } from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
+import { selectLanguage } from '@ancadeba/schemas'
+import { createTranslator } from '@ancadeba/utilities'
+import en from '../languages/en/messages.json' with { type: 'json' }
+import nl from '../languages/nl/messages.json' with { type: 'json' }
 
 const app = document.querySelector<HTMLElement>('#app')
 
@@ -13,6 +17,13 @@ if (!app) {
 }
 
 const applicationUrl = new URL(import.meta.env.BASE_URL, document.baseURI).href
+const requestedLanguage = new URL(window.location.href).searchParams.get('language')
+const preferredLanguages = requestedLanguage ? [requestedLanguage] : []
+const uiLanguage = selectLanguage(['en', 'nl'], 'en', preferredLanguages)
+const t = createTranslator(en, uiLanguage === 'nl' ? nl : en)
+
+document.documentElement.lang = uiLanguage
+
 let engine: IEngine | undefined
 let disposed = false
 
@@ -31,6 +42,7 @@ try {
       fetch,
       new DomEngineHost(app),
       createBrowserTiming(window),
+      preferredLanguages,
     ).build()
 
     engine = container.resolve('engine')
@@ -38,8 +50,7 @@ try {
   }
 } catch (error) {
   if (!disposed) {
-    app.textContent =
-      'Unable to start the engine. Check config.json, game.json, and the browser console.'
+    app.textContent = t('startup.error')
     throw error
   }
 }

@@ -1,0 +1,3 @@
+{
+  "startup.error": "De engine kan niet starten. Controleer config.json, game.json en de browserconsole."
+}

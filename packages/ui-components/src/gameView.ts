@@ -9,6 +9,11 @@ export interface GameViewSession {
 
 export interface GameViewOptions extends SceneRendererOptions {
   readonly scenePicker?: boolean
+  readonly scenePickerLabels?: {
+    readonly caption: string
+    readonly accessibleName: string
+    readonly empty: string
+  }
 }
 
 /** Shared browser surface for the standalone engine and the editor preview. */
@@ -23,6 +28,8 @@ export function mountGameView(
   root.className = 'ancadeba-game'
   root.tabIndex = 0
   root.setAttribute('aria-label', game.title)
+
+  if (game.language) root.setAttribute('lang', game.language)
   const viewport = document.createElement('div')
   viewport.className = 'ancadeba-scene-viewport'
   const cleanups: (() => void)[] = []
@@ -58,12 +65,15 @@ export function mountGameView(
       const label = document.createElement('label')
       label.className = 'ancadeba-scene-picker'
       const caption = document.createElement('span')
-      caption.textContent = 'Scene'
+      caption.textContent = options.scenePickerLabels?.caption ?? 'Scene'
       const select = document.createElement('select')
-      select.setAttribute('aria-label', 'Preview scene')
+      select.setAttribute(
+        'aria-label',
+        options.scenePickerLabels?.accessibleName ?? 'Preview scene',
+      )
       const empty = document.createElement('option')
       empty.value = ''
-      empty.textContent = 'No active scene'
+      empty.textContent = options.scenePickerLabels?.empty ?? 'No active scene'
       select.append(empty)
 
       for (const scene of game.scenes.values()) {
