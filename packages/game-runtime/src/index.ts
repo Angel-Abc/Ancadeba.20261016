@@ -47,6 +47,7 @@ export {
   type ButtonComponentData,
   type LanguageSelectComponentData,
   type SceneComponentData,
+  type GraphicComponentData,
 } from './gameData.js'
 
 export {
@@ -104,3 +105,7 @@ export type {
   ActorRosterEntry,
   ActorRosterSnapshot,
 } from './turns.js'
+
+export * from './graphics.js'
+
+export * from './graphicSources.js'

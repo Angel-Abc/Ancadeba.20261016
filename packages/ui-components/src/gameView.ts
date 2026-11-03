@@ -135,6 +135,7 @@ export function mountGameView(
 
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
+      assets: game.assets,
       localization,
       onButtonActivate: (action) => {
         if (disposed) return

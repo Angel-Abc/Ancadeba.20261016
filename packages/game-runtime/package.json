@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ancadeba/schemas": "workspace:*",
-    "@ancadeba/utilities": "workspace:*"
+    "@ancadeba/utilities": "workspace:*",
+    "saxes": "^6.0.0"
   }
 }

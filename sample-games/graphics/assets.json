@@ -1,0 +1,361 @@
+{
+  "schema-version": "1.0.0",
+  "images": {
+    "body": {
+      "format": "svg",
+      "source": "assets/images/body.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "colors": {},
+      "palettes": {}
+    },
+    "hands": {
+      "format": "svg",
+      "source": "assets/images/hand.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "colors": {},
+      "palettes": {}
+    },
+    "tunic": {
+      "format": "svg",
+      "source": "assets/images/tunic.svg",
+      "bounds": {
+        "x": 62,
+        "y": 120,
+        "width": 196,
+        "height": 174
+      },
+      "colors": {
+        "fabric": "#397c73",
+        "trim": "#e4c58b",
+        "metal": "#c99b50"
+      },
+      "palettes": {
+        "wayfarer": {
+          "fabric": "#397c73",
+          "trim": "#e4c58b",
+          "metal": "#c99b50"
+        },
+        "royal": {
+          "fabric": "#665191",
+          "trim": "#e7c783",
+          "metal": "#c99b50"
+        },
+        "ember": {
+          "fabric": "#ac4f42",
+          "trim": "#e8d9ba",
+          "metal": "#b9c7cf"
+        }
+      }
+    },
+    "sword": {
+      "format": "svg",
+      "source": "assets/images/sword.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 260
+      },
+      "colors": {
+        "blade": "#a5bbc8",
+        "edge": "#e4f0f2",
+        "hilt": "#c99b50",
+        "grip": "#685044"
+      },
+      "palettes": {
+        "steel": {
+          "blade": "#a5bbc8",
+          "edge": "#e4f0f2",
+          "hilt": "#c99b50",
+          "grip": "#685044"
+        },
+        "bronze": {
+          "blade": "#b98249",
+          "edge": "#f0c78c",
+          "hilt": "#825637",
+          "grip": "#514338"
+        },
+        "obsidian": {
+          "blade": "#4a405f",
+          "edge": "#b5a0d4",
+          "hilt": "#8f80af",
+          "grip": "#373245"
+        }
+      }
+    },
+    "cloak-back": {
+      "format": "svg",
+      "source": "assets/images/cloak-back.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "colors": {
+        "fabric": "#665191"
+      },
+      "palettes": {}
+    },
+    "cloak-clasp": {
+      "format": "svg",
+      "source": "assets/images/cloak-clasp.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "colors": {
+        "metal": "#c99b50"
+      },
+      "palettes": {}
+    }
+  },
+  "parts": {
+    "adventurer": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "pieces": [
+        {
+          "id": "body",
+          "image": "body",
+          "layer": "body",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {}
+        },
+        {
+          "id": "hands",
+          "image": "hands",
+          "layer": "hands",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {}
+        }
+      ],
+      "colors": {},
+      "palettes": {}
+    },
+    "tunic-part": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "pieces": [
+        {
+          "id": "tunic",
+          "image": "tunic",
+          "layer": "clothes",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {
+            "fabric": "fabric",
+            "trim": "trim",
+            "metal": "metal"
+          }
+        }
+      ],
+      "colors": {
+        "fabric": "#397c73",
+        "trim": "#e4c58b",
+        "metal": "#c99b50"
+      },
+      "palettes": {
+        "wayfarer": {
+          "fabric": "#397c73",
+          "trim": "#e4c58b",
+          "metal": "#c99b50"
+        },
+        "royal": {
+          "fabric": "#665191",
+          "trim": "#e7c783",
+          "metal": "#c99b50"
+        },
+        "ember": {
+          "fabric": "#ac4f42",
+          "trim": "#e8d9ba",
+          "metal": "#b9c7cf"
+        }
+      }
+    },
+    "sword-part": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 260
+      },
+      "pieces": [
+        {
+          "id": "blade",
+          "image": "sword",
+          "layer": "sword",
+          "anchor": "right-hand",
+          "sourceAnchor": {
+            "x": 40,
+            "y": 215
+          },
+          "scale": 0.7,
+          "rotation": 12,
+          "slots": {
+            "blade": "blade",
+            "edge": "edge",
+            "hilt": "hilt",
+            "grip": "grip"
+          }
+        }
+      ],
+      "colors": {
+        "blade": "#a5bbc8",
+        "edge": "#e4f0f2",
+        "hilt": "#c99b50",
+        "grip": "#685044"
+      },
+      "palettes": {
+        "steel": {
+          "blade": "#a5bbc8",
+          "edge": "#e4f0f2",
+          "hilt": "#c99b50",
+          "grip": "#685044"
+        },
+        "bronze": {
+          "blade": "#b98249",
+          "edge": "#f0c78c",
+          "hilt": "#825637",
+          "grip": "#514338"
+        },
+        "obsidian": {
+          "blade": "#4a405f",
+          "edge": "#b5a0d4",
+          "hilt": "#8f80af",
+          "grip": "#373245"
+        }
+      }
+    },
+    "cloak": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "pieces": [
+        {
+          "id": "back",
+          "image": "cloak-back",
+          "layer": "rear",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {
+            "fabric": "fabric"
+          }
+        },
+        {
+          "id": "clasp",
+          "image": "cloak-clasp",
+          "layer": "clasp",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {
+            "metal": "metal"
+          }
+        }
+      ],
+      "colors": {
+        "fabric": "#665191",
+        "metal": "#c99b50"
+      },
+      "palettes": {
+        "royal": {
+          "fabric": "#665191",
+          "metal": "#c99b50"
+        },
+        "forest": {
+          "fabric": "#397c73",
+          "metal": "#c99b50"
+        }
+      }
+    }
+  },
+  "compositions": {
+    "paper-doll": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "layers": ["rear", "body", "clothes", "sword", "hands", "clasp"],
+      "anchors": {
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "right-hand": {
+          "x": 250,
+          "y": 257
+        }
+      },
+      "slots": {
+        "base": {
+          "parts": ["adventurer"],
+          "default": "adventurer"
+        },
+        "tunic": {
+          "parts": ["tunic-part"],
+          "default": "tunic-part"
+        },
+        "sword": {
+          "parts": ["sword-part"],
+          "default": "sword-part"
+        },
+        "cloak": {
+          "parts": ["cloak"],
+          "default": "cloak"
+        }
+      }
+    }
+  }
+}

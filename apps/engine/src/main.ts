@@ -5,6 +5,7 @@ import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/u
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
+import { HttpGameResources } from './gameResources'
 import { selectLanguage } from '@ancadeba/schemas'
 import { createTranslator } from '@ancadeba/utilities'
 import en from '../languages/en/messages.json' with { type: 'json' }
@@ -42,7 +43,7 @@ try {
       config,
       applicationUrl,
       fetch,
-      new DomEngineHost(app),
+      new DomEngineHost(app, new HttpGameResources(config.gameUrl, applicationUrl, fetch)),
       createBrowserTiming(window),
       preferredLanguages,
       new BrowserGameLanguagePreferences(() => window.localStorage),

@@ -46,9 +46,11 @@ export function localizeDefinitions(
           ...scene,
           ...metadata(scene),
           components: scene.components.map((component) =>
-            component.type === 'text'
-              ? { ...component, text: text(component.textKey, component.text) }
-              : { ...component, label: text(component.labelKey, component.label, true) },
+            component.type === 'graphic'
+              ? { ...component, alt: text(component.altKey, component.alt) }
+              : component.type === 'text'
+                ? { ...component, text: text(component.textKey, component.text) }
+                : { ...component, label: text(component.labelKey, component.label, true) },
           ),
         }),
       ]),
@@ -78,9 +80,11 @@ export function assertGameLanguages(
         scene.titleKey !== undefined ||
         scene.descriptionKey !== undefined ||
         scene.components.some((component) =>
-          component.type === 'text'
-            ? component.textKey !== undefined
-            : component.labelKey !== undefined,
+          component.type === 'graphic'
+            ? component.altKey !== undefined
+            : component.type === 'text'
+              ? component.textKey !== undefined
+              : component.labelKey !== undefined,
         ),
     )
 

@@ -26,3 +26,7 @@ export type {
 } from './componentRendering.js'
 
 export { mountGameView, type GameViewSession, type GameViewOptions } from './gameView.js'
+
+export * from './graphicResources.js'
+
+export * from './graphicComponentRenderer.js'

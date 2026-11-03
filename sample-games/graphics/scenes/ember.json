@@ -1,0 +1,133 @@
+{
+  "schema-version": "1.0.0",
+  "id": "ember",
+  "title": "The asset wardrobe",
+  "type": "stand-alone",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "heading",
+      "type": "text",
+      "text": "One wardrobe. Many appearances.",
+      "presentation": {
+        "variant": "heading"
+      },
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "adventurer-one",
+      "type": "graphic",
+      "visual": "paper-doll",
+      "placement": {
+        "row": 2,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 5
+      },
+      "alt": "Adventurer with a tunic, sword, and two-piece cloak",
+      "appearance": {
+        "slots": {
+          "tunic": {
+            "palette": "ember"
+          },
+          "sword": {
+            "palette": "bronze"
+          },
+          "cloak": {
+            "palette": "forest"
+          }
+        }
+      }
+    },
+    {
+      "id": "adventurer-two",
+      "type": "graphic",
+      "visual": "paper-doll",
+      "placement": {
+        "row": 2,
+        "column": 6,
+        "rowSpan": 8,
+        "columnSpan": 5
+      },
+      "alt": "A second adventurer with an independent appearance",
+      "appearance": {
+        "slots": {
+          "tunic": {
+            "palette": "royal"
+          },
+          "sword": {
+            "palette": "obsidian"
+          },
+          "cloak": {
+            "part": null
+          }
+        }
+      }
+    },
+    {
+      "id": "tunic-icon",
+      "type": "graphic",
+      "visual": "tunic",
+      "placement": {
+        "row": 3,
+        "column": 11,
+        "rowSpan": 3,
+        "columnSpan": 2
+      },
+      "alt": "Matching tunic item preview",
+      "appearance": {
+        "palette": "ember"
+      }
+    },
+    {
+      "id": "sword-icon",
+      "type": "graphic",
+      "visual": "sword",
+      "placement": {
+        "row": 6,
+        "column": 11,
+        "rowSpan": 3,
+        "columnSpan": 2
+      },
+      "alt": "Matching sword item preview",
+      "appearance": {
+        "palette": "bronze"
+      }
+    },
+    {
+      "id": "caption",
+      "type": "text",
+      "text": "Shared artwork. Independent palettes. One cloak selection controls both its rear fabric and front clasp.",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "another-look",
+      "type": "button",
+      "label": "Wayfarer and steel",
+      "action": {
+        "type": "enter-scene",
+        "scene": "gallery"
+      },
+      "placement": {
+        "row": 12,
+        "column": 1,
+        "columnSpan": 12
+      }
+    }
+  ]
+}

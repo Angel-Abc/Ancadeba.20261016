@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Asset Workshop · Ancadeba</title>
+  </head>
+  <body>
+    <div class="workshop">
+      <header class="masthead">
+        <a class="brand" href="./"
+          ><span class="brand-mark" aria-hidden="true">a</span>Ancadeba
+          <span class="brand-divider">/</span> <span class="brand-section">Asset workshop</span></a
+        >
+        <span class="experiment">Experiment 01</span>
+      </header>
+      <main>
+        <div class="intro">
+          <div>
+            <p class="eyebrow">A wardrobe of possibilities</p>
+            <h1>Make it your own.</h1>
+            <p class="intro-copy">
+              A little color. A different metal. The same adventurer, a whole new look.
+            </p>
+          </div>
+          <button class="reset-button" id="reset" type="button">
+            <span aria-hidden="true">↺</span> Reset appearance
+          </button>
+        </div>
+        <div class="workspace">
+          <section class="character-card" aria-labelledby="character-heading">
+            <div class="character-header">
+              <h2 id="character-heading">The adventurer</h2>
+              <span class="live-badge"><span></span> Live preview</span>
+            </div>
+            <div class="character-stage">
+              <div class="stage-grid" aria-hidden="true"></div>
+              <div class="stage-halo" aria-hidden="true"></div>
+              <div class="stage-shadow" aria-hidden="true"></div>
+              <div id="character-preview" class="character-preview"></div>
+              <span class="stage-caption">Your next adventure starts here.</span>
+            </div>
+            <div class="loadout">
+              <span class="eyebrow">Currently equipped</span>
+              <p id="loadout" role="status" aria-live="polite" aria-atomic="true"></p>
+            </div>
+          </section>
+          <div class="equipment-panel">
+            <section class="item-card" aria-labelledby="tunic-heading">
+              <div class="item-top">
+                <div class="item-icon tunic-icon" id="tunic-preview"></div>
+                <div class="item-title">
+                  <p class="eyebrow">Body · 3 color slots</p>
+                  <h2 id="tunic-heading">Wayfarer's tunic</h2>
+                  <p>One trusty tunic. Your colors.</p>
+                </div>
+                <label class="equip-switch"
+                  ><input id="equip-tunic" type="checkbox" checked /><span
+                    class="switch-track"
+                    aria-hidden="true"
+                  ></span
+                  ><span>Equip tunic</span></label
+                >
+              </div>
+              <fieldset class="palette-fields">
+                <legend>Choose your colors</legend>
+                <label class="color-field"
+                  ><input id="fabric" type="color" aria-label="Fabric" value="#397c73" /><span
+                    ><strong>Fabric</strong
+                    ><output for="fabric" id="fabric-value">#397C73</output></span
+                  ></label
+                >
+                <label class="color-field"
+                  ><input id="trim" type="color" aria-label="Trim" value="#e4c58b" /><span
+                    ><strong>Trim</strong><output for="trim" id="trim-value">#E4C58B</output></span
+                  ></label
+                >
+                <label class="color-field"
+                  ><input id="metal" type="color" aria-label="Metal" value="#c99b50" /><span
+                    ><strong>Metal</strong
+                    ><output for="metal" id="metal-value">#C99B50</output></span
+                  ></label
+                >
+              </fieldset>
+              <div class="preset-row">
+                <span class="control-label">Try a palette</span>
+                <div
+                  id="tunic-presets"
+                  class="preset-buttons"
+                  role="group"
+                  aria-label="Tunic palettes"
+                ></div>
+              </div>
+            </section>
+            <section class="item-card" aria-labelledby="sword-heading">
+              <div class="item-top">
+                <div class="item-icon sword-icon" id="sword-preview"></div>
+                <div class="item-title">
+                  <p class="eyebrow">Main hand · 3 materials</p>
+                  <h2 id="sword-heading">Traveler's sword</h2>
+                  <p>A familiar blade, freshly forged.</p>
+                </div>
+                <label class="equip-switch"
+                  ><input id="equip-sword" type="checkbox" checked /><span
+                    class="switch-track"
+                    aria-hidden="true"
+                  ></span
+                  ><span>Equip sword</span></label
+                >
+              </div>
+              <fieldset class="material-fields">
+                <legend>Choose a material</legend>
+                <div id="sword-materials" class="material-buttons"></div>
+              </fieldset>
+              <p class="item-note">The blade, edge, hilt, and grip change together.</p>
+            </section>
+            <div class="workshop-note">
+              <label class="equip-switch"
+                ><input id="equip-cloak" type="checkbox" /><span
+                  class="switch-track"
+                  aria-hidden="true"
+                ></span
+                ><span>Equip two-piece cloak</span></label
+              >
+              <span class="note-icon" aria-hidden="true">✧</span>
+              <p>
+                <strong>Same gear, different story.</strong> Item previews and equipped gear share
+                the same artwork and colors.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+      <footer>
+        <span>Ancadeba · Asset workshop</span><span>Two items. Plenty of possibilities.</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/asset-lab/main.ts"></script>
+  </body>
+</html>

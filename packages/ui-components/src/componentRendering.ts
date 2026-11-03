@@ -5,8 +5,12 @@ import type {
   TextResolutionOptions,
   IGameLocalization,
 } from '@ancadeba/game-runtime'
+import type { AssetCatalog } from '@ancadeba/schemas'
+import type { IGraphicResources } from './graphicResources.js'
 
 export interface ComponentRendererOptions {
+  readonly assets?: AssetCatalog | undefined
+  readonly graphics?: IGraphicResources | undefined
   readonly localization?: IGameLocalization | undefined
   readonly bindingMode?: TextResolutionOptions['mode']
   readonly onButtonActivate?: (action: NonNullable<ButtonComponentData['action']>) => void

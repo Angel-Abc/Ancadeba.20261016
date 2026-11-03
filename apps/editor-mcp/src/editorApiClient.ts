@@ -19,6 +19,9 @@ const rejectedCommandStatuses = new Map<string, number>([
   ['revision_conflict', 409],
   ['scene_exists', 409],
   ['scene_not_found', 404],
+  ['asset_not_found', 404],
+  ['component_not_found', 404],
+  ['component_exists', 409],
 ])
 
 export class EditorApiError extends Error {

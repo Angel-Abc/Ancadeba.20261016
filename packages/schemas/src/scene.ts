@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { gameIdSchema } from './game.js'
 import { translationKeySchema } from './languages.js'
 import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
+import { graphicAppearanceSchema, graphicHasBindings, assetIdSchema } from './assets.js'
 
 export const gridPlacementSchema = z.object({
   row: z.number().int().positive(),
@@ -71,10 +72,22 @@ export const languageSelectComponentSchema = z
     message: 'A label or labelKey is required',
   })
 
+export const graphicComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('graphic'),
+  placement: gridPlacementSchema,
+  visual: assetIdSchema,
+  alt: z.string(),
+  altKey: translationKeySchema.optional(),
+  fit: z.enum(['contain', 'cover']).default('contain'),
+  appearance: graphicAppearanceSchema.default({ colors: {}, visible: true, slots: {} }),
+})
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
+  graphicComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -104,6 +117,17 @@ export const sceneSchema = z
       })
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (
+        scene.type === 'stand-alone' &&
+        component.type === 'graphic' &&
+        graphicHasBindings(component.appearance)
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index, 'appearance'],
+          message: 'Game bindings require a game scene',
+        })
+
       if (
         scene.type === 'stand-alone' &&
         component.type === 'text' &&
@@ -143,6 +167,8 @@ export const sceneSchema = z
 export type SceneDefinition = z.infer<typeof sceneSchema>
 
 export type SceneComponentDefinition = z.infer<typeof sceneComponentSchema>
+
+export type GraphicComponentDefinition = z.infer<typeof graphicComponentSchema>
 
 export type TextComponentDefinition = z.infer<typeof textComponentSchema>
 

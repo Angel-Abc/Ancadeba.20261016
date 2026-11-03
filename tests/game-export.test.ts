@@ -20,6 +20,9 @@ import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { HttpGameResources } from '../apps/engine/src/gameResources.js'
 import { exportGame } from '../tooling/game-export.js'
+import { GameLoader, resolveGraphic, validateImageSource } from '@ancadeba/game-runtime'
+import { JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
+import { graphicAppearanceSchema } from '@ancadeba/schemas'
 
 const input = {
   'schema-version': '1.0.0',
@@ -134,6 +137,61 @@ describe('standalone game export', () => {
       exportGame({ gameDirectory: localized, outputDirectory: invalidOutput }),
     ).rejects.toThrow('language catalog')
     await expect(readFile(join(invalidOutput, 'index.html'))).rejects.toHaveProperty(
+      'code',
+      'ENOENT',
+    )
+  })
+
+  it('exports the graphics sample, relocates it under a nested URL, and validates every artwork source', async () => {
+    const gameDirectory = join(temp, 'graphics-source')
+    await cp(new URL('../sample-games/graphics/', import.meta.url), gameDirectory, {
+      recursive: true,
+    })
+    const destination = join(temp, 'graphics-output')
+    await exportGame({ gameDirectory, outputDirectory: destination })
+    const relocated = join(temp, 'graphics-relocated')
+    await rename(destination, relocated)
+
+    const server = await preview({
+      configFile: false,
+      root: temp,
+      base: '/nested/graphics/',
+      logLevel: 'silent',
+      build: { outDir: relocated },
+      preview: { host: '127.0.0.1', port: 0, strictPort: true },
+    })
+
+    try {
+      // SAFETY: Vite preview was configured to listen on a loopback TCP port.
+      const address = server.httpServer.address() as AddressInfo
+      const base = `http://127.0.0.1:${address.port}/nested/graphics/`
+      const config = await loadRuntimeConfig(base, fetch)
+      const resources = new HttpGameResources(config.gameUrl, base, fetch)
+      const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+      const loaded = await new GameLoader(new JsonResourceLoader(resources, logger)).load()
+      expect(loaded.assets?.parts.cloak?.pieces).toHaveLength(2)
+
+      for (const image of Object.values(loaded.assets!.images)) {
+        const bytes = await resources.readBytes(image.source)
+        expect(() =>
+          validateImageSource(image, bytes, new TextDecoder().decode(bytes)),
+        ).not.toThrow()
+      }
+
+      expect(
+        resolveGraphic(loaded.assets!, 'paper-doll', graphicAppearanceSchema.parse({})).pieces.map(
+          (piece) => piece.layer,
+        ),
+      ).toEqual(['rear', 'body', 'clothes', 'sword', 'hands', 'clasp'])
+    } finally {
+      await server.close()
+    }
+
+    await writeFile(join(gameDirectory, 'assets/images/cloak-clasp.svg'), '<svg>broken</svg>')
+    await expect(
+      exportGame({ gameDirectory, outputDirectory: join(temp, 'graphics-invalid') }),
+    ).rejects.toThrow('asset catalogues and sources')
+    await expect(readFile(join(temp, 'graphics-invalid/index.html'))).rejects.toHaveProperty(
       'code',
       'ENOENT',
     )

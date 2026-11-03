@@ -1,5 +1,10 @@
 import type { EngineHostSession, GameData, IEngineHost } from '@ancadeba/game-runtime'
-import { mountGameView } from '@ancadeba/ui-components'
+import {
+  mountGameView,
+  BrowserGraphicResources,
+  createGraphicPlatform,
+} from '@ancadeba/ui-components'
+import type { IResourceSource } from '@ancadeba/utilities'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 
@@ -8,18 +13,34 @@ export class EditorPreviewHost implements IEngineHost {
     private readonly element: HTMLElement,
     private readonly t: Translate = editorLocalization().t,
     private readonly subscribeLanguageChanges?: (listener: () => void) => () => void,
+    private readonly resources?: IResourceSource,
   ) {}
 
   mount(game: GameData, session: EngineHostSession): () => void {
-    const unmount = mountGameView(this.element, game, session, {
-      scenePicker: true,
-      scenePickerLabels: {
-        caption: this.t('scene.label'),
-        accessibleName: this.t('preview.scene'),
-        empty: this.t('preview.noScene'),
-      },
-      bindingMode: 'editor',
-    })
+    const graphics = this.resources
+      ? new BrowserGraphicResources(
+          this.resources,
+          createGraphicPlatform(this.element.ownerDocument),
+        )
+      : undefined
+
+    let unmount: () => void
+
+    try {
+      unmount = mountGameView(this.element, game, session, {
+        graphics,
+        scenePicker: true,
+        scenePickerLabels: {
+          caption: this.t('scene.label'),
+          accessibleName: this.t('preview.scene'),
+          empty: this.t('preview.noScene'),
+        },
+        bindingMode: 'editor',
+      })
+    } catch (error) {
+      graphics?.dispose()
+      throw error
+    }
 
     const unsubscribe = this.subscribeLanguageChanges?.(() => {
       const picker = this.element.querySelector('.ancadeba-scene-picker')
@@ -35,7 +56,12 @@ export class EditorPreviewHost implements IEngineHost {
 
     return () => {
       unsubscribe?.()
-      unmount()
+
+      try {
+        unmount()
+      } finally {
+        graphics?.dispose()
+      }
     }
   }
 }

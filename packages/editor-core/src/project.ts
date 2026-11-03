@@ -1,4 +1,4 @@
-import type { GameDefinition, SceneDefinition } from '@ancadeba/schemas'
+import type { GameDefinition, SceneDefinition, AssetCatalog } from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
 
@@ -16,6 +16,7 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  assets?: AssetCatalog | undefined
   revision: string
   game: GameDefinition | null
   scenes: SceneDefinition[]

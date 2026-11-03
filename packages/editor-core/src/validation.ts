@@ -8,6 +8,8 @@ import {
   assertGameLanguages,
   type LanguageCatalog,
   type SceneDefinition,
+  assetCatalogSchema,
+  assertGraphicReference,
 } from '@ancadeba/schemas'
 import type { Diagnostic, ProjectDocuments } from './project.js'
 
@@ -57,6 +59,27 @@ export function validateProject(
   }
 
   if (game.data.input) check(game.data.input, inputSchema)
+
+  const assets =
+    typeof game.data.assets === 'string' ? check(game.data.assets, assetCatalogSchema) : undefined
+
+  for (const [id, scene] of scenes) {
+    scene.components.forEach((component, index) => {
+      if (component.type !== 'graphic') return
+
+      try {
+        if (!assets?.success) throw new Error('Graphic requires a valid asset catalogue')
+        assertGraphicReference(assets.data, component.visual, component.appearance)
+      } catch (error) {
+        diagnostics.push({
+          code: 'invalid_graphic',
+          file: `scenes/${id}.json`,
+          path: ['components', index],
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+  }
 
   if (game.data.languages) {
     const catalogs = new Map<string, LanguageCatalog>()

@@ -108,6 +108,7 @@ function clearDownload(): void {
 const container = new ContainerBuilder({
   fetcher: fetch,
   host: new EditorPreviewHost(content, t, subscribeLanguageChanges),
+  createHost: (source) => new EditorPreviewHost(content, t, subscribeLanguageChanges, source),
   gameLanguagePreferences: new BrowserGameLanguagePreferences(() => window.localStorage),
   getPreferredGameLanguages: () => {
     return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []

@@ -144,6 +144,45 @@ export function createEditorServer(
 
         return
       }
+
+      if (request.method === 'POST' && url.pathname === '/api/editor/assets/import') {
+        const contentType = request.headers['content-type'] ?? ''
+
+        if (!contentType.startsWith('multipart/form-data;'))
+          throw new WorkspaceError(415, 'Asset imports must use multipart/form-data')
+        const bytes = await readBody(request)
+        let form: FormData
+
+        try {
+          form = await new Response(new Uint8Array(bytes), {
+            headers: { 'Content-Type': contentType },
+          }).formData()
+        } catch {
+          throw new EditorError(400, 'invalid_request', 'Malformed multipart import')
+        }
+
+        const metadata = form.get('metadata')
+        const file = form.get('file')
+
+        if (typeof metadata !== 'string' || !(file instanceof Blob))
+          throw new EditorError(400, 'invalid_request', 'Import requires metadata and file fields')
+        let value: unknown
+
+        try {
+          value = JSON.parse(metadata)
+        } catch {
+          throw new EditorError(400, 'invalid_json', 'Invalid import metadata JSON')
+        }
+
+        const result = await projects.importAsset(value, new Uint8Array(await file.arrayBuffer()))
+        json(response, 200, {
+          ...result.view,
+          changedFiles: result.changedFiles,
+          summary: result.summary,
+        })
+
+        return
+      }
     }
 
     if (request.method === 'POST' && url.pathname === '/api/exports') {

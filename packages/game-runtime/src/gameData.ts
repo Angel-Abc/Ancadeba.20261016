@@ -5,9 +5,11 @@ import type {
   TextComponentDefinition,
   ButtonComponentDefinition,
   LanguageSelectComponentDefinition,
+  GraphicComponentDefinition,
+  AssetCatalog,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
-import { assertGameLanguages } from '@ancadeba/schemas'
+import { assertGameLanguages, assertGraphicReference } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
 export interface TextComponentData extends TextTemplate {
@@ -37,6 +39,9 @@ export type SceneComponentData =
   | TextComponentData
   | ButtonComponentData
   | LanguageSelectComponentData
+  | GraphicComponentDefinition
+
+export type GraphicComponentData = GraphicComponentDefinition
 
 export interface InputData {
   readonly virtualKeys: readonly string[]
@@ -58,6 +63,7 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly assets?: AssetCatalog
   readonly localization?: IGameLocalization
   readonly language?: string
   readonly id: string
@@ -75,8 +81,12 @@ export function assembleGameData(
   definition: GameDefinition,
   sceneDefinitions: ReadonlyMap<string, SceneDefinition>,
   inputDefinition?: InputDefinition,
+  assets?: AssetCatalog,
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
+
+  if ((typeof definition.assets === 'string') !== Boolean(assets))
+    throw new Error('Asset catalogue must match the game assets reference')
 
   if (Boolean(definition.input) !== Boolean(inputDefinition)) {
     throw new Error('Input definition must match the game input reference')
@@ -138,6 +148,11 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'graphic') {
+        if (!assets) throw new Error(`Graphic ${component.id} requires an asset catalogue`)
+        assertGraphicReference(assets, component.visual, component.appearance)
+      }
+
       if (component.type !== 'button' || !component.action) continue
       const target = scenes.get(component.action.scene)
 
@@ -151,6 +166,7 @@ export function assembleGameData(
   }
 
   return {
+    ...(assets ? { assets } : {}),
     id: definition.id,
     title: definition.title,
     description: definition.description,

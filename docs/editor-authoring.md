@@ -27,16 +27,37 @@ unchanged.
 
 Each request contains one command. Metadata commands supply all listed fields.
 
-| Command                | Fields                                               |
-| ---------------------- | ---------------------------------------------------- |
-| `game.updateMetadata`  | `title`, `description`, `version`                    |
-| `scene.create`         | A complete `scene` matching the current scene schema |
-| `scene.updateMetadata` | `sceneId`, `title`, `description`                    |
-| `scene.updateLayout`   | `sceneId`, positive integer `rows` and `columns`     |
+| Command                    | Fields                                               |
+| -------------------------- | ---------------------------------------------------- |
+| `game.updateMetadata`      | `title`, `description`, `version`                    |
+| `scene.create`             | A complete `scene` matching the current scene schema |
+| `scene.updateMetadata`     | `sceneId`, `title`, `description`                    |
+| `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`     |
+| `assets.upsertImage`       | `id`, complete `image` definition                    |
+| `assets.upsertPart`        | `id`, complete `part` definition                     |
+| `assets.upsertComposition` | `id`, complete `composition` definition              |
+| `assets.remove`            | `kind` (`images`, `parts`, or `compositions`), `id`  |
+| `scene.upsertGraphic`      | `sceneId`, complete graphic `component`              |
+| `scene.removeGraphic`      | `sceneId`, `componentId`                             |
 
 Scene creation updates both the scene document and the manifest reference.
-Existing IDs cannot be changed. Components remain empty under the current format.
+Existing IDs cannot be changed. Scenes support text, buttons, language selectors,
+and graphics; the focused graphic commands edit only graphic components.
 Input definitions are loaded and validated but cannot be edited through commands.
+
+Graphic components can be created, edited, and removed without changing other
+component types. The first asset operation initializes `assets.json` and its
+manifest reference. Inspection includes the parsed catalogue as `assets` when
+present. See [the graphics guide](asset-workshop.md) for source and composition
+formats, palettes, and game-state bindings.
+
+`POST /api/editor/assets/import` accepts multipart fields `metadata` (JSON with
+`path`, `expectedRevision`, `id`, and `format`) and `file` (bytes). The entire
+request is limited to 10 MiB, including multipart overhead. Source files are
+created under unique names before definitions are published. Replacing artwork
+retains compatible defaults and presets and never overwrites the previous source.
+An uncertain save reports the new source path; inspect before retrying. A failed
+publication can leave an unreferenced source, which is not automatically deleted.
 
 ## HTTP contract
 
@@ -108,7 +129,11 @@ project; repair invalid source files externally before retrying.
 
 Revisions hash the exact bytes of the manifest, referenced scenes, and referenced
 input file. They survive server restarts and detect direct file edits, including
-formatting changes. Unreferenced assets do not affect the revision.
+formatting changes. Unreferenced files do not affect the revision. Asset catalogues
+and all registered image source bytes do affect it. Inspection validates source
+bounds, format, SVG profile, and color-slot declarations. Replacing or unregistering
+an unused broken image is permitted as a targeted repair; the resulting project
+must be valid.
 
 Server commands and raw file-API writes use one queue per server. Competing
 commands based on the same revision cannot overwrite each other silently.
@@ -178,7 +203,7 @@ Run `pnpm lint`, `pnpm test`,
 `pnpm typecheck`, and `pnpm build`.
 
 V1 does not include new-project creation, deletion, ID changes, input editing,
-commands to edit existing components, scripts, batches, undo history, real-time
+commands to edit existing non-graphic components, scripts, batches, undo history, real-time
 collaboration, live preview updates, or embedded chat. New scenes can include
 text components using the engine's shared scene schema; existing components and
 bindings are preserved by metadata and layout edits. The visual panel creates

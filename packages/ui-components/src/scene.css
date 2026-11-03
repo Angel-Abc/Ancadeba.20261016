@@ -20,6 +20,7 @@
 }
 
 .ancadeba-text,
+.ancadeba-graphic,
 .ancadeba-button,
 .ancadeba-language-select {
   box-sizing: border-box;
@@ -37,6 +38,37 @@
   line-height: var(--ge-scene-line-height);
   color: var(--ge-scene-text-color);
   background: var(--ge-scene-text-background);
+}
+
+.ancadeba-graphic {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  white-space: normal;
+}
+.ancadeba-graphic[hidden] {
+  display: none;
+}
+.ancadeba-graphic > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ancadeba-graphic--unavailable {
+  display: grid;
+  place-items: center;
+  border: 1px dashed currentColor;
+}
+.ancadeba-graphic-diagnostic {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #421c1ce6;
+  color: white;
+  padding: 0.3em;
+  font: 12px/1.4 sans-serif;
+  white-space: pre-wrap;
 }
 
 .ancadeba-button {

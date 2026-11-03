@@ -102,15 +102,17 @@ Tool calls report an unavailable server until it returns.
 Every tool is bound to the configured game. Tool arguments cannot change the
 project path or editor server URL. There are no raw-file, shell, or process tools.
 
-| Tool                             | Arguments                                                            | Result                                                     |
-| -------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `ancadeba_get_capabilities`      | Empty object                                                         | API version, commands, HTTP schemas, examples, game folder |
-| `ancadeba_inspect_game`          | Empty object                                                         | Game metadata, scene summaries, revision, diagnostics      |
-| `ancadeba_inspect_scene`         | `sceneId`                                                            | Scene definition, revision, diagnostics                    |
-| `ancadeba_update_game_metadata`  | `expectedRevision`, `title`, `description`, `version`                | Saved change summary                                       |
-| `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                 | Saved change summary                                       |
-| `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`                | Saved change summary                                       |
-| `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns` | Saved change summary                                       |
+| Tool                             | Arguments                                                            | Result                                                             |
+| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ancadeba_get_capabilities`      | Empty object                                                         | API version, commands, HTTP schemas, examples, game folder         |
+| `ancadeba_inspect_game`          | Empty object                                                         | Game metadata, scene summaries, revision, diagnostics              |
+| `ancadeba_inspect_scene`         | `sceneId`                                                            | Scene definition, revision, diagnostics                            |
+| `ancadeba_inspect_assets`        | Empty object                                                         | Asset catalogue, parts, compositions, revision, source diagnostics |
+| `ancadeba_edit_assets`           | `expectedRevision`, an asset or graphic `command` from capabilities  | Saved change summary                                               |
+| `ancadeba_update_game_metadata`  | `expectedRevision`, `title`, `description`, `version`                | Saved change summary                                               |
+| `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                 | Saved change summary                                               |
+| `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`                | Saved change summary                                               |
+| `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns` | Saved change summary                                               |
 
 Editing input schemas derive from editor-core's commands. The adapter supplies
 the command type and configured project path. Each write checks that the connected
@@ -120,9 +122,16 @@ Metadata commands require all listed fields. Scene creation requires the current
 complete scene format, including `schema-version: 1.0.0`, scene type, grid screen,
 and a `components` array. Components can be empty or contain the engine's text
 components, including game bindings in game scenes. Grid bounds, unique component
-IDs, and binding rules are validated by the shared scene schema. The three inspection tools are annotated as
+IDs, and binding rules are validated by the shared scene schema. The four inspection tools are annotated as
 read-only. Editing tools are annotated as modifying and are not advertised as
 safe to retry automatically.
+
+The asset editing tool accepts `assets.upsertImage`, `assets.upsertPart`,
+`assets.upsertComposition`, `assets.remove`, `scene.upsertGraphic`, and
+`scene.removeGraphic`. Inspect capabilities for complete input schemas and
+examples. Image registration requires a source already inside the game directory;
+binary uploads use the editor's bounded multipart HTTP import endpoint. Asset
+inspection reports source problems, and artwork byte edits invalidate revisions.
 
 The project inspection deliberately returns scene summaries. Inspect a specific
 scene for its description and complete supported definition. Game titles,

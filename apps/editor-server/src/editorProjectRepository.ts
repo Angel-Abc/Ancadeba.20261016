@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { gameSchema, sceneSchema } from '@ancadeba/schemas'
+import { gameSchema, sceneSchema, assetCatalogSchema } from '@ancadeba/schemas'
+import { validateImageSource } from '@ancadeba/game-runtime'
 import {
   EditorError,
   type CommandResult,
@@ -16,6 +17,12 @@ export interface ProjectWorkspace extends WorkspaceService {
 export interface EditorProjectRepository {
   load(folder: string): Promise<ProjectSnapshot>
   save(folder: string, change: CommandResult): Promise<void>
+  validateAssets?(
+    folder: string,
+    project: ProjectSnapshot,
+    overrides?: ReadonlyMap<string, Uint8Array>,
+  ): Promise<Diagnostic[]>
+  createAsset?(folder: string, file: string, bytes: Uint8Array): Promise<void>
 }
 
 export function projectPath(folder: string, file: string): string {
@@ -72,6 +79,33 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       if (game.data.input) await read(game.data.input)
 
+      if (typeof game.data.assets === 'string') {
+        await read(game.data.assets)
+        const catalog = assetCatalogSchema.safeParse(documents[game.data.assets])
+
+        if (catalog.success) {
+          for (const [id, image] of Object.entries(catalog.data.images)) {
+            try {
+              const bytes = await this.workspace.read(projectPath(folder, image.source))
+              sources.push([image.source, createHash('sha256').update(bytes).digest('hex')])
+              validateImageSource(
+                image,
+                bytes,
+                image.format === 'svg' ? Buffer.from(bytes).toString('utf8') : '',
+              )
+            } catch (error) {
+              sources.push([image.source, null])
+              sourceDiagnostics.push({
+                code: 'invalid_asset_source',
+                file: image.source,
+                path: ['images', id],
+                message: error instanceof Error ? error.message : String(error),
+              })
+            }
+          }
+        }
+      }
+
       for (const language of game.data.languages?.available ?? []) {
         await read(`languages/${language}/messages.json`)
       }
@@ -90,7 +124,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
     const newScene = change.changedFiles.find((file) => file !== 'game.json')
 
-    if (change.changedFiles.length === 2 && newScene) {
+    if (change.changedFiles.length === 2 && newScene?.startsWith('scenes/')) {
       const path = projectPath(folder, newScene)
       const bytes = encode(newScene)
       const manifestPath = projectPath(folder, 'game.json')
@@ -136,10 +170,72 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
         throw error
       }
+    } else if (change.changedFiles.length === 2 && newScene) {
+      const path = projectPath(folder, newScene)
+      const bytes = encode(newScene)
+      await this.workspace.create(path, bytes)
+
+      try {
+        await this.workspace.write(projectPath(folder, 'game.json'), encode('game.json'))
+      } catch (error) {
+        const current = await this.workspace.read(projectPath(folder, 'game.json'))
+
+        if (Buffer.from(current).equals(encode('game.json'))) return
+        const manifest = gameSchema.safeParse(JSON.parse(Buffer.from(current).toString('utf8')))
+
+        if (manifest.success && manifest.data.assets !== newScene)
+          await this.workspace.removeCreated(path, bytes)
+        else
+          throw new EditorError(
+            500,
+            'asset_publication_failed',
+            `Catalogue publication is uncertain; inspect before retrying. File: ${newScene}`,
+          )
+        throw error
+      }
     } else {
       const file = change.changedFiles[0]
 
       if (file) await this.workspace.write(projectPath(folder, file), encode(file))
     }
+  }
+
+  async validateAssets(
+    folder: string,
+    project: ProjectSnapshot,
+    overrides: ReadonlyMap<string, Uint8Array> = new Map(),
+  ): Promise<Diagnostic[]> {
+    const game = gameSchema.parse(project.documents['game.json'])
+
+    if (typeof game.assets !== 'string') return []
+    const catalog = assetCatalogSchema.parse(project.documents[game.assets])
+    const diagnostics: Diagnostic[] = []
+
+    for (const [id, image] of Object.entries(catalog.images)) {
+      try {
+        const bytes =
+          overrides.get(image.source) ??
+          (await this.workspace.read(projectPath(folder, image.source)))
+
+        validateImageSource(
+          image,
+          bytes,
+          image.format === 'svg' ? Buffer.from(bytes).toString('utf8') : '',
+        )
+      } catch (error) {
+        diagnostics.push({
+          code: 'invalid_asset_source',
+          file: image.source,
+          path: ['images', id],
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return diagnostics
+  }
+
+  createAsset(folder: string, file: string, bytes: Uint8Array): Promise<void> {
+    return this.workspace.create(projectPath(folder, file), bytes)
   }
 }

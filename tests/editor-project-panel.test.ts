@@ -77,7 +77,8 @@ function panel() {
   let languageChanged = () => {}
 
   const root = {
-    querySelector: (selector: string) => control(selector.slice(1)),
+    querySelector: (selector: string) =>
+      selector === '#assets-panel' ? null : control(selector.slice(1)),
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
 

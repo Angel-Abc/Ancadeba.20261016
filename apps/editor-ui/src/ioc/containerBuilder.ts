@@ -13,6 +13,7 @@ export class ContainerBuilder implements IContainerBuilder {
       ...editorFactories,
       fetcher: () => this.dependencies.fetcher,
       host: () => this.dependencies.host,
+      createHost: () => this.dependencies.createHost,
       runtime: () => this.dependencies.runtime,
       onPreviewStateChange: () => this.dependencies.onPreviewStateChange,
       getPreferredGameLanguages: () => this.dependencies.getPreferredGameLanguages,

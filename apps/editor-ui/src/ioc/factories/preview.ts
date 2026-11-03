@@ -13,6 +13,7 @@ import {
   type Factories,
   type ILogger,
   type IMessageBus,
+  type IResourceSource,
 } from '@ancadeba/utilities'
 import { EditorPreviewController, type PreviewStateListener } from '../../previewController.js'
 import { EditorWorkspaceResources } from '../../workspaceResources.js'
@@ -20,6 +21,7 @@ import { EditorWorkspaceResources } from '../../workspaceResources.js'
 export interface PreviewDependencies {
   fetcher: typeof fetch
   host: IEngineHost
+  createHost?: (source: IResourceSource) => IEngineHost
   runtime: EngineRuntimeServices
   logger: ILogger
   onPreviewStateChange: PreviewStateListener
@@ -44,18 +46,21 @@ export const previewFactories = {
     const getPreferredLanguages = resolver.resolve('getPreferredGameLanguages')
     const languagePreferences = resolver.resolve('gameLanguagePreferences')
 
-    return (folder: string) =>
-      new Engine(
+    return (folder: string) => {
+      const source = new EditorWorkspaceResources(folder, fetcher)
+
+      return new Engine(
         new GameLoader(
-          new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
+          new JsonResourceLoader(source, logger),
           getPreferredLanguages?.() ?? [],
           languagePreferences,
         ),
-        host,
+        resolver.resolve('createHost')?.(source) ?? host,
         logger,
         createMessageBus,
         runtime,
       )
+    }
   },
   previewController: (resolver) =>
     new EditorPreviewController(

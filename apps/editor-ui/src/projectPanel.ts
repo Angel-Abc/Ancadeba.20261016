@@ -1,8 +1,9 @@
-import type { ProjectView } from '@ancadeba/editor-core'
+import type { ProjectView, EditorCommand } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
 import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
+import { bindAssetsPanel } from './assetsPanel.js'
 
 export function bindProjectPanel(
   root: HTMLElement,
@@ -38,6 +39,7 @@ export function bindProjectPanel(
   let view: ProjectView | undefined
   const dirtyForms = new Set<string>()
   let loadedPath = ''
+  let assetsPanel: ReturnType<typeof bindAssetsPanel> | undefined
 
   const fillScene = () => {
     const scene = view?.scenes.find((scene) => scene.id === scenes.value)
@@ -60,6 +62,7 @@ export function bindProjectPanel(
   let refreshLanguage = () => {}
 
   const render: ProjectEditorListener = (state, replaceFields) => {
+    assetsPanel?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     view = state.view
     loadedPath = state.path
@@ -92,14 +95,14 @@ export function bindProjectPanel(
 
     if (!replaceFields || !view?.game) return
 
-    const savedForm = state.lastCommand
-      ? {
-          'game.updateMetadata': metadata.id,
-          'scene.updateMetadata': sceneMetadata.id,
-          'scene.updateLayout': layout.id,
-          'scene.create': create.id,
-        }[state.lastCommand]
-      : undefined
+    const formCommands: Partial<Record<EditorCommand['type'], string>> = {
+      'game.updateMetadata': metadata.id,
+      'scene.updateMetadata': sceneMetadata.id,
+      'scene.updateLayout': layout.id,
+      'scene.create': create.id,
+    }
+
+    const savedForm = state.lastCommand ? formCommands[state.lastCommand] : undefined
 
     if (savedForm) dirtyForms.delete(savedForm)
     else if (!state.preserveDrafts) dirtyForms.clear()
@@ -143,6 +146,15 @@ export function bindProjectPanel(
   }
 
   const controller = new ProjectEditorController(new HttpEditorClient(fetcher), render)
+  assetsPanel = bindAssetsPanel(
+    root,
+    {
+      save: (command) => controller.save(command),
+      importAsset: (id, format, file) => controller.importAsset(id, format, file),
+    },
+    fetcher,
+    t,
+  )
   const unsubscribeLanguage = subscribeLanguageChanges?.(() => refreshLanguage())
 
   const listeners: (() => void)[] = []
@@ -157,7 +169,7 @@ export function bindProjectPanel(
     void controller.load(path.startsWith('/') ? path : path.replace(/\/+$/, ''))
   })
   on(reload, 'click', () => {
-    void controller.load(loadedPath, dirtyForms.size > 0)
+    void controller.load(loadedPath, dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
   })
 
   for (const form of [metadata, sceneMetadata, layout, create]) {
@@ -222,11 +234,12 @@ export function bindProjectPanel(
     })
   })
   on(root.ownerDocument.defaultView!, 'focus', () => {
-    void controller.refresh(() => dirtyForms.size > 0)
+    void controller.refresh(() => dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
   })
 
   return () => {
     controller.dispose()
+    assetsPanel?.dispose()
     unsubscribeLanguage?.()
 
     for (const remove of listeners) remove()

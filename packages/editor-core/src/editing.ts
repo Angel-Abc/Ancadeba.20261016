@@ -2,13 +2,26 @@ import { gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand } from './commands.js'
 import { EditorError, object, type CommandResult, type ProjectSnapshot } from './project.js'
 import { validateProject } from './validation.js'
+import { editAssets } from './assetEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
 
   if (!parsed.success) throw new EditorError(400, 'invalid_command', 'Invalid editing command')
   const command = parsed.data
-  const diagnostics = validateProject(project.documents, project.sourceDiagnostics)
+  const initialDiagnostics = validateProject(project.documents, project.sourceDiagnostics)
+  const repairing = command.type === 'assets.upsertImage' || command.type === 'assets.remove'
+  const manifest = object(project.documents['game.json'])
+
+  const catalog = object(
+    project.documents[typeof manifest.assets === 'string' ? manifest.assets : 'assets.json'],
+  )
+
+  const repairSource = repairing ? object(object(catalog.images)[command.id]).source : undefined
+
+  const diagnostics = initialDiagnostics.filter(
+    (diagnostic) => !repairing || diagnostic.file !== repairSource,
+  )
 
   if (diagnostics.length)
     throw new EditorError(
@@ -21,7 +34,13 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
 
-  if (command.type === 'game.updateMetadata') {
+  if (
+    command.type.startsWith('assets.') ||
+    command.type === 'scene.upsertGraphic' ||
+    command.type === 'scene.removeGraphic'
+  ) {
+    changedFiles.push(...editAssets(documents, command))
+  } else if (command.type === 'game.updateMetadata') {
     documents['game.json'] = {
       ...object(documents['game.json']),
       title: command.title,
@@ -43,7 +62,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
       scenes: [...game.scenes, command.scene.id],
     }
     changedFiles.push(file, 'game.json')
-  } else {
+  } else if (command.type === 'scene.updateMetadata' || command.type === 'scene.updateLayout') {
     if (!game.scenes.includes(command.sceneId))
       throw new EditorError(404, 'scene_not_found', 'Scene does not exist')
     const file = `scenes/${command.sceneId}.json`
@@ -86,7 +105,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
           ? 'Updated game metadata'
           : command.type === 'scene.updateLayout'
             ? `Updated scene ${command.sceneId} grid to ${command.rows} x ${command.columns}`
-            : `Updated scene ${command.sceneId} metadata`,
+            : command.type === 'scene.updateMetadata'
+              ? `Updated scene ${command.sceneId} metadata`
+              : `Applied ${command.type}`,
     diagnostics: [],
   }
 }

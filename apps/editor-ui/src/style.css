@@ -184,3 +184,78 @@ textarea:focus-visible {
 #editor-error {
   white-space: pre-wrap;
 }
+/* Asset authoring uses the same renderer and resources as game preview. */
+#assets-panel {
+  border-top: 1px solid var(--border-color, #52606b);
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+.asset-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.6rem;
+  max-height: 250px;
+  overflow: auto;
+}
+.asset-thumbnail {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 80px auto;
+  gap: 0.3rem;
+  padding: 0.5rem;
+}
+.asset-thumbnail > .ancadeba-graphic {
+  height: 80px;
+  width: 100%;
+}
+.asset-thumbnail > span {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+.asset-preview {
+  height: 320px;
+  background: #b8c5b52b;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+}
+.asset-preview > .ancadeba-graphic {
+  height: 100%;
+  width: 100%;
+}
+.asset-preview-controls,
+#asset-color-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+.asset-preview-controls label,
+#asset-color-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+#assets-panel input[type='color'] {
+  width: 4rem;
+  height: 2.5rem;
+  padding: 0.15rem;
+}
+#assets-panel form {
+  margin-top: 1.2rem;
+}
+#assets-panel details {
+  margin-top: 1.5rem;
+}
+#assets-panel textarea {
+  font-family: monospace;
+}
+.graphic-placement {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+@media (max-width: 550px) {
+  .graphic-placement {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -101,6 +101,20 @@ The editor server provides `GET /health`, returning `{ "status": "ok" }`. During
 development, the editor UI proxies `/health` and `/api` to its configured
 `editorServerUrl`.
 
+## Graphics assets
+
+Games can reference an `assets.json` catalogue containing SVG/PNG/JPEG/WebP images,
+grouped parts, and layered compositions. The editor's Assets panel imports artwork,
+edits palettes, previews compositions, and places graphics in scenes. MCP exposes
+the same revision-checked authoring commands.
+
+`sample-games/graphics` is a self-contained wardrobe example with two independent
+characters, item previews, and a two-piece cloak. Export it with
+`pnpm export:game sample-games/graphics` or select it in the editor workspace.
+The development workshop at `http://localhost:5173/asset-lab.html` uses the same
+catalogue, artwork, and renderer. See [the graphics guide](docs/asset-workshop.md)
+for the source profile, schema examples, bindings, and attachment conventions.
+
 ## App configuration
 
 Copy each app's `config.example.json` to `config.json` and edit the values.
@@ -195,7 +209,7 @@ scene in the browser hosts.
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and a `components` array of text, button, and language selector components (or an empty array).
+and a `components` array of text, button, language selector, and graphic components (or an empty array).
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
@@ -1557,7 +1571,7 @@ The exporter copies all regular game files, including unused assets. It excludes
 source-control directories (`.git`, `.hg`, `.svn`), `node_modules`, `.env` and
 `.env.*` files, and `.DS_Store`/`Thumbs.db`. Links and special files are rejected.
 Exports use the same game data pipeline as engine startup. Missing or invalid
-referenced scenes prevent export; other asset references are not yet validated.
+referenced scenes, asset catalogues, or registered image sources prevent export.
 Gameplay is not executed during export.
 
 Exports are assembled in a temporary directory and published only after a

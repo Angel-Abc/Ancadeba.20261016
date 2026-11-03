@@ -11,7 +11,7 @@ import {
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { GameLoader } from '@ancadeba/game-runtime'
+import { GameLoader, validateImageSource } from '@ancadeba/game-runtime'
 import { JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
 import { build } from 'vite-plus'
 import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
@@ -124,10 +124,19 @@ export async function exportGame(options: GameExportOptions): Promise<GameExport
           new Uint8Array(await readFile(join(staging, 'game', path))),
       }
 
-      await new GameLoader(new JsonResourceLoader(source, validationLogger)).load()
+      const game = await new GameLoader(new JsonResourceLoader(source, validationLogger)).load()
+
+      for (const image of Object.values(game.assets?.images ?? {})) {
+        const bytes = await source.readBytes(image.source)
+        validateImageSource(
+          image,
+          bytes,
+          image.format === 'svg' ? Buffer.from(bytes).toString('utf8') : '',
+        )
+      }
     } catch (error) {
       throw new Error(
-        'Cannot export game: game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid',
+        'Cannot export game: game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid; asset catalogues and sources must also be valid',
         {
           cause: error,
         },

@@ -14,6 +14,15 @@ export class EditorClientError extends Error {
 export interface IEditorClient {
   inspect(path: string): Promise<ProjectView>
   apply(request: CommandRequest): Promise<ProjectView>
+  importAsset?(
+    metadata: {
+      path: string
+      expectedRevision: string
+      id: string
+      format: 'svg' | 'png' | 'jpeg' | 'webp'
+    },
+    file: File,
+  ): Promise<ProjectView>
 }
 
 export class HttpEditorClient implements IEditorClient {
@@ -28,6 +37,21 @@ export class HttpEditorClient implements IEditorClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })
+  }
+  importAsset(
+    metadata: {
+      path: string
+      expectedRevision: string
+      id: string
+      format: 'svg' | 'png' | 'jpeg' | 'webp'
+    },
+    file: File,
+  ): Promise<ProjectView> {
+    const body = new FormData()
+    body.set('metadata', JSON.stringify(metadata))
+    body.set('file', file)
+
+    return this.request('/api/editor/assets/import', { method: 'POST', body })
   }
   private async request(url: string, init?: RequestInit): Promise<ProjectView> {
     const fetcher = this.fetcher

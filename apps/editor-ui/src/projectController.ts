@@ -72,6 +72,30 @@ export class ProjectEditorController {
       return true
     })
   }
+  importAsset(id: string, format: 'svg' | 'png' | 'jpeg' | 'webp', file: File): Promise<void> {
+    const { view, path } = this.state
+
+    if (!view || !this.client.importAsset) return Promise.resolve()
+
+    return this.perform(async () => {
+      const next = await this.client.importAsset!(
+        { path, expectedRevision: view.revision, id, format },
+        file,
+      )
+
+      this.state = {
+        ...this.state,
+        view: next,
+        lastCommand: 'assets.upsertImage',
+        preserveDrafts: true,
+        error: '',
+        conflict: false,
+        changedElsewhere: false,
+      }
+
+      return true
+    })
+  }
 
   async refresh(hasDrafts: boolean | (() => boolean)): Promise<void> {
     const { view, path } = this.state

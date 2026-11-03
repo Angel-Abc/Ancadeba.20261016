@@ -59,21 +59,68 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
-  it('discovers seven typed tools with read-only annotations and compact structured results', async () => {
+  it('exposes typed catalogue inspection and normalized graphic authoring commands', async () => {
+    const service = api()
+    let applied: EditorCommand | undefined
+    const original = service.apply.bind(service)
+    service.apply = async (revision, command, signal) => {
+      applied = command
+
+      return original(revision, command, signal)
+    }
+
+    const { client, close } = await connection(service)
+
+    try {
+      const inspection = await client.callTool({ name: 'ancadeba_inspect_assets', arguments: {} })
+      expect(inspection.structuredContent).toMatchObject({
+        ok: true,
+        data: { gamePath: 'basic', revision: 'one', diagnostics: [] },
+      })
+
+      const result = await client.callTool({
+        name: 'ancadeba_edit_assets',
+        arguments: {
+          expectedRevision: 'one',
+          command: {
+            type: 'assets.upsertImage',
+            id: 'art',
+            image: {
+              format: 'svg',
+              source: 'assets/art.svg',
+              bounds: { x: 0, y: 0, width: 20, height: 30 },
+              colors: { fabric: '#ABCDEF' },
+            },
+          },
+        },
+      })
+
+      expect(result.structuredContent).toMatchObject({ ok: true, data: { revision: 'two' } })
+      expect(applied).toMatchObject({
+        type: 'assets.upsertImage',
+        image: { colors: { fabric: '#abcdef' }, palettes: {} },
+      })
+    } finally {
+      await close()
+    }
+  })
+  it('discovers typed tools with read-only annotations and compact structured results', async () => {
     const { client, close } = await connection(api())
 
     try {
       const { tools } = await client.listTools()
       expect(tools.map((tool) => tool.name).sort((a, b) => a.localeCompare(b))).toEqual([
         'ancadeba_create_scene',
+        'ancadeba_edit_assets',
         'ancadeba_get_capabilities',
+        'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
         'ancadeba_inspect_scene',
         'ancadeba_update_game_metadata',
         'ancadeba_update_scene_layout',
         'ancadeba_update_scene_metadata',
       ])
-      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(3)
+      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(4)
 
       for (const tool of tools) {
         expect(tool.outputSchema).toHaveProperty('type', 'object')
