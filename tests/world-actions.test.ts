@@ -27,6 +27,7 @@ class TestTiming {
     schedule: (run: () => void, delay: number) => {
       const task = { run, delay, dueAt: this.now + delay, cancelled: false, ran: false }
       this.tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
@@ -41,6 +42,7 @@ class TestTiming {
     const task = this.pending
       .filter((task) => task.dueAt <= this.now)
       .sort((a, b) => a.dueAt - b.dueAt)[0]
+
     if (!task) throw new Error('No due task')
     task.ran = true
     task.run()
@@ -48,6 +50,7 @@ class TestTiming {
 
   drain(): void {
     let passes = 0
+
     while (this.pending.some((task) => task.dueAt <= this.now)) {
       if (++passes > 100) throw new Error('Tasks did not become idle')
       this.runNext()
@@ -73,18 +76,22 @@ function setup(
 ) {
   const timing = options.timing ?? new TestTiming()
   const capture = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
   const logger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: vi.fn(() => ''),
   } satisfies ILogger
+
   const mount = vi.fn<IEngineHost['mount']>(() => () => {})
+
   const engine = new Engine(
     { load: async () => game },
     {
       mount(data, session) {
         session.lifecycle.startGame()
+
         return (options.host ?? { mount }).mount(data, session)
       },
     },
@@ -107,6 +114,7 @@ function setup(
       }),
     },
   )
+
   return { engine, timing, capture, logger, mount }
 }
 
@@ -114,6 +122,7 @@ async function start(options: Parameters<typeof setup>[0] = {}) {
   const instance = setup(options)
   await instance.engine.start()
   instance.timing.drain()
+
   return instance
 }
 
@@ -149,6 +158,7 @@ describe('one-shot world schedules', () => {
   it('orders each newly due group by deadline and then registration order', async () => {
     const instance = await start()
     const { engine, timing, capture } = instance
+
     for (const [deadline, label] of [
       [200, 'late-first'],
       [100, 'early-first'],
@@ -157,6 +167,7 @@ describe('one-shot world schedules', () => {
     ] as const) {
       engine.actions!.scheduleWorldAt('capture', deadline, label)
     }
+
     expect(timing.pending).toEqual([])
     engine.actions!.request('cost', 300)
     timing.drain()
@@ -176,18 +187,22 @@ describe('one-shot world schedules', () => {
 
   it('appends due requests behind queued actions and uses the latest committed snapshot', async () => {
     const order: string[] = []
+
     const instance = await start({
       handlers: {
         marker: () => {
           order.push('queued')
+
           return { status: 'applied' }
         },
         effect: (_request, context) => {
           order.push(`effect:${context.progression.worldTimeMs}`)
+
           return { status: 'applied' }
         },
       },
     })
+
     const { engine, timing } = instance
     const observed: ActionRequest[] = []
     engine.messages!.subscribe('action.requested', (request) => {
@@ -274,6 +289,7 @@ describe('one-shot world schedules', () => {
         },
       },
     })
+
     const { engine, timing } = instance
     const rejected = vi.fn()
     const failed = vi.fn()
@@ -469,12 +485,14 @@ describe('world deadlines and elapsed host wakeups', () => {
     const deadline = max * 2 + 10
     engine.actions!.scheduleWorldAt('capture', deadline)
     expect(timing.pending.every((task) => task.delay === max)).toBe(true)
+
     for (const now of [max, max * 2]) {
       timing.now = now
       timing.drain()
       expect(capture).not.toHaveBeenCalled()
       expect(timing.pending.every((task) => task.delay >= 1 && task.delay <= max)).toBe(true)
     }
+
     timing.now = deadline
     timing.drain()
     expect(capture.mock.calls[0]![0].origin).toMatchObject({
@@ -486,9 +504,11 @@ describe('world deadlines and elapsed host wakeups', () => {
 
   it('clamps an infinite host projection caused by a finite world deadline and tiny rate', async () => {
     const max = 2_147_483_647
+
     const instance = await start({
       policy: { mode: 'elapsed', rate: Number.MIN_VALUE, pulseMs: max },
     })
+
     const { engine, timing, capture } = instance
     engine.actions!.scheduleWorldAt('capture', 1)
     expect(timing.pending.every((task) => task.delay === max)).toBe(true)
@@ -503,18 +523,22 @@ describe('world deadlines and elapsed host wakeups', () => {
 describe('world schedule action boundaries and lifecycle', () => {
   it('anchors a relative schedule inside a handler before that action commits its cost', async () => {
     const order: string[] = []
+
     const instance = await start({
       handlers: {
         source: (_request, context) => {
           context.actions.scheduleWorld('effect', 500)
+
           return { status: 'applied', worldTimeCostMs: 1000 }
         },
         effect: (_request, context) => {
           order.push(`effect:${context.progression.worldTimeMs}`)
+
           return { status: 'applied' }
         },
       },
     })
+
     const { engine, timing } = instance
     engine.messages!.subscribe('action.applied', ({ request }) => {
       if (request.action === 'source') order.push('source:applied')
@@ -527,24 +551,29 @@ describe('world schedule action boundaries and lifecycle', () => {
 
   it('defers zero-delay schedules inside handlers and supports later cost-triggered cascades', async () => {
     const order: string[] = []
+
     const instance = await start({
       handlers: {
         source: (_request, context) => {
           order.push('source')
           context.actions.scheduleWorld('first', 0)
           context.actions.scheduleWorldAt('second', 10)
+
           return { status: 'applied' }
         },
         first: () => {
           order.push('first')
+
           return { status: 'applied', worldTimeCostMs: 10 }
         },
         second: () => {
           order.push('second')
+
           return { status: 'applied' }
         },
       },
     })
+
     const { engine, timing } = instance
     engine.actions!.request('source')
     timing.runNext()
@@ -565,6 +594,7 @@ describe('world schedule action boundaries and lifecycle', () => {
         },
       },
     })
+
     const { engine, timing, capture } = instance
     engine.actions!.scheduleWorldAt('capture', 10)
     engine.actions!.request('reject')
@@ -592,6 +622,7 @@ describe('world schedule action boundaries and lifecycle', () => {
           },
         },
       })
+
       const { engine, timing, capture } = instance
       engine.actions!.scheduleWorldAt('capture', 10)
       timing.now = 20
@@ -620,6 +651,7 @@ describe('world schedule action boundaries and lifecycle', () => {
   it('defers mounting-time schedules until running and excludes mounting time', async () => {
     const timing = new TestTiming()
     let session: EngineHostSession | undefined
+
     const instance = setup({
       timing,
       policy: { mode: 'elapsed' },
@@ -629,10 +661,12 @@ describe('world schedule action boundaries and lifecycle', () => {
           services.actions!.scheduleWorld('capture', 0, 'start')
           services.actions!.scheduleWorld('capture', 20, 'later')
           timing.now = 1000
+
           return () => {}
         },
       },
     })
+
     await instance.engine.start()
     expect(instance.capture).not.toHaveBeenCalled()
     expect(session!.actions).toBe(instance.engine.actions)
@@ -650,6 +684,7 @@ describe('world schedule action boundaries and lifecycle', () => {
 
   it('disposes pending schedules when mounting fails', async () => {
     let retained: IGameActions | undefined
+
     const instance = setup({
       policy: { mode: 'elapsed' },
       host: {
@@ -661,6 +696,7 @@ describe('world schedule action boundaries and lifecycle', () => {
         },
       },
     })
+
     await expect(instance.engine.start()).rejects.toThrow('Mount failed')
     instance.timing.drain()
     expect(instance.capture).not.toHaveBeenCalled()
@@ -674,10 +710,12 @@ describe('world schedule action boundaries and lifecycle', () => {
       handlers: {
         halt: () => {
           instance.engine.stop()
+
           return { status: 'applied', worldTimeCostMs: 50 }
         },
       },
     })
+
     const { engine, timing, capture } = instance
     const actions = engine.actions!
     actions.scheduleWorldAt('halt', 5)
@@ -720,10 +758,12 @@ describe('world schedule action boundaries and lifecycle', () => {
     const secondId = second.engine.actions!.scheduleWorldAt('capture', 10)!
     expect(firstId).toBe(secondId)
     first.engine.actions!.cancelWorldScheduled(firstId)
+
     for (const instance of [first, second]) {
       instance.engine.actions!.request('cost', 10)
       instance.timing.drain()
     }
+
     expect(first.capture).not.toHaveBeenCalled()
     expect(second.capture).toHaveBeenCalledTimes(1)
     stop(first)

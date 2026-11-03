@@ -7,8 +7,10 @@ export function validateProject(
   sourceDiagnostics: readonly Diagnostic[] = [],
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [...sourceDiagnostics]
+
   const check = <T>(file: string, schema: z.ZodType<T>) => {
     const result = schema.safeParse(documents[file])
+
     if (!result.success && !sourceDiagnostics.some((diagnostic) => diagnostic.file === file)) {
       diagnostics.push(
         ...result.error.issues.map((issue) => ({
@@ -19,13 +21,18 @@ export function validateProject(
         })),
       )
     }
+
     return result
   }
+
   const game = check('game.json', gameSchema)
+
   if (!game.success) return diagnostics
+
   for (const id of game.data.scenes) {
     const file = `scenes/${id}.json`
     const scene = check(file, sceneSchema)
+
     if (scene.success && scene.data.id !== id) {
       diagnostics.push({
         code: 'scene_id_mismatch',
@@ -35,6 +42,8 @@ export function validateProject(
       })
     }
   }
+
   if (game.data.input) check(game.data.input, inputSchema)
+
   return diagnostics
 }

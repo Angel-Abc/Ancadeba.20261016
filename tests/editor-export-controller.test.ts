@@ -18,6 +18,7 @@ function createController() {
   const download = vi.fn<(archive: Blob, fileName: string) => void>()
   const onStateChange = vi.fn<ExportStateListener>()
   const controller = new EditorExportController(fetcher, download, onStateChange)
+
   return { controller, fetcher, download, onStateChange }
 }
 

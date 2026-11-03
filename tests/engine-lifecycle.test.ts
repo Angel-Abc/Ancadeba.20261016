@@ -40,10 +40,12 @@ function gameData(title: string) {
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (error: Error) => void
+
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise
     reject = rejectPromise
   })
+
   return { promise, resolve, reject }
 }
 
@@ -54,16 +56,20 @@ function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMe
       .mockResolvedValue(JSON.stringify(gameDefinition('Demo'))),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
   } satisfies IResourceSource
+
   const cleanup = vi.fn<() => void>()
+
   const host = {
     mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup),
   } satisfies IEngineHost
+
   const logger = {
     debug: vi.fn<ILogger['debug']>(() => ''),
     info: vi.fn<ILogger['info']>(() => ''),
     warn: vi.fn<ILogger['warn']>(() => ''),
     error: vi.fn<ILogger['error']>(() => ''),
   } satisfies ILogger
+
   const engine = new Engine(
     new GameLoader(new JsonResourceLoader(resourceSource, logger)),
     host,
@@ -71,6 +77,7 @@ function createInstance(options: { createMessageBus?: () => IMessageBus<EngineMe
     options.createMessageBus ?? (() => new MessageBus<EngineMessages>()),
     runtime,
   )
+
   return { engine, resourceSource, host, cleanup, logger }
 }
 
@@ -250,6 +257,7 @@ describe('engine lifecycle', () => {
     const { engine, host, cleanup } = createInstance()
     host.mount.mockImplementation(() => {
       engine.stop()
+
       return cleanup
     })
 
@@ -301,6 +309,7 @@ describe('engine lifecycle', () => {
 
 function observeLifecycle(engine: IEngine) {
   const messages = engine.messages
+
   if (!messages) throw new Error('Start a session before observing lifecycle events')
 
   const topics: (keyof EngineMessages)[] = []
@@ -324,6 +333,7 @@ function observeLifecycle(engine: IEngine) {
     expectTypeOf(payload).toEqualTypeOf<undefined>()
     topics.push('engine.stopped')
   })
+
   return { messages, topics, started, failed }
 }
 
@@ -526,6 +536,7 @@ describe('engine session messaging', () => {
     const { engine, host } = createInstance()
     host.mount.mockImplementationOnce(() => {
       engine.stop()
+
       return () => {}
     })
     const starting = engine.start()

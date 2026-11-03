@@ -18,6 +18,7 @@ function createLoader() {
     readText: vi.fn<IResourceSource['readText']>(),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
   } satisfies IResourceSource
+
   const logger = {
     debug: vi.fn<ILogger['debug']>(() => ''),
     info: vi.fn<ILogger['info']>(() => ''),

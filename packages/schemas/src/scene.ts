@@ -25,6 +25,7 @@ export const textComponentSchema = z
   })
   .superRefine((component, context) => {
     if (component.bindings === undefined) return
+
     for (const { alias } of textPlaceholders(component.text)) {
       if (!bindingAliasSchema.safeParse(alias).success || !Object.hasOwn(component.bindings, alias))
         context.addIssue({
@@ -83,6 +84,7 @@ export const sceneSchema = z
           path: ['components', index, 'bindings'],
           message: 'Game bindings require a game scene',
         })
+
       if (ids.has(component.id))
         context.addIssue({
           code: 'custom',
@@ -91,12 +93,14 @@ export const sceneSchema = z
         })
       ids.add(component.id)
       const { row, column, rowSpan, columnSpan } = component.placement
+
       if (row > scene.screen.grid.rows || rowSpan - 1 > scene.screen.grid.rows - row)
         context.addIssue({
           code: 'custom',
           path: ['components', index, 'placement'],
           message: 'Component exceeds the scene grid rows',
         })
+
       if (column > scene.screen.grid.columns || columnSpan - 1 > scene.screen.grid.columns - column)
         context.addIssue({
           code: 'custom',
@@ -107,8 +111,13 @@ export const sceneSchema = z
   })
 
 export type SceneDefinition = z.infer<typeof sceneSchema>
+
 export type SceneComponentDefinition = z.infer<typeof sceneComponentSchema>
+
 export type TextComponentDefinition = z.infer<typeof textComponentSchema>
+
 export type ButtonComponentDefinition = z.infer<typeof buttonComponentSchema>
+
 export type ButtonActionDefinition = z.infer<typeof buttonActionSchema>
+
 export type GridPlacementDefinition = z.infer<typeof gridPlacementSchema>

@@ -1,9 +1,15 @@
 export { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
+
 export { createBrowserTiming } from './browserTiming.js'
+
 export { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
+
 export { ComponentRenderer } from './componentRenderer.js'
+
 export { TextComponentRenderer } from './textComponentRenderer.js'
+
 export { ButtonComponentRenderer } from './buttonComponentRenderer.js'
+
 export type {
   ComponentRenderContext,
   ComponentRendererOptions,
@@ -11,4 +17,5 @@ export type {
   IComponentRenderer,
   RenderedComponent,
 } from './componentRendering.js'
+
 export { mountGameView, type GameViewSession, type GameViewOptions } from './gameView.js'

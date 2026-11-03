@@ -67,6 +67,7 @@ describe('engine development game files', () => {
     })
     await server.listen()
     const address = server.httpServer?.address()
+
     if (!address || typeof address === 'string')
       throw new Error('The development server has no TCP address')
     origin = `http://127.0.0.1:${address.port}`
@@ -87,6 +88,7 @@ describe('engine development game files', () => {
     const applicationUrl = `${origin}/nested/`
     const config = await loadRuntimeConfig(applicationUrl, fetch)
     const mount = vi.fn(() => () => {})
+
     const container = new ContainerBuilder(
       config,
       applicationUrl,
@@ -97,6 +99,7 @@ describe('engine development game files', () => {
         scheduler: { schedule: () => () => {} },
       },
     ).build()
+
     const engine = container.resolve('engine')
     await engine.start()
     expect(engine.state).toBe('running')
@@ -168,10 +171,12 @@ describe('engine development game files', () => {
           })
           response.on('end', () => resolve({ status: response.statusCode, body }))
         })
+
         pending.on('error', reject)
         pending.end()
       },
     )
+
     expect(result.status).toBe(403)
     expect(result.body).not.toContain('outside the game directory')
   })
@@ -180,6 +185,7 @@ describe('engine development game files', () => {
     const unsupported = await fetch(`${origin}/nested/sample-games/basic/game.json`, {
       method: 'POST',
     })
+
     expect(unsupported.status).toBe(405)
     expect(unsupported.headers.get('allow')).toBe('GET, HEAD')
     const malformed = await fetch(`${origin}/nested/sample-games/basic/%invalid`)

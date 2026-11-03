@@ -6,7 +6,9 @@ export {
   type EngineHostSession,
   type EngineRuntimeServices,
 } from './engine.js'
+
 export type { EngineMessages } from './messages.js'
+
 export {
   GameBindings,
   type IGameBindings,
@@ -16,6 +18,7 @@ export {
   type BindingDiagnostic,
   type BindingResult,
 } from './gameBindings.js'
+
 export {
   resolveText,
   observeText,
@@ -24,7 +27,9 @@ export {
   type TextResolutionOptions,
   type TextBindingDiagnostic,
 } from './textBindings.js'
+
 export { GameLoader, type IGameLoader } from './gameLoader.js'
+
 export {
   assembleGameData,
   type GameData,
@@ -34,6 +39,7 @@ export {
   type ButtonComponentData,
   type SceneComponentData,
 } from './gameData.js'
+
 export {
   GameLifecycle,
   type IGameLifecycle,
@@ -45,9 +51,13 @@ export {
   type GameInstance,
   type SceneInstance,
 } from './gameLifecycle.js'
+
 export { InputController, type IGameInput, type VirtualInput } from './input.js'
+
 export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from './timers.js'
+
 export { ActionProcessor } from './actionProcessor.js'
+
 export type {
   ActionRequestId,
   WorldScheduleId,
@@ -68,6 +78,7 @@ export type {
   ProgressionAdvanced,
   WorldTimePolicy,
 } from './actions.js'
+
 export type {
   TurnSnapshot,
   ActionTurnPolicy,

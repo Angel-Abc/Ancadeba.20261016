@@ -26,6 +26,7 @@ const manifest = {
   scenes: [],
   extension: 'keep',
 }
+
 const scene = {
   'schema-version': '1.0.0',
   id: 'shop',
@@ -36,6 +37,7 @@ const scene = {
   components: [],
   extension: 'keep',
 }
+
 describe('shared editor project API', () => {
   let root: string
   let base: string
@@ -46,10 +48,12 @@ describe('shared editor project API', () => {
     await mkdir(join(root, 'basic'))
     await writeFile(join(root, 'basic/game.json'), JSON.stringify(manifest))
     workspace = await FileWorkspace.open(root)
+
     const projects = new EditorProjectService(
       new WorkspaceProjectRepository(workspace),
       new EditorCoordinator(),
     )
+
     server = createEditorServer(
       { workFolder: root, host: '127.0.0.1', port: 3100 },
       workspace,
@@ -67,9 +71,11 @@ describe('shared editor project API', () => {
     )
     await rm(root, { recursive: true, force: true })
   })
+
   // SAFETY: this helper calls our editor project route, whose success response is ProjectView.
   const inspect = async () =>
     (await fetch(`${base}/api/editor/project?path=basic`)).json() as Promise<ProjectView>
+
   const command = (revision: string, operation: unknown, path = 'basic') =>
     fetch(`${base}/api/editor/commands`, {
       method: 'POST',
@@ -87,12 +93,14 @@ describe('shared editor project API', () => {
     const first = (await created.json()) as ProjectView
     expect(first.revision).not.toBe(initial.revision)
     expect(first.game?.scenes).toEqual(['shop'])
+
     const updated = await command(first.revision, {
       type: 'scene.updateLayout',
       sceneId: 'shop',
       rows: 20,
       columns: 25,
     })
+
     expect(updated.status).toBe(200)
     const bytes = await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')
     expect(JSON.parse(bytes)).toMatchObject({
@@ -103,6 +111,7 @@ describe('shared editor project API', () => {
       'extension',
       'keep',
     )
+
     const logger: ILogger = {
       debug() {
         return ''
@@ -117,6 +126,7 @@ describe('shared editor project API', () => {
         return ''
       },
     }
+
     const loader = new GameLoader(
       new JsonResourceLoader(
         {
@@ -127,6 +137,7 @@ describe('shared editor project API', () => {
         logger,
       ),
     )
+
     expect((await loader.load()).scenes.get('shop')?.screen.grid.rows).toBe(20)
     const inspected = await fetch(`${base}/api/editor/scene?path=basic&id=shop`)
     expect((await inspected.json()).scene.id).toBe('shop')
@@ -135,10 +146,12 @@ describe('shared editor project API', () => {
   it('lets only one competing revision-checked edit succeed', async () => {
     const initial = await inspect()
     const operation = { type: 'game.updateMetadata', title: 'A', description: '', version: '1' }
+
     const results = await Promise.all([
       command(initial.revision, operation),
       command(initial.revision, { ...operation, title: 'B' }),
     ])
+
     expect(results.map((result) => result.status).sort((a, b) => a - b)).toEqual([200, 409])
     const rejected = results.find((result) => result.status === 409)!
     expect((await rejected.json()).code).toBe('revision_conflict')
@@ -150,17 +163,20 @@ describe('shared editor project API', () => {
       method: 'PUT',
       body: JSON.stringify({ ...manifest, title: 'External' }),
     })
+
     const rejected = await command(initial.revision, {
       type: 'game.updateMetadata',
       title: 'Old',
       description: '',
       version: '1',
     })
+
     expect(rejected.status).toBe(409)
     await writeFile(
       join(root, 'basic/game.json'),
       JSON.stringify({ ...manifest, input: 'input.json' }),
     )
+
     const input = {
       'schema-version': '1.0.0',
       'virtual-keys': ['confirm'],
@@ -168,6 +184,7 @@ describe('shared editor project API', () => {
       contexts: { menu: { confirm: 'accept' } },
       'initial-context': 'menu',
     }
+
     await writeFile(join(root, 'basic/input.json'), JSON.stringify(input))
     const before = await inspect()
     await writeFile(
@@ -196,44 +213,54 @@ describe('shared editor project API', () => {
       'scenes/missing.json',
       'scenes/shop.json',
     ])
+
     const rejected = await command(invalid.revision, {
       type: 'game.updateMetadata',
       title: 'X',
       description: '',
       version: '1',
     })
+
     expect(rejected.status).toBe(422)
     expect((await rejected.json()).diagnostics[0]).toHaveProperty('path')
   })
 
   it('rejects invalid commands and unsafe folders without changing saved content', async () => {
     const initial = await inspect()
+
     const invalid = await command(initial.revision, {
       type: 'scene.create',
       scene: { ...scene, id: '../escape' },
     })
+
     expect(invalid.status).toBe(400)
     expect((await invalid.json()).diagnostics.length).toBeGreaterThan(0)
+
     const badLayout = await command(initial.revision, {
       type: 'scene.updateLayout',
       sceneId: 'shop',
       rows: 0,
       columns: 1,
     })
+
     expect(badLayout.status).toBe(400)
+
     for (const path of ['../outside', 'C:/outside', 'basic/../outside']) {
       expect(
         (await command(initial.revision, { type: 'scene.create', scene }, path)).status,
       ).toBeGreaterThanOrEqual(400)
     }
+
     expect((await inspect()).revision).toBe(initial.revision)
     const plain = await fetch(`${base}/api/editor/commands`, { method: 'POST', body: '{}' })
     expect(plain.status).toBe(415)
+
     const malformed = await fetch(`${base}/api/editor/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{',
     })
+
     expect(malformed.status).toBe(400)
   })
 
@@ -259,10 +286,12 @@ describe('shared editor project API', () => {
         throw new Error('Disk failure')
       },
     }
+
     const service = new EditorProjectService(
       new WorkspaceProjectRepository(failing),
       new EditorCoordinator(),
     )
+
     const current = await service.inspect('basic')
     await expect(
       service.apply({
@@ -291,10 +320,12 @@ describe('shared editor project API', () => {
         throw new Error('Disk failure')
       },
     }
+
     const service = new EditorProjectService(
       new WorkspaceProjectRepository(failing),
       new EditorCoordinator(),
     )
+
     const current = await service.inspect('basic')
     await expect(
       service.apply({
@@ -318,16 +349,20 @@ describe('shared editor project API', () => {
         throw new Error('Cleanup failed after publication')
       },
     }
+
     const service = new EditorProjectService(
       new WorkspaceProjectRepository(uncertain),
       new EditorCoordinator(),
     )
+
     const current = await service.inspect('basic')
+
     const result = await service.apply({
       path: 'basic',
       expectedRevision: current.revision,
       command: { type: 'scene.create', scene },
     })
+
     expect(result.view.game?.scenes).toEqual(['shop'])
     expect(result.view.diagnostics).toEqual([])
     expect(JSON.parse(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')).id).toBe('shop')
@@ -347,10 +382,12 @@ describe('shared editor project API', () => {
         throw new Error('Publication outcome changed')
       },
     }
+
     const service = new EditorProjectService(
       new WorkspaceProjectRepository(uncertain),
       new EditorCoordinator(),
     )
+
     const current = await service.inspect('basic')
     await expect(
       service.apply({

@@ -26,14 +26,18 @@ function setup() {
       ]),
     ),
   }
+
   const disposeSceneState = vi.fn()
+
   const lifecycle = new GameLifecycle(data, {
     createGameState: () => undefined,
     createSceneState: () => undefined,
     disposeSceneState,
   })
+
   const changes = vi.fn<(change: SceneChange) => void>()
   lifecycle.subscribeSceneChanges(changes)
+
   return { lifecycle, changes, disposeSceneState }
 }
 
@@ -118,6 +122,7 @@ describe('scene change notifications', () => {
     unsubscribeFirst()
     unsubscribeFirst()
     let unsubscribeLater = () => {}
+
     lifecycle.subscribeSceneChanges(() => unsubscribeLater())
     const later = vi.fn()
     unsubscribeLater = lifecycle.subscribeSceneChanges(later)

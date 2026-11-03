@@ -20,4 +20,5 @@ export function textPlaceholders(text: string): { alias: string; index: number; 
 }
 
 export type GameBindingDefinition = z.infer<typeof gameBindingSchema>
+
 export type TextBindingsDefinition = z.infer<typeof textBindingsSchema>

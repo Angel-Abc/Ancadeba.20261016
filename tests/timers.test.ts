@@ -5,18 +5,22 @@ import { describe, expect, it, vi } from 'vite-plus/test'
 function setup() {
   let now = 100
   const tasks: { run: () => void; delay: number; cancelled: boolean }[] = []
+
   const scheduler: ITaskScheduler = {
     schedule(run, delay) {
       const task = { run, delay, cancelled: false }
       tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
     },
   }
+
   const messages = new MessageBus<EngineMessages>()
   const handler = vi.fn()
   messages.subscribe('timer.wakeup', handler)
+
   return {
     timers: new TimerService(messages, scheduler, { now: () => now }),
     messages,
@@ -107,6 +111,7 @@ describe('one-shot timer service', () => {
     timers.dispose()
     timers.dispose()
     expect(tasks.every((task) => task.cancelled)).toBe(true)
+
     for (const task of tasks) task.run()
     expect(timers.schedule(0)).toBeUndefined()
     expect(timers.schedule(-1)).toBeUndefined()

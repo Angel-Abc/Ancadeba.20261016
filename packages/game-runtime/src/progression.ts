@@ -24,15 +24,19 @@ export class GameProgression {
     this.mode = policy?.mode ?? 'action-driven'
     this.rate = policy?.rate ?? 1
     this.pulseMs = policy?.pulseMs ?? 1000
+
     if (!['action-driven', 'elapsed', 'hybrid'].includes(this.mode))
       throw new TypeError('Unknown world-time mode')
+
     if (!Number.isFinite(this.rate) || this.rate <= 0)
       throw new RangeError('World-time rate must be positive and finite')
+
     if (!Number.isInteger(this.pulseMs) || this.pulseMs < 1 || this.pulseMs > 2_147_483_647) {
       throw new RangeError(
         'World-time pulse must be an integer from 1 through 2147483647 milliseconds',
       )
     }
+
     this.unsubscribe = messages.subscribe('timer.wakeup', (event) => {
       if (this.disposed || !this.started || event.timerId !== this.pulse) return
       this.pulse = undefined
@@ -48,6 +52,7 @@ export class GameProgression {
   start(): void {
     if (this.disposed || this.started) return
     this.started = true
+
     if (this.mode !== 'action-driven') {
       this.anchor = this.clock.now()
       this.armPulse()
@@ -73,6 +78,7 @@ export class GameProgression {
   /** Project a world deadline using the same elapsed anchor without mutating progression. */
   hostDelayUntil(dueAtWorldMs: number): number | undefined {
     if (this.disposed || !this.started || this.mode === 'action-driven') return undefined
+
     return (dueAtWorldMs - this.snapshot.worldTimeMs) / this.rate - (this.clock.now() - this.anchor)
   }
 
@@ -80,6 +86,7 @@ export class GameProgression {
     if (this.disposed) return
     this.disposed = true
     this.unsubscribe()
+
     if (this.pulse !== undefined) this.timers.cancel(this.pulse)
     this.pulse = undefined
   }
@@ -98,11 +105,15 @@ export class GameProgression {
         'Progression must remain finite, monotonic, and within the safe turn range',
       )
     }
+
     const previous = this.snapshot
+
     if (turn === previous.turn && worldTimeMs === previous.worldTimeMs) return
     this.snapshot = Object.freeze({ turn, worldTimeMs })
     const event = Object.freeze({ previous, progression: this.snapshot })
+
     if (turn !== previous.turn) this.messages.publish('turn.advanced', event)
+
     if (worldTimeMs !== previous.worldTimeMs) this.messages.publish('world-time.advanced', event)
   }
 }

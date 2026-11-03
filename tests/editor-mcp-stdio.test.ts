@@ -18,6 +18,7 @@ import { createEditorServer } from '../apps/editor-server/src/server.js'
 
 const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href
 const entry = fileURLToPath(new URL('../apps/editor-mcp/src/main.ts', import.meta.url))
+
 describe('MCP stdio process', () => {
   let root: string
   let base: string
@@ -41,10 +42,12 @@ describe('MCP stdio process', () => {
       }),
     )
     const workspace = await FileWorkspace.open(root)
+
     const projects = new EditorProjectService(
       new WorkspaceProjectRepository(workspace),
       new EditorCoordinator(),
     )
+
     server = createEditorServer(
       { workFolder: root, host: '127.0.0.1', port: 3100 },
       workspace,
@@ -59,12 +62,14 @@ describe('MCP stdio process', () => {
   afterEach(async () => {
     await client?.close()
     await transport?.close()
+
     if (server.listening)
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       )
     await rm(root, { recursive: true, force: true })
   })
+
   function args(game = 'basic') {
     return [
       '--import',
@@ -78,6 +83,7 @@ describe('MCP stdio process', () => {
       '1000',
     ]
   }
+
   async function connect(game = 'basic') {
     transport = new StdioClientTransport({
       command: process.execPath,
@@ -91,14 +97,17 @@ describe('MCP stdio process', () => {
     client = new Client({ name: 'stdio-tests', version: '1' })
     client.onerror = (error) => errors.push(error.message)
     await client.connect(transport)
+
     return { activeClient: client, activeTransport: transport, errors, stderr }
   }
+
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
     expect((await activeClient.listTools()).tools).toHaveLength(7)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
+
     const result = await activeClient.callTool({
       name: 'ancadeba_update_game_metadata',
       arguments: {
@@ -108,6 +117,7 @@ describe('MCP stdio process', () => {
         version: '1',
       },
     })
+
     expect(result.isError).toBe(false)
     const view = await (await fetch(`${base}/api/editor/project?path=basic`)).json()
     expect(view.game.title).toBe('Saved through stdio')
@@ -116,6 +126,7 @@ describe('MCP stdio process', () => {
     const pid = activeTransport.pid
     expect(pid).not.toBeNull()
     await activeClient.close()
+
     if (pid !== null) expect(() => process.kill(pid, 0)).toThrow()
   })
   it('can list tools while the editor is offline and recovers when that same server returns', async () => {
@@ -155,6 +166,7 @@ describe('MCP stdio process', () => {
     const stdout: string[] = []
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk.toString('utf8')))
     const exited = once(child, 'exit')
+
     try {
       child.stdin.end()
       expect((await exited)[0]).toBe(0)

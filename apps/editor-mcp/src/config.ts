@@ -20,10 +20,13 @@ export function parseAdapterConfig(args: string[]): AdapterConfig {
       'timeout-ms': { type: 'string', default: '10000' },
     },
   })
+
   if (values['editor-server-url'] === undefined || values.game === undefined) {
     throw new Error('Both --editor-server-url and --game are required')
   }
+
   const url = new URL(values['editor-server-url'])
+
   if (
     url.protocol !== 'http:' ||
     !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
@@ -37,7 +40,9 @@ export function parseAdapterConfig(args: string[]): AdapterConfig {
       'Editor server URL must be a loopback HTTP origin without credentials, path, query, or fragment',
     )
   }
+
   const game = values.game
+
   if (
     game !== '' &&
     game
@@ -59,9 +64,12 @@ export function parseAdapterConfig(args: string[]): AdapterConfig {
       'Game must be a workspace-relative folder using / separators, or empty for the root',
     )
   }
+
   const timeoutMs = Number(values['timeout-ms'])
+
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) {
     throw new Error('Timeout must be an integer between 1 and 60000 milliseconds')
   }
+
   return { editorServerUrl: url.origin, game, timeoutMs }
 }

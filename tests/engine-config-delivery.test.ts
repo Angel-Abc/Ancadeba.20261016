@@ -9,6 +9,7 @@ import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
 describe('engine runtime configuration delivery', () => {
   it('serves JSON under the Vite base and permits deployment edits without rebuilding', async () => {
     const root = await mkdtemp(fileURLToPath(new URL('./.tmp-vite-', import.meta.url)))
+
     const options = {
       configFile: false as const,
       root,
@@ -16,10 +17,12 @@ describe('engine runtime configuration delivery', () => {
       logLevel: 'silent' as const,
       plugins: [engineRuntimeConfigPlugin('/games/demo')],
     }
+
     const server = await createServer({
       ...options,
       server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false },
     })
+
     try {
       await server.listen()
       // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
@@ -34,10 +37,12 @@ describe('engine runtime configuration delivery', () => {
       const output = join(root, 'dist/config.json')
       expect(JSON.parse(await readFile(output, 'utf8'))).toEqual({ gameUrl: '/games/demo' })
       await writeFile(output, JSON.stringify({ gameUrl: 'https://cdn.example/changed/' }))
+
       const production = await preview({
         ...options,
         preview: { host: '127.0.0.1', port: 0, strictPort: true },
       })
+
       try {
         // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
         const previewAddress = production.httpServer.address() as AddressInfo

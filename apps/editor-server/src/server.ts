@@ -26,21 +26,28 @@ function readBody(request: IncomingMessage): Promise<Uint8Array> {
     if (Number(request.headers['content-length']) > maxWriteBytes) {
       request.resume()
       reject(new WorkspaceError(413, 'File exceeds the 10 MiB write limit'))
+
       return
     }
+
     const chunks: Buffer[] = []
     let size = 0
+
     const onData = (chunk: Buffer) => {
       size += chunk.length
+
       if (size > maxWriteBytes) {
         chunks.length = 0
         request.off('data', onData)
         reject(new WorkspaceError(413, 'File exceeds the 10 MiB write limit'))
         request.resume()
+
         return
       }
+
       chunks.push(chunk)
     }
+
     request.on('data', onData)
     request.once('end', () => resolve(Buffer.concat(chunks)))
     request.once('error', reject)
@@ -55,20 +62,25 @@ export function createEditorServer(
 ): Server {
   parseEditorServerConfig(config)
   const coordinator = projects?.coordinator ?? new EditorCoordinator()
+
   return createServer((request, response) => {
     void handle(request, response).catch((error: unknown) => {
       if (response.headersSent || response.destroyed) {
         response.destroy()
+
         return
       }
+
       if (error instanceof EditorError) {
         json(response, error.status, {
           error: error.message,
           code: error.code,
           diagnostics: error.diagnostics,
         })
+
         return
       }
+
       const failure = workspaceError(error)
       json(response, failure.status, { error: failure.message })
     })
@@ -76,66 +88,90 @@ export function createEditorServer(
 
   async function handle(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? '/', 'http://localhost')
+
     if (request.method === 'GET' && request.url === '/health') {
       const health: HealthResponse = { status: 'ok' }
       json(response, 200, health)
+
       return
     }
+
     const path = url.searchParams.get('path') ?? ''
+
     if (url.pathname.startsWith('/api/editor/')) {
       response.setHeader('Cache-Control', 'no-store')
+
       if (request.method === 'GET' && url.pathname === '/api/editor/capabilities') {
         json(response, 200, capabilities)
+
         return
       }
+
       if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
+
       if (request.method === 'GET' && url.pathname === '/api/editor/project') {
         json(response, 200, await projects.inspect(path))
+
         return
       }
+
       if (request.method === 'GET' && url.pathname === '/api/editor/scene') {
         json(response, 200, await projects.scene(path, url.searchParams.get('id') ?? ''))
+
         return
       }
+
       if (request.method === 'POST' && url.pathname === '/api/editor/commands') {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
           throw new WorkspaceError(415, 'Editing requests must use application/json')
         }
+
         const bytes = await readBody(request)
         let body: unknown
+
         try {
           body = JSON.parse(Buffer.from(bytes).toString('utf8'))
         } catch {
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
         }
+
         const result = await projects.apply(body)
         json(response, 200, {
           ...result.view,
           changedFiles: result.changedFiles,
           summary: result.summary,
         })
+
         return
       }
     }
+
     if (request.method === 'POST' && url.pathname === '/api/exports') {
       if (!exports) throw new WorkspaceError(503, 'Game exports are not available')
+
       if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
         throw new WorkspaceError(415, 'Export requests must use application/json')
       }
+
       let body: unknown
+
       try {
         body = JSON.parse(Buffer.from(await readBody(request)).toString('utf8'))
       } catch (error) {
         if (error instanceof WorkspaceError) throw error
         throw new WorkspaceError(400, 'Invalid export request')
       }
+
       let parsed: EditorExportRequest
+
       try {
         parsed = parseEditorExportRequest(body)
       } catch {
         throw new WorkspaceError(400, 'Export requires a workspace-relative game folder')
       }
+
       const archive = await exports.create(parsed.path)
+
       try {
         response.writeHead(200, {
           'Content-Type': 'application/zip',
@@ -147,25 +183,33 @@ export function createEditorServer(
       } finally {
         await archive.dispose()
       }
+
       return
     }
+
     if (request.method === 'GET' && url.pathname === '/api/workspace') {
       json(response, 200, await workspace.list(path))
+
       return
     }
+
     if (request.method === 'GET' && url.pathname === '/api/files') {
       const contents = await coordinator.run(() => workspace.read(path))
       response.writeHead(200, { 'Content-Type': 'application/octet-stream' })
       response.end(contents)
+
       return
     }
+
     if (request.method === 'PUT' && url.pathname === '/api/files') {
       const contents = await readBody(request)
       const created = await coordinator.run(() => workspace.write(path, contents))
       response.writeHead(created ? 201 : 204)
       response.end()
+
       return
     }
+
     json(response, 404, { error: 'Not found' })
   }
 }

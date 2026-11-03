@@ -11,6 +11,7 @@ export interface ProjectEditorState {
   lastCommand: EditorCommand['type'] | null
   preserveDrafts: boolean
 }
+
 export type ProjectEditorListener = (state: ProjectEditorState, replaceFields: boolean) => void
 
 export class ProjectEditorController {
@@ -33,6 +34,7 @@ export class ProjectEditorController {
 
   load(path: string, preserveFields = false): Promise<void> {
     const preserveDrafts = preserveFields && path === this.state.path
+
     return this.perform(async () => {
       const view = await this.client.inspect(path)
       this.state = {
@@ -45,13 +47,16 @@ export class ProjectEditorController {
         conflict: false,
         changedElsewhere: false,
       }
+
       return true
     })
   }
 
   save(command: EditorCommand): Promise<void> {
     const { view, path } = this.state
+
     if (!view) return Promise.resolve()
+
     return this.perform(async () => {
       const next = await this.client.apply({ path, expectedRevision: view.revision, command })
       this.state = {
@@ -63,25 +68,32 @@ export class ProjectEditorController {
         conflict: false,
         changedElsewhere: false,
       }
+
       return true
     })
   }
 
   async refresh(hasDrafts: boolean | (() => boolean)): Promise<void> {
     const { view, path } = this.state
+
     if (!view || this.disposed || this.state.busy) return
     const sequence = ++this.refreshSequence
     const isCurrent = () => !this.disposed && !this.state.busy && sequence === this.refreshSequence
+
     try {
       const next = await this.client.inspect(path)
+
       if (!isCurrent() || next.revision === view.revision) return
+
       // Users can type or submit while the background read is in flight.
       if (typeof hasDrafts === 'function' ? hasDrafts() : hasDrafts) {
         // Keep the original revision with the draft so saving cannot silently overwrite newer data.
         this.state = { ...this.state, changedElsewhere: true }
         this.onChange(this.state, false)
+
         return
       }
+
       this.state = {
         ...this.state,
         view: next,
@@ -109,12 +121,14 @@ export class ProjectEditorController {
     this.state = { ...this.state, busy: true, error: '' }
     this.onChange(this.state, false)
     let replaceFields = false
+
     try {
       replaceFields = await operation()
     } catch (error) {
       this.reportError(error)
     } finally {
       this.state = { ...this.state, busy: false }
+
       if (!this.disposed) this.onChange(this.state, replaceFields)
     }
   }
@@ -129,6 +143,7 @@ export class ProjectEditorController {
             )
             .join('\n')
         : ''
+
     this.state = {
       ...this.state,
       error: `${error instanceof Error ? error.message : String(error)}${details ? `\n${details}` : ''}`,

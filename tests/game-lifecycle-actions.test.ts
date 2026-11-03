@@ -23,6 +23,7 @@ class TestTiming {
     schedule: (run: () => void, delay: number) => {
       const task = { run, dueAt: this.now + delay, cancelled: false, ran: false }
       this.tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
@@ -35,11 +36,14 @@ class TestTiming {
 
   drain(): void {
     let passes = 0
+
     while (true) {
       const task = this.pending
         .filter((task) => task.dueAt <= this.now)
         .sort((a, b) => a.dueAt - b.dueAt)[0]
+
       if (!task) return
+
       if (++passes > 100) throw new Error('Dispatch did not become idle')
       task.ran = true
       task.run()
@@ -75,11 +79,13 @@ const data: GameData = {
 
 function setup(options: { factory?: GameRulesFactory; host?: IEngineHost } = {}) {
   const timing = new TestTiming()
+
   const handler = vi.fn<GameActionHandler>(() => ({
     status: 'applied',
     advanceTurn: true,
     worldTimeCostMs: 10,
   }))
+
   const factory = vi.fn<GameRulesFactory>(
     options.factory ??
       (() => ({
@@ -91,14 +97,18 @@ function setup(options: { factory?: GameRulesFactory; host?: IEngineHost } = {})
         ],
       })),
   )
+
   const disposedStates = vi.fn()
+
   const logger: ILogger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: vi.fn(() => ''),
   }
+
   const host = { mount: vi.fn<IEngineHost['mount']>(() => () => {}) }
+
   const engine = new Engine(
     { load: async () => data },
     options.host ?? host,
@@ -116,6 +126,7 @@ function setup(options: { factory?: GameRulesFactory; host?: IEngineHost } = {})
         }),
     },
   )
+
   return { engine, timing, handler, factory, disposedStates, logger, host }
 }
 
@@ -136,6 +147,7 @@ const scoreRules: GameRulesFactory = (_data, game) => ({
         // SAFETY: setup pairs these rules with a lifecycle factory that creates { score: 0 }.
         const state = game.state as { score: number }
         state.score++
+
         return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
       },
     ],
@@ -160,12 +172,14 @@ describe('playthrough-owned bindings', () => {
     const listener = vi.fn()
     const unsubscribe = observeText(scoreTemplate, bindings, listener)
     expect(listener).toHaveBeenLastCalledWith({ text: 'Score 0, turn 0, time 0', diagnostics: [] })
+
     for (const scene of ['standard', 'inventory', 'settings']) {
       lifecycle.enterScene(scene)
       expect(game.bindings).toBe(bindings)
       game.actions!.request('act')
       timing.drain()
     }
+
     expect(listener).toHaveBeenCalledTimes(4)
     expect(listener).toHaveBeenLastCalledWith({ text: 'Score 3, turn 3, time 30', diagnostics: [] })
     game.actions!.request('noop')
@@ -207,10 +221,12 @@ describe('playthrough-owned bindings', () => {
     const state = game.state as { score: number }
     state.score = 7
     timing.drain()
+
     for (const action of ['reject', 'fail', 'unknown']) {
       game.actions!.request(action)
       timing.drain()
     }
+
     expect(changed).not.toHaveBeenCalled()
     game.actions!.request('noop')
     timing.drain()
@@ -227,6 +243,7 @@ describe('playthrough-owned bindings', () => {
     const { engine, timing } = setup({
       factory: () => ({ handlers: new Map(), worldTime: { mode: 'elapsed', pulseMs: 10 } }),
     })
+
     await engine.start()
     const game = engine.lifecycle!.startGame()
     const listener = vi.fn()
@@ -254,6 +271,7 @@ describe('playthrough-owned bindings', () => {
       game.actions!.request('act')
       engine.flushMessages() // Apply, but leave progression and outcome notifications queued.
       expect(listener).toHaveBeenCalledOnce()
+
       if (transition === 'replace') lifecycle.startGame()
       else if (transition === 'end') lifecycle.endGame()
       else engine.stop()
@@ -269,12 +287,14 @@ describe('playthrough-owned bindings', () => {
         diagnostic: { reason: 'source-unavailable' },
       })
       expect(() => bindings.subscribeChanges(listener)).toThrow('disposed')
+
       if (next) {
         next.actions!.request('act')
         timing.drain()
         expect(fresh).toHaveBeenCalled()
         expect(listener).toHaveBeenCalledOnce()
       }
+
       engine.stop()
       timing.drain()
     },
@@ -364,6 +384,7 @@ describe('playthrough-owned actions and progression', () => {
         },
       }),
     })
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     const game = lifecycle.startGame()
@@ -382,6 +403,7 @@ describe('playthrough-owned actions and progression', () => {
       expect(actions.turnState).toBe(turn)
       expect(actions.rosterState).toBe(roster)
     }
+
     expect(progression).toEqual({ turn: 1, worldTimeMs: 10 })
     expect(turn?.actorId).toBe('opponent')
     expect(factory).toHaveBeenCalledTimes(1)
@@ -391,15 +413,18 @@ describe('playthrough-owned actions and progression', () => {
 
   it('resets rules and IDs and discards queued requests, input, outcomes, and fired timers', async () => {
     const counts: number[] = []
+
     const { engine, timing, factory } = setup({
       factory: () => {
         let count = 0
+
         return {
           handlers: new Map([
             [
               'act',
               () => {
                 counts.push(++count)
+
                 return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
               },
             ],
@@ -408,6 +433,7 @@ describe('playthrough-owned actions and progression', () => {
         }
       },
     })
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     const first = lifecycle.startGame()
@@ -435,6 +461,7 @@ describe('playthrough-owned actions and progression', () => {
     expect(old.scheduleWorld('act', 0)).toBeUndefined()
     expect(old.cancelScheduled(oldTimerId)).toBe(false)
     expect(current.request('act')).toBe(1)
+
     for (const task of staleTasks) task.run()
     timing.drain()
     expect(counts).toEqual([1, 1])
@@ -452,6 +479,7 @@ describe('playthrough-owned actions and progression', () => {
         worldTime: { mode: 'elapsed', pulseMs: 10 },
       }),
     })
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     const old = lifecycle.startGame().actions!
@@ -471,6 +499,7 @@ describe('playthrough-owned actions and progression', () => {
     expect(current.cancelScheduled(hostTimer!)).toBe(false)
     expect(currentTimer).not.toBe(hostTimer)
     timing.now = 10
+
     for (const task of stale) task.run()
     timing.drain()
     expect(handler).toHaveBeenCalledTimes(1)
@@ -483,6 +512,7 @@ describe('playthrough-owned actions and progression', () => {
     const { engine, timing } = setup({
       factory: () => ({ handlers: new Map(), worldTime: { mode: 'elapsed', pulseMs: 10 } }),
     })
+
     await engine.start()
     timing.now = 1000
     timing.drain()
@@ -544,12 +574,14 @@ describe('playthrough-owned actions and progression', () => {
               () => {
                 if (transition === 'end') engine.lifecycle!.endGame()
                 else engine.lifecycle!.startGame()
+
                 return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
               },
             ],
           ]),
         }),
       })
+
       await engine.start()
       const old = engine.lifecycle!.startGame().actions!
       const applied = vi.fn()
@@ -560,6 +592,7 @@ describe('playthrough-owned actions and progression', () => {
       expect(old.progression).toEqual({ turn: 0, worldTimeMs: 0 })
       expect(applied).not.toHaveBeenCalled()
       expect(engine.state).toBe('running')
+
       if (transition === 'replace')
         expect(engine.actions?.progression).toEqual({ turn: 0, worldTimeMs: 0 })
       else expect(engine.actions).toBeUndefined()
@@ -595,10 +628,12 @@ describe('playthrough-owned actions and progression', () => {
   it('checks ownership between subscribers when a subscriber replaces the game', async () => {
     const { engine, timing, handler } = setup()
     await engine.start()
+
     const unsubscribe = engine.messages!.subscribe('action.requested', () => {
       unsubscribe()
       engine.lifecycle!.startGame().actions!.request('act')
     })
+
     const old = engine.lifecycle!.startGame().actions!
     old.request('act')
     old.request('act')
@@ -624,6 +659,7 @@ describe('playthrough-owned actions and progression', () => {
     const schedule = timing.scheduler.schedule
     timing.scheduler.schedule = (run, delay) => {
       if (delay === 10) throw new Error('Cannot schedule world pulse')
+
       return schedule(run, delay)
     }
 
@@ -642,6 +678,7 @@ describe('playthrough-owned actions and progression', () => {
 
   it('exposes mounting-time game actions but starts elapsed accounting after mounting', async () => {
     let session: EngineHostSession | undefined
+
     const instance = setup({
       factory: () => ({ handlers: new Map(), worldTime: { mode: 'elapsed', pulseMs: 10 } }),
       host: {
@@ -651,10 +688,12 @@ describe('playthrough-owned actions and progression', () => {
           const game = services.lifecycle.startGame()
           expect(services.actions).toBe(game.actions)
           instance.timing.now = 1000
+
           return () => {}
         },
       },
     })
+
     await instance.engine.start()
     expect(session!.actions).toBe(instance.engine.actions)
     expect(instance.engine.actions?.progression.worldTimeMs).toBe(0)

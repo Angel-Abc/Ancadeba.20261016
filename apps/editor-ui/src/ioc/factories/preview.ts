@@ -38,6 +38,7 @@ export const previewFactories = {
     const logger = resolver.resolve('logger')
     const createMessageBus = resolver.resolve('createMessageBus')
     const runtime = resolver.resolve('runtime')
+
     return (folder: string) =>
       new Engine(
         new GameLoader(

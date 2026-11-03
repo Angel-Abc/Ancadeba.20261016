@@ -11,25 +11,32 @@ export const inputSchema = z
   })
   .superRefine((input, context) => {
     const keys = new Set(input['virtual-keys'])
+
     const issue = (path: string[], message: string) =>
       context.addIssue({ code: 'custom', path, message })
+
     if (keys.size !== input['virtual-keys'].length) {
       issue(['virtual-keys'], 'Virtual key IDs must be unique')
     }
+
     for (const [code, key] of Object.entries(input.keyboard)) {
       if (!keys.has(key)) issue(['keyboard', code], `Unknown virtual key: ${key}`)
     }
+
     if (Object.keys(input.contexts).length === 0) {
       issue(['contexts'], 'At least one input context is required')
     }
+
     for (const [name, mappings] of Object.entries(input.contexts)) {
       if (Object.keys(mappings).length === 0) {
         issue(['contexts', name], 'Input contexts must not be empty')
       }
+
       for (const key of Object.keys(mappings)) {
         if (!keys.has(key)) issue(['contexts', name, key], `Unknown virtual key: ${key}`)
       }
     }
+
     if (!Object.hasOwn(input.contexts, input['initial-context'])) {
       issue(['initial-context'], 'The initial context must name a declared context')
     }

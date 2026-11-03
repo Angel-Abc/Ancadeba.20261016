@@ -14,8 +14,10 @@
 
 ## Local policy
 
-The root `vite.config.ts` enables eight generic rules: chained assertions, known-value widening, module mocking, broad `object` parameters, `Reflect.apply`, `Reflect.get`, widen-then-assert flows, and assertion justifications.
+The root `vite.config.ts` enables nine generic rules: chained assertions, known-value widening, module mocking, broad `object` parameters, `Reflect.apply`, `Reflect.get`, widen-then-assert flows, readable spacing, and assertion justifications.
 
-The other generic rules and the Effect plugin are intentionally disabled. In particular, unvalidated JSON/MCP dictionaries, `unknown` boundary parameters, runtime type checks, existing spacing, and conditional property omission remain supported. Reconsider dictionary restrictions alongside a deliberate redesign of the raw-document contracts, rather than replacing them solely to satisfy lint.
+The other generic rules and the Effect plugin are intentionally disabled. In particular, unvalidated JSON/MCP dictionaries, `unknown` boundary parameters, runtime type checks, and conditional property omission remain supported. Reconsider dictionary restrictions alongside a deliberate redesign of the raw-document contracts, rather than replacing them solely to satisfy lint.
+
+Readable spacing is enforced in application code and tests. Apply lint autofix before the formatter (`pnpm lint:fix`); the spacing rule inserts blank lines without changing statement behavior, keeps compact single-line binding groups and overloads together, and preserves leading documentation.
 
 Assertions must document a specific checked invariant with `SAFETY:`. Tests may use a line-scoped suppression with a reason when they deliberately violate a public type contract to exercise runtime rejection. Do not disable the selected rules for entire test files or directories.

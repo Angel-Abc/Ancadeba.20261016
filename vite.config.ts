@@ -16,7 +16,7 @@ export default defineConfig({
     },
     ignorePatterns: ['**/dist/**', 'coverage/**', 'tools/oxlint/anti-slop/**'],
     jsPlugins: [{ name: 'anti-slop', specifier: './tools/oxlint/anti-slop/index.ts' }],
-    // Preserve boundary parsing and dynamic JSON contracts; adopt the type-evidence rules.
+    // Preserve boundary parsing and dynamic JSON contracts; enforce type evidence and spacing.
     rules: {
       'anti-slop/no-chained-type-assertions': 'error',
       'anti-slop/no-known-value-widening': 'error',
@@ -25,6 +25,7 @@ export default defineConfig({
       'anti-slop/no-reflect-apply': 'error',
       'anti-slop/no-reflect-get': 'error',
       'anti-slop/no-widen-then-assert': 'error',
+      'anti-slop/require-readable-spacing': 'error',
       'anti-slop/require-safety-comment-for-type-assertion': 'error',
     },
     overrides: [

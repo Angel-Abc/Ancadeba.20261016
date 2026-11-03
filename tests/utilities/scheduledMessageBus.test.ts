@@ -10,17 +10,21 @@ function setup(
   shouldDeliver: (topic: keyof Topics, payload: number | string) => boolean = () => true,
 ) {
   const tasks: { run: () => void; cancelled: boolean; delay: number }[] = []
+
   const scheduler: ITaskScheduler = {
     schedule(run, delay) {
       const task = { run, cancelled: false, delay }
       tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
     },
   }
+
   const onError = vi.fn()
   const bus = new ScheduledMessageBus(new MessageBus<Topics>(), scheduler, onError, shouldDeliver)
+
   return { bus, tasks, onError }
 }
 
@@ -47,6 +51,7 @@ describe('scheduled message bus', () => {
     const calls: number[] = []
     bus.subscribe('work', (value) => {
       calls.push(value)
+
       if (value < 3) bus.publish('work', value + 1)
       bus.flush()
     })
@@ -66,6 +71,7 @@ describe('scheduled message bus', () => {
     const calls: number[] = []
     bus.subscribe('work', (value) => {
       calls.push(value)
+
       if (value === 1) bus.publish('work', 2)
     })
     bus.publish('work', 1)
@@ -98,11 +104,14 @@ describe('scheduled message bus', () => {
     const { bus, tasks, onError } = setup()
     const failure = new Error('Handler failed')
     const calls: number[] = []
+
     const unsubscribe = bus.subscribe('work', () => {
       throw failure
     })
+
     bus.subscribe('work', (value) => {
       calls.push(value)
+
       if (value === 1) bus.publish('work', 3)
     })
     bus.publish('work', 1)
@@ -120,10 +129,12 @@ describe('scheduled message bus', () => {
 
   it('propagates explicit flush errors without logging and preserves later work', () => {
     const { bus, tasks, onError } = setup()
+
     const unsubscribe = bus.subscribe('work', () => {
       bus.publish('result', 'next')
       throw new Error('Failed')
     })
+
     const result = vi.fn()
     bus.subscribe('result', result)
     bus.publish('work', 1)

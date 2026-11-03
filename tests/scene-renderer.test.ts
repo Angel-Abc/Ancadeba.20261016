@@ -66,6 +66,7 @@ class TestElement extends EventTarget {
   }
   set textContent(value: string) {
     this.content = value
+
     for (const child of [...this.children]) child.remove()
   }
   set innerHTML(_value: string) {
@@ -94,10 +95,13 @@ class TestElement extends EventTarget {
   }
   find(predicate: (element: TestElement) => boolean): TestElement | undefined {
     if (predicate(this)) return this
+
     for (const child of this.children) {
       const found = child.find(predicate)
+
       if (found) return found
     }
+
     return undefined
   }
   asElement(): HTMLElement {
@@ -117,11 +121,13 @@ class TestDocument extends EventTarget {
 
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
 const timing = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
+
 const source: IResourceSource = {
   readText: (path) => readFile(new URL(`../sample-games/basic/${path}`, import.meta.url), 'utf8'),
   readBytes: async (path) =>
     new Uint8Array(await readFile(new URL(`../sample-games/basic/${path}`, import.meta.url))),
 }
+
 const loader = new GameLoader(new JsonResourceLoader(source, logger))
 
 function setup(game: GameData) {
@@ -129,8 +135,10 @@ function setup(game: GameData) {
     createGameState: () => ({ score: 0 }),
     createSceneState: () => undefined,
   })
+
   const document = new TestDocument()
   const target = document.createElement('main')
+
   return { lifecycle, document, target }
 }
 
@@ -159,12 +167,14 @@ function bindingEngine(
       createGameRules: (_content, instance) => {
         // SAFETY: the paired lifecycle factory creates BindingDemoState for this engine.
         const state = instance.state as BindingDemoState
+
         return {
           handlers: new Map<string, GameActionHandler>([
             [
               'damage',
               () => {
                 state.player.health = Number(state.player.health) - 7
+
                 return { status: 'applied', advanceTurn: true, worldTimeCostMs: 1000 }
               },
             ],
@@ -172,6 +182,7 @@ function bindingEngine(
               'forget',
               () => {
                 delete state.player.health
+
                 return { status: 'applied' }
               },
             ],
@@ -179,6 +190,7 @@ function bindingEngine(
               'heal',
               () => {
                 state.player.health = 40
+
                 return { status: 'applied' }
               },
             ],
@@ -186,6 +198,7 @@ function bindingEngine(
               'markup',
               () => {
                 state.player.health = '<b>{{turn}}</b>'
+
                 return { status: 'applied' }
               },
             ],
@@ -213,15 +226,18 @@ describe('scene renderer', () => {
     const { lifecycle, target, document } = setup(game)
     lifecycle.enterScene('start-screen')
     const dispose = vi.fn()
+
     const buttonRenderer: IComponentRenderer = {
       render: vi.fn((component, context) => {
         expect(component.type).toBe('button')
         expect(context.document).toBe(document)
         expect(context.bindings).toBeUndefined()
         const element = document.createElement('aside')
+
         return { element: element.asElement(), dispose }
       }),
     }
+
     const renderer = new SceneRenderer(
       target.asElement(),
       lifecycle,
@@ -231,6 +247,7 @@ describe('scene renderer', () => {
         button: buttonRenderer,
       }),
     )
+
     const menu = target.children[0]!
     expect(menu.children[0]!.tagName).toBe('H2')
     const button = menu.children[1]!
@@ -250,6 +267,7 @@ describe('scene renderer', () => {
     const { lifecycle, target, document } = setup(await loader.load())
     lifecycle.enterScene('start-screen')
     const dispose = vi.fn()
+
     const components: IComponentRenderer = {
       render: vi
         .fn()
@@ -258,6 +276,7 @@ describe('scene renderer', () => {
           throw new Error('Button renderer failed')
         }),
     }
+
     expect(() => new SceneRenderer(target.asElement(), lifecycle, {}, components)).toThrow(
       'Button renderer failed',
     )
@@ -268,12 +287,15 @@ describe('scene renderer', () => {
   it('releases both scenes when a component cleanup fails during scene replacement', async () => {
     const { lifecycle, target, document } = setup(await loader.load())
     lifecycle.enterScene('start-screen')
+
     const dispose = vi.fn().mockImplementationOnce(() => {
       throw new Error('Cleanup failed')
     })
+
     const components: IComponentRenderer = {
       render: () => ({ element: document.createElement('div').asElement(), dispose }),
     }
+
     const renderer = new SceneRenderer(target.asElement(), lifecycle, {}, components)
     expect(() => lifecycle.enterScene('settings')).toThrow()
     expect(dispose).toHaveBeenCalledTimes(7)
@@ -339,7 +361,9 @@ describe('scene renderer', () => {
     const game = await loader.load()
     const settings = game.scenes.get('settings')!
     const heading = settings.components[0]!
+
     if (heading.type !== 'text') throw new Error('Expected text')
+
     const smaller: GameData = {
       ...game,
       scenes: new Map([
@@ -359,6 +383,7 @@ describe('scene renderer', () => {
         ],
       ]),
     }
+
     const first = setup(game)
     const second = setup(smaller)
     const firstRenderer = new SceneRenderer(first.target.asElement(), first.lifecycle)
@@ -401,7 +426,9 @@ describe('scene renderer', () => {
     const literal = '<img src=x onerror="alert(1)">\n<script>example()</script>'
     const settings = game.scenes.get('settings')!
     const heading = settings.components[0]!
+
     if (heading.type !== 'text') throw new Error('Expected text')
+
     const modified: GameData = {
       ...game,
       scenes: new Map([
@@ -414,6 +441,7 @@ describe('scene renderer', () => {
         ],
       ]),
     }
+
     const { lifecycle, target } = setup(modified)
     lifecycle.enterScene('settings')
     const renderer = new SceneRenderer(target.asElement(), lifecycle)
@@ -447,10 +475,13 @@ describe('scene renderer', () => {
     const read = vi.spyOn(game.bindings!, 'read')
     const createElement = document.createElement.bind(document)
     let calls = 0
+
     const create = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
       if (++calls === 4) throw new Error('Cannot mount narrative')
+
       return createElement(tag)
     })
+
     expect(() => new SceneRenderer(target.asElement(), lifecycle)).toThrow('Cannot mount narrative')
     create.mockRestore()
     expect(target.children).toHaveLength(0)
@@ -479,6 +510,7 @@ describe('scene renderer', () => {
     let pulse: (() => void) | undefined
     const content = await loader.load()
     const { target } = setup(content)
+
     const engine = bindingEngine(
       content,
       new EditorPreviewHost(target.asElement()),
@@ -487,12 +519,14 @@ describe('scene renderer', () => {
         scheduler: {
           schedule(run, delay) {
             if (delay === 10) pulse = run
+
             return () => {}
           },
         },
       },
       true,
     )
+
     await engine.start()
     startSampleGame(target)
     const lifecycle = engine.lifecycle!
@@ -523,6 +557,7 @@ describe.each([
 ] as const)('%s rendering integration', (_name, createHost) => {
   it('opens the menu without a playthrough and routes buttons with listener cleanup', async () => {
     const { target } = setup(await loader.load())
+
     const engine = new Engine(
       loader,
       createHost(target.asElement()),
@@ -530,6 +565,7 @@ describe.each([
       () => new MessageBus<EngineMessages>(),
       timing,
     )
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     const menu = target.find((element) => element.dataset.sceneId === 'start-screen')!
@@ -589,6 +625,7 @@ describe.each([
 
     game.actions!.request('forget')
     flush(engine)
+
     if (_name === 'editor preview') {
       expect(status.textContent).toContain('Health [unresolved: health] / 40')
       expect(status.title).toBe('health: game.state ["player","health"] (missing-path)')
@@ -599,10 +636,12 @@ describe.each([
       expect(status.title).toBe('')
       expect(status.dataset.bindingStatus).toBeUndefined()
     }
+
     game.actions!.request('heal')
     flush(engine)
     expect(status.textContent).toContain('Health 40 / 40')
     expect(status.title).toBe('')
+
     if (_name === 'editor preview') expect(status.dataset.bindingStatus).toBe('resolved')
 
     const detachedText = status.textContent
@@ -677,6 +716,7 @@ describe.each([
 
   it('shows editor diagnostics or standalone fallbacks without an application-state factory', async () => {
     const { target } = setup(await loader.load())
+
     const engine = new Engine(
       loader,
       createHost(target.asElement()),
@@ -684,18 +724,21 @@ describe.each([
       () => new MessageBus<EngineMessages>(),
       timing,
     )
+
     await engine.start()
     startSampleGame(target)
     const status = target.find((element) => element.dataset.componentId === 'player-status')!
     expect(status.textContent).toContain(
       _name === 'editor preview' ? 'Health [unresolved: health] / 40' : 'Health 40 / 40',
     )
+
     if (_name === 'editor preview') expect(status.title).toContain('(source-unavailable)')
     engine.stop()
   })
 
   it('selects the configured initial scene, follows changes, and remounts with the engine', async () => {
     const { target } = setup(await loader.load())
+
     const engine = new Engine(
       loader,
       createHost(target.asElement()),
@@ -703,6 +746,7 @@ describe.each([
       () => new MessageBus<EngineMessages>(),
       timing,
     )
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     expect(lifecycle.activeScene?.data.id).toBe('start-screen')
@@ -729,22 +773,26 @@ describe('editor scene picker', () => {
   it('switches the three scenes and empty selection through the lifecycle, and removes its listener', async () => {
     const game = await loader.load()
     const { lifecycle, target } = setup(game)
+
     const cleanup = mountGameView(
       target.asElement(),
       game,
       { lifecycle, input: undefined },
       { scenePicker: true },
     )
+
     const select = target.find((element) => element.tagName === 'SELECT')!
     expect(select.value).toBe('start-screen')
     startSampleGame(target)
     const playthrough = lifecycle.currentGame
+
     for (const id of ['inventory', 'settings', 'standard', '']) {
       select.value = id
       select.dispatchEvent(new Event('change'))
       expect(lifecycle.activeScene?.data.id ?? '').toBe(id)
       expect(lifecycle.currentGame).toBe(playthrough)
     }
+
     lifecycle.endGame()
     select.value = 'inventory'
     select.dispatchEvent(new Event('change'))

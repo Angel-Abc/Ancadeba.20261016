@@ -58,8 +58,10 @@ export class EditorApiClient implements IEditorApi {
       undefined,
       signal,
     )
+
     if (data.version !== 1)
       throw new EditorApiError('incompatible_api', 'This adapter requires editor API version 1')
+
     return data
   }
 
@@ -87,6 +89,7 @@ export class EditorApiClient implements IEditorApi {
       expectedRevision,
       command: input,
     })
+
     if (!request.success) {
       throw new EditorApiError(
         'invalid_request',
@@ -99,15 +102,18 @@ export class EditorApiClient implements IEditorApi {
         })),
       )
     }
+
     const { command } = request.data
     // Check every write so a restarted or upgraded server cannot silently change the contract.
     const capabilities = await this.capabilities(signal)
+
     if (!capabilities.commands.some((item) => item.type === command.type)) {
       throw new EditorApiError(
         'unsupported_command',
         'The connected editor does not support this command',
       )
     }
+
     return this.request('/api/editor/commands', appliedChangeSchema, request.data, signal)
   }
 
@@ -122,14 +128,18 @@ export class EditorApiClient implements IEditorApi {
       requestSignal,
       this.shutdownSignal,
     ].filter((signal): signal is AbortSignal => signal !== undefined)
+
     const signal = AbortSignal.any(signals)
+
     if (signal.aborted)
       throw new EditorApiError('cancelled', 'Request was cancelled before sending')
     const writing = body !== undefined
     let sent = false
+
     try {
       const fetcher = this.fetcher
       sent = true
+
       const response = await fetcher(`${this.config.editorServerUrl}${path}`, {
         method: writing ? 'POST' : 'GET',
         ...(writing
@@ -139,7 +149,9 @@ export class EditorApiClient implements IEditorApi {
         cache: 'no-store',
         signal,
       })
+
       let value: unknown
+
       try {
         value = await response.json()
       } catch (error) {
@@ -152,8 +164,10 @@ export class EditorApiClient implements IEditorApi {
           response.status,
         )
       }
+
       if (!response.ok) {
         const error = apiErrorSchema.safeParse(value)
+
         if (!error.success)
           throw new EditorApiError(
             'invalid_response',
@@ -162,12 +176,14 @@ export class EditorApiClient implements IEditorApi {
             writing ? 'unknown' : 'not_applied',
             response.status,
           )
+
         const fallback =
           response.status === 404
             ? 'not_found'
             : response.status === 409
               ? 'workspace_conflict'
               : 'editor_error'
+
         throw new EditorApiError(
           error.data.code ?? fallback,
           error.data.error,
@@ -180,7 +196,9 @@ export class EditorApiClient implements IEditorApi {
           response.status,
         )
       }
+
       const parsed = schema.safeParse(value)
+
       if (!parsed.success)
         throw new EditorApiError(
           'invalid_response',
@@ -189,6 +207,7 @@ export class EditorApiClient implements IEditorApi {
           writing ? 'unknown' : 'not_applied',
           response.status,
         )
+
       return parsed.data
     } catch (error) {
       if (error instanceof EditorApiError) throw error

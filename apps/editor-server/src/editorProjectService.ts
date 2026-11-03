@@ -24,9 +24,11 @@ export class EditorProjectService {
   scene(path: string, id: string) {
     if (!gameIdSchema.safeParse(id).success)
       throw new EditorError(400, 'invalid_scene_id', 'Invalid scene ID')
+
     return this.coordinator.run(async () => {
       const view = inspectProject(await this.repository.load(path))
       const scene = view.scenes.find((scene) => scene.id === id)
+
       if (!scene)
         throw new EditorError(
           404,
@@ -34,12 +36,14 @@ export class EditorProjectService {
           'Scene does not exist or is invalid',
           view.diagnostics,
         )
+
       return { revision: view.revision, scene, diagnostics: view.diagnostics }
     })
   }
 
   apply(input: unknown): Promise<CommandResult & { view: ProjectView }> {
     const parsed = commandRequestSchema.safeParse(input)
+
     if (!parsed.success) {
       const diagnostics: Diagnostic[] = parsed.error.issues.map((issue) => ({
         code: 'invalid_request',
@@ -47,17 +51,23 @@ export class EditorProjectService {
         path: issue.path.map((part) => (typeof part === 'number' ? part : String(part))),
         message: issue.message,
       }))
+
       throw new EditorError(400, 'invalid_request', 'Invalid editing request', diagnostics)
     }
+
     const request = parsed.data
+
     return this.coordinator.run(async () => {
       const current = await this.repository.load(request.path)
+
       if (current.revision !== request.expectedRevision) {
         throw new EditorError(409, 'revision_conflict', 'Project changed. Reload before retrying.')
       }
+
       const change = applyCommand(current, request.command)
       await this.repository.save(request.path, change)
       const saved = await this.repository.load(request.path)
+
       return { ...change, project: saved, view: inspectProject(saved) }
     })
   }

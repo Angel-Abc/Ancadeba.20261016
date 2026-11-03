@@ -40,6 +40,7 @@ function project(revision: string): ProjectView {
     screen: { type: 'grid' as const, grid: { rows: 12, columns: 16 } },
     components: [],
   }))
+
   return {
     revision,
     game: {
@@ -57,32 +58,41 @@ function project(revision: string): ProjectView {
 
 function panel() {
   const controls = new Map<string, Control>()
+
   const control = (id: string) => {
     let result = controls.get(id)
+
     if (!result) {
       result = new Control(id)
       controls.set(id, result)
     }
+
     return result
   }
+
   let latest = project('one')
   const requests: CommandRequest[] = []
+
   const root = {
     querySelector: (selector: string) => control(selector.slice(1)),
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
+
   const fetcher: typeof fetch = async (_url, init) => {
     if (init?.method === 'POST') {
       if (typeof init.body !== 'string') throw new Error('Expected a JSON request body')
       requests.push(commandRequestSchema.parse(JSON.parse(init.body)))
     }
+
     return new Response(JSON.stringify(latest))
   }
+
   const dispose = bindProjectPanel(
     // @ts-expect-error -- Deliberately partial DOM fixture supplies only the query and control operations used by the panel.
     root,
     fetcher,
   )
+
   return {
     control,
     requests,
@@ -96,6 +106,7 @@ function panel() {
 describe('project panel form reconciliation', () => {
   it('reloads clean forms while preserving only dirty form values', async () => {
     const { control, requests, setLatest, dispose } = panel()
+
     try {
       control('editor-folder').value = 'basic'
       control('editor-load').fire('click')
@@ -127,6 +138,7 @@ describe('project panel form reconciliation', () => {
 
   it('never retargets a removed scene draft to the next scene after reload', async () => {
     const { control, setLatest, dispose } = panel()
+
     try {
       control('editor-load').fire('click')
       await vi.waitFor(() => expect(control('scene-title').value).toBe('shop'))

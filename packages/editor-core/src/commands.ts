@@ -5,6 +5,7 @@ const metadata = {
   title: z.string().trim().min(1),
   description: z.string(),
 }
+
 export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('game.updateMetadata'),
@@ -38,7 +39,9 @@ export const commandRequestSchema = z.strictObject({
   expectedRevision: z.string().min(1),
   command: commandSchema,
 })
+
 export type EditorCommand = z.infer<typeof commandSchema>
+
 export type CommandRequest = z.infer<typeof commandRequestSchema>
 
 const scene = {
@@ -50,6 +53,7 @@ const scene = {
   screen: { type: 'grid', grid: { rows: 12, columns: 16 } },
   components: [],
 }
+
 export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),

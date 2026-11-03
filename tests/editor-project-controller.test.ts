@@ -23,23 +23,30 @@ const view = (revision: string): ProjectView => ({
   scenes: [],
   diagnostics: [],
 })
+
 describe('project editor controller', () => {
   it('preserves draft values and the original revision across refresh and conflict until explicit reload', async () => {
     let latest = view('one')
     const requests: CommandRequest[] = []
+
     const client: IEditorClient = {
       inspect: async () => latest,
       apply: async (request) => {
         requests.push(request)
+
         if (request.expectedRevision !== latest.revision)
           throw new EditorClientError('revision_conflict', 'Reload before retrying')
+
         return latest
       },
     }
+
     const updates: { state: ProjectEditorState; replaceFields: boolean }[] = []
+
     const controller = new ProjectEditorController(client, (state, replaceFields) =>
       updates.push({ state, replaceFields }),
     )
+
     await controller.load('basic')
     latest = view('two')
     await controller.refresh(true)
@@ -47,12 +54,14 @@ describe('project editor controller', () => {
       state: { changedElsewhere: true, view: { revision: 'one' } },
       replaceFields: false,
     })
+
     const operation = {
       type: 'game.updateMetadata' as const,
       title: 'My draft',
       description: '',
       version: '1',
     }
+
     await controller.save(operation)
     expect(updates.at(-1)).toMatchObject({ state: { conflict: true }, replaceFields: false })
     await controller.load('basic', true)
@@ -68,14 +77,18 @@ describe('project editor controller', () => {
   it('checks for drafts when a background refresh completes, including typing during the read', async () => {
     let complete: (value: ProjectView) => void = () => {}
     let dirty = false
+
     const client: IEditorClient = {
       inspect: async () => view('one'),
       apply: async () => view('saved'),
     }
+
     const updates: { state: ProjectEditorState; replaceFields: boolean }[] = []
+
     const controller = new ProjectEditorController(client, (state, replaceFields) =>
       updates.push({ state, replaceFields }),
     )
+
     await controller.load('basic')
     client.inspect = () =>
       new Promise((resolve) => {
@@ -102,13 +115,16 @@ describe('project editor controller', () => {
   it('allows saves during background refresh and discards the stale refresh result', async () => {
     let complete: (value: ProjectView) => void = () => {}
     const requests: CommandRequest[] = []
+
     const client: IEditorClient = {
       inspect: async () => view('one'),
       apply: async (request) => {
         requests.push(request)
+
         return view('saved')
       },
     }
+
     const updates: ProjectEditorState[] = []
     const controller = new ProjectEditorController(client, (state) => updates.push(state))
     await controller.load('basic')
@@ -132,10 +148,12 @@ describe('project editor controller', () => {
 
   it('ignores failed refreshes superseded by a project load and never preserves drafts across projects', async () => {
     let fail: (error: Error) => void = () => {}
+
     const client: IEditorClient = {
       inspect: async () => view('one'),
       apply: async () => view('saved'),
     }
+
     const updates: ProjectEditorState[] = []
     const controller = new ProjectEditorController(client, (state) => updates.push(state))
     await controller.load('basic')
@@ -160,6 +178,7 @@ describe('project editor controller', () => {
     let latest = view('one')
     let finish: ((value: ProjectView) => void) | undefined
     const updates: boolean[] = []
+
     const client: IEditorClient = {
       inspect: async () => latest,
       apply: () =>
@@ -167,19 +186,23 @@ describe('project editor controller', () => {
           finish = resolve
         }),
     }
+
     const controller = new ProjectEditorController(client, (_state, replace) =>
       updates.push(replace),
     )
+
     await controller.load('')
     latest = view('two')
     await controller.refresh(false)
     expect(updates.at(-1)).toBe(true)
+
     const pending = controller.save({
       type: 'game.updateMetadata',
       title: 'New',
       description: '',
       version: '1',
     })
+
     const count = updates.length
     controller.dispose()
     finish?.(latest)
@@ -189,12 +212,14 @@ describe('project editor controller', () => {
 
   it('uses the same HTTP contract and returns structured diagnostics', async () => {
     const requests: { url: string; init: RequestInit | undefined }[] = []
+
     const fetcher: typeof fetch = async function (this: unknown, url, init) {
       expect(this).toBeUndefined()
       requests.push({
         url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
         init,
       })
+
       return new Response(
         JSON.stringify({
           error: 'Invalid project',
@@ -206,6 +231,7 @@ describe('project editor controller', () => {
         { status: 422 },
       )
     }
+
     const client = new HttpEditorClient(fetcher)
     await expect(
       client.apply({
@@ -240,6 +266,7 @@ describe('project editor controller', () => {
           status: 500,
         }),
     )
+
     await expect(client.inspect('basic')).rejects.toMatchObject({
       code: 'request_failed',
       message: 'Editor request failed',

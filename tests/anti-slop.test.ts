@@ -28,5 +28,6 @@ it('rejects module mocking through Vite+ while allowing injected spies and unrel
       ],
     })
   `
+
   await runNode(process.execPath, ['--input-type=module', '--eval', script], { windowsHide: true })
 })

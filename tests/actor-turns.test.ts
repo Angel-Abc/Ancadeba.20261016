@@ -23,6 +23,7 @@ class TestTiming {
     schedule: (run: () => void, delay: number) => {
       const task = { run, dueAt: this.now + delay, ran: false, cancelled: false }
       this.tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
@@ -35,12 +36,14 @@ class TestTiming {
     const task = this.pending
       .filter((task) => task.dueAt <= this.now)
       .sort((a, b) => a.dueAt - b.dueAt)[0]
+
     if (!task) throw new Error('No due task')
     task.ran = true
     task.run()
   }
   drain(): void {
     let count = 0
+
     while (this.pending.some((task) => task.dueAt <= this.now)) {
       if (++count > 100) throw new Error('Tasks did not become idle')
       this.runNext()
@@ -111,6 +114,7 @@ function setup(
   const timing = new TestTiming()
   const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
   const weather = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
   const rules =
     options.rules ??
     configured({
@@ -118,19 +122,23 @@ function setup(
       ...(options.policy ? { worldTime: options.policy } : {}),
       ...(options.bindings ? { bindings: options.bindings } : {}),
     })
+
   const logger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: vi.fn(() => ''),
   } satisfies ILogger
+
   const mount = vi.fn<IEngineHost['mount']>(() => () => {})
   const factory = vi.fn(() => rules)
+
   const engine = new Engine(
     { load: async () => game },
     {
       mount(data, session) {
         session.lifecycle.startGame()
+
         return (options.host ?? { mount }).mount(data, session)
       },
     },
@@ -142,6 +150,7 @@ function setup(
       createGameRules: factory,
     },
   )
+
   return { engine, timing, act, weather, logger, mount, factory }
 }
 
@@ -149,6 +158,7 @@ async function start(options: Parameters<typeof setup>[0] = {}) {
   const instance = setup(options)
   await instance.engine.start()
   instance.timing.drain()
+
   return instance
 }
 
@@ -259,8 +269,10 @@ describe('dynamic actor membership', () => {
           }),
         },
       })
+
       actorAction(instance, 'phase')
       const events: string[] = []
+
       for (const topic of [
         'turn.advanced',
         'world-time.advanced',
@@ -316,6 +328,7 @@ describe('dynamic actor membership', () => {
     instance.engine.messages!.subscribe('turn.ended', (event) => {
       ended = event
     })
+
     for (const topic of [
       'turn.advanced',
       'turn.rosterChanged',
@@ -367,6 +380,7 @@ describe('dynamic actor membership', () => {
   it('handles repeated single-actor idle/resume cycles without reusing revisions or generations', async () => {
     const instance = await dynamicStart({ actors: ['a'], phases: ['only'] })
     const actions = instance.engine.actions!
+
     for (let cycle = 1; cycle <= 3; cycle++) {
       edit(instance, { remove: ['a'] })
       expect(actions.turnState).toBeUndefined()
@@ -380,6 +394,7 @@ describe('dynamic actor membership', () => {
       expect(actions.rosterState!.actors[0]!.generation).toBe(cycle + 1)
       expect(actions.progression.turn).toBe(cycle)
     }
+
     stop(instance)
   })
 
@@ -442,6 +457,7 @@ describe('dynamic actor membership', () => {
     expect(applied.at(-1)!.rosterState).toBe(captured)
     actorAction(instance, 'act')
     expect(act.mock.calls[0]![1].rosterState).toBe(captured)
+
     for (const value of [
       initial,
       captured,
@@ -485,6 +501,7 @@ describe('dynamic actor membership', () => {
         }),
       },
     })
+
     const actions = instance.engine.actions!
     const initialRoster = actions.rosterState
     const initialTurn = actions.turnState
@@ -516,6 +533,7 @@ describe('dynamic actor membership', () => {
         }),
       },
     })
+
     const failed = vi.fn()
     instance.engine.messages!.subscribe('action.failed', failed)
     const initial = instance.engine.actions!.rosterState
@@ -537,6 +555,7 @@ describe('dynamic actor membership', () => {
         }),
       },
     })
+
     const actions = instance.engine.actions!
     actions.request('cost', Number.MAX_VALUE)
     instance.timing.drain()
@@ -555,6 +574,7 @@ describe('dynamic actor membership', () => {
       handlers: {
         edit: () => {
           instance.engine.stop()
+
           return {
             status: 'applied',
             rosterChanges: { remove: ['a'], add: ['c'] },
@@ -563,6 +583,7 @@ describe('dynamic actor membership', () => {
         },
       },
     })
+
     const retained = instance.engine.actions!
     const initial = retained.rosterState
     edit(instance, {})
@@ -588,6 +609,7 @@ describe('dynamic actor membership', () => {
         ]),
       },
     })
+
     const failed = vi.fn()
     const applied = vi.fn()
     instance.engine.messages!.subscribe('action.failed', failed)
@@ -612,6 +634,7 @@ describe('dynamic actor attribution and session isolation', () => {
       const actions = instance.engine.actions!
       const rejected: EngineMessages['action.rejected'][] = []
       instance.engine.messages!.subscribe('action.rejected', (event) => rejected.push(event))
+
       if (kind === 'direct') {
         actions.request('edit', { remove: ['b'] })
         actions.request('edit', { add: ['b'] })
@@ -621,16 +644,19 @@ describe('dynamic actor attribution and session isolation', () => {
         actions.scheduleWorld('act', 10, undefined, { actorId: 'b' })
       else actions.scheduleWorldAt('act', 10, undefined, { actorId: 'b' })
       instance.timing.drain()
+
       if (kind !== 'direct') {
         edit(instance, { remove: ['b'] })
         edit(instance, { add: ['b'] })
         actorAction(instance, 'end')
         actorAction(instance, 'end')
         expect(actions.turnState).toMatchObject({ actorId: 'b', round: 2 })
+
         if (kind === 'host') instance.timing.now = 10
         else actions.request('cost', 10)
         instance.timing.drain()
       }
+
       expect(act).not.toHaveBeenCalled()
       expect(rejected).toHaveLength(1)
       expect(rejected[0]!.reason).toContain('registration')
@@ -640,10 +666,12 @@ describe('dynamic actor attribution and session isolation', () => {
         turnRevision: 0,
       })
       expect(actions.rosterState!.actors.at(-1)!.generation).toBe(2)
+
       if (kind !== 'direct') {
         actorAction(instance, 'act')
         expect(act.mock.calls[0]![0].actor?.actorGeneration).toBe(2)
       }
+
       stop(instance)
     },
   )
@@ -706,6 +734,7 @@ describe('dynamic actor attribution and session isolation', () => {
 
   it('captures fixed input generations at conversion and handles active input while idle', async () => {
     const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const instance = await dynamicStart({
       actors: ['a'],
       handlers: { act },
@@ -714,6 +743,7 @@ describe('dynamic actor attribution and session isolation', () => {
         { context: 'game', input: 'end', action: 'act', actor: { type: 'active' } },
       ],
     })
+
     const actions = instance.engine.actions!
     const rejected: EngineMessages['action.rejected'][] = []
     instance.engine.messages!.subscribe('action.rejected', (event) => rejected.push(event))
@@ -747,6 +777,7 @@ describe('dynamic actor attribution and session isolation', () => {
 
   it('keeps due global world actions in bus order across a removal caused by action time costs', async () => {
     const order: string[] = []
+
     const instance = await dynamicStart({
       handlers: {
         edit: (request) => ({
@@ -757,10 +788,12 @@ describe('dynamic actor attribution and session isolation', () => {
         }),
         weather: (_request, context) => {
           order.push(`weather:${context.turnState?.actorId}`)
+
           return { status: 'applied' }
         },
       },
     })
+
     instance.engine.actions!.scheduleWorld('weather', 5)
     instance.engine.messages!.subscribe('turn.rosterChanged', () => order.push('roster'))
     instance.engine.messages!.subscribe('action.applied', (event) =>
@@ -818,6 +851,7 @@ describe('dynamic actor attribution and session isolation', () => {
 
   it('exposes initial frozen membership during mounting and preserves it on startup failure', async () => {
     let retained: Engine['actions']
+
     const instance = setup({
       host: {
         mount: (_game, session) => {
@@ -829,6 +863,7 @@ describe('dynamic actor attribution and session isolation', () => {
         },
       },
     })
+
     await expect(instance.engine.start()).rejects.toThrow('Mount failed')
     instance.timing.drain()
     expect(retained!.rosterState!.revision).toBe(0)
@@ -861,6 +896,7 @@ describe('cyclic actor turns and phases', () => {
     const instance = await start()
     const { engine } = instance
     const events: string[] = []
+
     for (const topic of [
       'turn.advanced',
       'turn.phaseChanged',
@@ -933,9 +969,11 @@ describe('cyclic actor turns and phases', () => {
 
   it('increments round and revision for a single actor and phase, invalidating queued requests', async () => {
     const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const instance = await start({
       rules: configured({ actors: ['a'], phases: ['only'], handlers: { act } }),
     })
+
     const rejected = vi.fn()
     instance.engine.messages!.subscribe('action.rejected', rejected)
     instance.engine.actions!.request('phase', undefined, { actorId: 'a' })
@@ -957,8 +995,10 @@ describe('cyclic actor turns and phases', () => {
     const instance = await start({
       handlers: { end: () => ({ status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }) },
     })
+
     const order: string[] = []
     const applied = vi.fn<(event: EngineMessages['action.applied']) => void>()
+
     for (const topic of [
       'turn.advanced',
       'world-time.advanced',
@@ -1009,12 +1049,14 @@ describe('actor request eligibility and attribution', () => {
 
   it('checks allowed phases at execution and exposes turn state to eligible handlers', async () => {
     const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const instance = await start({
       rules: configured({
         handlers: { act },
         policies: new Map([['act', { scope: 'actor', allowedPhases: ['play'] }]]),
       }),
     })
+
     const rejected = vi.fn()
     instance.engine.messages!.subscribe('action.rejected', rejected)
     instance.engine.actions!.request('act', undefined, { actorId: 'a' })
@@ -1049,10 +1091,12 @@ describe('actor request eligibility and attribution', () => {
       handlers: {
         phase: (_request, context) => {
           context.actions.request('act', undefined, { actorId: context.turnState!.actorId })
+
           return { status: 'applied', advancePhase: true }
         },
       },
     })
+
     const rejected = vi.fn()
     instance.engine.messages!.subscribe('action.rejected', rejected)
     actorAction(instance, 'phase')
@@ -1073,6 +1117,7 @@ describe('actor request eligibility and attribution', () => {
         { context: 'game', input: 'end', action: 'end', actor: { type: 'active' } },
       ],
     })
+
     const { engine, timing, act } = instance
     const requests: EngineMessages['action.requested'][] = []
     engine.messages!.subscribe('action.requested', (request) => requests.push(request))
@@ -1097,6 +1142,7 @@ describe('actor request eligibility and attribution', () => {
     const instance = await start({
       bindings: [{ context: 'game', input: 'move', action: 'act', actor: { type: 'active' } }],
     })
+
     const rejected = vi.fn()
     instance.engine.messages!.subscribe('action.rejected', rejected)
     instance.engine.input!.pressKey('KeyM')
@@ -1137,6 +1183,7 @@ describe('actor request eligibility and attribution', () => {
       const instance = await start()
       const { engine, timing } = instance
       const options: ActionRequestOptions = { actorId: 'a' }
+
       if (kind === 'host') {
         engine.actions!.schedule('act', 10, undefined, options)
         engine.actions!.schedule('weather', 10)
@@ -1147,9 +1194,11 @@ describe('actor request eligibility and attribution', () => {
         engine.actions!.scheduleWorldAt('act', 10, undefined, options)
         engine.actions!.scheduleWorldAt('weather', 10)
       }
+
       const rejected = vi.fn()
       engine.messages!.subscribe('action.rejected', rejected)
       actorAction(instance, 'phase')
+
       if (kind === 'host') timing.now = 10
       else engine.actions!.request('cost', 10)
       timing.drain()
@@ -1257,6 +1306,7 @@ describe('turn outcome validation and atomic commits', () => {
       const instance = await start({
         handlers: { weather: () => ({ status: 'applied', [flag]: true, worldTimeCostMs: 10 }) },
       })
+
       const failed = vi.fn()
       instance.engine.messages!.subscribe('action.failed', failed)
       instance.engine.actions!.request('weather')
@@ -1274,6 +1324,7 @@ describe('turn outcome validation and atomic commits', () => {
         end: () => ({ status: 'applied', advanceTurn: true, worldTimeCostMs: Number.MAX_VALUE }),
       },
     })
+
     const failed = vi.fn()
     const ended = vi.fn()
     instance.engine.messages!.subscribe('action.failed', failed)
@@ -1294,10 +1345,12 @@ describe('turn outcome validation and atomic commits', () => {
       handlers: {
         end: () => {
           instance.engine.stop()
+
           return { status: 'applied', advanceTurn: true }
         },
       },
     })
+
     const retained = instance.engine.actions!
     const initial = retained.turnState
     retained.request('end', undefined, { actorId: 'a' })
@@ -1309,6 +1362,7 @@ describe('turn outcome validation and atomic commits', () => {
 
   it('keeps legacy numeric turns compatible and rejects phase advances without configuration', async () => {
     const handler = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const instance = await start({
       rules: {
         handlers: new Map<string, GameActionHandler>([
@@ -1318,6 +1372,7 @@ describe('turn outcome validation and atomic commits', () => {
         ]),
       },
     })
+
     const failed = vi.fn()
     const rejected = vi.fn()
     instance.engine.messages!.subscribe('action.failed', failed)
@@ -1337,6 +1392,7 @@ describe('turn outcome validation and atomic commits', () => {
 
 describe('turn configuration and session lifecycle', () => {
   const invalidConfigurations: GameRules[] = []
+
   for (const patch of [
     { actors: [] },
     { actors: ['a', 'a'] },
@@ -1349,6 +1405,7 @@ describe('turn configuration and session lifecycle', () => {
     const base = configured()
     invalidConfigurations.push({ ...base, turns: { ...base.turns!, ...patch } })
   }
+
   for (const policy of [
     { scope: 'actor', allowedPhases: [] },
     { scope: 'actor', allowedPhases: ['play', 'play'] },
@@ -1361,11 +1418,13 @@ describe('turn configuration and session lifecycle', () => {
       configured({ policies: new Map([['act', policy as ActionTurnPolicy]]) }),
     )
   }
+
   const base = configured()
   const missing = new Map(base.turns!.actionPolicies)
   missing.delete('act')
   invalidConfigurations.push({ ...base, turns: { ...base.turns!, actionPolicies: missing } })
   invalidConfigurations.push(configured({ policies: new Map([['unknown', { scope: 'global' }]]) }))
+
   for (const binding of [
     { context: 'game', input: 'move', action: 'act' },
     { context: 'game', input: 'move', action: 'act', actor: { type: 'fixed', actorId: 'unknown' } },
@@ -1375,6 +1434,7 @@ describe('turn configuration and session lifecycle', () => {
     // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- Includes an invalid actor selector to exercise runtime validation.
     invalidConfigurations.push(configured({ bindings: [binding as InputActionBinding] }))
   }
+
   invalidConfigurations.push({
     handlers: new Map([['act', () => ({ status: 'applied' })]]),
     inputBindings: [{ context: 'game', input: 'move', action: 'act', actor: { type: 'active' } }],
@@ -1404,6 +1464,7 @@ describe('turn configuration and session lifecycle', () => {
     const allowed = ['play']
     const selector = { type: 'fixed' as const, actorId: 'a' }
     const act = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const instance = await start({
       rules: configured({
         actors,
@@ -1413,6 +1474,7 @@ describe('turn configuration and session lifecycle', () => {
         bindings: [{ context: 'game', input: 'move', action: 'act', actor: selector }],
       }),
     })
+
     actors[1] = 'other'
     phases[1] = 'other'
     allowed[0] = 'setup'
@@ -1477,6 +1539,7 @@ describe('turn configuration and session lifecycle', () => {
 
   it('exposes initial state during mounting and retains it inertly after a mount failure', async () => {
     let retained: NonNullable<Engine['actions']> | undefined
+
     const instance = setup({
       host: {
         mount: (_game, session) => {
@@ -1493,6 +1556,7 @@ describe('turn configuration and session lifecycle', () => {
         },
       },
     })
+
     await expect(instance.engine.start()).rejects.toThrow('Mount failed')
     instance.timing.drain()
     expect(retained!.turnState?.revision).toBe(0)

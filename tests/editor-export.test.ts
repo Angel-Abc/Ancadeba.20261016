@@ -152,25 +152,30 @@ describe('editor game export API', () => {
   it('requires JSON requests and rejects malformed JSON', async () => {
     const unsupported = await fetch(`${baseUrl}/api/exports`, { method: 'POST', body: 'path=game' })
     expect(unsupported.status).toBe(415)
+
     const malformed = await fetch(`${baseUrl}/api/exports`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{broken',
     })
+
     expect(malformed.status).toBe(400)
   })
 
   it('keeps an export busy until disposed and makes old cleanup idempotent', async () => {
     const workspace = await FileWorkspace.open(root)
     let release!: () => void
+
     const ready = new Promise<void>((resolve) => {
       release = resolve
     })
+
     const builder = vi.fn(async (_source: string, output: string) => {
       await ready
       await mkdir(output)
       await writeFile(join(output, 'index.html'), 'export')
     })
+
     const exports = new WorkspaceGameExporter(workspace, builder, writeGameArchive, scratch)
     const pending = exports.create('')
     await vi.waitFor(() => expect(builder).toHaveBeenCalledTimes(1))
@@ -188,10 +193,12 @@ describe('editor game export API', () => {
 
   it('cleans up after archive creation fails and permits retrying', async () => {
     const workspace = await FileWorkspace.open(root)
+
     const builder = async (_source: string, output: string) => {
       await mkdir(output)
       await writeFile(join(output, 'index.html'), 'export')
     }
+
     const writer = vi.fn(writeGameArchive).mockRejectedValueOnce(new Error('Archive failed'))
     const exports = new WorkspaceGameExporter(workspace, builder, writer, scratch)
 
@@ -205,27 +212,34 @@ describe('editor game export API', () => {
   it('disposes the archive when a client disconnects before the build completes', async () => {
     const filePath = join(temp, 'disconnected.zip')
     await writeFile(filePath, new Uint8Array([80, 75, 3, 4]))
+
     const dispose = vi.fn(async () => {
       await rm(filePath)
     })
+
     let finish!: (archive: GameExportArchive) => void
+
     const create = vi.fn(
       () =>
         new Promise<GameExportArchive>((resolve) => {
           finish = resolve
         }),
     )
+
     const workspace = await FileWorkspace.open(root)
+
     const disconnected = createEditorServer(
       { workFolder: root, host: '127.0.0.1', port: 3100 },
       workspace,
       { create },
     )
+
     disconnected.listen(0, '127.0.0.1')
     await once(disconnected, 'listening')
     // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const port = (disconnected.address() as AddressInfo).port
     const abort = new AbortController()
+
     try {
       const pending = fetch(`http://127.0.0.1:${port}/api/exports`, {
         method: 'POST',
@@ -233,6 +247,7 @@ describe('editor game export API', () => {
         body: '{"path":""}',
         signal: abort.signal,
       }).catch((error: unknown) => error)
+
       await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1))
       abort.abort()
       await pending

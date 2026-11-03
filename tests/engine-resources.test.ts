@@ -50,6 +50,7 @@ describe('engine game resources', () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(new Uint8Array([0, 255, 42])))
+
     const resources = new HttpGameResources('/game', 'https://engine.example/', fetcher)
     const response = await resources.fetchResource('assets/my sprite.bin')
     expect(fetcher).toHaveBeenCalledWith('https://engine.example/game/assets/my%20sprite.bin')
@@ -149,6 +150,7 @@ describe('engine game resources', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('', { status: 404 }))
       .mockRejectedValueOnce(new Error('offline'))
+
     const resources = new HttpGameResources('/game', 'https://engine.example/', fetcher)
     await expect(resources.fetchResource('missing.json')).rejects.toThrow('HTTP 404')
     await expect(resources.fetchResource('data.json')).rejects.toThrow(
@@ -160,6 +162,7 @@ describe('engine game resources', () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(JSON.stringify({ gameUrl: '/games/', port: 1234 })))
+
     await expect(loadRuntimeConfig('https://engine.example/nested/', fetcher)).resolves.toEqual({
       gameUrl: '/games/',
     })
@@ -174,6 +177,7 @@ describe('engine game resources', () => {
       .mockResolvedValueOnce(new Response('', { status: 404 }))
       .mockResolvedValueOnce(new Response('invalid JSON'))
       .mockResolvedValueOnce(new Response('{}'))
+
     for (let attempt = 0; attempt < 3; attempt++) {
       await expect(loadRuntimeConfig('https://engine.example/', fetcher)).rejects.toThrow()
     }
@@ -182,6 +186,7 @@ describe('engine game resources', () => {
   it('injects configuration and resource access into isolated engine containers', async () => {
     const config = { gameUrl: '/game' }
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('ready'))
+
     const container = new ContainerBuilder(
       config,
       'https://engine.example/',
@@ -189,6 +194,7 @@ describe('engine game resources', () => {
       host,
       runtime,
     ).build()
+
     expect(container.resolve('config')).toBe(config)
     expect(container.resolve('gameResources')).toBe(container.resolve('gameResources'))
     await expect(container.resolve('gameResources').fetchResource('a.txt')).resolves.toBeInstanceOf(
@@ -204,6 +210,7 @@ describe('engine game resources', () => {
   ])('loads game.json from %s through the registered JSON loader', async (gameUrl, expectedUrl) => {
     const game = gameDefinition('Demo')
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(game)))
+
     const container = new ContainerBuilder(
       { gameUrl },
       'https://engine.example/app/',
@@ -224,6 +231,7 @@ describe('engine game resources', () => {
     ['non-object', '[]', 200],
   ])('rejects a %s game.json', async (_reason, body, status) => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status }))
+
     const container = new ContainerBuilder(
       { gameUrl: '/game/' },
       'https://engine.example/',
@@ -239,6 +247,7 @@ describe('engine game resources', () => {
 
   it('enforces the game directory boundary when loading JSON through the container', async () => {
     const fetcher = vi.fn<typeof fetch>()
+
     const container = new ContainerBuilder(
       { gameUrl: '/game/' },
       'https://engine.example/',
@@ -255,11 +264,14 @@ describe('engine game resources', () => {
 
   it('resolves the engine with the registered loader, host, logger, and session bus factory', async () => {
     const game = gameDefinition('Container game')
+
     const fetcher = vi
       .fn<typeof fetch>()
       .mockImplementation(async () => new Response(JSON.stringify(game)))
+
     const cleanup = vi.fn<() => void>()
     const host = { mount: vi.fn().mockReturnValue(cleanup) }
+
     const container = new ContainerBuilder(
       { gameUrl: '/game/' },
       'https://engine.example/',
@@ -267,6 +279,7 @@ describe('engine game resources', () => {
       host,
       runtime,
     ).build()
+
     const loader = container.resolve('jsonResourceLoader')
     const load = vi.spyOn(loader, 'load')
     const info = vi.spyOn(container.resolve('logger'), 'info')
@@ -312,6 +325,7 @@ describe('engine game resources', () => {
   it('keeps registered engines and their session state isolated between containers', async () => {
     const firstHost = { mount: vi.fn(() => () => {}) }
     const secondHost = { mount: vi.fn(() => () => {}) }
+
     const first = new ContainerBuilder(
       { gameUrl: '/first/' },
       'https://engine.example/',
@@ -321,6 +335,7 @@ describe('engine game resources', () => {
       firstHost,
       runtime,
     ).build()
+
     const second = new ContainerBuilder(
       { gameUrl: '/second/' },
       'https://engine.example/',
@@ -330,6 +345,7 @@ describe('engine game resources', () => {
       secondHost,
       runtime,
     ).build()
+
     const firstEngine = first.resolve('engine')
     const secondEngine = second.resolve('engine')
     await Promise.all([firstEngine.start(), secondEngine.start()])

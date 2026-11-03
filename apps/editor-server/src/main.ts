@@ -12,10 +12,12 @@ import { EditorProjectService } from './editorProjectService.js'
 const config = await loadEditorServerConfig()
 const workspace = await FileWorkspace.open(config.workFolder)
 const exports = new WorkspaceGameExporter(workspace, buildGame, writeGameArchive)
+
 const projects = new EditorProjectService(
   new WorkspaceProjectRepository(workspace),
   new EditorCoordinator(),
 )
+
 const server = createEditorServer(config, workspace, exports, projects)
 
 server.on('error', (error) => {
@@ -37,4 +39,5 @@ function shutdown() {
 }
 
 process.once('SIGINT', shutdown)
+
 process.once('SIGTERM', shutdown)

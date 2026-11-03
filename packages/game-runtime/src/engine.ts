@@ -80,6 +80,7 @@ export class Engine implements IEngine {
 
   get state(): EngineState {
     if (!this.session) return 'stopped'
+
     return this.session.game ? 'running' : 'starting'
   }
 
@@ -115,10 +116,13 @@ export class Engine implements IEngine {
     if (this.session) return this.startup
 
     let cancel = () => {}
+
     const cancelled = new Promise<undefined>((resolve) => {
       cancel = () => resolve(undefined)
     })
+
     const scopes = new GameMessageScopes()
+
     const messages = new ScheduledMessageBus(
       this.createMessageBus(),
       this.runtime.scheduler,
@@ -127,6 +131,7 @@ export class Engine implements IEngine {
         topic.startsWith('engine.') ||
         (this.session === session && session.game !== undefined && scopes.shouldDeliver(payload)),
     )
+
     const session: EngineSession = {
       cancelled,
       cancel,
@@ -134,23 +139,28 @@ export class Engine implements IEngine {
       nextTimerId: 0,
       gameRuntimes: new WeakMap(),
     }
+
     this.session = session
     this.latestMessages = session.messages
     session.messages.publish('engine.starting', undefined)
     this.startup = Promise.resolve().then(() => this.startSession(session, scopes))
+
     return this.startup
   }
 
   stop(): void {
     const session = this.session
+
     if (!session) return
 
     this.session = undefined
     session.cancel()
     session.input?.dispose()
     session.timers?.dispose()
+
     try {
       const errors: unknown[] = []
+
       for (const cleanup of [() => session.lifecycle?.dispose(), () => session.cleanup?.()]) {
         try {
           cleanup()
@@ -158,7 +168,9 @@ export class Engine implements IEngine {
           errors.push(error)
         }
       }
+
       if (errors.length === 1) throw errors[0]
+
       if (errors.length > 1) throw new AggregateError(errors, 'Engine cleanup failed')
     } catch (error) {
       session.messages.publish('engine.failed', { error })
@@ -174,6 +186,7 @@ export class Engine implements IEngine {
 
     try {
       const game = await Promise.race([this.loader.load(), session.cancelled])
+
       if (this.session !== session || !game) return
 
       const lifecycle =
@@ -182,18 +195,24 @@ export class Engine implements IEngine {
           createGameState: () => undefined,
           createSceneState: () => undefined,
         })
+
       if (this.session !== session) {
         lifecycle.dispose()
+
         return
       }
+
       session.lifecycle = lifecycle
       lifecycle.bindGameRuntime((instance) => {
         const rules = this.runtime.createGameRules?.(game, instance) ?? { handlers: new Map() }
+
         if (this.session !== session) throw new Error('Engine stopped while creating game rules')
+
         const isRunning = () =>
           this.session === session &&
           session.game !== undefined &&
           lifecycle.currentGame === instance
+
         const runtime = new GameActionRuntime(
           instance,
           rules,
@@ -210,9 +229,12 @@ export class Engine implements IEngine {
           () => ++session.nextTimerId,
           () => session.gameRuntimes.delete(instance),
         )
+
         session.gameRuntimes.set(instance, runtime)
+
         return runtime
       })
+
       if (game.input) {
         // A release/cancellation belongs to the same context as its original press.
         const inputOwners = new Map<string, GameActionRuntime | undefined>()
@@ -220,6 +242,7 @@ export class Engine implements IEngine {
           publish(topic, payload) {
             const key = JSON.stringify([payload.context, payload.input])
             let owner: GameActionRuntime | undefined
+
             if (payload.phase === 'pressed') {
               owner =
                 lifecycle.currentGame && lifecycle.activeScene?.type !== 'stand-alone'
@@ -230,23 +253,29 @@ export class Engine implements IEngine {
               owner = inputOwners.get(key)
               inputOwners.delete(key)
             }
+
             const messages = owner?.messages ?? session.messages
             messages.publish(topic, payload)
           },
         })
       }
+
       session.timers = new TimerService(
         session.messages,
         this.runtime.scheduler,
         this.runtime.clock,
         () => ++session.nextTimerId,
       )
+
       if (game.initialScene !== undefined && !lifecycle.activeScene) {
         const initial = game.scenes.get(game.initialScene)
+
         if (!initial) throw new Error(`Missing initial scene: ${game.initialScene}`)
+
         if (initial.type === 'game' && !lifecycle.currentGame) lifecycle.startGame()
         lifecycle.enterScene(initial.id)
       }
+
       const cleanup = this.host.mount(game, {
         lifecycle,
         get actions() {
@@ -256,16 +285,20 @@ export class Engine implements IEngine {
         messages: session.messages,
         timers: session.timers,
       })
+
       if (this.session !== session) {
         cleanup()
+
         return
       }
 
       session.cleanup = cleanup
       session.game = game
       const currentGame = lifecycle.currentGame
+
       if (currentGame) session.gameRuntimes.get(currentGame)?.start()
       this.logger.info('Engine', 'The engine workspace is ready.')
+
       if (this.session === session) session.messages.publish('engine.started', { game })
     } catch (error) {
       if (this.session !== session) return

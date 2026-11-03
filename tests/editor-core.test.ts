@@ -22,6 +22,7 @@ const scene = {
   components: [],
   extension: { author: 'human' },
 }
+
 function project(): ProjectSnapshot {
   return {
     revision: 'original',
@@ -39,16 +40,19 @@ function project(): ProjectSnapshot {
     },
   }
 }
+
 describe('editor core', () => {
   it('updates nested layout without mutating source or dropping extension properties', () => {
     const original = project()
     const before = JSON.stringify(original)
+
     const result = applyCommand(original, {
       type: 'scene.updateLayout',
       sceneId: 'start',
       rows: 12,
       columns: 16,
     })
+
     expect(JSON.stringify(original)).toBe(before)
     expect(result.changedFiles).toEqual(['scenes/start.json'])
     expect(result.project.documents['game.json']).toBe(original.documents['game.json'])
@@ -63,6 +67,7 @@ describe('editor core', () => {
       type: 'scene.create',
       scene: { ...scene, id: 'shop' },
     })
+
     expect(result.changedFiles).toEqual(['scenes/shop.json', 'game.json'])
     expect(result.project.documents['scenes/shop.json']).toEqual({ ...scene, id: 'shop' })
     expect(inspectProject(result.project).game?.scenes).toEqual(['start', 'shop'])
@@ -81,9 +86,11 @@ describe('editor core', () => {
       bindings: { score: { source: 'game.state' as const, path: ['score'] } },
       presentation: { variant: 'body' as const, align: 'start' as const },
     }
+
     const created = { ...scene, id: 'play', type: 'game' as const, components: [component] }
     const result = applyCommand(project(), { type: 'scene.create', scene: created })
     expect(result.project.documents['scenes/play.json']).toEqual(created)
+
     for (const invalid of [
       { ...created, type: 'stand-alone' as const },
       { ...created, components: [component, component] },
@@ -98,24 +105,28 @@ describe('editor core', () => {
 
   it('edits game and scene metadata without changing IDs or other properties', () => {
     const original = project()
+
     const game = applyCommand(original, {
       type: 'game.updateMetadata',
       title: 'New',
       description: 'Description',
       version: '2',
     })
+
     expect(game.project.documents['game.json']).toMatchObject({
       id: 'test',
       title: 'New',
       version: '2',
       extension: 'manifest',
     })
+
     const changed = applyCommand(original, {
       type: 'scene.updateMetadata',
       sceneId: 'start',
       title: 'New scene',
       description: 'Text',
     })
+
     expect(changed.project.documents['scenes/start.json']).toMatchObject({
       id: 'start',
       title: 'New scene',
@@ -180,6 +191,7 @@ describe('editor core', () => {
   it('publishes machine-readable requests and examples for every command', () => {
     expect(capabilities.commands).toHaveLength(4)
     expect(capabilities.requestSchema).toHaveProperty('properties')
+
     for (const command of capabilities.commands) expect(command.example.type).toBe(command.type)
   })
 })

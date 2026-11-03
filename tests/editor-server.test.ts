@@ -129,11 +129,13 @@ describe('editor server', () => {
     ['bad\0name', 400],
   ])('rejects unsafe workspace path %j', async (path, status) => {
     const query = encodeURIComponent(path)
+
     for (const method of ['GET', 'PUT']) {
       const response = await fetch(`${baseUrl}/api/files?path=${query}`, {
         method,
         ...(method === 'PUT' ? { body: 'forbidden' } : {}),
       })
+
       expect(response.status).toBe(status)
     }
   })
@@ -144,8 +146,10 @@ describe('editor server', () => {
         method: 'PUT',
         body: 'no',
       })
+
       expect(response.status).toBe(409)
     }
+
     expect(await readFile(join(root, 'hello.txt'), 'utf8')).toBe('hello')
   })
 
@@ -159,6 +163,7 @@ describe('editor server', () => {
     // SAFETY: this request targets our workspace-listing route, whose entries have string names.
     const body = (await listing.json()) as { entries: { name: string }[] }
     expect(body.entries.some((entry) => entry.name === 'linked')).toBe(false)
+
     for (const [method, path] of [
       ['GET', '/api/files?path=linked/secret.txt'],
       ['GET', '/api/workspace?path=linked'],
@@ -168,8 +173,10 @@ describe('editor server', () => {
         method,
         ...(method === 'PUT' ? { body: 'no' } : {}),
       })
+
       expect(response.status).toBe(403)
     }
+
     await expect(readFile(join(outside, 'new/deep.txt'))).rejects.toHaveProperty('code', 'ENOENT')
     await expect(FileWorkspace.open(link)).rejects.toThrow('Cannot open workFolder')
   })
@@ -188,6 +195,7 @@ describe('editor server', () => {
       method: 'PUT',
       body: new Uint8Array(maxWriteBytes + 1),
     })
+
     expect(response.status).toBe(413)
     await expect(readFile(join(root, 'oversized/file.bin'))).rejects.toHaveProperty(
       'code',
@@ -205,10 +213,12 @@ describe('editor server', () => {
           response.once('end', () => resolve(response.statusCode))
         },
       )
+
       request.on('error', reject)
       request.write(Buffer.alloc(maxWriteBytes))
       request.end(Buffer.alloc(1))
     })
+
     expect(status).toBe(413)
     await expect(readFile(join(root, 'chunked/file.bin'))).rejects.toHaveProperty('code', 'ENOENT')
   })
@@ -218,6 +228,7 @@ describe('editor server', () => {
       method: 'PUT',
       body: new Uint8Array(maxWriteBytes),
     })
+
     expect(response.status).toBe(201)
     expect((await readFile(join(root, 'limit.bin'))).length).toBe(maxWriteBytes)
   })

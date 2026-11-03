@@ -7,10 +7,13 @@ describe('Container', () => {
       dependency: { name: string }
       service: { dependency: { name: string } }
     }
+
     const dependency = vi.fn(() => ({ name: 'dependency' }))
+
     const service = vi.fn((resolver: Resolver<Services>) => ({
       dependency: resolver.resolve('dependency'),
     }))
+
     const factories = { dependency, service } satisfies Factories<Services>
     const container = new Container(factories)
 
@@ -66,12 +69,14 @@ describe('Container', () => {
 
   it('retries a failed dependency factory and caches successful results', () => {
     const error = new Error('Temporary failure')
+
     const dependency = vi
       .fn<() => string>()
       .mockImplementationOnce(() => {
         throw error
       })
       .mockReturnValue('ready')
+
     const container = new Container<{ service: string; dependency: string }>({
       dependency,
       service: (resolver) => resolver.resolve('dependency'),

@@ -45,8 +45,10 @@ export class SceneRenderer {
     const next = scene ? this.createScene(scene) : undefined
     const previous = this.scene
     this.scene = undefined
+
     try {
       previous?.dispose()
+
       if (next) this.target.append(next.element)
       this.scene = next
     } catch (error) {
@@ -67,12 +69,14 @@ export class SceneRenderer {
 
     const components: RenderedComponent[] = []
     let active = true
+
     const rendered: RenderedComponent = {
       element: root,
       dispose() {
         if (!active) return
         active = false
         const errors: unknown[] = []
+
         try {
           for (const component of components.splice(0)) {
             try {
@@ -84,14 +88,17 @@ export class SceneRenderer {
         } finally {
           root.remove()
         }
+
         if (errors.length) throw new AggregateError(errors, 'Scene component cleanup failed')
       },
     }
+
     const context: ComponentRenderContext = {
       ...this.options,
       document,
       bindings: scene.type === 'game' ? scene.game.bindings : undefined,
     }
+
     try {
       for (const component of data.components) {
         const rendered = this.components.render(component, context)
@@ -105,6 +112,7 @@ export class SceneRenderer {
         element.style.setProperty('--ge-component-column-span', String(columnSpan))
         root.append(element)
       }
+
       return rendered
     } catch (error) {
       rendered.dispose()

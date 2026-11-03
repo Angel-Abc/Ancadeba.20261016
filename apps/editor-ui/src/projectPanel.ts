@@ -5,9 +5,12 @@ import { ProjectEditorController } from './projectController.js'
 export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
     const element = root.querySelector<T>(`#${id}`)
+
     if (!element) throw new Error(`Missing editor element: ${id}`)
+
     return element
   }
+
   const folder = find<HTMLInputElement>('editor-folder')
   const load = find<HTMLButtonElement>('editor-load')
   const reload = find<HTMLButtonElement>('editor-reload')
@@ -20,26 +23,33 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
   const status = find<HTMLElement>('editor-status')
   const error = find<HTMLElement>('editor-error')
   const value = (id: string) => find<HTMLInputElement>(id).value
+
   const set = (id: string, text: string | number) => {
     find<HTMLInputElement>(id).value = String(text)
   }
+
   let view: ProjectView | undefined
   const dirtyForms = new Set<string>()
   let loadedPath = ''
+
   const fillScene = () => {
     const scene = view?.scenes.find((scene) => scene.id === scenes.value)
     sceneMetadata.hidden = !scene
     layout.hidden = !scene
+
     if (!scene) return
+
     if (!dirtyForms.has(sceneMetadata.id)) {
       set('scene-title', scene.title)
       set('scene-description', scene.description)
     }
+
     if (!dirtyForms.has(layout.id)) {
       set('scene-rows', scene.screen.grid.rows)
       set('scene-columns', scene.screen.grid.columns)
     }
   }
+
   const controller = new ProjectEditorController(
     new HttpEditorClient(fetcher),
     (state, replaceFields) => {
@@ -69,7 +79,9 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
           .join('\n') ||
         ''
       error.hidden = !error.textContent
+
       if (!replaceFields || !view?.game) return
+
       const savedForm = state.lastCommand
         ? {
             'game.updateMetadata': metadata.id,
@@ -78,24 +90,30 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
             'scene.create': create.id,
           }[state.lastCommand]
         : undefined
+
       if (savedForm) dirtyForms.delete(savedForm)
       else if (!state.preserveDrafts) dirtyForms.clear()
+
       if (!dirtyForms.has(create.id)) create.reset()
       scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
+
       if (!dirtyForms.has(metadata.id)) {
         set('editor-title', view.game.title)
         set('editor-description', view.game.description)
         set('editor-version', view.game.version)
       }
+
       const selected = scenes.value
       scenes.replaceChildren(
         ...view.scenes.map((scene) => {
           const option = root.ownerDocument.createElement('option')
           option.value = scene.id
           option.textContent = `${scene.title} (${scene.id})`
+
           return option
         }),
       )
+
       if (
         selected &&
         !view.scenes.some((scene) => scene.id === selected) &&
@@ -110,15 +128,19 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
         status.textContent =
           'The selected scene is unavailable. Load the project again to discard its drafts.'
       }
+
       if (view.scenes.some((scene) => scene.id === selected)) scenes.value = selected
       fillScene()
     },
   )
+
   const listeners: (() => void)[] = []
+
   const on = (element: EventTarget, event: string, listener: EventListener) => {
     element.addEventListener(event, listener)
     listeners.push(() => element.removeEventListener(event, listener))
   }
+
   on(load, 'click', () => {
     const path = folder.value.trim()
     void controller.load(path.startsWith('/') ? path : path.replace(/\/+$/, ''))
@@ -126,20 +148,24 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
   on(reload, 'click', () => {
     void controller.load(loadedPath, dirtyForms.size > 0)
   })
+
   for (const form of [metadata, sceneMetadata, layout, create]) {
     on(form, 'input', () => {
       dirtyForms.add(form.id)
       scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
     })
   }
+
   on(scenes, 'change', () => {
     fillScene()
   })
+
   const submit = (form: HTMLFormElement, action: () => void) =>
     on(form, 'submit', (event) => {
       event.preventDefault()
       action()
     })
+
   submit(metadata, () => {
     void controller.save({
       type: 'game.updateMetadata',
@@ -187,8 +213,10 @@ export function bindProjectPanel(root: HTMLElement, fetcher: typeof fetch): () =
   on(root.ownerDocument.defaultView!, 'focus', () => {
     void controller.refresh(() => dirtyForms.size > 0)
   })
+
   return () => {
     controller.dispose()
+
     for (const remove of listeners) remove()
   }
 }

@@ -28,6 +28,7 @@ describe('ConsoleLogger', () => {
       `${color}[Loader] Object %o\x1B[0m`,
       details,
     )
+
     for (const otherLevel of ['debug', 'info', 'warn', 'error', 'log'] as const) {
       if (otherLevel !== level) expect(console[otherLevel]).not.toHaveBeenCalled()
     }
@@ -68,6 +69,7 @@ describe('ConsoleLogger', () => {
 
   it('resolves the logger factory using the injected console', () => {
     const console = createConsole()
+
     const container = new Container({
       console: () => console,
       ...loggerFactories,

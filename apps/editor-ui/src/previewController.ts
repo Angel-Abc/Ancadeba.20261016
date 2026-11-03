@@ -15,11 +15,13 @@ export class EditorPreviewController {
     if (this.disposed || this.engine) return
 
     let engine: IEngine | undefined
+
     try {
       engine = this.createInstance(folder)
       this.engine = engine
       this.onStateChange('starting')
       await engine.start()
+
       if (this.disposed || this.engine !== engine) return
 
       if (engine.state === 'stopped') this.engine = undefined
@@ -36,6 +38,7 @@ export class EditorPreviewController {
     if (this.disposed) return
     const engine = this.engine
     this.engine = undefined
+
     try {
       engine?.stop()
       this.onStateChange('stopped')

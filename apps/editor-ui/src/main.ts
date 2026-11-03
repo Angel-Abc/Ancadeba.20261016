@@ -8,7 +8,9 @@ import { ContainerBuilder } from './ioc/containerBuilder'
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector)
+
   if (!result) throw new Error(`Missing editor element: ${selector}`)
+
   return result
 }
 
@@ -67,6 +69,7 @@ const container = new ContainerBuilder({
     exportError.textContent =
       state === 'error' ? `Unable to export game: ${message ?? 'Export failed'}` : ''
     exportError.hidden = state !== 'error'
+
     if (state === 'exporting' || state === 'error') clearDownload()
     updateControls()
   },
@@ -83,6 +86,7 @@ const container = new ContainerBuilder({
     error.hidden = !message
   },
 }).build()
+
 const controller = container.resolve('previewController')
 const exportController = container.resolve('exportController')
 
@@ -92,13 +96,19 @@ function onStart(event: SubmitEvent): void {
 }
 
 const onStop = () => controller.stop()
+
 const onExport = () => {
   void exportController.export(folder.value)
 }
+
 form.addEventListener('submit', onStart)
+
 stop.addEventListener('click', onStop)
+
 exportButton.addEventListener('click', onExport)
+
 controller.stop()
+
 const disposeProjectPanel = bindProjectPanel(element<HTMLElement>('#project-editor'), fetch)
 
 import.meta.hot?.dispose(() => {

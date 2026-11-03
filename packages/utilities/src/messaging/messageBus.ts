@@ -25,6 +25,7 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
     handler: MessageHandler<Topics[Topic]>,
   ): Unsubscribe {
     let subscriptions = this.subscriptions.get(topic)
+
     if (!subscriptions) {
       subscriptions = new Set()
       this.subscriptions.set(topic, subscriptions)
@@ -38,6 +39,7 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
 
     return () => {
       if (!topicSubscriptions.delete(subscription)) return
+
       if (topicSubscriptions.size === 0) this.subscriptions.delete(topic)
     }
   }
@@ -60,12 +62,15 @@ export class MessageBus<Topics> implements IMessageBus<Topics> {
           errors.push(error)
           continue
         }
+
         const subscriptions = this.subscriptions.get(topic)
+
         if (!subscriptions) continue
 
         // Additions wait until the next message; removals take effect immediately.
         for (const subscription of [...subscriptions]) {
           if (!subscriptions.has(subscription)) continue
+
           try {
             subscription(payload)
           } catch (error) {

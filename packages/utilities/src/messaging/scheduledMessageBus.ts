@@ -43,6 +43,7 @@ export class ScheduledMessageBus<Topics> implements IMessageBus<Topics> {
     this.pending = undefined
     pending?.cancel?.()
     this.flushing = true
+
     try {
       this.source.flush(
         (topic, payload) =>
@@ -65,6 +66,7 @@ export class ScheduledMessageBus<Topics> implements IMessageBus<Topics> {
     task.cancel = this.scheduler.schedule(() => {
       if (this.pending !== task) return
       this.pending = undefined
+
       try {
         this.flush()
       } catch (error) {

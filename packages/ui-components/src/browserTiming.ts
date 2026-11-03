@@ -11,11 +11,13 @@ export function createBrowserTiming(window: BrowserTimingSource) {
     scheduler: {
       schedule(callback: () => void, delayMs: number): () => void {
         let active = true
+
         const id = window.setTimeout(() => {
           if (!active) return
           active = false
           callback()
         }, delayMs)
+
         return () => {
           if (!active) return
           active = false

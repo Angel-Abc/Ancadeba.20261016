@@ -13,6 +13,7 @@ export function formatMessageForConsole(message: string, ...args: unknown[]) {
       // Keep objects inspectable in the console at their placeholder positions.
       if (typeof arg === 'object' && arg !== null) {
         extraArgs.push(arg)
+
         return '%o'
       }
 

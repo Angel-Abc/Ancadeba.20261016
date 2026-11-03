@@ -10,6 +10,7 @@ export interface GameBinding {
 }
 
 export type BindingValue = string | number | boolean
+
 export type BindingFailure =
   | 'source-unavailable'
   | 'missing-path'
@@ -57,11 +58,15 @@ export class GameBindings implements IGameBindings {
       status: 'unresolved',
       diagnostic: { source: binding.source, path: [...binding.path], reason },
     })
+
     if (!this.roots) return unresolved('source-unavailable')
+
     try {
       let value: unknown =
         binding.source === 'game.state' ? this.roots.state() : this.roots.progression()
+
       if (value === undefined) return unresolved('source-unavailable')
+
       for (const segment of binding.path) {
         if (value instanceof Map) {
           if (typeof segment !== 'string' || !Map.prototype.has.call(value, segment))
@@ -69,22 +74,28 @@ export class GameBindings implements IGameBindings {
           value = Map.prototype.get.call(value, segment)
         } else {
           if (typeof value !== 'object' || value === null) return unresolved('missing-path')
+
           if (Array.isArray(value) && (!Number.isSafeInteger(segment) || Number(segment) < 0))
             return unresolved('missing-path')
+
           if (!Array.isArray(value) && typeof segment !== 'string')
             return unresolved('missing-path')
           const descriptor = Object.getOwnPropertyDescriptor(value, segment)
+
           if (!descriptor) return unresolved('missing-path')
+
           if (!Object.hasOwn(descriptor, 'value')) return unresolved('unreadable-path')
           value = descriptor.value
         }
       }
+
       if (
         typeof value === 'string' ||
         typeof value === 'boolean' ||
         (typeof value === 'number' && Number.isFinite(value))
       )
         return { status: 'resolved', value }
+
       return unresolved('unsupported-value')
     } catch {
       return unresolved('unreadable-path')
@@ -95,6 +106,7 @@ export class GameBindings implements IGameBindings {
     if (!this.roots) throw new Error('Game bindings are disposed')
     const subscription = () => handler()
     this.subscribers.add(subscription)
+
     return () => {
       this.subscribers.delete(subscription)
     }
@@ -103,20 +115,25 @@ export class GameBindings implements IGameBindings {
   dispose(): void {
     this.roots = undefined
     this.subscribers.clear()
+
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
   }
 
   private notify(): void {
     const errors: unknown[] = []
+
     for (const subscriber of [...this.subscribers]) {
       if (!this.roots) break
+
       if (!this.subscribers.has(subscriber)) continue
+
       try {
         subscriber()
       } catch (error) {
         errors.push(error)
       }
     }
+
     if (errors.length) throw new AggregateError(errors, 'Game binding subscribers failed')
   }
 }

@@ -10,10 +10,12 @@ export class EditorClientError extends Error {
     super(message)
   }
 }
+
 export interface IEditorClient {
   inspect(path: string): Promise<ProjectView>
   apply(request: CommandRequest): Promise<ProjectView>
 }
+
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
 
@@ -31,6 +33,7 @@ export class HttpEditorClient implements IEditorClient {
     const fetcher = this.fetcher
     const response = await fetcher(url, { ...init, cache: 'no-store' })
     const value: unknown = await response.json()
+
     if (!response.ok) {
       const parsed = apiErrorSchema.safeParse(value)
       throw new EditorClientError(
@@ -39,9 +42,12 @@ export class HttpEditorClient implements IEditorClient {
         parsed.success ? parsed.data.diagnostics : [],
       )
     }
+
     const parsed = projectViewSchema.safeParse(value)
+
     if (!parsed.success)
       throw new EditorClientError('invalid_response', 'Editor response was malformed')
+
     return parsed.data
   }
 }

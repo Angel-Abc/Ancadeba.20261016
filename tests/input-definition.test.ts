@@ -19,6 +19,7 @@ const definition = {
   },
   'initial-context': 'gameplay',
 }
+
 const game = {
   'schema-version': '1.0.0',
   id: 'demo',
@@ -28,6 +29,7 @@ const game = {
   scenes: [],
   input: 'input.json',
 }
+
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
 const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
 
@@ -68,9 +70,11 @@ describe('input definitions', () => {
     const readText = vi.fn(async (path: string) =>
       JSON.stringify(path === 'game.json' ? game : definition),
     )
+
     const loader = new GameLoader(
       new JsonResourceLoader({ readText, readBytes: async () => new Uint8Array() }, logger),
     )
+
     const data = await loader.load()
     expect(readText.mock.calls).toEqual([['game.json'], ['input.json']])
     expect(data.input).toEqual({
@@ -93,9 +97,11 @@ describe('input definitions', () => {
   it('supports games without input and rejects inconsistent assembly inputs', async () => {
     const { input: _input, ...legacy } = game
     const readText = vi.fn(async () => JSON.stringify(legacy))
+
     const data = await new GameLoader(
       new JsonResourceLoader({ readText, readBytes: async () => new Uint8Array() }, logger),
     ).load()
+
     expect(data).not.toHaveProperty('input')
     expect(readText).toHaveBeenCalledExactlyOnceWith('game.json')
     expect(() => assembleGameData(gameSchema.parse(game), new Map())).toThrow('Input definition')
@@ -107,10 +113,14 @@ describe('input definitions', () => {
   it.each(['missing', 'malformed', 'invalid'])('rejects %s input before mounting', async (kind) => {
     const readText = async (path: string) => {
       if (path === 'game.json') return JSON.stringify(game)
+
       if (kind === 'missing') throw new Error('Missing input.json')
+
       return kind === 'malformed' ? '{broken' : JSON.stringify({ ...definition, contexts: {} })
     }
+
     const mount = vi.fn<IEngineHost['mount']>(() => () => {})
+
     const engine = new Engine(
       new GameLoader(
         new JsonResourceLoader({ readText, readBytes: async () => new Uint8Array() }, logger),
@@ -120,6 +130,7 @@ describe('input definitions', () => {
       () => new MessageBus<EngineMessages>(),
       runtime,
     )
+
     await expect(engine.start()).rejects.toThrow()
     expect(engine.input).toBeUndefined()
     expect(mount).not.toHaveBeenCalled()

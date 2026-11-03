@@ -28,6 +28,7 @@ function controller() {
   const messages = new MessageBus<EngineMessages>()
   const handler = vi.fn<(message: EngineMessages['input.virtual']) => void>()
   messages.subscribe('input.virtual', handler)
+
   return { input: new InputController(inputData(), messages), messages, handler }
 }
 
@@ -141,6 +142,7 @@ describe('game input controller', () => {
 
 describe('engine session input', () => {
   const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+
   const game: GameData = {
     id: 'demo',
     title: 'Demo',
@@ -152,6 +154,7 @@ describe('engine session input', () => {
 
   it('exposes input only while running and creates isolated state and buses on restart', async () => {
     const mount = vi.fn<IEngineHost['mount']>(() => () => {})
+
     const engine = new Engine(
       { load: async () => game },
       { mount },
@@ -159,6 +162,7 @@ describe('engine session input', () => {
       () => new MessageBus<EngineMessages>(),
       runtime,
     )
+
     expect(engine.input).toBeUndefined()
     const starting = engine.start()
     expect(engine.input).toBeUndefined()
@@ -201,15 +205,19 @@ describe('engine session input', () => {
   it('disposes input if mounting throws or stops the session', async () => {
     for (const stopDuringMount of [false, true]) {
       let captured: IGameInput | undefined
+
       const engine = new Engine(
         { load: async () => game },
         {
           mount: (_game, session) => {
             captured = session.input
+
             if (stopDuringMount) {
               engine.stop()
+
               return () => {}
             }
+
             throw new Error('Mount failed')
           },
         },
@@ -217,6 +225,7 @@ describe('engine session input', () => {
         () => new MessageBus<EngineMessages>(),
         runtime,
       )
+
       if (stopDuringMount) await engine.start()
       else await expect(engine.start()).rejects.toThrow('Mount failed')
       expect(engine.input).toBeUndefined()

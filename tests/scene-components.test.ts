@@ -13,6 +13,7 @@ const text = {
   text: 'First line\nSecond line',
   placement: { row: 2, column: 3 },
 }
+
 const scene = {
   'schema-version': '1.0.0',
   id: 'standard',
@@ -44,6 +45,7 @@ describe('text component definitions', () => {
         },
       ],
     })
+
     expect(definition.components[0]).toMatchObject({
       presentation: { variant: 'heading', align: 'end' },
     })
@@ -90,6 +92,7 @@ describe('text component definitions', () => {
 
   it('copies nested component configuration into runtime data', () => {
     const definition = sceneSchema.parse(scene)
+
     const game = gameSchema.parse({
       'schema-version': '1.0.0',
       id: 'demo',
@@ -98,8 +101,10 @@ describe('text component definitions', () => {
       version: '1',
       scenes: ['standard'],
     })
+
     const assembled = assembleGameData(game, new Map([['standard', definition]]))
     const component = definition.components[0]!
+
     if (component.type !== 'text') throw new Error('Expected text')
     component.text = 'Changed'
     component.placement.row = 7
@@ -128,6 +133,7 @@ describe('button component definitions', () => {
       rowSpan: 1,
       columnSpan: 1,
     })
+
     for (const invalid of [
       { ...button, label: ' ' },
       { ...button, action: { type: 'script', scene: 'standard' } },
@@ -139,6 +145,7 @@ describe('button component definitions', () => {
 
   it('copies actions and rejects missing or incompatible scene targets during assembly', () => {
     const definition = sceneSchema.parse({ ...scene, components: [button] })
+
     const manifest = gameSchema.parse({
       'schema-version': '1.0.0',
       id: 'demo',
@@ -147,8 +154,10 @@ describe('button component definitions', () => {
       version: '1',
       scenes: ['standard'],
     })
+
     const assembled = assembleGameData(manifest, new Map([['standard', definition]]))
     const component = definition.components[0]!
+
     if (component.type !== 'button') throw new Error('Expected button')
     component.action!.scene = 'missing'
     expect(assembled.scenes.get('standard')!.components[0]).toMatchObject({

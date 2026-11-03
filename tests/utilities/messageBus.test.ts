@@ -35,18 +35,23 @@ describe('MessageBus delivery filters', () => {
     const subscriberFailure = new Error('Subscriber failed')
     bus.subscribe('tick', (value) => {
       calls.push(value)
+
       if (value === 2) throw subscriberFailure
     })
+
     for (const value of [1, 2, 3]) bus.publish('tick', value)
     let aggregate: unknown
+
     try {
       bus.flush((_topic, payload) => {
         if (payload === 1) throw predicateFailure
+
         return true
       })
     } catch (error) {
       aggregate = error
     }
+
     expect(aggregate).toBeInstanceOf(AggregateError)
     // SAFETY: the preceding assertion checked the captured failure is an AggregateError.
     expect((aggregate as AggregateError).errors).toEqual([predicateFailure, subscriberFailure])
@@ -58,9 +63,11 @@ describe('MessageBus delivery filters', () => {
 describe('MessageBus', () => {
   it('infers payloads and checks topics and payload types through its interface', () => {
     const bus: IMessageBus<Messages> = new MessageBus<Messages>()
+
     const unsubscribe = bus.subscribe('entity.destroyed', (payload) => {
       expectTypeOf(payload).toEqualTypeOf<{ entityId: string }>()
     })
+
     expectTypeOf(unsubscribe).toEqualTypeOf<Unsubscribe>()
 
     bus.publish('entity.destroyed', { entityId: 'enemy-42' })
@@ -213,10 +220,12 @@ describe('MessageBus', () => {
   it('applies unsubscription immediately during delivery', () => {
     const bus = new MessageBus<Messages>()
     const skipped = vi.fn()
+
     const first = bus.subscribe('tick', () => {
       first()
       second()
     })
+
     const second = bus.subscribe('tick', skipped)
     bus.publish('tick', 1)
     bus.publish('tick', 2)
@@ -229,10 +238,12 @@ describe('MessageBus', () => {
   it('applies subscriptions added during delivery starting with the next message', () => {
     const bus = new MessageBus<Messages>()
     const added = vi.fn()
+
     const unsubscribe = bus.subscribe('tick', () => {
       unsubscribe()
       bus.subscribe('tick', added)
     })
+
     bus.publish('tick', 1)
     bus.publish('tick', 2)
 
@@ -245,10 +256,12 @@ describe('MessageBus', () => {
     const bus = new MessageBus<Messages>()
     const failure = new Error('Subscriber failed')
     const handler = vi.fn()
+
     const failing = bus.subscribe('tick', (value) => {
       bus.publish('scene.loaded', { sceneId: `level-${value}` })
       throw failure
     })
+
     bus.subscribe('tick', () => {
       throw 'non-Error failure'
     })
@@ -259,6 +272,7 @@ describe('MessageBus', () => {
     bus.publish('tick', 2)
 
     let caught: unknown
+
     try {
       bus.flush()
     } catch (error) {

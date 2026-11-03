@@ -13,6 +13,7 @@ const scene = {
   screen: { type: 'grid' as const, grid: { rows: 12, columns: 16 } },
   components: [],
 }
+
 const view = {
   revision: 'one',
   game: {
@@ -26,12 +27,14 @@ const view = {
   scenes: [scene],
   diagnostics: [],
 }
+
 async function connection(api: IEditorApi) {
   const server = createMcpServer(api, 'basic')
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
   const client = new Client({ name: 'adapter-tests', version: '1' })
   await client.connect(clientTransport)
+
   return {
     client,
     close: async () => {
@@ -40,6 +43,7 @@ async function connection(api: IEditorApi) {
     },
   }
 }
+
 function api(): IEditorApi {
   return {
     capabilities: async () => capabilities,
@@ -57,6 +61,7 @@ function api(): IEditorApi {
 describe('MCP adapter tools', () => {
   it('discovers seven typed tools with read-only annotations and compact structured results', async () => {
     const { client, close } = await connection(api())
+
     try {
       const { tools } = await client.listTools()
       expect(tools.map((tool) => tool.name).sort((a, b) => a.localeCompare(b))).toEqual([
@@ -69,12 +74,15 @@ describe('MCP adapter tools', () => {
         'ancadeba_update_scene_metadata',
       ])
       expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(3)
+
       for (const tool of tools) {
         expect(tool.outputSchema).toHaveProperty('type', 'object')
         expect(tool.inputSchema).toHaveProperty('additionalProperties', false)
+
         if (!tool.annotations?.readOnlyHint)
           expect(tool.inputSchema.required).toContain('expectedRevision')
       }
+
       const result = await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
       expect(result.structuredContent).toMatchObject({
         ok: true,
@@ -84,10 +92,12 @@ describe('MCP adapter tools', () => {
       expect(result.content).toEqual([
         { type: 'text', text: JSON.stringify(result.structuredContent) },
       ])
+
       const detail = await client.callTool({
         name: 'ancadeba_inspect_scene',
         arguments: { sceneId: 'shop' },
       })
+
       expect(detail.structuredContent).toMatchObject({
         data: { scene: { description: 'Scene detail' } },
       })
@@ -105,9 +115,12 @@ describe('MCP adapter tools', () => {
     remote.apply = async (revision, command, signal) => {
       expect(signal).toBeInstanceOf(AbortSignal)
       calls.push({ revision, command })
+
       return { ...view, revision: 'two', changedFiles: ['game.json'], summary: 'Saved' }
     }
+
     const { client, close } = await connection(remote)
+
     try {
       const inputs = [
         {
@@ -124,6 +137,7 @@ describe('MCP adapter tools', () => {
           arguments: { expectedRevision: 'one', sceneId: 'shop', rows: 20, columns: 25 },
         },
       ]
+
       for (const input of inputs) {
         const result = await client.callTool(input)
         expect(result.isError).toBe(false)
@@ -138,6 +152,7 @@ describe('MCP adapter tools', () => {
           },
         })
       }
+
       expect(calls.map((call) => call.command.type)).toEqual([
         'game.updateMetadata',
         'scene.create',
@@ -156,7 +171,9 @@ describe('MCP adapter tools', () => {
       mutations++
       throw new Error('Should not run')
     }
+
     const { client, close } = await connection(remote)
+
     try {
       for (const args of [
         { sceneId: 'shop', rows: 1, columns: 1 },
@@ -185,15 +202,19 @@ describe('MCP adapter tools', () => {
     remote.apply = async () => {
       throw new EditorApiError('revision_conflict', 'Changed', [], 'not_applied', 409)
     }
+
     remote.inspectGame = async () => {
       throw new EditorApiError('server_unavailable', 'Start the editor server')
     }
+
     const { client, close } = await connection(remote)
+
     try {
       const failed = await client.callTool({
         name: 'ancadeba_update_game_metadata',
         arguments: { expectedRevision: 'one', title: 'Title', description: '', version: '1' },
       })
+
       expect(failed.isError).toBe(true)
       expect(failed.structuredContent).toMatchObject({
         ok: false,

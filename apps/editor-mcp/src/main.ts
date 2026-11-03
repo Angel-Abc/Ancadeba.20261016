@@ -10,15 +10,18 @@ try {
     const config = parseAdapterConfig(process.argv.slice(2))
     const shutdown = new AbortController()
     const api = new EditorApiClient(config, fetch, shutdown.signal)
+
     const handle = serveStdio(() => createMcpServer(api, config.game), {
       onerror: (error) => console.error('MCP transport error:', error.message),
     })
+
     const close = () => {
       shutdown.abort()
       void handle.close().catch(() => {
         process.exitCode = 1
       })
     }
+
     process.once('SIGINT', close)
     process.once('SIGTERM', close)
     process.stdin.once('end', () => shutdown.abort())

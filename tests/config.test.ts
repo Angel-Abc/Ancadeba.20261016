@@ -140,6 +140,7 @@ describe('app-local configuration files', () => {
     const file = pathToFileURL(join(temp, 'broken.json'))
     expect(() => loadEngineConfig(file, {})).toThrow('Copy config.example.json')
     await expect(loadEditorServerConfig(file, {})).rejects.toThrow('Copy config.example.json')
+
     for (const contents of ['{broken', '{}', '{"gameUrl":"http://[:::]/game"}']) {
       await writeFile(file, contents)
       expect(() => loadEngineConfig(file, {})).toThrow('Copy config.example.json')
@@ -152,6 +153,7 @@ describe('app-local configuration files', () => {
       JSON.parse(
         await readFile(new URL(`../apps/${app}/config.example.json`, import.meta.url), 'utf8'),
       )
+
     expect(parseEngineConfig(await readExample('engine')).gameUrl).toBeTruthy()
     expect(parseEditorUiConfig(await readExample('editor-ui')).port).toBe(5174)
     expect(parseEditorServerConfig(await readExample('editor-server')).workFolder).toBeTruthy()

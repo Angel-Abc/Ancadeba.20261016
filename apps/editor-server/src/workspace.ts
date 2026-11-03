@@ -27,12 +27,14 @@ async function replaceFile(source: string, target: string): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(source, target)
+
       return
     } catch (error) {
       // Windows can briefly deny replacement while a reader has the old file open.
       if (attempt === 5 || !['EPERM', 'EACCES', 'EBUSY'].some((code) => hasCode(error, code))) {
         throw error
       }
+
       await delay(10 * 2 ** attempt)
     }
   }
@@ -40,13 +42,17 @@ async function replaceFile(source: string, target: string): Promise<void> {
 
 export function workspaceError(error: unknown): WorkspaceError {
   if (error instanceof WorkspaceError) return error
+
   if (hasCode(error, 'ENOENT')) return new WorkspaceError(404, 'Resource not found')
+
   if (hasCode(error, 'EACCES') || hasCode(error, 'EPERM') || hasCode(error, 'ELOOP')) {
     return new WorkspaceError(403, 'Access denied')
   }
+
   if (hasCode(error, 'ENOTDIR') || hasCode(error, 'EISDIR') || hasCode(error, 'EEXIST')) {
     return new WorkspaceError(409, 'File or directory conflict')
   }
+
   return new WorkspaceError(500, 'Workspace operation failed')
 }
 
@@ -56,9 +62,11 @@ export class FileWorkspace implements WorkspaceService {
   static async open(workFolder: string): Promise<FileWorkspace> {
     try {
       const info = await lstat(workFolder)
+
       if (info.isSymbolicLink() || !info.isDirectory()) {
         throw new Error('workFolder must be an existing directory, not a link or file')
       }
+
       return new FileWorkspace(await realpath(workFolder))
     } catch (error) {
       throw new Error(
@@ -70,13 +78,17 @@ export class FileWorkspace implements WorkspaceService {
 
   private segments(path: string, allowRoot: boolean): string[] {
     if (path === '' && allowRoot) return []
+
     if (isAbsolute(path) || path.startsWith('/') || path.includes('\\')) {
       throw new WorkspaceError(400, 'Use a workspace-relative path with / separators')
     }
+
     const parts = path.split('/')
+
     if (parts.includes('..')) {
       throw new WorkspaceError(403, 'Path is outside the workspace')
     }
+
     if (
       parts.some(
         (part) =>
@@ -90,14 +102,17 @@ export class FileWorkspace implements WorkspaceService {
     ) {
       throw new WorkspaceError(400, 'Invalid workspace path')
     }
+
     return parts
   }
 
   private async inspect(path: string) {
     const info = await lstat(path)
+
     if (info.isSymbolicLink()) throw new WorkspaceError(403, 'Links are not accessible')
     const canonical = await realpath(path)
     const fromRoot = relative(this.root, canonical)
+
     if (
       fromRoot === '..' ||
       fromRoot.startsWith('../') ||
@@ -106,6 +121,7 @@ export class FileWorkspace implements WorkspaceService {
     ) {
       throw new WorkspaceError(403, 'Path is outside the workspace')
     }
+
     return info
   }
 
@@ -113,34 +129,44 @@ export class FileWorkspace implements WorkspaceService {
     const parts = this.segments(path, allowRoot)
     let current = this.root
     const rootInfo = await this.inspect(current)
+
     if (!rootInfo.isDirectory()) throw new WorkspaceError(409, 'Expected a directory')
+
     for (const [index, part] of parts.entries()) {
       current = resolve(current, part)
       const leaf = index === parts.length - 1
+
       try {
         const info = await this.inspect(current)
+
         if (!leaf && !info.isDirectory()) throw new WorkspaceError(409, 'Expected a directory')
       } catch (error) {
         if (!createParents || !hasCode(error, 'ENOENT')) throw error
+
         if (leaf) return current
+
         try {
           await mkdir(current)
         } catch (mkdirError) {
           if (!hasCode(mkdirError, 'EEXIST')) throw mkdirError
         }
+
         if (!(await this.inspect(current)).isDirectory()) {
           throw new WorkspaceError(409, 'Expected a directory')
         }
       }
     }
+
     return current
   }
 
   async list(path: string): Promise<WorkspaceListing> {
     const target = await this.locate(path, true)
+
     if (!(await this.inspect(target)).isDirectory())
       throw new WorkspaceError(409, 'Expected a directory')
     const entries = await readdir(target, { withFileTypes: true })
+
     return {
       entries: entries
         .filter((entry) => !entry.isSymbolicLink() && (entry.isFile() || entry.isDirectory()))
@@ -154,15 +180,19 @@ export class FileWorkspace implements WorkspaceService {
 
   async read(path: string): Promise<Uint8Array> {
     const target = await this.locate(path)
+
     if (!(await this.inspect(target)).isFile()) throw new WorkspaceError(409, 'Expected a file')
+
     return readFile(target)
   }
 
   async resolveDirectory(path: string): Promise<string> {
     const target = await this.locate(path, true)
+
     if (!(await this.inspect(target)).isDirectory()) {
       throw new WorkspaceError(409, 'Expected a game directory')
     }
+
     return target
   }
 
@@ -170,12 +200,14 @@ export class FileWorkspace implements WorkspaceService {
     const target = await this.locate(path, false, true)
     const temporary = resolve(dirname(target), `.ancadeba-save-${randomUUID()}.tmp`)
     const file = await open(temporary, 'wx')
+
     try {
       try {
         await file.writeFile(contents)
       } finally {
         await file.close()
       }
+
       try {
         // A hard link publishes complete bytes without replacing an existing destination.
         await link(temporary, target)
@@ -191,9 +223,11 @@ export class FileWorkspace implements WorkspaceService {
   async removeCreated(path: string, contents: Uint8Array): Promise<void> {
     const target = await this.locate(path)
     const current = await this.read(path)
+
     if (!Buffer.from(current).equals(contents)) {
       throw new WorkspaceError(409, 'Scene changed before cleanup')
     }
+
     await rm(target)
   }
 
@@ -201,27 +235,33 @@ export class FileWorkspace implements WorkspaceService {
     const target = await this.locate(path, false, true)
     let exists = false
     let mode: number | undefined
+
     try {
       const info = await this.inspect(target)
+
       if (!info.isFile()) throw new WorkspaceError(409, 'Expected a file')
       exists = true
       mode = info.mode
     } catch (error) {
       if (!hasCode(error, 'ENOENT')) throw error
     }
+
     const temporary = resolve(dirname(target), `.ancadeba-save-${randomUUID()}.tmp`)
     const file = await open(temporary, 'wx', mode)
+
     try {
       try {
         await file.writeFile(contents)
       } finally {
         await file.close()
       }
+
       // Publish a complete file on the same filesystem, including during concurrent saves.
       await replaceFile(temporary, target)
     } finally {
       await rm(temporary, { force: true })
     }
+
     return !exists
   }
 }

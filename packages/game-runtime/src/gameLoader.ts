@@ -11,15 +11,19 @@ export class GameLoader implements IGameLoader {
 
   async load(): Promise<GameData> {
     const definition = await this.resources.load('game.json', gameSchema)
+
     const scenes = await Promise.all(
       definition.scenes.map(async (id) => {
         const scene = await this.resources.load(`scenes/${id}.json`, sceneSchema)
+
         return [id, scene] as const
       }),
     )
+
     const input = definition.input
       ? await this.resources.load(definition.input, inputSchema)
       : undefined
+
     return assembleGameData(definition, new Map(scenes), input)
   }
 }

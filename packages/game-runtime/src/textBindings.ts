@@ -34,12 +34,14 @@ export function resolveText(
   const replacements = new Map<string, string>()
   let text = ''
   let offset = 0
+
   for (const { alias, index, length } of textPlaceholders(template.text)) {
     if (!replacements.has(alias)) {
       // SAFETY: an own data property of the typed binding map is a GameBinding; absent/accessor properties yield undefined.
       const binding = Object.getOwnPropertyDescriptor(template.bindings, alias)?.value as
         | GameBinding
         | undefined
+
       const result = binding
         ? (source?.read(binding) ?? {
             status: 'unresolved' as const,
@@ -50,6 +52,7 @@ export function resolveText(
             },
           })
         : undefined
+
       if (result?.status === 'resolved') replacements.set(alias, String(result.value))
       else {
         diagnostics.push({
@@ -62,9 +65,11 @@ export function resolveText(
         )
       }
     }
+
     text += template.text.slice(offset, index) + replacements.get(alias)!
     offset = index + length
   }
+
   return { text: text + template.text.slice(offset), diagnostics }
 }
 
@@ -77,15 +82,19 @@ export function observeText(
 ): Unsubscribe {
   let previous: string | undefined
   let active = true
+
   const emit = () => {
     if (!active) return
     const resolution = resolveText(template, source, options)
     const signature = JSON.stringify(resolution)
+
     if (signature === previous) return
     previous = signature
     handler(resolution)
   }
+
   const unsubscribe = source.subscribeChanges(emit)
+
   try {
     emit()
   } catch (error) {
@@ -93,6 +102,7 @@ export function observeText(
     unsubscribe()
     throw error
   }
+
   return () => {
     active = false
     unsubscribe()

@@ -30,8 +30,10 @@ function createDependencies() {
   const fetcher = vi
     .fn<typeof fetch>()
     .mockImplementation(async () => new Response(JSON.stringify(gameDefinition('Preview'))))
+
   const cleanup = vi.fn<() => void>()
   const host = { mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup) }
+
   const dependencies = {
     runtime: { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } },
     fetcher,
@@ -40,6 +42,7 @@ function createDependencies() {
     download: vi.fn<(archive: Blob, fileName: string) => void>(),
     onExportStateChange: vi.fn<ExportStateListener>(),
   } satisfies EditorDependencies
+
   return { dependencies, cleanup }
 }
 

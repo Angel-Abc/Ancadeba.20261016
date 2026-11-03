@@ -67,6 +67,7 @@ export class WorldActionScheduler<Context = undefined> {
     this.progression.synchronize()
     const dueAtWorldMs = this.progression.current.worldTimeMs + delayWorldMs
     this.validateTime(dueAtWorldMs)
+
     return this.register(action, dueAtWorldMs, payload, context)
   }
 
@@ -79,18 +80,21 @@ export class WorldActionScheduler<Context = undefined> {
     if (this.disposed) return undefined
     this.validateTime(dueAtWorldMs)
     this.progression.synchronize()
+
     return this.register(action, dueAtWorldMs, payload, context)
   }
 
   cancel(id: WorldScheduleId): boolean {
     if (this.disposed || !this.pending.delete(id)) return false
     this.rearm()
+
     return true
   }
 
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+
     for (const unsubscribe of this.subscriptions) unsubscribe()
     this.clearAlarm()
     this.pending.clear()
@@ -116,6 +120,7 @@ export class WorldActionScheduler<Context = undefined> {
     const id: WorldScheduleId = `world:${order}`
     this.pending.set(id, { id, order, action, dueAtWorldMs, payload, context })
     this.selectDue()
+
     return id
   }
 
@@ -123,9 +128,11 @@ export class WorldActionScheduler<Context = undefined> {
     if (!this.ready) return
     // Queued progression events can be older than the latest committed snapshot.
     const observedWorldMs = this.progression.current.worldTimeMs
+
     const due = [...this.pending.values()]
       .filter((schedule) => schedule.dueAtWorldMs <= observedWorldMs)
       .sort((a, b) => a.dueAtWorldMs - b.dueAtWorldMs || a.order - b.order)
+
     for (const schedule of due) {
       this.pending.delete(schedule.id)
       this.enqueue(
@@ -140,6 +147,7 @@ export class WorldActionScheduler<Context = undefined> {
         schedule.context,
       )
     }
+
     this.rearm()
   }
 
@@ -150,11 +158,14 @@ export class WorldActionScheduler<Context = undefined> {
 
   private rearm(): void {
     this.clearAlarm()
+
     if (!this.ready || this.pending.size === 0) return
     let earliest = Infinity
+
     for (const schedule of this.pending.values())
       earliest = Math.min(earliest, schedule.dueAtWorldMs)
     const projected = this.progression.hostDelayUntil(earliest)
+
     if (projected === undefined) return
     // A remaining sub-millisecond deadline must not repeatedly wake at zero delay.
     const delay = Math.min(2_147_483_647, Math.max(1, Math.ceil(projected)))

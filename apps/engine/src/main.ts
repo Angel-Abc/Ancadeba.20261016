@@ -23,6 +23,7 @@ import.meta.hot?.dispose(() => {
 
 try {
   const config = await loadRuntimeConfig(applicationUrl, fetch)
+
   if (!disposed) {
     const container = new ContainerBuilder(
       config,
@@ -31,6 +32,7 @@ try {
       new DomEngineHost(app),
       createBrowserTiming(window),
     ).build()
+
     engine = container.resolve('engine')
     await engine.start()
   }

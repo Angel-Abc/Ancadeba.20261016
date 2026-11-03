@@ -25,6 +25,7 @@ class TestTiming {
     schedule: (run: () => void, delay: number) => {
       const task = { run, dueAt: this.now + delay, cancelled: false, ran: false }
       this.tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
@@ -39,6 +40,7 @@ class TestTiming {
     const task = this.pending
       .filter((task) => task.dueAt <= this.now)
       .sort((a, b) => a.dueAt - b.dueAt)[0]
+
     if (!task) throw new Error('No due task')
     task.ran = true
     task.run()
@@ -46,6 +48,7 @@ class TestTiming {
 
   drain(): void {
     let passes = 0
+
     while (this.pending.some((task) => task.dueAt <= this.now)) {
       if (++passes > 100) throw new Error('Tasks did not become idle')
       this.runNext()
@@ -89,12 +92,14 @@ function setup(
   } = {},
 ) {
   const timing = options.timing ?? new TestTiming()
+
   const logger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: vi.fn(() => ''),
   } satisfies ILogger
+
   const runtime: EngineRuntimeServices = {
     clock: timing.clock,
     scheduler: timing.scheduler,
@@ -104,12 +109,15 @@ function setup(
         ? { createGameRules: () => options.rules! }
         : {}),
   }
+
   const mount = vi.fn<IEngineHost['mount']>(() => () => {})
+
   const engine = new Engine(
     options.loader ?? { load: async () => game },
     {
       mount(data, session) {
         session.lifecycle.startGame()
+
         return (options.host ?? { mount }).mount(data, session)
       },
     },
@@ -117,6 +125,7 @@ function setup(
     () => new MessageBus<EngineMessages>(),
     runtime,
   )
+
   return { engine, timing, logger, mount }
 }
 
@@ -124,6 +133,7 @@ async function start(options: Parameters<typeof setup>[0] = {}) {
   const instance = setup(options)
   await instance.engine.start()
   instance.timing.drain()
+
   return instance
 }
 
@@ -138,6 +148,7 @@ function observe(engine: Engine) {
   engine.messages!.subscribe('action.failed', failed)
   engine.messages!.subscribe('turn.advanced', turns)
   engine.messages!.subscribe('world-time.advanced', world)
+
   return { applied, rejected, failed, turns, world }
 }
 
@@ -162,12 +173,14 @@ describe('game action routing', () => {
   it('routes pressed inputs using captured context and ignores unmatched inputs and phases', async () => {
     const walk = vi.fn<GameActionHandler>(() => ({ status: 'applied', advanceTurn: true }))
     const menu = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const { engine, timing } = await start({
       rules: rules({ walk, menu }, [
         { context: 'gameplay', input: 'moveNorth', action: 'walk' },
         { context: 'menu', input: 'selectPrevious', action: 'menu' },
       ]),
     })
+
     engine.input!.pressKey('KeyW')
     engine.input!.pressKey('KeyW')
     engine.input!.setContext('menu')
@@ -197,12 +210,14 @@ describe('game action routing', () => {
 
   it('supports explicit release and cancellation bindings', async () => {
     const handler = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const { engine, timing } = await start({
       rules: rules({ stop: handler }, [
         { context: 'gameplay', input: 'moveNorth', phase: 'released', action: 'stop' },
         { context: 'gameplay', input: 'moveNorth', phase: 'cancelled', action: 'stop' },
       ]),
     })
+
     engine.input!.pressKey('KeyW')
     engine.input!.releaseKey('KeyW')
     engine.input!.pressKey('KeyW')
@@ -219,19 +234,23 @@ describe('game action routing', () => {
 
   it('processes requests serially and defers handler-generated followups and outcomes', async () => {
     const seen: number[] = []
+
     const { engine, timing } = await start({
       rules: rules({
         first: (_request, context) => {
           seen.push(context.progression.turn)
           context.actions.request('next')
+
           return { status: 'applied', advanceTurn: true }
         },
         next: (_request, context) => {
           seen.push(context.progression.turn)
+
           return { status: 'applied', advanceTurn: true }
         },
       }),
     })
+
     const events = observe(engine)
     const payload = { target: 'north' }
     engine.actions!.request('first', payload)
@@ -297,7 +316,9 @@ describe('independent action progression', () => {
         both: () => ({ status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }),
       }),
     })
+
     const events = observe(engine)
+
     for (const action of ['free', 'turn', 'time', 'both']) engine.actions!.request(action)
     timing.drain()
     expect(events.applied.mock.calls.map(([event]) => event.progression)).toEqual([
@@ -336,6 +357,7 @@ describe('independent action progression', () => {
           { mode },
         ),
       })
+
       timing.now = 100
       engine.actions!.request('move')
       timing.drain()
@@ -355,6 +377,7 @@ describe('independent action progression', () => {
         mode: 'hybrid',
       }),
     })
+
     timing.now = 100
     engine.actions!.request('jump')
     timing.drain()
@@ -368,9 +391,11 @@ describe('independent action progression', () => {
 
   it('samples processing time and exposes the latest synchronized snapshot', async () => {
     const handler = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const { engine, timing } = await start({
       rules: rules({ inspect: handler }, [], { mode: 'elapsed', rate: 2 }),
     })
+
     timing.now = 10
     engine.actions!.request('inspect')
     timing.now = 40
@@ -386,6 +411,7 @@ describe('independent action progression', () => {
     const { engine, timing } = await start({
       rules: rules({}, [], { mode: 'elapsed', rate: 2, pulseMs: 25 }),
     })
+
     const events = observe(engine)
     timing.now = 125
     timing.drain()
@@ -401,22 +427,26 @@ describe('independent action progression', () => {
 
   it('starts elapsed accounting after loading and mounting rather than during startup', async () => {
     const timing = new TestTiming()
+
     const { engine } = setup({
       timing,
       rules: rules({}, [], { mode: 'elapsed' }),
       loader: {
         load: async () => {
           timing.now = 1000
+
           return game
         },
       },
       host: {
         mount: () => {
           timing.now = 2000
+
           return () => {}
         },
       },
     })
+
     await engine.start()
     timing.drain()
     expect(engine.actions!.progression.worldTimeMs).toBe(0)
@@ -433,6 +463,7 @@ describe('independent action progression', () => {
         mode: 'hybrid',
       }),
     })
+
     const events = observe(engine)
     timing.now = 200
     engine.actions!.request('blocked')
@@ -468,6 +499,7 @@ describe('action failures and lifecycle', () => {
         valid: () => ({ status: 'applied', advanceTurn: true }),
       }),
     })
+
     const events = observe(engine)
     engine.actions!.request('invalid')
     timing.drain()
@@ -484,6 +516,7 @@ describe('action failures and lifecycle', () => {
 
   it('reports exceptions and rejected promises as failures while preserving elapsed progression', async () => {
     const failure = new Error('Handler failed')
+
     const { engine, timing, logger } = await start({
       rules: rules(
         {
@@ -499,6 +532,7 @@ describe('action failures and lifecycle', () => {
         { mode: 'hybrid' },
       ),
     })
+
     const events = observe(engine)
     const engineFailed = vi.fn()
     engine.messages!.subscribe('engine.failed', engineFailed)
@@ -553,6 +587,7 @@ describe('action failures and lifecycle', () => {
   it('provides actions during mounting and exposes them on the engine only while running', async () => {
     let captured: EngineHostSession | undefined
     const handler = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
     const { engine, timing } = setup({
       rules: rules({ ready: handler }),
       host: {
@@ -560,10 +595,12 @@ describe('action failures and lifecycle', () => {
           captured = session
           expect(engine.actions).toBeUndefined()
           session.actions!.request('ready')
+
           return () => {}
         },
       },
     })
+
     expect(engine.actions).toBeUndefined()
     await engine.start()
     expect(engine.actions).toBe(captured!.actions)
@@ -581,9 +618,11 @@ describe('action failures and lifecycle', () => {
         factory: () => {
           if (shouldThrow) throw new Error('Rules failed')
           engine.stop()
+
           return rules({})
         },
       })
+
       if (shouldThrow) await expect(engine.start()).rejects.toThrow('Rules failed')
       else await engine.start()
       timing.drain()
@@ -604,6 +643,7 @@ describe('action failures and lifecycle', () => {
         }),
       }),
     })
+
     const events = observe(engine)
     engine.actions!.request('huge')
     engine.actions!.request('overflow')
@@ -618,9 +658,11 @@ describe('action failures and lifecycle', () => {
 
   it('cancels queued work and owned timers on stop and disables retained references', async () => {
     const handler = vi.fn<GameActionHandler>(() => ({ status: 'applied', advanceTurn: true }))
+
     const { engine, timing } = await start({
       rules: rules({ move: handler }, [], { mode: 'elapsed' }),
     })
+
     const actions = engine.actions!
     actions.request('move')
     const timer = actions.schedule('move', 5)!
@@ -630,6 +672,7 @@ describe('action failures and lifecycle', () => {
     expect(actions.schedule('move', 0)).toBeUndefined()
     expect(actions.cancelScheduled(timer)).toBe(false)
     timing.now = 2000
+
     for (const task of stale) task.run()
     timing.drain()
     expect(handler).not.toHaveBeenCalled()
@@ -642,10 +685,12 @@ describe('action failures and lifecycle', () => {
       rules: rules({
         stop: () => {
           engine.stop()
+
           return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
         },
       }),
     })
+
     const actions = engine.actions!
     const events = observe(engine)
     actions.request('stop')
@@ -658,15 +703,19 @@ describe('action failures and lifecycle', () => {
 
   it('creates fresh handler state, progression, and IDs on restart and ignores old callbacks', async () => {
     const counts: number[] = []
+
     const factory = vi.fn<GameRulesFactory>(() => {
       let moves = 0
+
       return rules({
         move: () => {
           counts.push(++moves)
+
           return { status: 'applied', advanceTurn: true, worldTimeCostMs: 10 }
         },
       })
     })
+
     const { engine, timing } = await start({ factory })
     const oldActions = engine.actions!
     oldActions.request('move')
@@ -692,18 +741,22 @@ describe('action failures and lifecycle', () => {
   it('disposes actions when mounting fails or stops the engine', async () => {
     for (const shouldThrow of [true, false]) {
       let captured: IGameActions | undefined
+
       const { engine, timing } = setup({
         rules: rules({}, [], { mode: 'elapsed' }),
         host: {
           mount: (_game, session) => {
             captured = session.actions
             session.actions!.schedule('anything', 0)
+
             if (shouldThrow) throw new Error('Mount failed')
             engine.stop()
+
             return () => {}
           },
         },
       })
+
       if (shouldThrow) await expect(engine.start()).rejects.toThrow('Mount failed')
       else await engine.start()
       timing.drain()
@@ -715,15 +768,19 @@ describe('action failures and lifecycle', () => {
 
   it('keeps simultaneous engine progression and domain state isolated', async () => {
     const counts: number[] = []
+
     const factory: GameRulesFactory = () => {
       let count = 0
+
       return rules({
         move: () => {
           counts.push(++count)
+
           return { status: 'applied', advanceTurn: true }
         },
       })
     }
+
     const first = await start({ factory })
     const second = await start({ factory })
     first.engine.actions!.request('move')
@@ -734,6 +791,7 @@ describe('action failures and lifecycle', () => {
     expect(counts).toEqual([1, 2, 1])
     expect(first.engine.actions!.progression.turn).toBe(2)
     expect(second.engine.actions!.progression.turn).toBe(1)
+
     for (const instance of [first, second]) {
       instance.engine.stop()
       instance.timing.drain()

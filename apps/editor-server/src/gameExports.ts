@@ -34,18 +34,22 @@ export class WorkspaceGameExporter implements GameExportService {
     this.busy = true
     let temporary: string | undefined
     let disposed = false
+
     const cleanup = async () => {
       if (disposed) return
       disposed = true
+
       try {
         if (temporary) {
           const target = resolve(temporary)
+
           if (
             dirname(target) !== resolve(this.temporaryRoot) ||
             !basename(target).startsWith('ancadeba-export-')
           ) {
             throw new Error('Unexpected export temporary directory')
           }
+
           await rm(target, { recursive: true, force: true })
         }
       } finally {
@@ -57,6 +61,7 @@ export class WorkspaceGameExporter implements GameExportService {
       const gameDirectory = await this.workspace.resolveDirectory(path)
       temporary = await mkdtemp(join(this.temporaryRoot, 'ancadeba-export-'))
       const output = join(temporary, 'game')
+
       try {
         await this.buildGame(gameDirectory, output)
       } catch {
@@ -65,13 +70,17 @@ export class WorkspaceGameExporter implements GameExportService {
           'Could not export the game. Check game.json and the game assets.',
         )
       }
+
       const filePath = join(temporary, 'game.zip')
       await this.writeArchive(output, filePath)
+
       const name =
         basename(gameDirectory)
           .replace(/[^a-zA-Z0-9_-]/g, '-')
           .slice(0, 80) || 'game'
+
       const size = (await stat(filePath)).size
+
       return { filePath, fileName: `${name}.zip`, size, dispose: cleanup }
     } catch (error) {
       await cleanup()

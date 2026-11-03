@@ -5,6 +5,7 @@ import { loadAppConfig } from '../../tooling/app-config.js'
 const config = loadAppConfig(new URL('./config.json', import.meta.url), (value, env) => {
   const parsed = parseEditorUiConfig(value, env)
   new URL(parsed.editorServerUrl)
+
   return parsed
 })
 

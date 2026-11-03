@@ -14,6 +14,7 @@ async function executeOperation(operation: () => Promise<Record<string, unknown>
             [],
             'unknown',
           )
+
     return {
       ok: false as const,
       error: {
@@ -37,6 +38,7 @@ export async function toolResult(
   operation: () => Promise<Record<string, unknown>>,
 ): Promise<CallToolResult> {
   const output = await executeOperation(operation)
+
   return {
     isError: !output.ok,
     structuredContent: output,

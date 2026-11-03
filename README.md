@@ -71,8 +71,9 @@ to the server on an automatically allocated local port.
 Lint also runs a selective set of vendored anti-slop rules: no chained assertions,
 known-value widening, module mocking, broad `object` parameters, reflective
 `get`/`apply`, or widen-then-assert flows. Necessary assertions require a specific
-`// SAFETY:` invariant. Boundary `unknown` values, runtime type checks, raw JSON
-dictionaries, and existing spacing remain supported. Tests that deliberately
+`// SAFETY:` invariant. The readable-spacing rule inserts blank lines between
+logical statement groups through `pnpm lint:fix`. Boundary `unknown` values,
+runtime type checks, and raw JSON dictionaries remain supported. Tests that deliberately
 violate types use a line-scoped, explained exception; there is no blanket test
 override. Unused lint suppressions fail lint, and TypeScript checks unused
 `@ts-expect-error` directives. See

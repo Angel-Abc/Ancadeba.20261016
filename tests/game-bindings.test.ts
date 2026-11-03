@@ -13,11 +13,14 @@ import { MessageBus } from '@ancadeba/utilities'
 
 const health: GameBinding = { source: 'game.state', path: ['player', 'health'], fallback: '—' }
 const turn: GameBinding = { source: 'game.progression', path: ['turn'] }
+
 const template: TextTemplate = {
   text: 'Health: {{health}} / {{ health }} — Turn {{turn}}',
   bindings: { health, turn },
 }
+
 const component = { id: 'story', type: 'text', placement: { row: 1, column: 1 }, ...template }
+
 const scene = {
   'schema-version': '1.0.0',
   id: 'standard',
@@ -32,10 +35,12 @@ function setup(state: unknown = { player: { health: 10 } }) {
   const messages = new MessageBus<EngineMessages>()
   const progression = { turn: 0, worldTimeMs: 0 }
   const source = new GameBindings({ state: () => state, progression: () => progression }, messages)
+
   const invalidate = () => {
     messages.publish('world-time.advanced', { previous: progression, progression })
     messages.flush()
   }
+
   return { source, messages, progression, invalidate }
 }
 
@@ -68,6 +73,7 @@ describe('binding definitions', () => {
 
   it('copies the binding dictionary, definitions, and paths into runtime data', () => {
     const definition = sceneSchema.parse(scene)
+
     const content = assembleGameData(
       gameSchema.parse({
         'schema-version': '1.0.0',
@@ -79,7 +85,9 @@ describe('binding definitions', () => {
       }),
       new Map([['standard', definition]]),
     )
+
     const component = definition.components[0]!
+
     if (component.type !== 'text') throw new Error('Expected text')
     const bindings = component.bindings!
     bindings.health!.path[0] = 'other'
@@ -127,6 +135,7 @@ describe('game binding reads', () => {
     expect(source.read({ source: 'game.state', path: ['secret'] })).toMatchObject({
       diagnostic: { reason: 'unreadable-path' },
     })
+
     for (const key of ['inherited', '__proto__', 'constructor', 'missing'])
       expect(source.read({ source: 'game.state', path: [key] })).toMatchObject({
         diagnostic: { reason: 'missing-path' },
@@ -138,6 +147,7 @@ describe('game binding reads', () => {
     const items = [1]
     items[2] = 3
     const { source } = setup({ items, map: new Map([['x', 1]]), value: 2 })
+
     for (const path of [
       ['items', 1],
       ['items', '0'],
@@ -147,10 +157,12 @@ describe('game binding reads', () => {
       expect(source.read({ source: 'game.state', path })).toMatchObject({
         diagnostic: { reason: 'missing-path' },
       })
+
     const unavailable = new GameBindings(
       { state: () => undefined, progression: () => ({ turn: 0, worldTimeMs: 0 }) },
       new MessageBus<EngineMessages>(),
     )
+
     expect(unavailable.read(health)).toMatchObject({ diagnostic: { reason: 'source-unavailable' } })
   })
 })
@@ -222,6 +234,7 @@ describe('plain text binding resolution', () => {
     interface MutableState {
       player?: { health: number | string }
     }
+
     const state: MutableState = { player: { health: 10 } }
     const { source, invalidate } = setup(state)
     const listener = vi.fn()
@@ -249,9 +262,11 @@ describe('plain text binding resolution', () => {
 
   it('cleans up an observer whose initial callback throws', () => {
     const { source, invalidate } = setup()
+
     const listener = vi.fn(() => {
       throw new Error('initial')
     })
+
     expect(() => observeText(template, source, listener)).toThrow('initial')
     expect(invalidate).not.toThrow()
     expect(listener).toHaveBeenCalledOnce()
@@ -259,9 +274,11 @@ describe('plain text binding resolution', () => {
 
   it('attempts other observers after a callback fails and stops delivery on disposal', () => {
     const { source, invalidate } = setup()
+
     const failing = () => {
       throw new Error('observer')
     }
+
     const unsubscribe = source.subscribeChanges(failing)
     const other = vi.fn()
     source.subscribeChanges(other)

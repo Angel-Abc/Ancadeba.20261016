@@ -78,6 +78,7 @@ class TestWindow extends EventTarget {
   setTimeout(run: () => void, delay: number): number {
     const id = ++this.nextId
     this.tasks.set(id, { run, delay })
+
     return id
   }
 
@@ -93,6 +94,7 @@ class TestWindow extends EventTarget {
 
   drain(): void {
     let count = 0
+
     while (this.tasks.size) {
       if (++count > 100) throw new Error('Browser tasks did not become idle')
       this.runNext()
@@ -128,6 +130,7 @@ function key(
     ...options,
   })
   surface.dispatchEvent(event)
+
   return event
 }
 
@@ -135,6 +138,7 @@ function setup() {
   const document = new TestDocument()
   const surface = document.createElement('section')
   const messages = new MessageBus<EngineMessages>()
+
   const input = new InputController(
     {
       virtualKeys: ['north', 'confirm'],
@@ -147,9 +151,11 @@ function setup() {
     },
     messages,
   )
+
   const handler = vi.fn<(event: EngineMessages['input.virtual']) => void>()
   messages.subscribe('input.virtual', handler)
   const cleanup = bindKeyboardInput(surface.asElement(), input)
+
   return { document, surface, messages, input, handler, cleanup }
 }
 
@@ -194,9 +200,11 @@ describe('shared keyboard adapter', () => {
   it('matches codes, allows Shift, ignores shortcuts and composition, and preserves releases', () => {
     const { document, surface, messages, handler, cleanup } = setup()
     document.activeElement = surface
+
     for (const option of ['ctrlKey', 'altKey', 'metaKey', 'isComposing']) {
       expect(key(surface, 'keydown', 'KeyW', { [option]: true }).defaultPrevented).toBe(false)
     }
+
     expect(key(surface, 'keydown', 'KeyW', { shiftKey: true, key: 'Z' }).defaultPrevented).toBe(
       true,
     )
@@ -246,6 +254,7 @@ describe('shared keyboard adapter', () => {
       const { document, surface, messages, handler, cleanup } = setup()
       document.activeElement = surface
       key(surface, 'keydown', 'KeyW')
+
       if (kind === 'window') document.defaultView.dispatchEvent(new Event('blur'))
       else if (kind === 'hidden') {
         document.hidden = true
@@ -254,12 +263,14 @@ describe('shared keyboard adapter', () => {
         const target = document.createElement(
           kind === 'editable' ? 'input' : kind === 'button' ? 'button' : 'section',
         )
+
         if (kind === 'editable' || kind === 'button') surface.append(target)
         document.activeElement = target
         const event = new Event('focusout')
         Object.assign(event, { relatedTarget: target })
         surface.dispatchEvent(event)
       }
+
       key(surface, 'keyup', 'KeyW')
       messages.flush()
       expect(handler.mock.calls.map(([event]) => event.phase)).toEqual(['pressed', 'cancelled'])
@@ -332,6 +343,7 @@ describe.each([
   it('automatically dispatches input and timer wakeups and stops and restarts cleanly', async () => {
     const document = new TestDocument()
     const container = document.createElement('main')
+
     const game: GameData = {
       id: 'demo',
       title: 'Demo',
@@ -345,7 +357,9 @@ describe.each([
         initialContext: 'gameplay',
       },
     }
+
     const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+
     const engine = new Engine(
       { load: async () => game },
       createHost(container.asElement()),
@@ -353,6 +367,7 @@ describe.each([
       () => new MessageBus<EngineMessages>(),
       createBrowserTiming(document.defaultView),
     )
+
     await engine.start()
     document.defaultView.drain()
     const wakeup = vi.fn()

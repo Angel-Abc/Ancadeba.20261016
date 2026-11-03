@@ -71,11 +71,13 @@ function gameData(title: string) {
 describe('standalone game export', () => {
   let temp: string
   let source: string
+
   const game = {
     ...gameDefinition('Export test'),
     input: 'input.json',
     assets: ['assets/my sprite.bin'],
   }
+
   const bytes = new Uint8Array([0, 255, 128, 42])
   const literalPaths = ['assets/intro #1.txt', 'assets/literal%2f.txt', 'assets/100%.txt']
 
@@ -91,6 +93,7 @@ describe('standalone game export', () => {
     await writeFile(join(source, 'scenes/start-screen.json'), JSON.stringify(scene))
     await writeFile(join(source, 'assets/my sprite.bin'), bytes)
     await writeFile(join(source, 'assets/dialogue/intro.txt'), 'Café 🎮')
+
     for (const path of literalPaths) await writeFile(join(source, path), 'Café 🎮')
     await writeFile(join(source, 'index.html'), '<title>Game asset</title>')
     await writeFile(join(source, '.env'), 'LOCAL_SETTING=private')
@@ -119,12 +122,14 @@ describe('standalone game export', () => {
     expect(await readFile(join(output, 'game/index.html'), 'utf8')).toBe(
       '<title>Game asset</title>',
     )
+
     for (const path of ['.env', '.env.local', '.git', 'node_modules']) {
       await expect(readFile(join(output, 'game', path))).rejects.toHaveProperty('code', 'ENOENT')
     }
 
     const relocated = join(temp, 'relocated')
     await rename(output, relocated)
+
     const server = await preview({
       configFile: false,
       root: temp,
@@ -133,16 +138,20 @@ describe('standalone game export', () => {
       build: { outDir: relocated },
       preview: { host: '127.0.0.1', port: 0, strictPort: true },
     })
+
     try {
       // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
       const address = server.httpServer.address() as AddressInfo
       const applicationUrl = `http://127.0.0.1:${address.port}/nested/game/`
       const html = await (await fetch(applicationUrl)).text()
+
       const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
         .map((match) => match[1]!)
         .filter((path) => !path.startsWith('data:'))
+
       expect(assets.some((path) => path.endsWith('.js'))).toBe(true)
       expect(assets.some((path) => path.endsWith('.css'))).toBe(true)
+
       for (const path of assets) {
         expect(path).toMatch(/^\.\/assets\//)
         const response = await fetch(new URL(path, applicationUrl))
@@ -151,10 +160,12 @@ describe('standalone game export', () => {
 
       const config = await loadRuntimeConfig(applicationUrl, fetch)
       const host = { mount: vi.fn(() => () => {}) }
+
       const container = new ContainerBuilder(config, applicationUrl, fetch, host, {
         clock: { now: () => 0 },
         scheduler: { schedule: () => () => {} },
       }).build()
+
       const engine = container.resolve('engine')
       await engine.start()
       expect(engine.game).toEqual(gameData('Export test'))
@@ -172,30 +183,38 @@ describe('standalone game export', () => {
       await expect(
         container.resolve('gameResources').readText('assets/dialogue/intro.txt'),
       ).resolves.toBe('Café 🎮')
+
       // Serve literal filenames with standard percent decoding. Vite preview leaves
       // reserved characters such as %23 encoded when looking up static files.
       const fileServer = createServer((request, response) => {
         const path = decodeURIComponent(
           new URL(request.url ?? '/', 'http://localhost').pathname,
         ).replace(/^\/game\//, '')
+
         if (!literalPaths.includes(path)) {
           response.writeHead(404).end()
+
           return
         }
+
         void readFile(join(relocated, 'game', path))
           .then((contents) => response.end(contents))
           .catch(() => response.writeHead(500).end())
       })
+
       fileServer.listen(0, '127.0.0.1')
       await once(fileServer, 'listening')
+
       try {
         // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
         const address = fileServer.address() as AddressInfo
+
         const resources = new HttpGameResources(
           '/game/',
           `http://127.0.0.1:${address.port}/`,
           fetch,
         )
+
         for (const path of literalPaths) {
           await expect(resources.readText(path)).resolves.toBe('Café 🎮')
           await expect(resources.readBytes(path)).resolves.toEqual(
@@ -244,6 +263,7 @@ describe('standalone game export', () => {
     const invalid = join(temp, `invalid-${kind}`)
     const output = join(temp, `failed-${kind}`)
     await mkdir(invalid)
+
     if (contents !== undefined) await writeFile(join(invalid, 'game.json'), contents)
 
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
@@ -267,6 +287,7 @@ describe('standalone game export', () => {
     await mkdir(join(invalid, 'scenes'), { recursive: true })
     await writeFile(join(invalid, 'game.json'), JSON.stringify(game))
     await writeFile(join(invalid, 'input.json'), JSON.stringify(input))
+
     if (contents !== undefined) await writeFile(join(invalid, 'scenes/start-screen.json'), contents)
 
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
@@ -285,6 +306,7 @@ describe('standalone game export', () => {
     const output = join(temp, `failed-input-${kind}`)
     await mkdir(invalid)
     await writeFile(join(invalid, 'game.json'), JSON.stringify({ ...game, scenes: [] }))
+
     if (contents !== undefined) await writeFile(join(invalid, 'input.json'), contents)
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
       'input definition',

@@ -25,6 +25,7 @@ const manifest = gameSchema.parse({
   version: '1.0.0',
   scenes: ['standard', 'inventory', 'settings'],
 })
+
 const definitions = new Map<string, SceneDefinition>(
   manifest.scenes.map((id) => [
     id,
@@ -63,6 +64,7 @@ function createLifecycle(data = content()) {
     disposeGameState: vi.fn<(state: PlayState) => void>(),
     disposeSceneState: vi.fn<(state: LocalState) => void>(),
   }
+
   return { lifecycle: new GameLifecycle(data, factories), factories, data }
 }
 
@@ -75,13 +77,16 @@ describe('game and scene lifetimes', () => {
         definition,
       ]),
     ])
+
     const source: IResourceSource = {
       readText: async (path) => {
         if (!files.has(path)) throw new Error(`Missing fixture: ${path}`)
+
         return JSON.stringify(files.get(path))
       },
       readBytes: async () => new Uint8Array(),
     }
+
     const data = await new GameLoader(new JsonResourceLoader(source, logger)).load()
     const { lifecycle } = createLifecycle(data)
 
@@ -115,6 +120,7 @@ describe('game and scene lifetimes', () => {
     const game = lifecycle.startGame()
     const standard = lifecycle.enterScene('standard')
     expect(standard.type).toBe('game')
+
     if (standard.type !== 'game') throw new Error('Expected a game scene')
     expect(standard.game).toBe(game)
     game.state!.score = 12
@@ -124,6 +130,7 @@ describe('game and scene lifetimes', () => {
 
     const inventory = lifecycle.enterScene('inventory')
     expect(inventory.type).toBe('game')
+
     if (inventory.type !== 'game') throw new Error('Expected a game scene')
     expect(inventory.game).toBe(game)
     expect(inventory.game.state!.score).toBe(12)
@@ -268,11 +275,13 @@ describe('game and scene lifetimes', () => {
     const scene = lifecycle.enterScene('standard')
 
     let failure: unknown
+
     try {
       lifecycle.endGame()
     } catch (error) {
       failure = error
     }
+
     expect(failure).toBeInstanceOf(AggregateError)
     // SAFETY: the preceding assertion checked the captured failure is an AggregateError.
     expect((failure as AggregateError).errors).toEqual([sceneError, gameError])
@@ -307,6 +316,7 @@ describe('game and scene lifetimes', () => {
     const { lifecycle, factories } = createLifecycle()
     factories.createGameState.mockImplementationOnce(() => {
       lifecycle.enterScene('settings')
+
       return { score: 0, locations: new Map() }
     })
     expect(() => lifecycle.startGame()).toThrow('already in progress')
@@ -327,6 +337,7 @@ describe('engine-owned game lifecycle', () => {
     const lifecycles: ReturnType<typeof createLifecycle>[] = []
     const cleanup = vi.fn()
     const mount = vi.fn<IEngineHost['mount']>(() => cleanup)
+
     const engine = new Engine(
       { load: async () => content() },
       host ?? { mount },
@@ -337,10 +348,12 @@ describe('engine-owned game lifecycle', () => {
         createGameLifecycle(data) {
           const created = createLifecycle(data)
           lifecycles.push(created)
+
           return created.lifecycle
         },
       },
     )
+
     return { engine, lifecycles, mount, cleanup }
   }
 
@@ -380,6 +393,7 @@ describe('engine-owned game lifecycle', () => {
       () => new MessageBus<EngineMessages>(),
       timing,
     )
+
     await engine.start()
     const lifecycle = engine.lifecycle!
     const game = lifecycle.startGame()
@@ -400,6 +414,7 @@ describe('engine-owned game lifecycle', () => {
     const { lifecycle, factories } = lifecycles[0]!
     factories.createGameState.mockImplementationOnce(() => {
       engine.stop()
+
       return { score: 0, locations: new Map() }
     })
 
@@ -415,6 +430,7 @@ describe('engine-owned game lifecycle', () => {
   it('disposes a lifecycle returned after its factory stops the engine', async () => {
     const created = createLifecycle()
     const mount = vi.fn<IEngineHost['mount']>(() => () => {})
+
     const engine = new Engine(
       { load: async () => created.data },
       { mount },
@@ -426,6 +442,7 @@ describe('engine-owned game lifecycle', () => {
           created.lifecycle.startGame()
           created.lifecycle.enterScene('settings')
           engine.stop()
+
           return created.lifecycle
         },
       },
@@ -448,6 +465,7 @@ describe('engine-owned game lifecycle', () => {
         throw new Error('Mount failed')
       },
     })
+
     await expect(engine.start()).rejects.toThrow('Mount failed')
     expect(engine.state).toBe('stopped')
     expect(engine.lifecycle).toBeUndefined()
@@ -488,6 +506,7 @@ describe('engine-owned game lifecycle', () => {
     })
 
     let failure: unknown
+
     try {
       engine.stop()
     } catch (error) {

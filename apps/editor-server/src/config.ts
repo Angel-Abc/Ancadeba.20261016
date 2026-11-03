@@ -11,6 +11,7 @@ export async function loadEditorServerConfig(
 ) {
   try {
     const config = parseEditorServerConfig(JSON.parse(await readFile(file, 'utf8')), env)
+
     return { ...config, workFolder: resolve(dirname(fileURLToPath(file)), config.workFolder) }
   } catch (error) {
     throw new Error(

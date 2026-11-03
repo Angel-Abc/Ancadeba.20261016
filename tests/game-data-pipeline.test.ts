@@ -28,6 +28,7 @@ const definition: GameDefinition = {
   version: '1.0.0',
   scenes: ['start-screen'],
 }
+
 const scene: SceneDefinition = {
   'schema-version': '1.0.0',
   id: 'start-screen',
@@ -37,6 +38,7 @@ const scene: SceneDefinition = {
   screen: { type: 'grid', grid: { rows: 20, columns: 20 } },
   components: [],
 }
+
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
 const runtime = { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } }
 
@@ -49,13 +51,16 @@ function createPipeline(
   const source = {
     readText: vi.fn<IResourceSource['readText']>(async (path) => {
       if (!(path in files)) throw new Error(`Missing resource: ${path}`)
+
       return JSON.stringify(files[path])
     }),
     readBytes: vi.fn<IResourceSource['readBytes']>(),
   }
+
   const loader = new GameLoader(new JsonResourceLoader(source, logger))
   const host = { mount: vi.fn<IEngineHost['mount']>(() => () => {}) }
   const engine = new Engine(loader, host, logger, () => new MessageBus<EngineMessages>(), runtime)
+
   return { source, loader, host, engine }
 }
 
@@ -67,9 +72,11 @@ describe('game data pipeline', () => {
         'game.json': { ...definition, 'initial-scene': 'start-screen' },
         'scenes/start-screen.json': { ...scene, type },
       })
+
       host.mount.mockImplementation((_game, session) => {
         expect(session.lifecycle.activeScene?.data.id).toBe('start-screen')
         expect(Boolean(session.lifecycle.currentGame)).toBe(type === 'game')
+
         return () => {}
       })
       await engine.start()
@@ -85,6 +92,7 @@ describe('game data pipeline', () => {
       readBytes: async (path) =>
         new Uint8Array(await readFile(new URL(`../sample-games/basic/${path}`, import.meta.url))),
     }
+
     const game = await new GameLoader(new JsonResourceLoader(source, logger)).load()
 
     expect(game).toMatchObject({
@@ -124,6 +132,7 @@ describe('game data pipeline', () => {
   it('assembles scenes in manifest order without sharing mutable definition objects', () => {
     const first = sceneSchema.parse(scene)
     const second = sceneSchema.parse({ ...scene, id: 'second' })
+
     const game = assembleGameData(
       { ...definition, scenes: ['second', 'start-screen'] },
       new Map([
@@ -180,6 +189,7 @@ describe('game data pipeline', () => {
       'game.json': definition,
       'scenes/start-screen.json': invalidScene,
     })
+
     await expect(engine.start()).rejects.toThrow('scenes/start-screen.json')
     expect(engine.state).toBe('stopped')
     expect(engine.game).toBeUndefined()
@@ -190,10 +200,12 @@ describe('game data pipeline', () => {
     await expect(createPipeline({ 'game.json': definition }).loader.load()).rejects.toThrow(
       'scenes/start-screen.json',
     )
+
     const { loader } = createPipeline({
       'game.json': definition,
       'scenes/start-screen.json': { ...scene, id: 'other' },
     })
+
     await expect(loader.load()).rejects.toThrow('expected start-screen')
   })
 
@@ -208,9 +220,11 @@ describe('game data pipeline', () => {
   it('requires all scenes before mounting and publishing the assembled game', async () => {
     const { engine, host, source } = createPipeline()
     let finish!: (text: string) => void
+
     const pending = new Promise<string>((resolve) => {
       finish = resolve
     })
+
     source.readText.mockImplementation(async (path) =>
       path === 'game.json' ? JSON.stringify(definition) : pending,
     )
@@ -242,10 +256,12 @@ describe('game data pipeline', () => {
       const { engine, source, host } = createPipeline()
       let finish!: (text: string) => void
       let fail!: (error: Error) => void
+
       const pending = new Promise<string>((resolve, reject) => {
         finish = resolve
         fail = reject
       })
+
       source.readText
         .mockImplementationOnce(async () => JSON.stringify(definition))
         .mockImplementationOnce(() => pending)
@@ -257,6 +273,7 @@ describe('game data pipeline', () => {
       await first
       await engine.start()
       const current = engine.game
+
       if (completion === 'resolve') finish(JSON.stringify({ ...scene, title: 'Stale' }))
       else fail(new Error('Stale scene failed'))
       await new Promise<void>((resolve) => setTimeout(resolve, 0))

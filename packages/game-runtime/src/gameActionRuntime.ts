@@ -27,6 +27,7 @@ export class GameActionRuntime implements IGameRuntime {
     private readonly onDispose: () => void,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
+
     try {
       this.actions = new ActionProcessor(rules, messages, this.timers, clock, logger, isRunning)
       this.bindings = new GameBindings(
@@ -51,6 +52,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed) return
     this.disposed = true
     this.bindings.dispose()
+
     try {
       this.actions.dispose()
     } finally {

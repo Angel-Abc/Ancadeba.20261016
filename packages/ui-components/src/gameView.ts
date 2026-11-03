@@ -27,10 +27,12 @@ export function mountGameView(
   viewport.className = 'ancadeba-scene-viewport'
   const cleanups: (() => void)[] = []
   let disposed = false
+
   const cleanup = () => {
     if (disposed) return
     disposed = true
     const errors: unknown[] = []
+
     try {
       for (const release of [...cleanups].reverse()) {
         try {
@@ -42,6 +44,7 @@ export function mountGameView(
     } finally {
       root.remove()
     }
+
     if (errors.length) throw new AggregateError(errors, 'Game view cleanup failed')
   }
 
@@ -62,27 +65,33 @@ export function mountGameView(
       empty.value = ''
       empty.textContent = 'No active scene'
       select.append(empty)
+
       for (const scene of game.scenes.values()) {
         const option = document.createElement('option')
         option.value = scene.id
         option.textContent = scene.title
         select.append(option)
       }
+
       const syncSelection = () => {
         select.value = session.lifecycle.activeScene?.data.id ?? ''
       }
+
       syncSelection()
+
       const onChange = () => {
         try {
           if (!select.value) session.lifecycle.leaveScene()
           else {
             const scene = game.scenes.get(select.value)
+
             if (scene) enter(scene)
           }
         } finally {
           syncSelection()
         }
       }
+
       select.addEventListener('change', onChange)
       cleanups.push(() => select.removeEventListener('change', onChange))
       cleanups.push(session.lifecycle.subscribeSceneChanges(syncSelection))
@@ -92,25 +101,33 @@ export function mountGameView(
 
     root.append(viewport)
     target.append(root)
+
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
       onButtonActivate: (action) => {
         if (disposed) return
         const scene = game.scenes.get(action.scene)
+
         if (!scene) throw new Error(`Missing button target scene: ${action.scene}`)
+
         if (action.type === 'new-game') session.lifecycle.startGame()
         enter(scene)
       },
     })
+
     cleanups.push(() => renderer.dispose())
+
     if (session.input) cleanups.push(bindKeyboardInput(root, session.input))
+
     if (!session.lifecycle.activeScene) {
       const first =
         game.initialScene === undefined
           ? game.scenes.values().next().value
           : game.scenes.get(game.initialScene)
+
       if (first) enter(first)
     }
+
     return cleanup
   } catch (error) {
     cleanup()

@@ -13,6 +13,7 @@ import type {
 } from './turns.js'
 
 export type ActionRequestId = number
+
 export type WorldScheduleId = `world:${number}`
 
 export interface ProgressionSnapshot {

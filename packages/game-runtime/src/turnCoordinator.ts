@@ -34,6 +34,7 @@ function copyIds(ids: readonly string[], category: string): readonly string[] {
   ) {
     throw new TypeError(`${category} must contain unique nonempty IDs`)
   }
+
   return [...ids]
 }
 
@@ -57,8 +58,10 @@ export class TurnCoordinator {
     this.participants = this.roster.current.actors
     this.phases = copyIds(rules.phases, 'Turn phases')
     const actions = new Set(actionIds)
+
     for (const [id, policy] of rules.actionPolicies) {
       if (!actions.has(id)) throw new Error(`Unknown turn-policy action: ${id}`)
+
       if (policy.scope === 'global') {
         if ('allowedPhases' in policy && policy.allowedPhases !== undefined)
           throw new TypeError('Global actions cannot restrict phases')
@@ -68,6 +71,7 @@ export class TurnCoordinator {
           policy.allowedPhases === undefined
             ? this.phases
             : copyIds(policy.allowedPhases, 'Allowed phases')
+
         if (phases.some((phase) => !this.phases.includes(phase)))
           throw new Error(`Unknown allowed phase for action: ${id}`)
         this.policies.set(id, { scope: 'actor', phases: new Set(phases) })
@@ -75,6 +79,7 @@ export class TurnCoordinator {
         throw new TypeError(`Invalid turn policy for action: ${id}`)
       }
     }
+
     for (const id of actions)
       if (!this.policies.has(id)) throw new Error(`Missing turn policy for action: ${id}`)
     this.snapshot = Object.freeze({
@@ -107,12 +112,17 @@ export class TurnCoordinator {
     selector: InputActorSelector | undefined,
   ): InputActorSelector | undefined {
     const policy = this.policies.get(action)!
+
     if (policy.scope === 'global') {
       if (selector !== undefined) throw new TypeError('Global input bindings must be actorless')
+
       return undefined
     }
+
     if (!selector) throw new TypeError('Actor input bindings require an actor selector')
+
     if (selector.type === 'active') return Object.freeze({ type: 'active' })
+
     if (selector.type === 'fixed' && this.actors.includes(selector.actorId))
       return Object.freeze({ type: 'fixed', actorId: selector.actorId })
     throw new TypeError('Invalid or unknown input actor selector')
@@ -120,19 +130,29 @@ export class TurnCoordinator {
 
   rejection(action: string, actor: ActorAttribution | undefined): string | undefined {
     const policy = this.policies.get(action)!
+
     if (policy.scope === 'global')
       return actor === undefined ? undefined : 'Global actions must be actorless'
+
     if (!actor) return 'Actor action requires actor attribution'
     const registration = this.roster.current.actors.find((entry) => entry.actorId === actor.actorId)
+
     if (!registration) return `Unknown actor: ${actor.actorId}`
+
     if (actor.actorGeneration !== registration.generation) return 'Stale actor registration'
+
     if (!this.snapshot) return 'No active actor turn'
+
     if (registration.eligibleFromRound > this.round)
       return 'Actor is not eligible until the next round'
+
     if (actor.turnRevision !== this.revision) return 'Stale actor action request'
+
     if (actor.actorId !== this.snapshot.actorId) return `Inactive actor: ${actor.actorId}`
+
     if (!policy.phases.has(this.snapshot.phaseId))
       return `Action is not allowed in phase: ${this.snapshot.phaseId}`
+
     return undefined
   }
 
@@ -143,18 +163,23 @@ export class TurnCoordinator {
     )
       throw new TypeError('Global actions cannot advance actor turns or phases')
     const rosterChange = this.roster.prepare(outcome.rosterChanges, this.round + 1)
+
     if (!rosterChange && !outcome.advancePhase && !outcome.advanceTurn) return undefined
     const actors = rosterChange?.current.actors ?? this.roster.current.actors
+
     const survives = (entry: ActorRosterEntry): boolean =>
       actors.some(
         (actor) => actor.actorId === entry.actorId && actor.generation === entry.generation,
       )
+
     const removedActive = this.snapshot !== undefined && !survives(this.participants[this.cursor]!)
+
     const advanceTurn =
       this.snapshot !== undefined &&
       (removedActive ||
         outcome.advanceTurn === true ||
         (outcome.advancePhase === true && this.phaseIndex === this.phases.length - 1))
+
     let participants = this.participants
     let cursor = this.cursor
     let phaseIndex = this.phaseIndex
@@ -163,6 +188,7 @@ export class TurnCoordinator {
     let lastEnded = this.lastEnded
     let turnState = this.snapshot
     let roundAdvanced = false
+
     if (advanceTurn || (!this.snapshot && actors.length > 0)) {
       if (advanceTurn) lastEnded = this.snapshot
       cursor = advanceTurn
@@ -170,12 +196,14 @@ export class TurnCoordinator {
         : -1
       phaseIndex = 0
       revision++
+
       if (cursor < 0 && actors.length > 0) {
         round++
         roundAdvanced = true
         participants = actors.filter((actor) => actor.eligibleFromRound <= round)
         cursor = 0
       }
+
       turnState =
         cursor < 0
           ? undefined
@@ -190,8 +218,10 @@ export class TurnCoordinator {
       revision++
       turnState = Object.freeze({ ...this.snapshot, phaseId: this.phases[phaseIndex]!, revision })
     }
+
     if (!Number.isSafeInteger(round) || !Number.isSafeInteger(revision))
       throw new RangeError('Turn state exceeds the safe counter range')
+
     return {
       previous: this.snapshot,
       turnState,

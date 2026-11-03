@@ -15,6 +15,7 @@ export interface IContainerBuilder {
 }
 
 const category = 'ContainerBuilder'
+
 export class ContainerBuilder implements IContainerBuilder {
   constructor(
     private readonly config: EngineRuntimeConfig,
@@ -49,8 +50,10 @@ export class ContainerBuilder implements IContainerBuilder {
           this.fetcher,
         ),
     })
+
     const logger = container.resolve('logger')
     logger.info(category, 'Container built successfully.')
+
     return container
   }
 }

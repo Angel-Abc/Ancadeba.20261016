@@ -34,15 +34,19 @@ function createPreview() {
   const fetcher = vi
     .fn<typeof fetch>()
     .mockImplementation(async () => new Response(JSON.stringify(gameDefinition('Preview'))))
+
   const cleanup = vi.fn<() => void>()
   const host = { mount: vi.fn<IEngineHost['mount']>().mockReturnValue(cleanup) }
+
   const logger: ILogger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: () => '',
   }
+
   const onStateChange = vi.fn<PreviewStateListener>()
+
   const createInstance = vi.fn(
     (folder: string) =>
       new Engine(
@@ -55,7 +59,9 @@ function createPreview() {
         runtime,
       ),
   )
+
   const controller = new EditorPreviewController(createInstance, onStateChange)
+
   return { controller, fetcher, host, cleanup, onStateChange, createInstance }
 }
 

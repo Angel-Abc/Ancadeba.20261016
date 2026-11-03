@@ -21,6 +21,7 @@ export class GameMessageScopes {
 
   shouldDeliver(payload: EngineMessages[keyof EngineMessages]): boolean {
     if (typeof payload !== 'object' || payload === null) return true
+
     return this.owners.get(payload)?.active ?? true
   }
 }
@@ -44,9 +45,11 @@ export class GameMessageScope implements IMessageBus<EngineMessages> {
     payload: EngineMessages[Topic],
   ): void {
     if (this.disposed) return
+
     if (typeof payload !== 'object' || payload === null)
       throw new TypeError('Game messages require object payloads')
     const owner = this.owners.get(payload)
+
     if (owner && owner !== this) throw new Error('A message already belongs to another game')
     this.owners.set(payload, this)
     this.messages.publish(topic, payload)

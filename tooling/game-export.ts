@@ -28,6 +28,7 @@ export interface GameExportResult {
 
 const engineRoot = fileURLToPath(new URL('../apps/engine/', import.meta.url))
 const excludedNames = new Set(['.git', '.hg', '.svn', 'node_modules', '.DS_Store', 'Thumbs.db'])
+
 const validationLogger: ILogger = {
   debug: () => '',
   info: () => '',
@@ -41,6 +42,7 @@ function hasCode(error: unknown, code: string): boolean {
 
 function contains(parent: string, child: string): boolean {
   const path = relative(parent, child)
+
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
 }
 
@@ -49,6 +51,7 @@ async function canonicalPath(path: string): Promise<string> {
     return await realpath(path)
   } catch (error) {
     if (!hasCode(error, 'ENOENT') || dirname(path) === path) throw error
+
     return join(await canonicalPath(dirname(path)), basename(path))
   }
 }
@@ -60,6 +63,7 @@ async function requireNewDestination(path: string): Promise<void> {
     if (hasCode(error, 'ENOENT')) return
     throw error
   }
+
   throw new Error(`Export destination already exists: ${path}. Choose a new output directory.`)
 }
 
@@ -67,12 +71,15 @@ async function copyGame(source: string, destination: string): Promise<number> {
   await mkdir(destination)
   const entries = await readdir(source)
   let fileCount = 0
+
   for (const name of entries.sort()) {
     if (excludedNames.has(name) || name === '.env' || name.startsWith('.env.')) continue
     const from = join(source, name)
     const to = join(destination, name)
     const info = await lstat(from)
+
     if (info.isSymbolicLink()) throw new Error(`Game exports cannot contain links: ${from}`)
+
     if (info.isDirectory()) {
       fileCount += await copyGame(from, to)
     } else if (info.isFile()) {
@@ -82,33 +89,41 @@ async function copyGame(source: string, destination: string): Promise<number> {
       throw new Error(`Game exports only support regular files and directories: ${from}`)
     }
   }
+
   return fileCount
 }
 
 export async function exportGame(options: GameExportOptions): Promise<GameExportResult> {
   const source = resolve(options.gameDirectory)
   const sourceInfo = await lstat(source)
+
   if (sourceInfo.isSymbolicLink() || !sourceInfo.isDirectory()) {
     throw new Error('The game source must be a directory, not a file or link')
   }
+
   const gameDirectory = await realpath(source)
   const outputDirectory = await canonicalPath(resolve(options.outputDirectory))
+
   if (contains(gameDirectory, outputDirectory) || contains(outputDirectory, gameDirectory)) {
     throw new Error('The game source and export destination must not overlap')
   }
+
   await requireNewDestination(outputDirectory)
 
   const parent = dirname(outputDirectory)
   await mkdir(parent, { recursive: true })
   const staging = await mkdtemp(join(parent, '.game-export-'))
+
   try {
     const fileCount = await copyGame(gameDirectory, join(staging, 'game'))
+
     try {
       const source = {
         readText: (path: string) => readFile(join(staging, 'game', path), 'utf8'),
         readBytes: async (path: string) =>
           new Uint8Array(await readFile(join(staging, 'game', path))),
       }
+
       await new GameLoader(new JsonResourceLoader(source, validationLogger)).load()
     } catch (error) {
       throw new Error(
@@ -135,6 +150,7 @@ export async function exportGame(options: GameExportOptions): Promise<GameExport
 
     await requireNewDestination(outputDirectory)
     await rename(staging, outputDirectory)
+
     return { outputDirectory, fileCount }
   } finally {
     // Only remove the temporary sibling created for this export.

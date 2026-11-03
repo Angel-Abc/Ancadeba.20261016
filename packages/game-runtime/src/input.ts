@@ -37,6 +37,7 @@ export class InputController implements IGameInput {
         new Map(Object.entries(mappings)),
       ]),
     )
+
     if (!this.contexts.has(data.initialContext)) throw new Error('Unknown initial input context')
     this.activeContext = data.initialContext
   }
@@ -47,14 +48,18 @@ export class InputController implements IGameInput {
 
   isKeyMapped(code: string): boolean {
     const key = this.keyboard.get(code)
+
     return !this.disposed && key !== undefined && this.contexts.get(this.context)?.has(key) === true
   }
 
   setContext(id: string): void {
     if (this.disposed) return
+
     if (!this.contexts.has(id)) throw new Error(`Unknown input context: ${id}`)
+
     if (id === this.context) return
     this.cancelInputs()
+
     for (const code of this.held.keys()) this.suppressed.add(code)
     this.activeContext = id
   }
@@ -62,11 +67,14 @@ export class InputController implements IGameInput {
   pressKey(code: string): boolean {
     if (this.disposed) return false
     const key = this.keyboard.get(code)
+
     if (key === undefined) return false
+
     if (!this.held.has(code)) {
       this.held.set(code, key)
       this.reconcile()
     }
+
     return this.isKeyMapped(code) && !this.suppressed.has(code)
   }
 
@@ -75,6 +83,7 @@ export class InputController implements IGameInput {
     const accepted = this.isKeyMapped(code) && !this.suppressed.has(code)
     this.suppressed.delete(code)
     this.reconcile()
+
     return accepted
   }
 
@@ -105,11 +114,15 @@ export class InputController implements IGameInput {
     )
     const mappings = this.contexts.get(this.context)!
     const next = new Set<string>()
+
     for (const key of this.virtualKeys) {
       const input = mappings.get(key)
+
       if (input !== undefined) next.add(input)
     }
+
     for (const input of this.inputs) if (!next.has(input)) this.publish(input, 'released')
+
     for (const input of next) if (!this.inputs.has(input)) this.publish(input, 'pressed')
     this.inputs = next
   }

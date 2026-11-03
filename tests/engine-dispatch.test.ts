@@ -17,6 +17,7 @@ class TestTiming implements EngineRuntimeServices {
     schedule: (run: () => void, delay: number) => {
       const task = { run, dueAt: this.now + delay, cancelled: false, ran: false }
       this.tasks.push(task)
+
       return () => {
         task.cancelled = true
       }
@@ -25,6 +26,7 @@ class TestTiming implements EngineRuntimeServices {
 
   runNext(): void {
     const task = this.tasks.find((task) => !task.ran && !task.cancelled && task.dueAt <= this.now)
+
     if (!task) throw new Error('No due task')
     task.ran = true
     task.run()
@@ -32,6 +34,7 @@ class TestTiming implements EngineRuntimeServices {
 
   drain(): void {
     let passes = 0
+
     while (this.tasks.some((task) => !task.ran && !task.cancelled && task.dueAt <= this.now)) {
       if (++passes > 100) throw new Error('Dispatch did not become idle')
       this.runNext()
@@ -57,12 +60,14 @@ function createInstance(
   options: { timing?: TestTiming; loader?: IGameLoader; host?: IEngineHost } = {},
 ) {
   const timing = options.timing ?? new TestTiming()
+
   const logger = {
     debug: () => '',
     info: () => '',
     warn: () => '',
     error: vi.fn(() => ''),
   } satisfies ILogger
+
   const engine = new Engine(
     options.loader ?? { load: async () => game },
     options.host ?? { mount: () => () => {} },
@@ -70,6 +75,7 @@ function createInstance(
     () => new MessageBus<EngineMessages>(),
     timing,
   )
+
   return { engine, timing, logger }
 }
 
@@ -108,20 +114,24 @@ describe('automatic engine-session dispatch', () => {
     const timing = new TestTiming()
     const inputEvents: string[] = []
     const wakeup = vi.fn()
+
     const { engine } = createInstance({
       timing,
       host: {
         mount: (_game, session) => {
           session.messages.subscribe('input.virtual', (event) => {
             inputEvents.push(event.phase)
+
             if (event.phase === 'pressed') session.input!.releaseKey('KeyW')
           })
           session.messages.subscribe('timer.wakeup', wakeup)
           session.timers.schedule(0)
+
           return () => {}
         },
       },
     })
+
     await engine.start()
     timing.drain()
     expect(wakeup).toHaveBeenCalledExactlyOnceWith({ timerId: 1, dueAt: 0, observedAt: 0 })
@@ -176,6 +186,7 @@ describe('automatic engine-session dispatch', () => {
     bus.subscribe('engine.stopped', stopped)
     bus.publish('input.virtual', { context: 'gameplay', input: 'ignored', phase: 'pressed' })
     engine.flushMessages()
+
     for (const task of timing.tasks) task.run()
     expect(input).not.toHaveBeenCalled()
     expect(wakeup).not.toHaveBeenCalled()
@@ -215,6 +226,7 @@ describe('automatic engine-session dispatch', () => {
 
   it('automatically delivers startup failure without changing rejection behavior', async () => {
     const failure = new Error('Load failed')
+
     const { engine, timing } = createInstance({
       loader: {
         load: async () => {
@@ -222,6 +234,7 @@ describe('automatic engine-session dispatch', () => {
         },
       },
     })
+
     const starting = engine.start()
     const failed = vi.fn()
     const stopped = vi.fn()
@@ -237,12 +250,15 @@ describe('automatic engine-session dispatch', () => {
 
   it('handles cancellation during loading and ignores late completion after restart', async () => {
     let resolve!: (game: GameData) => void
+
     const pending = new Promise<GameData>((complete) => {
       resolve = complete
     })
+
     const loader = {
       load: vi.fn<IGameLoader['load']>().mockReturnValueOnce(pending).mockResolvedValue(game),
     }
+
     const { engine, timing } = createInstance({ loader })
     const first = engine.start()
     const stopped = vi.fn()
@@ -271,9 +287,11 @@ describe('automatic engine-session dispatch', () => {
     const failed = vi.fn()
     const received = vi.fn()
     engine.messages!.subscribe('engine.failed', failed)
+
     const unsubscribe = engine.messages!.subscribe('input.virtual', () => {
       throw failure
     })
+
     engine.messages!.subscribe('input.virtual', received)
     engine.input!.pressKey('KeyW')
     timing.runNext()
@@ -295,6 +313,7 @@ describe('automatic engine-session dispatch', () => {
 
   it('retains synchronous cleanup errors and delivers terminal notifications', async () => {
     const failure = new Error('Cleanup failed')
+
     const { engine, timing } = createInstance({
       host: {
         mount: () => () => {
@@ -302,6 +321,7 @@ describe('automatic engine-session dispatch', () => {
         },
       },
     })
+
     await engine.start()
     timing.drain()
     const failed = vi.fn()

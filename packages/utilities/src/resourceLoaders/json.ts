@@ -4,6 +4,7 @@ import type { IResourceSource } from '../resourceSources/index.js'
 import type { IJsonResourceLoader } from './index.js'
 
 const logName = 'JsonResourceLoader'
+
 export class JsonResourceLoader implements IJsonResourceLoader {
   constructor(
     private readonly source: IResourceSource,
@@ -13,6 +14,7 @@ export class JsonResourceLoader implements IJsonResourceLoader {
     this.logger.debug(logName, 'Loading JSON resource from path: {0}', path)
 
     let text: string
+
     try {
       text = await this.source.readText(path)
     } catch (error) {
@@ -22,6 +24,7 @@ export class JsonResourceLoader implements IJsonResourceLoader {
     }
 
     let json: unknown
+
     try {
       json = JSON.parse(text)
     } catch (error) {
@@ -31,6 +34,7 @@ export class JsonResourceLoader implements IJsonResourceLoader {
     }
 
     const parseResult = schema.safeParse(json)
+
     if (!parseResult.success) {
       this.logger.error(
         logName,
@@ -48,6 +52,7 @@ export class JsonResourceLoader implements IJsonResourceLoader {
       path,
       result,
     )
+
     return result
   }
 }

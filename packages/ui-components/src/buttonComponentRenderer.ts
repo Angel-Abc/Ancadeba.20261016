@@ -15,10 +15,13 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     const action = component.action
     element.disabled = !action || !context.onButtonActivate
     let active = true
+
     const onClick = () => {
       if (active && action) context.onButtonActivate?.(action)
     }
+
     if (!element.disabled) element.addEventListener('click', onClick)
+
     return {
       element,
       dispose() {

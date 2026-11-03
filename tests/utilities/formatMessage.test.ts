@@ -18,6 +18,7 @@ describe('formatMessageForConsole', () => {
     const first = { id: 1 }
     const second = { id: 2 }
     const unused = new Error('Details')
+
     const result = formatMessageForConsole(
       '{2} {0} {2} {1}',
       first,

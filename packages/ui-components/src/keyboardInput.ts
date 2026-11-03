@@ -25,6 +25,7 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     tracked.clear()
     input.reset()
   }
+
   const hasFocus = () =>
     !document.hidden &&
     surface.contains(document.activeElement) &&
@@ -32,31 +33,44 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (!hasFocus() || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
+
     if (event.repeat) {
       if (tracked.has(event.code) && input.isKeyMapped(event.code)) event.preventDefault()
+
       return
     }
+
     tracked.add(event.code)
+
     if (input.pressKey(event.code)) event.preventDefault()
   }
+
   const onKeyUp = (event: KeyboardEvent) => {
     // Releases must reach the sink even if the modifier state changed after keydown.
     if (!tracked.delete(event.code)) return
+
     if (input.releaseKey(event.code)) event.preventDefault()
   }
+
   const onFocusIn = () => {
     if (usesNativeKeyboard(document.activeElement)) reset()
   }
+
   const onFocusOut = (event: FocusEvent) => {
     const target = event.relatedTarget
+
     if (!target || !('nodeType' in target) || target.nodeType !== 1) {
       reset()
+
       return
     }
+
     // SAFETY: nodeType 1 identifies an Element, including elements from another browsing context.
     const element = target as Element
+
     if (!surface.contains(element) || usesNativeKeyboard(element)) reset()
   }
+
   const onVisibilityChange = () => {
     if (document.hidden) reset()
   }

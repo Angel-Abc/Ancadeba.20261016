@@ -5,9 +5,11 @@ import { validateProject } from './validation.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
+
   if (!parsed.success) throw new EditorError(400, 'invalid_command', 'Invalid editing command')
   const command = parsed.data
   const diagnostics = validateProject(project.documents, project.sourceDiagnostics)
+
   if (diagnostics.length)
     throw new EditorError(
       422,
@@ -18,6 +20,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const documents = { ...project.documents }
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
+
   if (command.type === 'game.updateMetadata') {
     documents['game.json'] = {
       ...object(documents['game.json']),
@@ -28,9 +31,11 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     changedFiles.push('game.json')
   } else if (command.type === 'scene.create') {
     const file = `scenes/${command.scene.id}.json`
+
     if (game.scenes.includes(command.scene.id) || Object.hasOwn(documents, file)) {
       throw new EditorError(409, 'scene_exists', 'Scene ID already exists')
     }
+
     // Clone the validated scene, including extension properties and normalized metadata.
     documents[file] = JSON.parse(JSON.stringify(command.scene))
     documents['game.json'] = {
@@ -44,6 +49,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     const file = `scenes/${command.sceneId}.json`
     const source = object(documents[file])
     sceneSchema.parse(source)
+
     if (command.type === 'scene.updateMetadata') {
       documents[file] = { ...source, title: command.title, description: command.description }
     } else {
@@ -56,9 +62,12 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
         },
       }
     }
+
     changedFiles.push(file)
   }
+
   const resultingDiagnostics = validateProject(documents)
+
   if (resultingDiagnostics.length)
     throw new EditorError(
       422,
@@ -66,6 +75,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
       'Change produces an invalid project',
       resultingDiagnostics,
     )
+
   return {
     project: { revision: project.revision, documents },
     changedFiles,

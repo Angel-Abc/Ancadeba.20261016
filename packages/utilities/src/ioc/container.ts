@@ -35,6 +35,7 @@ export class Container<S> implements Resolver<S> {
     try {
       const instance = factory(this)
       this.instances.set(key, instance)
+
       return instance
     } finally {
       this.resolving.delete(key)

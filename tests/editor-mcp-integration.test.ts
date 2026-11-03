@@ -23,6 +23,7 @@ const manifest = {
   scenes: [],
   extension: 'preserved',
 }
+
 const scene = {
   'schema-version': '1.0.0',
   id: 'shop',
@@ -32,6 +33,7 @@ const scene = {
   screen: { type: 'grid', grid: { rows: 12, columns: 16 } },
   components: [],
 }
+
 describe('MCP and shared editor integration', () => {
   let root: string
   let base: string
@@ -73,9 +75,11 @@ describe('MCP and shared editor integration', () => {
     )
     await rm(root, { recursive: true, force: true })
   })
+
   async function inspect() {
     const result = await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(result.isError).toBe(false)
+
     // SAFETY: the successful inspect tool wraps our fixture game and revision in data.
     return (
       result.structuredContent as {
@@ -86,6 +90,7 @@ describe('MCP and shared editor integration', () => {
 
   it('creates and edits saved scenes visible through the visual editor HTTP contract', async () => {
     let revision = (await inspect()).revision
+
     const operations = [
       { name: 'ancadeba_create_scene', arguments: { scene } },
       {
@@ -101,17 +106,20 @@ describe('MCP and shared editor integration', () => {
         arguments: { title: 'MCP game', description: '', version: '2' },
       },
     ]
+
     for (const operation of operations) {
       const result = await client.callTool({
         name: operation.name,
         arguments: { ...operation.arguments, expectedRevision: revision },
       })
+
       expect(result.isError).toBe(false)
       // SAFETY: each successful mutation returns the newly saved revision in data.
       const data = (result.structuredContent as { data: { revision: string } }).data
       expect(data.revision).not.toBe(revision)
       revision = data.revision
     }
+
     const view = await (await fetch(`${base}/api/editor/project?path=basic`)).json()
     expect(view).toMatchObject({
       revision,
@@ -130,20 +138,24 @@ describe('MCP and shared editor integration', () => {
       body: JSON.stringify({ ...manifest, title: 'Human edit' }),
     })
     const command = { title: 'Reviewed change', description: '', version: '1' }
+
     const failed = await client.callTool({
       name: 'ancadeba_update_game_metadata',
       arguments: { expectedRevision: stale, ...command },
     })
+
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({
       error: { code: 'revision_conflict', status: 409 },
     })
     const fresh = await inspect()
     expect(fresh.game.title).toBe('Human edit')
+
     const retried = await client.callTool({
       name: 'ancadeba_update_game_metadata',
       arguments: { expectedRevision: fresh.revision, ...command },
     })
+
     expect(retried.isError).toBe(false)
     expect((await inspect()).game.title).toBe('Reviewed change')
   })
@@ -163,31 +175,38 @@ describe('MCP and shared editor integration', () => {
         },
       ],
     }
+
     const created = await client.callTool({
       name: 'ancadeba_create_scene',
       arguments: { expectedRevision: (await inspect()).revision, scene: textScene },
     })
+
     expect(created.isError).toBe(false)
     const initial = await inspect()
+
     const inspected = await client.callTool({
       name: 'ancadeba_inspect_scene',
       arguments: { sceneId: 'shop' },
     })
+
     expect(inspected.isError).toBe(false)
     expect(inspected.structuredContent).toMatchObject({
       data: { revision: initial.revision, scene: textScene },
     })
     const before = await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')
+
     const invalid = await client.callTool({
       name: 'ancadeba_update_scene_layout',
       arguments: { expectedRevision: initial.revision, sceneId: 'shop', rows: 11, columns: 16 },
     })
+
     expect(invalid.isError).toBe(true)
     expect(invalid.structuredContent).toMatchObject({
       error: { code: 'invalid_project', outcome: 'not_applied' },
     })
     expect(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')).toBe(before)
     expect((await inspect()).revision).toBe(initial.revision)
+
     const updated = await client.callTool({
       name: 'ancadeba_update_scene_metadata',
       arguments: {
@@ -197,6 +216,7 @@ describe('MCP and shared editor integration', () => {
         description: 'Current score',
       },
     })
+
     expect(updated.isError).toBe(false)
     expect(JSON.parse(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8'))).toEqual({
       ...textScene,
@@ -213,10 +233,12 @@ describe('MCP and shared editor integration', () => {
     expect(invalid.diagnostics).toMatchObject([
       { code: 'missing_file', file: 'scenes/missing.json' },
     ])
+
     const result = await client.callTool({
       name: 'ancadeba_update_game_metadata',
       arguments: { expectedRevision: invalid.revision, title: 'X', description: '', version: '1' },
     })
+
     expect(result.isError).toBe(true)
     expect(result.structuredContent).toMatchObject({
       error: { code: 'invalid_project', diagnostics: [{ file: 'scenes/missing.json' }] },
@@ -227,11 +249,15 @@ describe('MCP and shared editor integration', () => {
     const initial = await inspect()
     const load = repository.load.bind(repository)
     let loads = 0
+
     const failure = vi.spyOn(repository, 'load').mockImplementation(async (folder) => {
       loads++
+
       if (loads === 2) throw new WorkspaceError(404, 'Resource not found')
+
       return load(folder)
     })
+
     try {
       const result = await client.callTool({
         name: 'ancadeba_update_game_metadata',
@@ -242,6 +268,7 @@ describe('MCP and shared editor integration', () => {
           version: '1',
         },
       })
+
       expect(result.isError).toBe(true)
       expect(result.structuredContent).toMatchObject({
         error: { code: 'not_found', status: 404, outcome: 'unknown' },
@@ -253,6 +280,7 @@ describe('MCP and shared editor integration', () => {
     } finally {
       failure.mockRestore()
     }
+
     expect((await inspect()).game.title).toBe('Saved before reread failure')
   })
 })
