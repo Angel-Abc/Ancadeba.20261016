@@ -59,14 +59,16 @@
         "rowSpan": 8,
         "columnSpan": 5
       },
-      "alt": "A second adventurer with an independent appearance",
+      "alt": "A second adventurer wearing a ranger tunic and carrying a curved saber",
       "appearance": {
         "slots": {
           "tunic": {
-            "palette": "royal"
+            "palette": "royal",
+            "part": "ranger-tunic-part"
           },
           "sword": {
-            "palette": "obsidian"
+            "palette": "obsidian",
+            "part": "saber-part"
           },
           "cloak": {
             "part": null
@@ -107,7 +109,7 @@
     {
       "id": "caption",
       "type": "text",
-      "text": "Shared artwork. Independent palettes. One cloak selection controls both its rear fabric and front clasp.",
+      "text": "Swap a wayfarer tunic for a ranger tunic, or a straight sword for a curved saber. Shared color slots keep each look customizable.",
       "placement": {
         "row": 10,
         "column": 1,

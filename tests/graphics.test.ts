@@ -160,6 +160,86 @@ describe('graphics definitions and source profile', () => {
 })
 
 describe('appearance resolution', () => {
+  it('swaps sample silhouettes independently while retaining bound colors and materials after removal', () => {
+    const state = {
+      tunic: 'tunic-part',
+      sword: 'sword-part',
+      fabric: '#2468ac',
+      material: 'bronze',
+    }
+
+    const bindings = new GameBindings(
+      { state: () => state, progression: () => ({ turn: 0, worldTimeMs: 0 }) },
+      new MessageBus<EngineMessages>(),
+    )
+
+    const bind = (key: string) => ({ source: 'game.state', path: [key] })
+
+    const appearance = graphicAppearanceSchema.parse({
+      slots: {
+        tunic: {
+          palette: 'royal',
+          partBinding: bind('tunic'),
+          bindings: { colors: { fabric: bind('fabric') } },
+        },
+        sword: { partBinding: bind('sword'), bindings: { palette: bind('material') } },
+      },
+    })
+
+    try {
+      for (const tunic of ['tunic-part', 'ranger-tunic-part']) {
+        for (const sword of ['sword-part', 'saber-part']) {
+          state.tunic = tunic
+          state.sword = sword
+          const doll = resolveGraphic(catalog, 'paper-doll', appearance, bindings)
+          const clothes = doll.pieces.find((piece) => piece.layer === 'clothes')!
+          const weapon = doll.pieces.find((piece) => piece.layer === 'sword')!
+          expect(doll.diagnostics).toEqual([])
+          expect(clothes.imageId).toBe(tunic === 'tunic-part' ? 'tunic' : 'ranger-tunic')
+          expect(weapon.imageId).toBe(sword === 'sword-part' ? 'sword' : 'saber')
+          expect(clothes.colors.fabric).toBe(state.fabric)
+          expect(clothes.colors).toEqual(
+            resolveGraphic(
+              catalog,
+              clothes.imageId,
+              graphicAppearanceSchema.parse({ palette: 'royal', colors: { fabric: state.fabric } }),
+            ).pieces[0]?.colors,
+          )
+          expect(weapon.colors).toEqual(
+            resolveGraphic(
+              catalog,
+              weapon.imageId,
+              graphicAppearanceSchema.parse({ palette: state.material }),
+            ).pieces[0]?.colors,
+          )
+          expect(weapon.transform).toBe(
+            'translate(250 257) rotate(12) scale(0.7) translate(-40 -215)',
+          )
+        }
+      }
+
+      state.tunic = ''
+      state.sword = ''
+      expect(
+        resolveGraphic(catalog, 'paper-doll', appearance, bindings).pieces.map(
+          (piece) => piece.layer,
+        ),
+      ).toEqual(['rear', 'body', 'hands', 'clasp'])
+      state.tunic = 'ranger-tunic-part'
+      state.sword = 'saber-part'
+      const restored = resolveGraphic(catalog, 'paper-doll', appearance, bindings)
+      expect(restored.pieces.find((piece) => piece.layer === 'clothes')?.colors.fabric).toBe(
+        '#2468ac',
+      )
+      expect(restored.pieces.find((piece) => piece.layer === 'sword')?.colors.blade).toBe('#b98249')
+      const other = resolveGraphic(catalog, 'paper-doll', graphicAppearanceSchema.parse({}))
+      expect(other.pieces.find((piece) => piece.layer === 'clothes')?.imageId).toBe('tunic')
+      expect(other.pieces.find((piece) => piece.layer === 'sword')?.imageId).toBe('sword')
+    } finally {
+      bindings.dispose()
+    }
+  })
+
   it('orders grouped cloak pieces around the body and maps shared palette slots to both images', () => {
     const appearance = graphicAppearanceSchema.parse({
       slots: { cloak: { colors: { fabric: '#112233', metal: '#aabbcc' } } },

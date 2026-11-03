@@ -7,7 +7,13 @@ older ignored `assets` arrays remain passive metadata rather than catalogues.
 
 `sample-games/graphics` is the complete reference game: two independent characters,
 matching item icons, tunic palettes, sword materials, and a cloak with rear fabric
-and a front clasp selected together. Export it using:
+and a front clasp selected together. In the editor's Assets panel, select `paper-doll`
+to swap `tunic-part` (wayfarer) with `ranger-tunic-part` (longer, split hem), and
+`sword-part` (straight blade) with `saber-part` (curved blade and knuckle guard).
+Both tunics share fabric, trim, and metal slots and the wayfarer/royal/ember presets;
+both swords share blade, edge, hilt, and grip slots and the steel/bronze/obsidian
+presets. The gallery shows both silhouettes; the ember scene uses the alternate
+parts with matching item previews. Export it using:
 
 ```sh
 pnpm export:game sample-games/graphics

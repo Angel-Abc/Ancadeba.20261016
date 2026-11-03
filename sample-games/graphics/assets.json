@@ -120,6 +120,74 @@
         "metal": "#c99b50"
       },
       "palettes": {}
+    },
+    "ranger-tunic": {
+      "format": "svg",
+      "source": "assets/images/ranger-tunic.svg",
+      "bounds": {
+        "x": 62,
+        "y": 120,
+        "width": 196,
+        "height": 210
+      },
+      "colors": {
+        "fabric": "#397c73",
+        "trim": "#e4c58b",
+        "metal": "#c99b50"
+      },
+      "palettes": {
+        "wayfarer": {
+          "fabric": "#397c73",
+          "trim": "#e4c58b",
+          "metal": "#c99b50"
+        },
+        "royal": {
+          "fabric": "#665191",
+          "trim": "#e7c783",
+          "metal": "#c99b50"
+        },
+        "ember": {
+          "fabric": "#ac4f42",
+          "trim": "#e8d9ba",
+          "metal": "#b9c7cf"
+        }
+      }
+    },
+    "saber": {
+      "format": "svg",
+      "source": "assets/images/saber.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 260
+      },
+      "colors": {
+        "blade": "#a5bbc8",
+        "edge": "#e4f0f2",
+        "hilt": "#c99b50",
+        "grip": "#685044"
+      },
+      "palettes": {
+        "steel": {
+          "blade": "#a5bbc8",
+          "edge": "#e4f0f2",
+          "hilt": "#c99b50",
+          "grip": "#685044"
+        },
+        "bronze": {
+          "blade": "#b98249",
+          "edge": "#f0c78c",
+          "hilt": "#825637",
+          "grip": "#514338"
+        },
+        "obsidian": {
+          "blade": "#4a405f",
+          "edge": "#b5a0d4",
+          "hilt": "#8f80af",
+          "grip": "#373245"
+        }
+      }
     }
   },
   "parts": {
@@ -317,6 +385,109 @@
           "metal": "#c99b50"
         }
       }
+    },
+    "ranger-tunic-part": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 440
+      },
+      "pieces": [
+        {
+          "id": "tunic",
+          "image": "ranger-tunic",
+          "layer": "clothes",
+          "anchor": "origin",
+          "sourceAnchor": {
+            "x": 0,
+            "y": 0
+          },
+          "scale": 1,
+          "rotation": 0,
+          "slots": {
+            "fabric": "fabric",
+            "trim": "trim",
+            "metal": "metal"
+          }
+        }
+      ],
+      "colors": {
+        "fabric": "#397c73",
+        "trim": "#e4c58b",
+        "metal": "#c99b50"
+      },
+      "palettes": {
+        "wayfarer": {
+          "fabric": "#397c73",
+          "trim": "#e4c58b",
+          "metal": "#c99b50"
+        },
+        "royal": {
+          "fabric": "#665191",
+          "trim": "#e7c783",
+          "metal": "#c99b50"
+        },
+        "ember": {
+          "fabric": "#ac4f42",
+          "trim": "#e8d9ba",
+          "metal": "#b9c7cf"
+        }
+      }
+    },
+    "saber-part": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 80,
+        "height": 260
+      },
+      "pieces": [
+        {
+          "id": "blade",
+          "image": "saber",
+          "layer": "sword",
+          "anchor": "right-hand",
+          "sourceAnchor": {
+            "x": 40,
+            "y": 215
+          },
+          "scale": 0.7,
+          "rotation": 12,
+          "slots": {
+            "blade": "blade",
+            "edge": "edge",
+            "hilt": "hilt",
+            "grip": "grip"
+          }
+        }
+      ],
+      "colors": {
+        "blade": "#a5bbc8",
+        "edge": "#e4f0f2",
+        "hilt": "#c99b50",
+        "grip": "#685044"
+      },
+      "palettes": {
+        "steel": {
+          "blade": "#a5bbc8",
+          "edge": "#e4f0f2",
+          "hilt": "#c99b50",
+          "grip": "#685044"
+        },
+        "bronze": {
+          "blade": "#b98249",
+          "edge": "#f0c78c",
+          "hilt": "#825637",
+          "grip": "#514338"
+        },
+        "obsidian": {
+          "blade": "#4a405f",
+          "edge": "#b5a0d4",
+          "hilt": "#8f80af",
+          "grip": "#373245"
+        }
+      }
     }
   },
   "compositions": {
@@ -344,11 +515,11 @@
           "default": "adventurer"
         },
         "tunic": {
-          "parts": ["tunic-part"],
+          "parts": ["tunic-part", "ranger-tunic-part"],
           "default": "tunic-part"
         },
         "sword": {
-          "parts": ["sword-part"],
+          "parts": ["sword-part", "saber-part"],
           "default": "sword-part"
         },
         "cloak": {
