@@ -27,9 +27,16 @@ export function mountGameView(
   const root = document.createElement('section')
   root.className = 'ancadeba-game'
   root.tabIndex = 0
-  root.setAttribute('aria-label', game.title)
+  const localization = options.localization ?? game.localization
 
-  if (game.language) root.setAttribute('lang', game.language)
+  const syncMetadata = () => {
+    const content = localization?.current ?? game
+    root.setAttribute('aria-label', content.title)
+
+    if (content.language) root.setAttribute('lang', content.language)
+  }
+
+  syncMetadata()
   const viewport = document.createElement('div')
   viewport.className = 'ancadeba-scene-viewport'
   const cleanups: (() => void)[] = []
@@ -61,6 +68,8 @@ export function mountGameView(
   }
 
   try {
+    if (localization) cleanups.push(localization.subscribe(syncMetadata))
+
     if (options.scenePicker) {
       const label = document.createElement('label')
       label.className = 'ancadeba-scene-picker'
@@ -76,12 +85,24 @@ export function mountGameView(
       empty.textContent = options.scenePickerLabels?.empty ?? 'No active scene'
       select.append(empty)
 
-      for (const scene of game.scenes.values()) {
+      const sceneOptions = new Map<string, HTMLOptionElement>()
+
+      for (const scene of (localization?.current ?? game).scenes.values()) {
         const option = document.createElement('option')
         option.value = scene.id
         option.textContent = scene.title
+        sceneOptions.set(scene.id, option)
         select.append(option)
       }
+
+      if (localization)
+        cleanups.push(
+          localization.subscribe(() => {
+            for (const [id, option] of sceneOptions) {
+              option.textContent = localization.current.scenes.get(id)?.title ?? id
+            }
+          }),
+        )
 
       const syncSelection = () => {
         select.value = session.lifecycle.activeScene?.data.id ?? ''
@@ -114,6 +135,7 @@ export function mountGameView(
 
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
+      localization,
       onButtonActivate: (action) => {
         if (disposed) return
         const scene = game.scenes.get(action.scene)

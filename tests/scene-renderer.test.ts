@@ -20,6 +20,7 @@ import {
 import {
   ComponentRenderer,
   TextComponentRenderer,
+  LanguageSelectComponentRenderer,
   mountGameView,
   SceneRenderer,
   type IComponentRenderer,
@@ -245,6 +246,7 @@ describe('scene renderer', () => {
       new ComponentRenderer({
         text: new TextComponentRenderer(),
         button: buttonRenderer,
+        'language-select': new LanguageSelectComponentRenderer(),
       }),
     )
 
@@ -298,10 +300,10 @@ describe('scene renderer', () => {
 
     const renderer = new SceneRenderer(target.asElement(), lifecycle, {}, components)
     expect(() => lifecycle.enterScene('settings')).toThrow()
-    expect(dispose).toHaveBeenCalledTimes(7)
+    expect(dispose).toHaveBeenCalledTimes(8)
     expect(target.children).toHaveLength(0)
     renderer.dispose()
-    expect(dispose).toHaveBeenCalledTimes(7)
+    expect(dispose).toHaveBeenCalledTimes(8)
   })
 
   it('renders the three sample scenes with exact grid placement and semantic text', async () => {
@@ -555,6 +557,58 @@ describe.each([
   ['engine', (element: HTMLElement): IEngineHost => new DomEngineHost(element)],
   ['editor preview', (element: HTMLElement): IEngineHost => new EditorPreviewHost(element)],
 ] as const)('%s rendering integration', (_name, createHost) => {
+  it('switches settings language immediately while preserving playthrough state and releasing listeners', async () => {
+    const content = await loader.load()
+    const { target } = setup(content)
+    const engine = bindingEngine(content, createHost(target.asElement()))
+    await engine.start()
+    startSampleGame(target)
+    const lifecycle = engine.lifecycle!
+    const playthrough = lifecycle.currentGame!
+    playthrough.actions!.request('damage')
+    flush(engine)
+    lifecycle.enterScene('settings')
+    const settings = lifecycle.activeScene
+
+    const selector = target.find(
+      (element) => element.tagName === 'SELECT' && element.dataset.componentId === 'language',
+    )!
+
+    expect(selector.children.map(({ value, textContent }) => [value, textContent])).toEqual([
+      ['en', 'English'],
+      ['nl', 'Nederlands'],
+    ])
+    selector.value = 'nl'
+    selector.dispatchEvent(new Event('change'))
+    expect(lifecycle.activeScene).toBe(settings)
+    expect(lifecycle.currentGame).toBe(playthrough)
+    expect(target.find((element) => element.dataset.componentId === 'title')?.textContent).toBe(
+      'Instellingen',
+    )
+    expect(
+      target.find(
+        (element) => element.tagName === 'SELECT' && element.dataset.componentId === 'language',
+      )?.value,
+    ).toBe('nl')
+    expect(
+      target.find((element) => element.className === 'ancadeba-game')?.attributes.get('lang'),
+    ).toBe('nl')
+    lifecycle.enterScene('standard')
+    expect(
+      target.find((element) => element.dataset.componentId === 'player-status')?.textContent,
+    ).toContain('Gezondheid 33 / 40')
+    expect(
+      target.find((element) => element.dataset.componentId === 'footer')?.textContent,
+    ).toContain('Beurt 1')
+    selector.value = 'en'
+    selector.dispatchEvent(new Event('change'))
+    expect(content.localization?.current.language).toBe('nl')
+    engine.stop()
+    expect(target.children).toHaveLength(0)
+    content.localization!.select('en')
+    expect(target.children).toHaveLength(0)
+  })
+
   it('opens the menu without a playthrough and routes buttons with listener cleanup', async () => {
     const { target } = setup(await loader.load())
 

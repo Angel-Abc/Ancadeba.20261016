@@ -10,6 +10,13 @@ export { TextComponentRenderer } from './textComponentRenderer.js'
 
 export { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 
+export { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
+
+export {
+  BrowserGameLanguagePreferences,
+  type LanguagePreferenceStorage,
+} from './browserGameLanguagePreferences.js'
+
 export type {
   ComponentRenderContext,
   ComponentRendererOptions,

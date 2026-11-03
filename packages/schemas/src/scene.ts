@@ -58,9 +58,23 @@ export const buttonComponentSchema = z
     message: 'A label or labelKey is required',
   })
 
+export const languageSelectComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('language-select'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+  })
+  .refine((component) => Boolean(component.label || component.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
+  languageSelectComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -133,6 +147,8 @@ export type SceneComponentDefinition = z.infer<typeof sceneComponentSchema>
 export type TextComponentDefinition = z.infer<typeof textComponentSchema>
 
 export type ButtonComponentDefinition = z.infer<typeof buttonComponentSchema>
+
+export type LanguageSelectComponentDefinition = z.infer<typeof languageSelectComponentSchema>
 
 export type ButtonActionDefinition = z.infer<typeof buttonActionSchema>
 

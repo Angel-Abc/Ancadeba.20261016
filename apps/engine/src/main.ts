@@ -1,7 +1,7 @@
 import './styling/main.css'
 import '@ancadeba/ui-components/game.css'
 import type { IEngine } from '@ancadeba/game-runtime'
-import { createBrowserTiming } from '@ancadeba/ui-components'
+import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
@@ -26,9 +26,11 @@ document.documentElement.lang = uiLanguage
 
 let engine: IEngine | undefined
 let disposed = false
+let unsubscribeLanguage: (() => void) | undefined
 
 import.meta.hot?.dispose(() => {
   disposed = true
+  unsubscribeLanguage?.()
   engine?.stop()
 })
 
@@ -43,10 +45,21 @@ try {
       new DomEngineHost(app),
       createBrowserTiming(window),
       preferredLanguages,
+      new BrowserGameLanguagePreferences(() => window.localStorage),
     ).build()
 
     engine = container.resolve('engine')
     await engine.start()
+
+    const localization = engine.game?.localization
+
+    if (!disposed && requestedLanguage && localization) {
+      unsubscribeLanguage = localization.subscribe(() => {
+        const url = new URL(window.location.href)
+        url.searchParams.set('language', localization.current.language)
+        window.history.replaceState(window.history.state, '', url)
+      })
+    }
   }
 } catch (error) {
   if (!disposed) {

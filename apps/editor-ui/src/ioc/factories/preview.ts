@@ -5,6 +5,7 @@ import {
   type IEngine,
   type IEngineHost,
   type EngineRuntimeServices,
+  type GameLanguagePreferences,
 } from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
@@ -23,6 +24,7 @@ export interface PreviewDependencies {
   logger: ILogger
   onPreviewStateChange: PreviewStateListener
   getPreferredGameLanguages?: () => readonly string[]
+  gameLanguagePreferences?: GameLanguagePreferences
 }
 
 export interface PreviewServices {
@@ -40,12 +42,14 @@ export const previewFactories = {
     const createMessageBus = resolver.resolve('createMessageBus')
     const runtime = resolver.resolve('runtime')
     const getPreferredLanguages = resolver.resolve('getPreferredGameLanguages')
+    const languagePreferences = resolver.resolve('gameLanguagePreferences')
 
     return (folder: string) =>
       new Engine(
         new GameLoader(
           new JsonResourceLoader(new EditorWorkspaceResources(folder, fetcher), logger),
           getPreferredLanguages?.() ?? [],
+          languagePreferences,
         ),
         host,
         logger,

@@ -4,9 +4,11 @@ import type {
   SceneDefinition,
   TextComponentDefinition,
   ButtonComponentDefinition,
+  LanguageSelectComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import { assertGameLanguages } from '@ancadeba/schemas'
+import type { IGameLocalization } from './gameLocalization.js'
 
 export interface TextComponentData extends TextTemplate {
   readonly id: string
@@ -24,7 +26,17 @@ export interface ButtonComponentData {
   readonly action?: Readonly<NonNullable<ButtonComponentDefinition['action']>> | undefined
 }
 
-export type SceneComponentData = TextComponentData | ButtonComponentData
+export interface LanguageSelectComponentData {
+  readonly id: string
+  readonly type: 'language-select'
+  readonly label: string
+  readonly placement: Readonly<LanguageSelectComponentDefinition['placement']>
+}
+
+export type SceneComponentData =
+  | TextComponentData
+  | ButtonComponentData
+  | LanguageSelectComponentData
 
 export interface InputData {
   readonly virtualKeys: readonly string[]
@@ -46,6 +58,7 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly localization?: IGameLocalization
   readonly language?: string
   readonly id: string
   readonly title: string
@@ -88,11 +101,13 @@ export function assembleGameData(
       type: scene.type,
       screen: { type: scene.screen.type, grid: { ...scene.screen.grid } },
       components: scene.components.map((component) =>
-        component.type === 'button'
+        component.type !== 'text'
           ? {
               ...component,
               placement: { ...component.placement },
-              ...(component.action ? { action: { ...component.action } } : {}),
+              ...(component.type === 'button' && component.action
+                ? { action: { ...component.action } }
+                : {}),
             }
           : {
               ...component,

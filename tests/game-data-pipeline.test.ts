@@ -128,7 +128,7 @@ describe('game data pipeline', () => {
       presentation: { variant: 'heading', align: 'center' },
     })
     expect(game.scenes.get('inventory')?.components.length).toBe(4)
-    expect(game.scenes.get('settings')?.components.length).toBe(3)
+    expect(game.scenes.get('settings')?.components.length).toBe(4)
   })
 
   it('assembles scenes in manifest order without sharing mutable definition objects', () => {

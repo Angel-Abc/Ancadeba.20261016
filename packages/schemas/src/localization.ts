@@ -63,6 +63,13 @@ export function assertGameLanguages(
 ): void {
   if (game.languages) return
 
+  if (
+    [...scenes.values()].some((scene) =>
+      scene.components.some((component) => component.type === 'language-select'),
+    )
+  )
+    throw new Error('Language selectors require languages in game.json')
+
   const keyed =
     game.titleKey !== undefined ||
     game.descriptionKey !== undefined ||

@@ -12,7 +12,6 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GameLoader } from '@ancadeba/game-runtime'
-import { gameSchema } from '@ancadeba/schemas'
 import { JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
 import { build } from 'vite-plus'
 import { engineRuntimeConfigPlugin } from '../apps/engine/tooling/config.js'
@@ -125,12 +124,7 @@ export async function exportGame(options: GameExportOptions): Promise<GameExport
           new Uint8Array(await readFile(join(staging, 'game', path))),
       }
 
-      const resources = new JsonResourceLoader(source, validationLogger)
-      const definition = await resources.load('game.json', gameSchema)
-
-      for (const language of definition.languages?.available ?? [undefined]) {
-        await new GameLoader(resources, language ? [language] : []).load()
-      }
+      await new GameLoader(new JsonResourceLoader(source, validationLogger)).load()
     } catch (error) {
       throw new Error(
         'Cannot export game: game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid',

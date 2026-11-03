@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { describe, expect, it } from 'vite-plus/test'
-import { GameLoader, resolveText } from '@ancadeba/game-runtime'
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { GameLoader, resolveText, type GameLanguagePreferences } from '@ancadeba/game-runtime'
 import { gameSchema, languageCatalogSchema, selectLanguage } from '@ancadeba/schemas'
 import { validateProject } from '@ancadeba/editor-core'
 import { createTranslator, JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
 import { editorLocalization } from '../apps/editor-ui/src/localization.js'
+import { BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
 import {
   WorkspaceProjectRepository,
   type ProjectWorkspace,
@@ -65,7 +66,11 @@ function documents(): GameFiles {
   }
 }
 
-function loader(files: Record<string, unknown>, preferences: readonly string[] = []) {
+function loader(
+  files: Record<string, unknown>,
+  preferences: readonly string[] = [],
+  storage?: GameLanguagePreferences,
+) {
   return new GameLoader(
     new JsonResourceLoader(
       {
@@ -79,10 +84,62 @@ function loader(files: Record<string, unknown>, preferences: readonly string[] =
       logger,
     ),
     preferences,
+    storage,
   )
 }
 
 describe('game localization', () => {
+  it('remembers language per game, restores it on later loads, and permits explicit overrides', async () => {
+    const saved = new Map<string, string>()
+
+    const write = vi.fn((id: string, language: string) => {
+      saved.set(id, language)
+    })
+
+    const preferences: GameLanguagePreferences = {
+      read: (id) => saved.get(id),
+      write,
+    }
+
+    const files = documents()
+    const first = await loader(files, [], preferences).load()
+    const changed = vi.fn()
+    const unsubscribe = first.localization!.subscribe(changed)
+    expect(first.localization!.current.language).toBe('en')
+    first.localization!.select('nl')
+    first.localization!.select('nl')
+    expect(first.localization!.current.title).toBe('Voorbeeld')
+    expect(first.title).toBe('Voorbeeld')
+    expect(first.language).toBe('nl')
+    expect(changed).toHaveBeenCalledOnce()
+    expect(write).toHaveBeenCalledExactlyOnceWith('localized', 'nl')
+    expect((await loader(files, [], preferences).load()).language).toBe('nl')
+    expect((await loader(files, ['en'], preferences).load()).language).toBe('en')
+    expect(
+      (await loader({ ...files, 'game.json': { ...game, id: 'other' } }, [], preferences).load())
+        .language,
+    ).toBe('en')
+    expect(() => first.localization!.select('../unknown')).toThrow('Unsupported game language')
+    expect(first.localization!.current.language).toBe('nl')
+    unsubscribe()
+    first.localization!.select('en')
+    expect(changed).toHaveBeenCalledOnce()
+    saved.set('localized', 'unsupported')
+    expect((await loader(files, [], preferences).load()).language).toBe('en')
+  })
+
+  it('keeps language switching available when browser storage access fails', async () => {
+    const storage = new BrowserGameLanguagePreferences(() => {
+      throw new Error('Storage blocked')
+    })
+
+    const data = await loader(documents(), [], storage).load()
+    expect(data.language).toBe('en')
+    expect(() => data.localization!.select('nl')).not.toThrow()
+    expect(data.localization!.current.language).toBe('nl')
+    expect((await loader(documents(), [], storage).load()).language).toBe('en')
+  })
+
   it('loads key-only definitions, falls back per key, and resolves translated game bindings', async () => {
     const files = documents()
     const data = await loader(files, ['nl-NL']).load()
@@ -264,6 +321,35 @@ describe('game localization', () => {
 })
 
 describe('application localization', () => {
+  it('stores independent game language preferences and tolerates storage read and write failures', () => {
+    const entries = new Map<string, string>()
+
+    const preferences = new BrowserGameLanguagePreferences(() => ({
+      getItem: (key) => entries.get(key) ?? null,
+      setItem: (key, value) => {
+        entries.set(key, value)
+      },
+    }))
+
+    preferences.write('first', 'nl')
+    preferences.write('second', 'en')
+    expect(preferences.read('first')).toBe('nl')
+    expect(preferences.read('second')).toBe('en')
+    expect(preferences.read('third')).toBeUndefined()
+
+    const blocked = new BrowserGameLanguagePreferences(() => ({
+      getItem: () => {
+        throw new Error('Read blocked')
+      },
+      setItem: () => {
+        throw new Error('Storage full')
+      },
+    }))
+
+    expect(blocked.read('first')).toBeUndefined()
+    expect(() => blocked.write('first', 'nl')).not.toThrow()
+  })
+
   it('matches language tags without using untrusted input as a resource path', () => {
     expect(selectLanguage(['en', 'nl', 'pt-BR'], 'en', ['PT-br'])).toBe('pt-BR')
     expect(selectLanguage(['en', 'nl'], 'en', ['../nl', 'nl-NL'])).toBe('nl')

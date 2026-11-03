@@ -17,12 +17,14 @@
   "scenes.settings.title": "Instellingen",
   "scenes.settings.description": "Een onafhankelijk scherm",
   "scenes.settings.components.title.text": "Instellingen",
-  "scenes.settings.components.reading-preferences.text": "Leesvoorkeuren\n\nRuimte voor prettig leesbare tekst, duidelijk contrast en voldoende leesruimte.\n\nDit indelingsvoorbeeld gebruikt statische tekst. Interactieve instellingen volgen later.",
   "scenes.settings.components.back.label": "Terug",
   "scenes.start-screen.title": "Startscherm",
   "scenes.start-screen.description": "Het hoofdmenu van het eenvoudige voorbeeldspel",
   "scenes.start-screen.components.title.text": "Basisspel",
   "scenes.start-screen.components.new-game.label": "Nieuw spel",
   "scenes.start-screen.components.load-game.label": "Spel laden",
-  "scenes.start-screen.components.settings.label": "Instellingen"
+  "scenes.start-screen.components.settings.label": "Instellingen",
+  "language.name": "Nederlands",
+  "scenes.settings.components.language.label": "Taal",
+  "scenes.settings.components.language-help.text": "Kies je voorkeurstaal. Je keuze wordt voor dit spel in deze browser onthouden."
 }

@@ -8,6 +8,11 @@ import {
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
+import { GameLocalization, type GameLanguagePreferences } from './gameLocalization.js'
+
+interface LocalizedGameData extends GameData {
+  readonly language: string
+}
 
 export interface IGameLoader {
   load(): Promise<GameData>
@@ -17,6 +22,7 @@ export class GameLoader implements IGameLoader {
   constructor(
     private readonly resources: IJsonResourceLoader,
     private readonly preferredLanguages: readonly string[] = [],
+    private readonly preferences?: GameLanguagePreferences,
   ) {}
 
   async load(): Promise<GameData> {
@@ -37,28 +43,58 @@ export class GameLoader implements IGameLoader {
     if (!definition.languages) return assembleGameData(definition, new Map(scenes), input)
 
     const { available, default: fallbackLanguage } = definition.languages
-    const language = selectLanguage(available, fallbackLanguage, this.preferredLanguages)
+    const saved = this.preferences?.read(definition.id)
 
-    const fallback = await this.resources.load(
-      `languages/${fallbackLanguage}/messages.json`,
-      languageCatalogSchema,
+    const language = selectLanguage(available, fallbackLanguage, [
+      ...this.preferredLanguages,
+      ...(saved ? [saved] : []),
+    ])
+
+    const catalogs = new Map(
+      await Promise.all(
+        available.map(
+          async (tag) =>
+            [
+              tag,
+              await this.resources.load(`languages/${tag}/messages.json`, languageCatalogSchema),
+            ] as const,
+        ),
+      ),
     )
 
-    const fallbackDefinitions = localizeDefinitions(definition, new Map(scenes), {
-      fallback,
-      messages: fallback,
-    })
+    const fallback = catalogs.get(fallbackLanguage)!
+    const variants = new Map<string, LocalizedGameData>()
 
-    const messages =
-      language === fallbackLanguage
-        ? fallback
-        : await this.resources.load(`languages/${language}/messages.json`, languageCatalogSchema)
+    for (const [tag, messages] of catalogs) {
+      const localized = localizeDefinitions(definition, new Map(scenes), { fallback, messages })
+      variants.set(tag, {
+        ...assembleGameData(localized.game, localized.scenes, input),
+        language: tag,
+      })
+    }
 
-    const localized =
-      language === fallbackLanguage
-        ? fallbackDefinitions
-        : localizeDefinitions(definition, new Map(scenes), { fallback, messages })
+    const localization = new GameLocalization(
+      variants,
+      available.map((tag) => ({ tag, name: catalogs.get(tag)!['language.name']?.trim() || tag })),
+      language,
+      (selected) => this.preferences?.write(definition.id, selected),
+    )
 
-    return { ...assembleGameData(localized.game, localized.scenes, input), language }
+    return {
+      ...variants.get(language)!,
+      localization,
+      get language() {
+        return localization.current.language
+      },
+      get title() {
+        return localization.current.title
+      },
+      get description() {
+        return localization.current.description
+      },
+      get scenes() {
+        return localization.current.scenes
+      },
+    }
   }
 }

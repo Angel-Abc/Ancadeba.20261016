@@ -31,12 +31,21 @@ export {
 export { GameLoader, type IGameLoader } from './gameLoader.js'
 
 export {
+  GameLocalization,
+  type GameLanguagePreferences,
+  type GameLanguageOption,
+  type IGameLocalization,
+  type LocalizedGameContent,
+} from './gameLocalization.js'
+
+export {
   assembleGameData,
   type GameData,
   type SceneData,
   type InputData,
   type TextComponentData,
   type ButtonComponentData,
+  type LanguageSelectComponentData,
   type SceneComponentData,
 } from './gameData.js'
 

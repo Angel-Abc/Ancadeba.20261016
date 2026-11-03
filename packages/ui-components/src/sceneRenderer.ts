@@ -13,6 +13,7 @@ export type SceneRendererOptions = ComponentRendererOptions
 export class SceneRenderer {
   private scene: RenderedComponent | undefined
   private unsubscribe: (() => void) | undefined
+  private unsubscribeLanguage: (() => void) | undefined
   private disposed = false
 
   constructor(
@@ -24,6 +25,9 @@ export class SceneRenderer {
     try {
       this.render(lifecycle.activeScene)
       this.unsubscribe = lifecycle.subscribeSceneChanges(({ current }) => this.render(current))
+      this.unsubscribeLanguage = options.localization?.subscribe(() =>
+        this.render(lifecycle.activeScene),
+      )
     } catch (error) {
       this.dispose()
       throw error
@@ -35,6 +39,8 @@ export class SceneRenderer {
     this.disposed = true
     this.unsubscribe?.()
     this.unsubscribe = undefined
+    this.unsubscribeLanguage?.()
+    this.unsubscribeLanguage = undefined
     const scene = this.scene
     this.scene = undefined
     scene?.dispose()
@@ -42,6 +48,14 @@ export class SceneRenderer {
 
   private render(scene: SceneInstance | undefined): void {
     if (this.disposed) return
+    const focused = this.target.ownerDocument.activeElement
+
+    // SAFETY: this renderer creates only HTML elements inside its owned scene.
+    const focusedId =
+      focused && this.scene?.element.contains(focused)
+        ? (focused as HTMLElement).dataset.componentId
+        : undefined
+
     const next = scene ? this.createScene(scene) : undefined
     const previous = this.scene
     this.scene = undefined
@@ -51,6 +65,11 @@ export class SceneRenderer {
 
       if (next) this.target.append(next.element)
       this.scene = next
+
+      if (focusedId)
+        next?.element
+          .querySelector<HTMLElement>(`select[data-component-id="${focusedId}"]`)
+          ?.focus()
     } catch (error) {
       next?.dispose()
       throw error
@@ -58,7 +77,7 @@ export class SceneRenderer {
   }
 
   private createScene(scene: SceneInstance): RenderedComponent {
-    const data = scene.data
+    const data = this.options.localization?.current.scenes.get(scene.data.id) ?? scene.data
     const document = this.target.ownerDocument
     const root = document.createElement('section')
     root.className = 'ancadeba-scene'

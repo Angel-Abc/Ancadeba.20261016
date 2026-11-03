@@ -4,6 +4,7 @@ import {
   gameSchema,
   sceneSchema,
   textComponentSchema,
+  languageSelectComponentSchema,
 } from '@ancadeba/schemas'
 import { assembleGameData } from '@ancadeba/game-runtime'
 
@@ -23,6 +24,48 @@ const scene = {
   screen: { type: 'grid', grid: { rows: 12, columns: 12 } },
   components: [text],
 }
+
+describe('language selector definitions', () => {
+  const selector = {
+    id: 'language',
+    type: 'language-select',
+    labelKey: 'settings.language',
+    placement: { row: 2, column: 3 },
+  }
+
+  it('validates translated labels and grid placement and requires declared game languages', () => {
+    expect(languageSelectComponentSchema.parse(selector)).toMatchObject({
+      labelKey: 'settings.language',
+      placement: { rowSpan: 1, columnSpan: 1 },
+    })
+    expect(
+      languageSelectComponentSchema.safeParse({ ...selector, labelKey: undefined }).success,
+    ).toBe(false)
+    expect(
+      sceneSchema.safeParse({
+        ...scene,
+        components: [{ ...selector, placement: { row: 13, column: 1 } }],
+      }).success,
+    ).toBe(false)
+
+    const definition = sceneSchema.parse({
+      ...scene,
+      components: [{ ...selector, labelKey: undefined, label: 'Language' }],
+    })
+
+    const manifest = gameSchema.parse({
+      'schema-version': '1.0.0',
+      id: 'test',
+      title: 'Test',
+      version: '1',
+      scenes: ['standard'],
+    })
+
+    expect(() => assembleGameData(manifest, new Map([['standard', definition]]))).toThrow(
+      'Language selectors require languages',
+    )
+  })
+})
 
 describe('text component definitions', () => {
   it('defaults to a single grid cell and body text aligned to the start', () => {

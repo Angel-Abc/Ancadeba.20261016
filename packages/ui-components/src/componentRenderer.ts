@@ -1,6 +1,7 @@
 import type { SceneComponentData } from '@ancadeba/game-runtime'
 import { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 import { TextComponentRenderer } from './textComponentRenderer.js'
+import { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -14,6 +15,7 @@ export class ComponentRenderer implements IComponentRenderer {
     private readonly renderers: ComponentRenderers = {
       text: new TextComponentRenderer(),
       button: new ButtonComponentRenderer(),
+      'language-select': new LanguageSelectComponentRenderer(),
     },
   ) {}
 
@@ -23,6 +25,8 @@ export class ComponentRenderer implements IComponentRenderer {
         return this.renderers.text.render(component, context)
       case 'button':
         return this.renderers.button.render(component, context)
+      case 'language-select':
+        return this.renderers['language-select'].render(component, context)
       default: {
         const unsupported: never = component
         throw new Error(`Unsupported scene component: ${String(unsupported)}`)

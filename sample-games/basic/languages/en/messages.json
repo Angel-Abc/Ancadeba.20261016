@@ -17,12 +17,14 @@
   "scenes.settings.title": "Settings",
   "scenes.settings.description": "An independent scene",
   "scenes.settings.components.title.text": "Settings",
-  "scenes.settings.components.reading-preferences.text": "Reading preferences\n\nA place for comfortable text, clear contrast, and room to read.\n\nThis layout example uses static text. Interactive settings will follow later.",
   "scenes.settings.components.back.label": "Back",
   "scenes.start-screen.title": "Start Screen",
   "scenes.start-screen.description": "The main menu of the basic sample game",
   "scenes.start-screen.components.title.text": "Basic Game",
   "scenes.start-screen.components.new-game.label": "New game",
   "scenes.start-screen.components.load-game.label": "Load Game",
-  "scenes.start-screen.components.settings.label": "Settings"
+  "scenes.start-screen.components.settings.label": "Settings",
+  "language.name": "English",
+  "scenes.settings.components.language.label": "Language",
+  "scenes.settings.components.language-help.text": "Choose your preferred language. Your choice is remembered for this game in this browser."
 }

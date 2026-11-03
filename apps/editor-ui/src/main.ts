@@ -2,7 +2,7 @@ import './style.css'
 import '@ancadeba/ui-components/game.css'
 import { bindProjectPanel } from './projectPanel.js'
 import type { EngineState } from '@ancadeba/game-runtime'
-import { createBrowserTiming } from '@ancadeba/ui-components'
+import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import type { Translate } from '@ancadeba/utilities'
@@ -108,6 +108,7 @@ function clearDownload(): void {
 const container = new ContainerBuilder({
   fetcher: fetch,
   host: new EditorPreviewHost(content, t, subscribeLanguageChanges),
+  gameLanguagePreferences: new BrowserGameLanguagePreferences(() => window.localStorage),
   getPreferredGameLanguages: () => {
     return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []
   },

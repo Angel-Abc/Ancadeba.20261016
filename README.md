@@ -195,7 +195,7 @@ scene in the browser hosts.
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and a `components` array of text and button components (or an empty array).
+and a `components` array of text, button, and language selector components (or an empty array).
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
@@ -247,7 +247,7 @@ Each `messages.json` is a flat JSON object of stable keys and plain-text values:
 ```
 
 Game and scene metadata support `titleKey` and `descriptionKey`. Text components
-support `textKey`; buttons support `labelKey`. Keys take precedence over literal
+support `textKey`; buttons and language selectors support `labelKey`. Keys take precedence over literal
 `title`, `description`, `text`, and `label` fields, which can be omitted when a key
 is supplied. Existing games with literal text continue to work without a
 `languages` declaration. IDs, actions, input mappings, and binding aliases stay
@@ -265,12 +265,46 @@ language and include the language folders.
 `GameLoader` accepts an injected array of preferred language tags as its second
 constructor argument. Preferences match case-insensitively, try regional tags
 before their base language (for example, `nl-NL` then `nl`), and fall back to the
-game's declared default. The engine and editor preview start in the game's declared
-default language, independently of browser language preferences. Override the standalone engine with `?language=nl`, or enter a tag
-in the editor's **Game language** field before starting the preview. Restarting
-loads a new language; switching languages during an active game is not yet exposed.
-Resolved `GameData.language` and the rendered game's `lang` attribute identify
-the selected language. Game binding templates use the existing `{{alias}}`
+game's declared default. The optional third constructor argument injects a
+`GameLanguagePreferences` store. Startup uses an explicit preference first, then
+the saved choice, then the game's default, independently of browser language
+preferences. Override the standalone engine with `?language=nl`, or enter a tag
+in the editor's **Game language** field before starting the preview. Leave the
+editor field empty to use the saved choice or game default.
+When a standalone URL contains `language`, the in-game selector updates that
+parameter too, so refreshing keeps the newly selected language.
+
+The basic sample's Settings screen includes a `language-select` component:
+
+```json
+{
+  "id": "language",
+  "type": "language-select",
+  "placement": { "row": 4, "column": 4, "rowSpan": 2, "columnSpan": 6 },
+  "labelKey": "scenes.settings.components.language.label"
+}
+```
+
+Its native dropdown lists the manifest's available languages. Set `language.name`
+in each catalog to show its native name, such as `English` or `Nederlands`;
+otherwise the language tag is shown. Changing the selection translates the current
+screen, navigation labels, and bound text immediately. Playthrough state, scene
+instances, health, turns, and timers are preserved. All declared catalogs load and
+validate before startup, so switching languages requires no additional requests.
+
+The browser hosts inject `BrowserGameLanguagePreferences`, which remembers the
+choice in local storage per browser origin and game ID. Standalone exports support
+the same behavior. The editor preview and standalone engine use separate origins,
+so each remembers its own choice. If storage is blocked or unavailable, switching
+still works for the current session. Removed or unsupported saved languages fall
+back to the game's default. Headless runtimes can inject another preference store.
+
+`GameData.localization` exposes the selected content, available languages,
+`select(tag)`, and `subscribe(handler)`. `GameData.language`, `title`, `description`,
+and `scenes` reflect the current selection. Active scene instances retain their
+original data and state; renderers use the localization's current scene content.
+The rendered game's `lang` attribute also follows the selection.
+Game binding templates use the existing `{{alias}}`
 syntax inside translations; translation happens before binding resolution.
 
 The editor has its own catalogs under `apps/editor-ui/languages/{language}/messages.json`,

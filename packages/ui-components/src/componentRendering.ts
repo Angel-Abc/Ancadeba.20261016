@@ -3,9 +3,11 @@ import type {
   IGameBindings,
   SceneComponentData,
   TextResolutionOptions,
+  IGameLocalization,
 } from '@ancadeba/game-runtime'
 
 export interface ComponentRendererOptions {
+  readonly localization?: IGameLocalization | undefined
   readonly bindingMode?: TextResolutionOptions['mode']
   readonly onButtonActivate?: (action: NonNullable<ButtonComponentData['action']>) => void
 }

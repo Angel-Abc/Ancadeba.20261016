@@ -4,6 +4,7 @@ import {
   type EngineMessages,
   type IEngineHost,
   type EngineRuntimeServices,
+  type GameLanguagePreferences,
 } from '@ancadeba/game-runtime'
 import { Container, JsonResourceLoader, MessageBus } from '@ancadeba/utilities'
 import { engineFactories, type EngineServices } from './factories/index.js'
@@ -24,6 +25,7 @@ export class ContainerBuilder implements IContainerBuilder {
     private readonly host: IEngineHost,
     private readonly runtime: EngineRuntimeServices,
     private readonly preferredLanguages: readonly string[] = [],
+    private readonly languagePreferences?: GameLanguagePreferences,
   ) {}
 
   build(): Container<EngineServices> {
@@ -42,7 +44,11 @@ export class ContainerBuilder implements IContainerBuilder {
           resolver.resolve('runtime'),
         ),
       gameLoader: (resolver) =>
-        new GameLoader(resolver.resolve('jsonResourceLoader'), this.preferredLanguages),
+        new GameLoader(
+          resolver.resolve('jsonResourceLoader'),
+          this.preferredLanguages,
+          this.languagePreferences,
+        ),
       jsonResourceLoader: (resolver) =>
         new JsonResourceLoader(resolver.resolve('gameResources'), resolver.resolve('logger')),
       gameResources: (resolver) =>

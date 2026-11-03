@@ -20,7 +20,8 @@
 }
 
 .ancadeba-text,
-.ancadeba-button {
+.ancadeba-button,
+.ancadeba-language-select {
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -54,6 +55,30 @@
 .ancadeba-button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.ancadeba-language-select {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5em;
+}
+
+.ancadeba-language-select select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.5em;
+  border: 1px solid currentColor;
+  border-radius: 0.35rem;
+  font: inherit;
+  color: inherit;
+  background: var(--ge-scene-background);
+}
+
+.ancadeba-language-select select:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .ancadeba-text--heading {

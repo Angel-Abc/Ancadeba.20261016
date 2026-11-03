@@ -26,15 +26,26 @@
       "textKey": "scenes.settings.components.title.text"
     },
     {
-      "id": "reading-preferences",
+      "id": "language",
+      "type": "language-select",
+      "placement": {
+        "row": 4,
+        "column": 4,
+        "rowSpan": 2,
+        "columnSpan": 6
+      },
+      "labelKey": "scenes.settings.components.language.label"
+    },
+    {
+      "id": "language-help",
       "type": "text",
       "placement": {
-        "row": 3,
+        "row": 7,
         "column": 3,
-        "rowSpan": 8,
+        "rowSpan": 3,
         "columnSpan": 8
       },
-      "textKey": "scenes.settings.components.reading-preferences.text"
+      "textKey": "scenes.settings.components.language-help.text"
     },
     {
       "id": "back",
