@@ -111,12 +111,19 @@ the same revision-checked authoring commands.
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
 to equip the cloak and move items between characters and their bags. The sample's
-`inventory.json` shows how to define items, owners, slots, and starting contents in
+`inventory/wardrobe.json` shows how to define items, owners, slots, and starting contents in
 any game. Export it with
 `pnpm export:game sample-games/graphics` or select it in the editor workspace.
 The development workshop at `http://localhost:5173/asset-lab.html` uses the same
 catalogue, artwork, and renderer. See [the graphics guide](docs/asset-workshop.md)
 for the source profile, schema examples, bindings, and attachment conventions.
+
+Set `inventory` in `game.json` to a list of IDs. The loader resolves each ID as
+`inventory/<id>.json`. The Basic Game
+splits its inventory between [museum items](sample-games/basic/inventory/museum.json)
+and [the harbour chart](sample-games/basic/inventory/harbour.json). Items can refer
+to types, owners, and containers defined in another file. IDs must be unique within
+each section (`itemTypes`, `owners`, and `items`) across all inventory files.
 
 ## App configuration
 
@@ -628,13 +635,14 @@ scene buttons or inventory inspection. Save actions before linking them. State
 paths use dots in the form, so `player.health` is the binding path
 `["player", "health"]` in JSON.
 
-Set `rules` in `game.json` to a filename or an ordered list of filenames, such as
-`["rules.json", "museum-puzzle.json"]`. In the **Rules** panel, use the **Rule file**
-selector to edit a file or choose **New rule file…** to add one. Saving an existing
-file updates that file, while adding a file also updates the manifest.
+Set `rules` in `game.json` to an ordered list of IDs, such as
+`["rules", "museum-puzzle"]`. The loader resolves each ID as `rules/<id>.json`.
+In the **Rules** panel, use the **Rule file** selector to edit a file or choose
+**New rule file…** and enter its ID. Adding a file also updates the manifest.
 
-The Basic Game separates [movement and the activity log](sample-games/basic/rules.json)
-from [the museum puzzle](sample-games/basic/museum-puzzle.json). Actions can use
+The Basic Game separates [movement and the activity log](sample-games/basic/rules/rules.json),
+[the museum puzzle](sample-games/basic/rules/museum-puzzle.json), and
+[the harbour route](sample-games/basic/rules/harbour-route.json). Actions can use
 state and the activity log from other rule files. Action IDs and state paths must
 be unique across the game, and the game can define one clock and one activity log.
 Each action runs its first branch whose

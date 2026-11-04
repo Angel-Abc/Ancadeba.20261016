@@ -1,9 +1,11 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
-import { defaultRulesFile, gameRuleFiles, type GameRulesDefinition } from '@ancadeba/schemas'
+import type { GameRulesDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls } from './ruleFormControls.js'
 import { rulesDefinitionForm } from './rulesDefinitionForm.js'
 import { ruleTriggerForms } from './ruleTriggerForms.js'
+
+const defaultRuleId = 'rules'
 
 export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand) => void) {
   const document = panel.ownerDocument
@@ -18,9 +20,9 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
   let view: ProjectView | undefined
   let loadedPath: string | undefined
   let draft: GameRulesDefinition = { state: [], actions: {} }
-  let file = defaultRulesFile
-  let newFilename = ''
-  let submittedFile = ''
+  let ruleId = defaultRuleId
+  let newRuleId = ''
+  let submittedRuleId = ''
   let selected = ''
   let rulesDirty = false
   let triggersDirty = false
@@ -71,23 +73,23 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     if (!view?.game) return
     const form = document.createElement('form')
-    const files = gameRuleFiles(view.game.rules)
-    const choices = files.length ? files : [defaultRulesFile]
+    const ids = view.game.rules ?? []
+    const choices = ids.length ? ids : [defaultRuleId]
 
     const filePicker = rulesControls.select(
       'Rule file',
-      file,
+      ruleId,
       [...choices, ['', 'New rule file…']],
       (next) => {
         if (rulesDirty) {
-          filePicker.querySelector('select')!.value = file
+          filePicker.querySelector('select')!.value = ruleId
           error.textContent = 'Save or discard this draft before switching rule files.'
 
           return
         }
 
-        file = next
-        newFilename = ''
+        ruleId = next
+        newRuleId = ''
         error.textContent = ''
         resetRules()
       },
@@ -96,15 +98,15 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     form.append(filePicker)
 
-    if (!file)
+    if (!ruleId)
       form.append(
-        rulesControls.input('New rule filename', newFilename, (value) => {
-          newFilename = value.trim()
+        rulesControls.input('New rule ID', newRuleId, (value) => {
+          newRuleId = value.trim()
         }),
       )
 
     const otherFields = Object.entries(view.ruleFiles ?? {})
-      .filter(([name]) => name !== file)
+      .filter(([id]) => id !== ruleId)
       .flatMap(([, rules]) => rules.state)
 
     const saveButton = document.createElement('button')
@@ -113,7 +115,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
     form.append(
       saveButton,
       rulesControls.button('Discard rule draft', () => {
-        newFilename = ''
+        newRuleId = ''
         resetRules()
         error.textContent = ''
       }),
@@ -134,14 +136,14 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 
-      if (!file && files.some((name) => name.toLowerCase() === newFilename.toLowerCase())) {
-        error.textContent = 'Choose a filename that is not already listed.'
+      if (!ruleId && ids.some((id) => id.toLowerCase() === newRuleId.toLowerCase())) {
+        error.textContent = 'Choose a rule ID that is not already listed.'
 
         return
       }
 
-      submittedFile = file || newFilename
-      submit({ type: 'game.updateRules', file: submittedFile, rules: draft })
+      submittedRuleId = ruleId || newRuleId
+      submit({ type: 'game.updateRules', ruleId: submittedRuleId, rules: draft })
     })
     rulesFields.append(form)
   }
@@ -161,10 +163,11 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
   }
 
   function resetRules() {
-    const files = gameRuleFiles(view?.game?.rules)
+    const ids = view?.game?.rules ?? []
+    const ruleFiles = view?.ruleFiles
 
-    if (file && files.length && !files.includes(file)) file = files[0]!
-    const saved = files.length ? view?.ruleFiles?.[file] : view?.rules
+    if (ruleId && ids.length && !ids.includes(ruleId)) ruleId = ids[0]!
+    const saved = ruleFiles && Object.hasOwn(ruleFiles, ruleId) ? ruleFiles[ruleId] : undefined
     draft = structuredClone(saved ?? { state: [], actions: {} })
 
     if (!Object.hasOwn(draft.actions, selected)) selected = Object.keys(draft.actions)[0] ?? ''
@@ -189,11 +192,11 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       const reset = projectChanged || (replaceFields && !state.preserveDrafts)
 
       if (reset) {
-        file = gameRuleFiles(view?.game?.rules)[0] ?? defaultRulesFile
-        newFilename = ''
+        ruleId = view?.game?.rules?.[0] ?? defaultRuleId
+        newRuleId = ''
       }
 
-      if (rulesSaved) file = submittedFile
+      if (rulesSaved) ruleId = submittedRuleId
 
       if (reset || rulesSaved || (viewChanged && !rulesDirty)) {
         resetRules()

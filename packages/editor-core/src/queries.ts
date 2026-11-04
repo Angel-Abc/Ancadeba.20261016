@@ -6,9 +6,15 @@ import {
   languageCatalogSchema,
   gameRulesSchema,
   mergeRuleSources,
+  mergeInventorySources,
 } from '@ancadeba/schemas'
 import { validateProject } from './validation.js'
-import { projectRuleSources, type ProjectSnapshot, type ProjectView } from './project.js'
+import {
+  projectInventorySources,
+  projectRuleSources,
+  type ProjectSnapshot,
+  type ProjectView,
+} from './project.js'
 
 export function inspectProject(project: ProjectSnapshot): ProjectView {
   const game = gameSchema.safeParse(project.documents['game.json'])
@@ -18,8 +24,12 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
       ? assetCatalogSchema.safeParse(project.documents[game.data.assets])
       : undefined
 
-  const inventory =
-    game.data?.inventory && inventorySchema.safeParse(project.documents[game.data.inventory])
+  const inventorySources = projectInventorySources(
+    game.data?.inventory,
+    (file) => inventorySchema.safeParse(project.documents[file]).data,
+  )
+
+  const { inventory } = mergeInventorySources(inventorySources)
 
   const language = game.data?.languages?.default
 
@@ -28,9 +38,7 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     (file) => gameRulesSchema.safeParse(project.documents[file]).data,
   )
 
-  const ruleFiles = Object.fromEntries(
-    sources.filter(({ file }) => file !== 'game.json').map(({ file, rules }) => [file, rules]),
-  )
+  const ruleFiles = Object.fromEntries(sources.map(({ id, rules }) => [id, rules]))
 
   const catalog =
     language &&
@@ -39,7 +47,7 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
   return {
     ...(sources.length ? { rules: mergeRuleSources(sources).rules, ruleFiles } : {}),
     ...(assets?.success ? { assets: assets.data } : {}),
-    ...(inventory && inventory.success ? { inventory: inventory.data } : {}),
+    ...(inventory ? { inventory } : {}),
     ...(catalog && catalog.success ? { translationKeys: Object.keys(catalog.data).sort() } : {}),
     revision: project.revision,
     game: game.success ? game.data : null,

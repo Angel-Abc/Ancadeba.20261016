@@ -1,0 +1,163 @@
+{
+  "state": [],
+  "actions": {
+    "walk-to-harbour": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "standard"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "old-harbour",
+            "mapView": "harbour-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.harbour"
+            }
+          }
+        ]
+      }
+    ],
+    "walk-to-museum": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "old-harbour"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "standard",
+            "mapView": "museum-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.lobby"
+            }
+          }
+        ]
+      }
+    ],
+    "follow-chart-to-buoy": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "old-harbour"
+          },
+          {
+            "type": "state-is",
+            "path": ["chartRead"],
+            "value": true
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "player"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "shoals",
+            "mapView": "harbour-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.buoy"
+            }
+          }
+        ]
+      }
+    ],
+    "return-to-harbour": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "shoals"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "old-harbour",
+            "mapView": "harbour-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.harbour"
+            }
+          }
+        ]
+      }
+    ],
+    "follow-chart-to-landing": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "shoals"
+          },
+          {
+            "type": "state-is",
+            "path": ["chartRead"],
+            "value": true
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "player"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "north-cliff-landing",
+            "mapView": "harbour-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.landing"
+            }
+          }
+        ]
+      }
+    ],
+    "return-to-buoy": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "north-cliff-landing"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "shoals",
+            "mapView": "harbour-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.buoy"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

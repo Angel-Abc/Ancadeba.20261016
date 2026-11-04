@@ -1,9 +1,11 @@
 import {
-  gameRuleFiles,
+  ruleFile,
+  inventoryFile,
   type GameDefinition,
   type SceneDefinition,
   type AssetCatalog,
   type InventoryDefinition,
+  type InventorySource,
   type GameRulesDefinition,
   type RuleSource,
 } from '@ancadeba/schemas'
@@ -38,14 +40,24 @@ export interface ProjectView {
 export function projectRuleSources(
   reference: GameDefinition['rules'],
   load: (file: string) => GameRulesDefinition | undefined,
-): RuleSource[] {
-  if (reference && typeof reference === 'object' && !Array.isArray(reference))
-    return [{ file: 'game.json', rules: reference }]
-
-  return gameRuleFiles(reference).flatMap((file) => {
+): (RuleSource & { id: string })[] {
+  return (reference ?? []).flatMap((id) => {
+    const file = ruleFile(id)
     const rules = load(file)
 
-    return rules ? [{ file, rules }] : []
+    return rules ? [{ id, file, rules }] : []
+  })
+}
+
+export function projectInventorySources(
+  reference: GameDefinition['inventory'],
+  load: (file: string) => InventoryDefinition | undefined,
+): InventorySource[] {
+  return (reference ?? []).flatMap((id) => {
+    const file = inventoryFile(id)
+    const inventory = load(file)
+
+    return inventory ? [{ file, inventory }] : []
   })
 }
 

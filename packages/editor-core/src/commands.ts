@@ -8,7 +8,6 @@ import {
   graphicComponentSchema,
   assetIdSchema,
   gameRulesSchema,
-  ruleFilenameSchema,
   gameBindingSchema,
   buttonComponentSchema,
   requestActionSchema,
@@ -72,7 +71,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('game.updateRules'),
-    file: ruleFilenameSchema.optional(),
+    ruleId: gameIdSchema,
     rules: gameRulesSchema,
   }),
   z.strictObject({
@@ -123,6 +122,7 @@ export const capabilities = {
       type: 'game.updateRules',
       example: {
         type: 'game.updateRules',
+        ruleId: 'greeting',
         rules: { state: [], actions: { greet: [{ when: [], effects: [] }] } },
       },
     },

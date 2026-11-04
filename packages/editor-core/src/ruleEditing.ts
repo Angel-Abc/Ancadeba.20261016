@@ -1,8 +1,8 @@
 import {
   gameBindingSchema,
   gameRulesSchema,
-  defaultRulesFile,
-  gameRuleFiles,
+  inventoryFile,
+  ruleFile,
   mergeRuleSources,
   type GameDefinition,
   type GameRulesDefinition,
@@ -49,9 +49,12 @@ export function editRules(
   game: GameDefinition,
   command: RuleCommand,
 ): string[] {
-  const inventoryFile = game.inventory
-  const inventory = object(inventoryFile && documents[inventoryFile])
-  const itemTypes = object(inventory.itemTypes)
+  const inventories = (game.inventory ?? []).map((id) => {
+    const file = inventoryFile(id)
+    const inventory = object(documents[file])
+
+    return { file, inventory, itemTypes: object(inventory.itemTypes) }
+  })
 
   const sceneComponents = (file: string): unknown[] => {
     const components = object(documents[file]).components
@@ -59,19 +62,13 @@ export function editRules(
     return Array.isArray(components) ? components : []
   }
 
-  const files = gameRuleFiles(game.rules)
   const sources = projectRuleSources(game.rules, (file) => gameRulesSchema.parse(documents[file]))
   const { rules } = mergeRuleSources(sources)
 
   if (command.type === 'game.updateRules') {
-    if (!command.file && files.length > 1)
-      throw new EditorError(422, 'rule_file_required', 'Select a rule file to update')
-
-    const file = command.file ?? files[0] ?? defaultRulesFile
-
-    const otherSources = sources.filter(
-      (source) => source.file !== file && source.file !== 'game.json',
-    )
+    const { ruleId } = command
+    const file = ruleFile(ruleId)
+    const otherSources = sources.filter((source) => source.id !== ruleId)
 
     const next = mergeRuleSources([...otherSources, { file, rules: command.rules }]).rules
 
@@ -94,18 +91,22 @@ export function editRules(
       }
     }
 
-    for (const itemType of Object.values(itemTypes)) {
-      const inspection = object(object(itemType).inspection)
-      checkLink(inspection.action, inspection.details, false)
+    for (const { itemTypes } of inventories) {
+      for (const itemType of Object.values(itemTypes)) {
+        const inspection = object(object(itemType).inspection)
+        checkLink(inspection.action, inspection.details, false)
+      }
     }
 
     documents[file] = command.rules
 
-    if (files.includes(file)) return [file]
+    const ids = game.rules ?? []
+
+    if (ids.includes(ruleId)) return [file]
 
     documents['game.json'] = {
       ...object(documents['game.json']),
-      rules: files.length ? [...files, file] : file,
+      rules: [...ids, ruleId],
     }
 
     return [file, 'game.json']
@@ -119,8 +120,11 @@ export function editRules(
   }
 
   if (command.type === 'inventory.setRuleInspection') {
-    if (!inventoryFile || !Object.hasOwn(itemTypes, command.itemType))
+    const source = inventories.find(({ itemTypes }) => Object.hasOwn(itemTypes, command.itemType))
+
+    if (!source)
       throw new EditorError(404, 'item_type_not_found', 'Inventory item type does not exist')
+    const { file, inventory, itemTypes } = source
     const { inspection: previous, ...itemType } = object(itemTypes[command.itemType])
 
     if (command.inspection) {
@@ -129,12 +133,12 @@ export function editRules(
       itemType.inspection = { ...object(previous), ...command.inspection }
     }
 
-    documents[inventoryFile] = {
+    documents[file] = {
       ...inventory,
       itemTypes: { ...itemTypes, [command.itemType]: itemType },
     }
 
-    return [inventoryFile]
+    return [file]
   }
 
   const file = `scenes/${command.sceneId}.json`

@@ -119,12 +119,18 @@ describe('game data pipeline', () => {
       'settings',
       'start-screen',
       'gallery',
+      'old-harbour',
+      'shoals',
+      'north-cliff-landing',
     ])
     expect([...game.scenes.values()].map(({ type }) => type)).toEqual([
       'game',
       'game',
       'stand-alone',
       'stand-alone',
+      'game',
+      'game',
+      'game',
       'game',
     ])
     expect(game.scenes.get('standard')?.components[0]).toEqual({
@@ -145,6 +151,18 @@ describe('game data pipeline', () => {
       expect(gameSchema.safeParse({ ...definition, stylesheet }).success).toBe(false)
     },
   )
+
+  it.each([
+    { rules: 'rules.json' },
+    { rules: ['rules/museum.json'] },
+    { rules: { state: [], actions: {} } },
+    { rules: ['museum', 'museum'] },
+    { inventory: 'inventory.json' },
+    { inventory: ['inventory/museum.json'] },
+    { inventory: ['museum', 'museum'] },
+  ])('rejects invalid rule and inventory references %j', (references) => {
+    expect(gameSchema.safeParse({ ...definition, ...references }).success).toBe(false)
+  })
 
   it('reports a missing stylesheet before mounting a game', async () => {
     const { engine, host } = createPipeline({

@@ -1,0 +1,187 @@
+{
+  "schema-version": "1.0.0",
+  "id": "shoals",
+  "type": "game",
+  "titleKey": "scenes.shoals.title",
+  "descriptionKey": "scenes.shoals.description",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12,
+      "compactColumns": [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3]
+    }
+  },
+  "components": [
+    {
+      "id": "location-title",
+      "type": "text",
+      "placement": {
+        "row": 1,
+        "column": 3,
+        "rowSpan": 2,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.shoals.title",
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      }
+    },
+    {
+      "id": "narrative",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 3,
+        "rowSpan": 8,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.shoals.narrative"
+    },
+    {
+      "id": "nearby",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 11,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "scenes.shoals.nearby"
+    },
+    {
+      "id": "player-status",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 2
+      },
+      "bindings": {
+        "health": {
+          "source": "game.state",
+          "path": ["player", "health"],
+          "fallback": "40"
+        }
+      },
+      "textKey": "scenes.standard.components.player-status.text"
+    },
+    {
+      "id": "items",
+      "type": "inventory",
+      "placement": {
+        "row": 5,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "owners": ["player"],
+      "readOnly": true,
+      "labelKey": "scenes.inventory.title"
+    },
+    {
+      "id": "map-key",
+      "type": "text",
+      "placement": {
+        "row": 6,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "harbour.map-key"
+    },
+    {
+      "id": "harbour-map",
+      "type": "map-view",
+      "labelKey": "scenes.shoals.map",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "map": "harbour",
+      "viewport": {
+        "columns": 7,
+        "rows": 5
+      },
+      "playerSpawn": {
+        "x": 3,
+        "y": 2
+      },
+      "interactive": false
+    },
+    {
+      "id": "event-log",
+      "type": "text",
+      "placement": {
+        "row": 9,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "textKey": "museum.event-log",
+      "bindings": {
+        "log": {
+          "source": "game.state",
+          "path": ["log"],
+          "fallback": ""
+        }
+      }
+    },
+    {
+      "id": "clock",
+      "type": "text",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "harbour.clock",
+      "bindings": {
+        "time": {
+          "source": "game.state",
+          "path": ["clock"],
+          "fallback": "09:00"
+        }
+      }
+    },
+    {
+      "id": "return-to-harbour",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "harbour.return-to-harbour",
+      "action": {
+        "type": "request-action",
+        "action": "return-to-harbour"
+      }
+    },
+    {
+      "id": "follow-chart-to-landing",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 7,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "harbour.follow-chart-to-landing",
+      "action": {
+        "type": "request-action",
+        "action": "follow-chart-to-landing",
+        "enabledWhen": {
+          "source": "game.state",
+          "path": ["chartRead"]
+        }
+      }
+    }
+  ]
+}

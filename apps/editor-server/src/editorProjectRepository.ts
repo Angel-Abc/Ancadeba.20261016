@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto'
-import { gameSchema, sceneSchema, assetCatalogSchema, gameRuleFiles } from '@ancadeba/schemas'
+import {
+  gameSchema,
+  sceneSchema,
+  assetCatalogSchema,
+  ruleFile,
+  inventoryFile,
+} from '@ancadeba/schemas'
 import { validateImageSource } from '@ancadeba/game-runtime'
 import {
   EditorError,
@@ -84,9 +90,9 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       if (game.data.input) await read(game.data.input)
 
-      if (game.data.inventory) await read(game.data.inventory)
+      for (const id of game.data.inventory ?? []) await read(inventoryFile(id))
 
-      for (const file of gameRuleFiles(game.data.rules)) await read(file)
+      for (const id of game.data.rules ?? []) await read(ruleFile(id))
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
@@ -187,9 +193,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       const manifestPath = projectPath(folder, 'game.json')
       const manifestBytes = encode('game.json')
 
-      const createsRules = gameRuleFiles(
-        gameSchema.parse(change.project.documents['game.json']).rules,
-      ).includes(newScene)
+      const createsRules = newScene.startsWith('rules/')
 
       await this.workspace.create(path, bytes)
 
@@ -205,8 +209,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
           const references = [
             manifest.assets,
-            ...gameRuleFiles(manifest.rules),
-            manifest.inventory,
+            ...(manifest.rules ?? []).map(ruleFile),
             manifest.input,
           ]
 

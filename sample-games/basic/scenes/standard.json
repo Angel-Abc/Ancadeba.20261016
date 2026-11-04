@@ -50,7 +50,7 @@
       "placement": {
         "row": 3,
         "column": 3,
-        "rowSpan": 8,
+        "rowSpan": 7,
         "columnSpan": 8
       },
       "textKey": "scenes.standard.components.narrative.text"
@@ -176,6 +176,21 @@
           "path": ["log"],
           "fallback": ""
         }
+      }
+    },
+    {
+      "id": "walk-to-harbour",
+      "type": "button",
+      "placement": {
+        "row": 10,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 8
+      },
+      "labelKey": "harbour.walk-to-harbour",
+      "action": {
+        "type": "request-action",
+        "action": "walk-to-harbour"
       }
     },
     {

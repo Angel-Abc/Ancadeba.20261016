@@ -19,7 +19,7 @@ const bag: InventoryPlacement = { type: 'inside', container: 'travel-pack' }
 const paths = [
   'game.json',
   'assets.json',
-  'inventory.json',
+  'inventory/wardrobe.json',
   'scenes/gallery.json',
   'scenes/ember.json',
   'scenes/wardrobe.json',
@@ -78,7 +78,7 @@ describe('wardrobe inventory', () => {
 
   it('rejects invalid moves atomically, including containment cycles through another bag', async () => {
     const game = await loader(async (path) => {
-      if (path !== 'inventory.json') return readSample(path)
+      if (path !== 'inventory/wardrobe.json') return readSample(path)
 
       const definition = inventorySchema.parse(JSON.parse(await readSample(path)))
       definition.items.pouch = { itemType: 'backpack', placement: bag, colors: {} }
@@ -132,30 +132,33 @@ describe('wardrobe inventory', () => {
 
     expect(validateProject(documents())).toEqual([])
 
-    const definition = inventorySchema.parse(JSON.parse(files.get('inventory.json')!))
+    const definition = inventorySchema.parse(JSON.parse(files.get('inventory/wardrobe.json')!))
     definition.items['travel-pack']!.placement = bag
     definition.items['moss-cloak']!.colors.unknown = '#123456'
     definition.itemTypes.cloak!.icon = 'missing'
-    files.set('inventory.json', JSON.stringify(definition))
+    files.set('inventory/wardrobe.json', JSON.stringify(definition))
     expect(validateProject(documents())).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          file: 'inventory.json',
+          file: 'inventory/wardrobe.json',
           path: ['items', 'travel-pack', 'placement'],
           message: expect.stringContaining('cycle'),
         }),
         expect.objectContaining({
-          file: 'inventory.json',
+          file: 'inventory/wardrobe.json',
           path: ['items', 'moss-cloak', 'colors', 'unknown'],
         }),
-        expect.objectContaining({ file: 'inventory.json', path: ['itemTypes', 'cloak', 'icon'] }),
+        expect.objectContaining({
+          file: 'inventory/wardrobe.json',
+          path: ['itemTypes', 'cloak', 'icon'],
+        }),
       ]),
     )
     await expect(loader(async (path) => files.get(path)!).load()).rejects.toThrow(
       'Unknown image or part: missing',
     )
 
-    files.set('inventory.json', await readSample('inventory.json'))
+    files.set('inventory/wardrobe.json', await readSample('inventory/wardrobe.json'))
     files.set(
       'scenes/wardrobe.json',
       files.get('scenes/wardrobe.json')!.replace('"outerwear": "cloak"', '"outerwear": "body"'),
@@ -203,5 +206,37 @@ describe('wardrobe inventory', () => {
       icon.pieces[1]?.colors,
     )
     expect(otherIcon.pieces[0]?.colors).toEqual({ fabric: '#665191' })
+  })
+
+  it('rejects duplicate inventory IDs and reports the file that introduced them', async () => {
+    const files = new Map(
+      await Promise.all(paths.map(async (path) => [path, await readSample(path)] as const)),
+    )
+
+    const game = JSON.parse(files.get('game.json')!)
+    const duplicate = 'inventory/extra.json'
+    files.set('game.json', JSON.stringify({ ...game, inventory: ['wardrobe', 'extra'] }))
+    files.set(
+      duplicate,
+      JSON.stringify({
+        'schema-version': '1.0.0',
+        itemTypes: {},
+        owners: { wayfarer: { label: 'Another wayfarer' } },
+        items: {},
+      }),
+    )
+
+    const message = 'Duplicate inventory ID: wayfarer'
+
+    const documents = Object.fromEntries(
+      [...files].map(([path, content]) => [path, JSON.parse(content)]),
+    )
+
+    expect(validateProject(documents)).toEqual([
+      { code: 'invalid_inventory', file: duplicate, path: ['owners', 'wayfarer'], message },
+    ])
+    await expect(loader(async (path) => files.get(path)!).load()).rejects.toThrow(
+      `${duplicate} (owners.wayfarer): ${message}`,
+    )
   })
 })

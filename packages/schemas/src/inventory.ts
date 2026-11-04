@@ -148,6 +148,65 @@ export interface InventoryIssue {
   readonly message: string
 }
 
+export interface InventorySource {
+  readonly file: string
+  readonly inventory: InventoryDefinition
+}
+
+export function mergeInventorySources(sources: readonly InventorySource[]) {
+  const issues: (InventoryIssue & { file: string })[] = []
+
+  const merge = <T>(
+    section: string,
+    entries: (inventory: InventoryDefinition) => Record<string, T>,
+  ) => {
+    const result = new Map<string, T>()
+
+    for (const { file, inventory } of sources) {
+      for (const [id, entry] of Object.entries(entries(inventory))) {
+        if (result.has(id))
+          issues.push({ file, path: [section, id], message: `Duplicate inventory ID: ${id}` })
+        else result.set(id, entry)
+      }
+    }
+
+    return Object.fromEntries(result)
+  }
+
+  const inventory: InventoryDefinition | undefined =
+    sources.length <= 1
+      ? sources[0]?.inventory
+      : {
+          'schema-version': '1.0.0',
+          itemTypes: merge('itemTypes', (inventory) => inventory.itemTypes),
+          owners: merge('owners', (inventory) => inventory.owners),
+          items: merge('items', (inventory) => inventory.items),
+        }
+
+  return { inventory, issues }
+}
+
+export function validateInventorySources(
+  sources: readonly InventorySource[],
+  assets?: AssetCatalog,
+) {
+  const { inventory, issues } = mergeInventorySources(sources)
+
+  if (inventory) {
+    for (const issue of inventoryIssues(inventory, assets)) {
+      const [section, id] = issue.path
+
+      if ((section === 'itemTypes' || section === 'items') && id !== undefined) {
+        const source = sources.find(({ inventory }) => Object.hasOwn(inventory[section], id))
+
+        if (source) issues.push({ ...issue, file: source.file })
+      }
+    }
+  }
+
+  return { inventory, issues }
+}
+
 export function inventoryIssues(
   definition: InventoryDefinition,
   assets: AssetCatalog | undefined,

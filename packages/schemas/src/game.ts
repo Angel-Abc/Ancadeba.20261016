@@ -1,17 +1,11 @@
 import { z } from 'zod'
 import { gameLanguagesSchema, translationKeySchema } from './languages.js'
-import { gameRulesSchema } from './rules.js'
 
-// IDs are also single filename segments when resolving scene references.
+// IDs are also single filename segments when resolving resource references.
 export const gameIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/)
 
-export const defaultRulesFile = 'rules.json'
-
-export const ruleFilenameSchema = z.string().regex(/^[a-zA-Z0-9_-]+\.json$/)
-
-const rulesReferenceSchema = z
-  .union([ruleFilenameSchema, z.array(ruleFilenameSchema).min(1), gameRulesSchema])
-  .optional()
+const uniqueFileIds = (ids: string[]) =>
+  new Set(ids.map((id) => id.toLowerCase())).size === ids.length
 
 export const gameSchema = z
   .object({
@@ -22,8 +16,10 @@ export const gameSchema = z
     titleKey: translationKeySchema.optional(),
     descriptionKey: translationKeySchema.optional(),
     languages: gameLanguagesSchema.optional(),
-    // Inline rules are accepted for projects saved before rule files were introduced.
-    rules: rulesReferenceSchema,
+    rules: z
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Rule references must be unique' })
+      .optional(),
     version: z.string().trim().min(1),
     'initial-scene': gameIdSchema.optional(),
     stylesheet: z
@@ -33,8 +29,8 @@ export const gameSchema = z
     // Older projects sometimes carried an ignored asset list as extension metadata.
     assets: z.union([z.string().regex(/^[a-zA-Z0-9_-]+\.json$/), z.array(z.string())]).optional(),
     inventory: z
-      .string()
-      .regex(/^[a-zA-Z0-9_-]+\.json$/)
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Inventory references must be unique' })
       .optional(),
     input: z
       .string()
@@ -55,27 +51,6 @@ export const gameSchema = z
     message: 'A title or titleKey is required',
   })
   .refine(
-    (game) => {
-      const files = gameRuleFiles(game.rules).map((file) => file.toLowerCase())
-
-      const otherResources = [
-        'game.json',
-        game.input,
-        game.inventory,
-        typeof game.assets === 'string' ? game.assets : undefined,
-      ]
-
-      return (
-        new Set(files).size === files.length &&
-        !otherResources.some((resource) => resource && files.includes(resource.toLowerCase()))
-      )
-    },
-    {
-      path: ['rules'],
-      message: 'Rules must reference distinct files separate from other game resources',
-    },
-  )
-  .refine(
     (game) => game['initial-scene'] === undefined || game.scenes.includes(game['initial-scene']),
     {
       path: ['initial-scene'],
@@ -85,8 +60,10 @@ export const gameSchema = z
 
 export type GameDefinition = z.infer<typeof gameSchema>
 
-export function gameRuleFiles(reference: z.infer<typeof rulesReferenceSchema>): readonly string[] {
-  if (typeof reference === 'string') return [reference]
+export function ruleFile(id: string): string {
+  return `rules/${id}.json`
+}
 
-  return Array.isArray(reference) ? reference : []
+export function inventoryFile(id: string): string {
+  return `inventory/${id}.json`
 }

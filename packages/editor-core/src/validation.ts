@@ -14,12 +14,17 @@ import {
   resolveMapView,
   type MapDefinition,
   inventorySchema,
-  inventoryIssues,
+  validateInventorySources,
   inventoryPanelIssues,
   validateRuleSources,
   gameRulesSchema,
 } from '@ancadeba/schemas'
-import { projectRuleSources, type Diagnostic, type ProjectDocuments } from './project.js'
+import {
+  projectInventorySources,
+  projectRuleSources,
+  type Diagnostic,
+  type ProjectDocuments,
+} from './project.js'
 
 export function validateProject(
   documents: ProjectDocuments,
@@ -79,13 +84,14 @@ export function validateProject(
   const assets =
     typeof game.data.assets === 'string' ? check(game.data.assets, assetCatalogSchema) : undefined
 
-  const inventoryFile = game.data.inventory
-  const inventory = inventoryFile ? check(inventoryFile, inventorySchema).data : undefined
+  const inventorySources = projectInventorySources(
+    game.data.inventory,
+    (file) => check(file, inventorySchema).data,
+  )
 
-  if (inventoryFile && inventory) {
-    for (const issue of inventoryIssues(inventory, assets?.data))
-      diagnostics.push({ ...issue, file: inventoryFile, code: 'invalid_inventory' })
-  }
+  const { inventory, issues } = validateInventorySources(inventorySources, assets?.data)
+
+  for (const issue of issues) diagnostics.push({ ...issue, code: 'invalid_inventory' })
 
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
@@ -157,11 +163,7 @@ export function validateProject(
   const sources = projectRuleSources(game.data.rules, (file) => check(file, gameRulesSchema).data)
 
   for (const issue of validateRuleSources(sources, scenes, maps, inventory, defaultMessages).issues)
-    diagnostics.push({
-      ...issue,
-      path: issue.file === 'game.json' ? ['rules', ...issue.path] : issue.path,
-      code: 'invalid_rules',
-    })
+    diagnostics.push({ ...issue, code: 'invalid_rules' })
 
   try {
     assertGameLanguages(game.data, scenes)

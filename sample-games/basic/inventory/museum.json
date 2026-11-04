@@ -1,0 +1,32 @@
+{
+  "schema-version": "1.0.0",
+  "itemTypes": {
+    "folded-letter": {
+      "label": "Folded letter",
+      "inspection": {
+        "action": "inspect-letter",
+        "details": {
+          "source": "game.state",
+          "path": ["letterClue"]
+        }
+      }
+    }
+  },
+  "owners": {
+    "player": {
+      "label": "Player"
+    },
+    "lobby": {
+      "label": "Museum lobby"
+    }
+  },
+  "items": {
+    "folded-letter": {
+      "itemType": "folded-letter",
+      "placement": {
+        "type": "carried",
+        "owner": "lobby"
+      }
+    }
+  }
+}

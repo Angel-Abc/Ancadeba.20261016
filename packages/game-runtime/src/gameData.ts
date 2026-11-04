@@ -18,9 +18,10 @@ import type { TextTemplate } from './textBindings.js'
 import {
   assertGameLanguages,
   assertGraphicReference,
-  inventoryIssues,
+  validateInventorySources,
   inventoryPanelIssues,
-  gameRuleFiles,
+  inventoryFile,
+  ruleFile,
   validateRuleSources,
   resolveMapView,
 } from '@ancadeba/schemas'
@@ -114,22 +115,34 @@ export function assembleGameData(
   inputDefinition?: InputDefinition,
   assets?: AssetCatalog,
   maps: ReadonlyMap<string, MapDefinition> = new Map(),
-  inventory?: InventoryDefinition,
+  inventoryDefinitions: ReadonlyMap<string, InventoryDefinition> = new Map(),
   ruleTranslation?: GameTranslation,
-  ruleFiles: ReadonlyMap<string, GameRulesDefinition> = new Map(),
+  ruleDefinitions: ReadonlyMap<string, GameRulesDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
-  const sources = gameRuleFiles(definition.rules).map((file) => {
-    const rules = ruleFiles.get(file)
+  const inventorySources = (definition.inventory ?? []).map((id) => {
+    const file = inventoryFile(id)
+    const inventory = inventoryDefinitions.get(id)
+
+    if (!inventory) throw new Error(`Missing inventory definition: ${file}`)
+
+    return { file, inventory }
+  })
+
+  const { inventory, issues: inventoryDiagnostics } = validateInventorySources(
+    inventorySources,
+    assets,
+  )
+
+  const sources = (definition.rules ?? []).map((id) => {
+    const file = ruleFile(id)
+    const rules = ruleDefinitions.get(id)
 
     if (!rules) throw new Error(`Missing rule definition: ${file}`)
 
     return { file, rules }
   })
-
-  if (definition.rules && typeof definition.rules === 'object' && !Array.isArray(definition.rules))
-    sources.push({ file: 'game.json', rules: definition.rules })
 
   const validated = sources.length
     ? validateRuleSources(sources, sceneDefinitions, maps, inventory, ruleTranslation?.fallback)
@@ -137,10 +150,7 @@ export function assembleGameData(
 
   const issue = validated?.issues[0]
 
-  if (issue) {
-    const path = issue.file === 'game.json' ? ['rules', ...issue.path] : issue.path
-    throw new Error(`${issue.file} (${path.join('.')}): ${issue.message}`)
-  }
+  if (issue) throw new Error(`${issue.file} (${issue.path.join('.')}): ${issue.message}`)
 
   if ((typeof definition.assets === 'string') !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')
@@ -149,15 +159,12 @@ export function assembleGameData(
     throw new Error('Input definition must match the game input reference')
   }
 
-  if (Boolean(definition.inventory) !== Boolean(inventory))
-    throw new Error('Inventory definition must match the game inventory reference')
+  const inventoryIssue = inventoryDiagnostics[0]
 
-  if (inventory) {
-    const issue = inventoryIssues(inventory, assets)[0]
-
-    if (issue)
-      throw new Error(`${definition.inventory} (${issue.path.join('.')}): ${issue.message}`)
-  }
+  if (inventoryIssue)
+    throw new Error(
+      `${inventoryIssue.file} (${inventoryIssue.path.join('.')}): ${inventoryIssue.message}`,
+    )
 
   const scenes = new Map<string, SceneData>()
 

@@ -84,12 +84,24 @@ describe('shared editor project API', () => {
     })
 
   it('saves rules and trigger links, guards deletion, and rejects a stale rules draft', async () => {
+    const owners = {
+      'schema-version': '1.0.0',
+      itemTypes: {},
+      owners: { player: { label: 'Player' } },
+      items: { letter: { itemType: 'letter', placement: { type: 'carried', owner: 'player' } } },
+    }
+
+    await mkdir(join(root, 'basic/inventory'))
     await writeFile(
       join(root, 'basic/game.json'),
-      JSON.stringify({ ...manifest, inventory: 'inventory.json' }),
+      JSON.stringify({
+        ...manifest,
+        inventory: ['owners', 'letters'],
+      }),
     )
+    await writeFile(join(root, 'basic/inventory/owners.json'), JSON.stringify(owners))
     await writeFile(
-      join(root, 'basic/inventory.json'),
+      join(root, 'basic/inventory/letters.json'),
       JSON.stringify({
         'schema-version': '1.0.0',
         itemTypes: { letter: { label: 'Letter', extension: 'keep' } },
@@ -114,6 +126,7 @@ describe('shared editor project API', () => {
 
     const invalid = await command(withScene.revision, {
       type: 'game.updateRules',
+      ruleId: 'rules',
       rules: {
         state,
         actions: {
@@ -128,7 +141,7 @@ describe('shared editor project API', () => {
     expect(await invalid.json()).toMatchObject({
       diagnostics: [
         {
-          file: 'rules.json',
+          file: 'rules/rules.json',
           path: ['actions', 'read', 0, 'effects', 0, 'value'],
         },
       ],
@@ -141,13 +154,13 @@ describe('shared editor project API', () => {
       },
     }
 
-    const operation = { type: 'game.updateRules', rules }
+    const operation = { type: 'game.updateRules', ruleId: 'rules', rules }
     const saved = await command(withScene.revision, operation)
     expect(saved.status).toBe(200)
     const afterRules = projectViewSchema.parse(await saved.json())
-    expect(afterRules.game?.rules).toBe('rules.json')
+    expect(afterRules.game?.rules).toEqual(['rules'])
     expect(afterRules.rules).toEqual(rules)
-    expect(JSON.parse(await readFile(join(root, 'basic/rules.json'), 'utf8'))).toEqual(rules)
+    expect(JSON.parse(await readFile(join(root, 'basic/rules/rules.json'), 'utf8'))).toEqual(rules)
     expect((await command(withScene.revision, operation)).status).toBe(409)
 
     const button = {
@@ -186,7 +199,10 @@ describe('shared editor project API', () => {
     expect(inspectLink.status).toBe(200)
     const afterInspection = projectViewSchema.parse(await inspectLink.json())
     expect(afterInspection.inventory?.itemTypes.letter?.inspection?.action).toBe('read')
-    const deletion = { type: 'game.updateRules', rules: { state, actions: {} } }
+    expect(
+      JSON.parse(await readFile(join(root, 'basic/inventory/letters.json'), 'utf8')),
+    ).toHaveProperty('itemTypes.letter.inspection.action', 'read')
+    const deletion = { type: 'game.updateRules', ruleId: 'rules', rules: { state, actions: {} } }
     expect(await (await command(afterInspection.revision, deletion)).json()).toHaveProperty(
       'code',
       'rule_in_use',
@@ -212,31 +228,34 @@ describe('shared editor project API', () => {
     const savedManifest = await readFile(join(root, 'basic/game.json'), 'utf8')
     expect((await command(withoutInspection.revision, deletion)).status).toBe(200)
     expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(savedManifest)
-    expect(JSON.parse(await readFile(join(root, 'basic/rules.json'), 'utf8'))).toEqual(
+    expect(JSON.parse(await readFile(join(root, 'basic/rules/rules.json'), 'utf8'))).toEqual(
       deletion.rules,
     )
-    expect(JSON.parse(await readFile(join(root, 'basic/inventory.json'), 'utf8'))).toHaveProperty(
-      'itemTypes.letter.extension',
-      'keep',
+    expect(
+      JSON.parse(await readFile(join(root, 'basic/inventory/letters.json'), 'utf8')),
+    ).toHaveProperty('itemTypes.letter.extension', 'keep')
+    expect(await readFile(join(root, 'basic/inventory/owners.json'), 'utf8')).toBe(
+      JSON.stringify(owners),
     )
   })
 
   it('includes the referenced rule file in revisions and updates it in place', async () => {
-    const ruleFile = join(root, 'basic/mechanics.json')
+    const ruleFile = join(root, 'basic/rules/mechanics.json')
     const rules = { state: [], actions: {} }
-    const savedManifest = JSON.stringify({ ...manifest, rules: 'mechanics.json' })
+    const savedManifest = JSON.stringify({ ...manifest, rules: ['mechanics'] })
     await writeFile(join(root, 'basic/game.json'), savedManifest)
     const missing = await inspect()
     expect(missing.diagnostics).toEqual([
-      expect.objectContaining({ code: 'missing_file', file: 'mechanics.json' }),
+      expect.objectContaining({ code: 'missing_file', file: 'rules/mechanics.json' }),
     ])
 
+    await mkdir(join(root, 'basic/rules'))
     await writeFile(ruleFile, JSON.stringify(rules))
     const beforeEdit = await inspect()
     expect(beforeEdit.rules).toEqual(rules)
     const outsideEdit = { ...rules, state: [{ path: ['ready'], value: true }] }
     await writeFile(ruleFile, JSON.stringify(outsideEdit))
-    const commandBody = { type: 'game.updateRules', rules }
+    const commandBody = { type: 'game.updateRules', ruleId: 'mechanics', rules }
     expect((await command(beforeEdit.revision, commandBody)).status).toBe(409)
 
     const afterEdit = await inspect()
@@ -253,7 +272,7 @@ describe('shared editor project API', () => {
 
     const first = await command(initial.revision, {
       type: 'game.updateRules',
-      file: 'setup.json',
+      ruleId: 'setup',
       rules: { state, actions },
     })
 
@@ -263,67 +282,73 @@ describe('shared editor project API', () => {
 
     const duplicate = await command(setup.revision, {
       type: 'game.updateRules',
-      file: 'finish.json',
+      ruleId: 'finish',
       rules: { state, actions: { prepare: finish } },
     })
 
     expect(duplicate.status).toBe(422)
     expect(await duplicate.json()).toMatchObject({
       diagnostics: [
-        { file: 'finish.json', path: ['state', 0, 'path'] },
-        { file: 'finish.json', path: ['actions', 'prepare'] },
+        { file: 'rules/finish.json', path: ['state', 0, 'path'] },
+        { file: 'rules/finish.json', path: ['actions', 'prepare'] },
       ],
     })
-    await expect(readFile(join(root, 'basic/finish.json'))).rejects.toHaveProperty('code', 'ENOENT')
+    await expect(readFile(join(root, 'basic/rules/finish.json'))).rejects.toHaveProperty(
+      'code',
+      'ENOENT',
+    )
 
     const finishRules = { state: [], actions: { finish } }
 
     const added = await command(setup.revision, {
       type: 'game.updateRules',
-      file: 'finish.json',
+      ruleId: 'finish',
       rules: finishRules,
     })
 
     expect(added.status).toBe(200)
     const both = projectViewSchema.parse(await added.json())
-    expect(both.game?.rules).toEqual(['setup.json', 'finish.json'])
-    expect(both.ruleFiles).toEqual({ 'setup.json': { state, actions }, 'finish.json': finishRules })
+    expect(both.game?.rules).toEqual(['setup', 'finish'])
+    expect(both.ruleFiles).toEqual({
+      setup: { state, actions },
+      finish: finishRules,
+    })
     expect(both.rules).toMatchObject({ state, actions: { ...actions, finish } })
 
     expect(
       (await command(both.revision, { type: 'game.updateRules', rules: finishRules })).status,
-    ).toBe(422)
-    const originalSetup = await readFile(join(root, 'basic/setup.json'), 'utf8')
+    ).toBe(400)
+    const originalSetup = await readFile(join(root, 'basic/rules/setup.json'), 'utf8')
     const originalManifest = await readFile(join(root, 'basic/game.json'), 'utf8')
 
     const updated = await command(both.revision, {
       type: 'game.updateRules',
-      file: 'finish.json',
+      ruleId: 'finish',
       rules: { state: [], actions: {} },
     })
 
     expect(updated.status).toBe(200)
-    expect(await readFile(join(root, 'basic/setup.json'), 'utf8')).toBe(originalSetup)
+    expect(await readFile(join(root, 'basic/rules/setup.json'), 'utf8')).toBe(originalSetup)
     expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(originalManifest)
   })
 
-  it('migrates inline rules on save while protecting a pre-existing rule file', async () => {
+  it('protects an unlisted rule file when creating a rule set', async () => {
     const rules = { state: [], actions: {} }
-    const savedManifest = JSON.stringify({ ...manifest, rules })
-    await writeFile(join(root, 'basic/game.json'), savedManifest)
-    const ruleFile = join(root, 'basic/rules.json')
+    const savedManifest = await readFile(join(root, 'basic/game.json'), 'utf8')
+    const ruleFile = join(root, 'basic/rules/rules.json')
+    await mkdir(join(root, 'basic/rules'))
     await writeFile(ruleFile, 'existing data')
-    const inline = await inspect()
-    expect(inline.rules).toEqual(rules)
-    const operation = { type: 'game.updateRules', rules }
-    expect((await command(inline.revision, operation)).status).toBe(409)
+    const initial = await inspect()
+    expect(initial.rules).toBeUndefined()
+    const operation = { type: 'game.updateRules', ruleId: 'rules', rules }
+    expect((await command(initial.revision, operation)).status).toBe(409)
     expect(await readFile(ruleFile, 'utf8')).toBe('existing data')
     expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(savedManifest)
 
     await rm(ruleFile)
-    const migrated = await command(inline.revision, operation)
-    expect(migrated.status).toBe(200)
-    expect(projectViewSchema.parse(await migrated.json()).game?.rules).toBe('rules.json')
+    const created = await command(initial.revision, operation)
+    expect(created.status).toBe(200)
+    expect(projectViewSchema.parse(await created.json()).game?.rules).toEqual(['rules'])
     expect(JSON.parse(await readFile(ruleFile, 'utf8'))).toEqual(rules)
   })
 
@@ -545,14 +570,14 @@ describe('shared editor project API', () => {
       const save = service.apply({
         path: 'basic',
         expectedRevision: current.revision,
-        command: { type: 'game.updateRules', rules },
+        command: { type: 'game.updateRules', ruleId: 'rules', rules },
       })
 
-      const ruleFile = join(root, 'basic/rules.json')
+      const ruleFile = join(root, 'basic/rules/rules.json')
 
       if (committed) {
         await expect(save).resolves.toMatchObject({
-          view: { game: { rules: 'rules.json' }, rules },
+          view: { game: { rules: ['rules'] }, rules },
         })
         expect(JSON.parse(await readFile(ruleFile, 'utf8'))).toEqual(rules)
       } else {

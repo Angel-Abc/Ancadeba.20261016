@@ -3,7 +3,16 @@
   "id": "basic-game",
   "version": "1.0.0",
   "initial-scene": "start-screen",
-  "scenes": ["standard", "inventory", "settings", "start-screen", "gallery"],
+  "scenes": [
+    "standard",
+    "inventory",
+    "settings",
+    "start-screen",
+    "gallery",
+    "old-harbour",
+    "shoals",
+    "north-cliff-landing"
+  ],
   "input": "input.json",
   "stylesheet": "museum.css",
   "titleKey": "game.title",
@@ -12,7 +21,7 @@
     "default": "en",
     "available": ["en", "nl"]
   },
-  "maps": ["museum"],
-  "inventory": "inventory.json",
-  "rules": ["rules.json", "museum-puzzle.json"]
+  "maps": ["museum", "harbour"],
+  "inventory": ["museum", "harbour"],
+  "rules": ["rules", "museum-puzzle", "harbour-route"]
 }

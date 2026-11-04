@@ -5,7 +5,7 @@
   "description": "Reusable graphics, palettes, and grouped parts.",
   "version": "1.0.0",
   "assets": "assets.json",
-  "inventory": "inventory.json",
+  "inventory": ["wardrobe"],
   "initial-scene": "gallery",
   "scenes": ["gallery", "ember", "wardrobe"]
 }

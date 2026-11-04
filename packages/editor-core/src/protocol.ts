@@ -5,7 +5,7 @@ import {
   assetCatalogSchema,
   inventorySchema,
   gameRulesSchema,
-  ruleFilenameSchema,
+  gameIdSchema,
 } from '@ancadeba/schemas'
 
 export const diagnosticSchema = z.object({
@@ -17,7 +17,7 @@ export const diagnosticSchema = z.object({
 
 export const projectViewSchema = z.object({
   rules: gameRulesSchema.optional(),
-  ruleFiles: z.record(ruleFilenameSchema, gameRulesSchema).optional(),
+  ruleFiles: z.record(gameIdSchema, gameRulesSchema).optional(),
   assets: assetCatalogSchema.optional(),
   inventory: inventorySchema.optional(),
   translationKeys: z.array(z.string()).optional(),

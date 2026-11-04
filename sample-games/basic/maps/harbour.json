@@ -1,0 +1,42 @@
+{
+  "schema-version": "1.0.0",
+  "type": "square-grid",
+  "width": 7,
+  "height": 5,
+  "terrain": {
+    "water": {
+      "color": "#24445b",
+      "walkable": false
+    },
+    "shoal": {
+      "color": "#4c7576",
+      "walkable": false
+    },
+    "cliff": {
+      "color": "#5c5b62",
+      "walkable": false
+    },
+    "dock": {
+      "color": "#b49164",
+      "movementCostMs": 180000
+    },
+    "channel": {
+      "color": "#af5953"
+    },
+    "buoy": {
+      "color": "#af5953",
+      "movementCostMs": 240000
+    },
+    "landing": {
+      "color": "#b49164",
+      "movementCostMs": 180000
+    }
+  },
+  "tiles": [
+    ["water", "water", "water", "cliff", "cliff", "cliff", "cliff"],
+    ["water", "water", "shoal", "channel", "channel", "landing", "cliff"],
+    ["water", "shoal", "shoal", "buoy", "cliff", "shoal", "water"],
+    ["water", "dock", "channel", "channel", "shoal", "water", "water"],
+    ["water", "water", "water", "shoal", "water", "water", "water"]
+  ]
+}

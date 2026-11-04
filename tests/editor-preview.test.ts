@@ -87,11 +87,11 @@ describe('editor preview', () => {
           ...gameDefinition('Rule preview'),
           scenes: ['room'],
           'initial-scene': 'room',
-          rules: ['museum-rules.json', 'museum-state.json'],
+          rules: ['museum-rules', 'museum-state'],
         })
       }
 
-      if (address.includes('museum-rules.json')) {
+      if (address.includes('rules%2Fmuseum-rules.json')) {
         return Response.json({
           state: [],
           actions: {
@@ -105,7 +105,7 @@ describe('editor preview', () => {
         })
       }
 
-      if (address.includes('museum-state.json')) {
+      if (address.includes('rules%2Fmuseum-state.json')) {
         return Response.json({ state: [{ path: ['message'], value: '' }], actions: {} })
       }
 

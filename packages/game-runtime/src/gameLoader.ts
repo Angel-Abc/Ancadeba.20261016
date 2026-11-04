@@ -8,8 +8,9 @@ import {
   assetCatalogSchema,
   mapDefinitionSchema,
   inventorySchema,
+  inventoryFile,
   gameRulesSchema,
-  gameRuleFiles,
+  ruleFile,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -64,14 +65,19 @@ export class GameLoader implements IGameLoader {
         ? await this.resources.load(definition.assets, assetCatalogSchema)
         : undefined
 
-    const inventory = definition.inventory
-      ? await this.resources.load(definition.inventory, inventorySchema)
-      : undefined
+    const inventory = new Map(
+      await Promise.all(
+        (definition.inventory ?? []).map(
+          async (id) =>
+            [id, await this.resources.load(inventoryFile(id), inventorySchema)] as const,
+        ),
+      ),
+    )
 
     const rules = new Map(
       await Promise.all(
-        gameRuleFiles(definition.rules).map(
-          async (file) => [file, await this.resources.load(file, gameRulesSchema)] as const,
+        (definition.rules ?? []).map(
+          async (id) => [id, await this.resources.load(ruleFile(id), gameRulesSchema)] as const,
         ),
       ),
     )
