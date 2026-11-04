@@ -417,7 +417,7 @@ scene, and `--ge-component-row`, `--ge-component-column`,
 alignment declarations directly.
 
 `scene.css` interprets these values with
-`grid-template-columns: repeat(var(--ge-scene-grid-columns), 1fr)` and the same
+`grid-template-columns: repeat(var(--ge-scene-grid-columns), minmax(0, 1fr))` and the same
 rule for rows. Component placement uses
 `grid-row: var(--ge-component-row) / span var(--ge-component-row-span)` and its
 column equivalent. The narrative example therefore covers rows and columns 3
@@ -425,11 +425,11 @@ through 10. The values stay local to each element so separate previews can have
 different grid dimensions without overwriting each other.
 
 The scene fills its host's available width and height. The standalone host fills
-`#app`, whose height follows the browser viewport. The editor sets its game view
-height to `--ge-preview-height` (650 game units by default); the selector sits above the scene and takes
-its own space. Rows divide the remaining height equally and columns divide the
-width equally. Cells are not forced to be square. Resizing preserves placement
-and proportions; there is no breakpoint-based rearrangement yet.
+`#app`, whose height follows the browser viewport. The editor sizes the preview
+canvas from its pane width and caps its height at 66% of the viewport. The scene
+selector takes its own space above the scene. Rows divide the remaining height
+equally and columns divide the width equally. Cells are not forced to be square.
+Resizing preserves placement and proportions.
 
 Both applications import `@ancadeba/ui-components/game.css`. This entry point
 imports `variables.css` for defaults and `scene.css` for rendering rules, and
@@ -438,7 +438,7 @@ rather than repeated as `var()` fallbacks: a 4-row/3-column grid, one-based
 component positions, one-cell spans, and start-aligned text. Loaded scene data
 overrides the applicable variables on its own elements.
 
-Text has no default margin, 15 game units of inner padding, wrapping, preserved line
+Text has no default margin, 7 scene units of inner padding, wrapping, preserved line
 breaks, zero minimum component sizes, and `overflow: auto` so long content scrolls
 inside its assigned rectangle. Components are ordinary grid items, without
 absolute positioning. Default gap and outer padding are zero. Text and heading
@@ -448,44 +448,28 @@ Appearance can be adjusted on a containing element through CSS custom properties
 
 ```css
 .my-game {
-  --ge-scene-gap: calc(10 * var(--ge-unit-size));
-  --ge-scene-padding: calc(20 * var(--ge-unit-size));
+  --ge-scene-gap: calc(10 * var(--ge-scene-unit-size));
+  --ge-scene-padding: calc(20 * var(--ge-scene-unit-size));
   --ge-scene-font-family: Georgia, serif;
-  --ge-scene-font-size: calc(20 * var(--ge-unit-size));
+  --ge-scene-font-size: calc(20 * var(--ge-scene-unit-size));
   --ge-scene-line-height: 1.7;
   --ge-scene-color: #e5e7eb;
   --ge-scene-background: #161616;
   --ge-scene-text-background: #202020;
-  --ge-scene-text-padding: calc(15 * var(--ge-unit-size));
-  --ge-scene-heading-size: calc(30 * var(--ge-unit-size));
+  --ge-scene-text-padding: calc(7 * var(--ge-scene-unit-size));
+  --ge-scene-heading-size: calc(30 * var(--ge-scene-unit-size));
   --ge-scene-heading-weight: 600;
 }
 ```
 
-The base unit is defined once in the shared `variables.css` for both hosts:
+A scene unit (`--ge-scene-unit-size`) is limited by the scene's own width and
+height and capped at the browser-wide unit. Body text uses 20 scene units and
+headings use 28. Resizing an embedded preview updates these sizes even when the
+browser window stays the same size.
 
-```css
-:root {
-  --ge-min-root-size: min(100vw, 100vh);
-  --ge-unit-size: calc(0.001 * var(--ge-min-root-size));
-  --ge-font-size: calc(20 * var(--ge-unit-size));
-}
-```
-
-One game unit is one thousandth of the browser's shorter viewport dimension.
-At a shorter dimension of 800 pixels, a unit is 0.8 pixels: body text is 16 pixels,
-headings are 22.4 pixels (28 units), and text padding is 12 pixels. Shared defaults
-use unit multiples for text, headings, spacing, scene-picker padding and borders,
-and preview height. The editor's surrounding controls, spacing, borders, outlines,
-and maximum width use the same unit. There are no fixed `px`, `rem`, or `em`
-lengths in these authored game or editor styles.
-
-Override `--ge-unit-size` on `:root` to change the global scale; all dependent
-default values are defined there too. Viewport resizing recalculates the unit
-automatically. Percentages and fractional grid tracks still fill the available
-host; zero values, grid counts and spans, font weights, and the line-height ratio
-remain unitless. Scaling does not introduce a fixed aspect ratio or rearrange the
-layout at breakpoints.
+The surrounding editor and the scene picker use `--ge-unit-size`, which follows
+the browser viewport. Grid tracks still fill the available scene without
+rearranging components at breakpoints.
 
 Font families and colors inherit from the containing app unless overridden, so
 the editor and standalone host currently inherit different application themes.

@@ -117,19 +117,6 @@
             </summary>
             <section class="preview-panel" aria-labelledby="preview-heading">
               <form id="preview-form">
-                <label for="game-language" data-i18n="game.language">Game language</label>
-                <input
-                  id="game-language"
-                  placeholder="Saved choice or game default"
-                  data-i18n-placeholder="game.automatic"
-                  aria-describedby="game-language-help"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <p id="game-language-help" class="help" data-i18n="game.languageHelp">
-                  Language tag, for example en or nl. Leave empty for the saved choice or game's
-                  default. Restart the preview after changing it.
-                </p>
                 <div class="preview-actions">
                   <button id="preview-start" type="submit" data-i18n="preview.start">Start</button>
                   <button id="preview-stop" type="button" disabled data-i18n="preview.stop">
@@ -137,6 +124,23 @@
                   </button>
                   <button id="game-export" type="button" data-i18n="export.button">Export</button>
                 </div>
+                <details class="preview-language">
+                  <summary data-i18n="game.language">Game language</summary>
+                  <input
+                    id="game-language"
+                    placeholder="Saved choice or game default"
+                    data-i18n-placeholder="game.automatic"
+                    aria-describedby="game-language-help"
+                    aria-label="Game language"
+                    data-i18n-aria-label="game.language"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <p id="game-language-help" class="help" data-i18n="game.languageHelp">
+                    Language tag, for example en or nl. Leave empty for the saved choice or game's
+                    default. Restart the preview after changing it.
+                  </p>
+                </details>
               </form>
               <p id="export-status" class="help" role="status"></p>
               <p id="export-error" class="error" role="alert" hidden></p>

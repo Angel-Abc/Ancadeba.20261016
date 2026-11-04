@@ -57,13 +57,13 @@ main {
   background: #713f12;
 }
 
-label {
+label:where(:not(.ancadeba-scene *)) {
   display: block;
   margin-bottom: calc(10 * var(--ge-unit-size));
 }
 
 input,
-button {
+button:where(:not(.ancadeba-scene *)) {
   min-height: calc(55 * var(--ge-unit-size));
   border: calc(1.25 * var(--ge-unit-size)) solid #475569;
   border-radius: calc(7.5 * var(--ge-unit-size));
@@ -82,7 +82,7 @@ input {
   font-size: calc(17.5 * var(--ge-unit-size));
 }
 
-button {
+button:where(:not(.ancadeba-scene *)) {
   padding: calc(10 * var(--ge-unit-size)) calc(25 * var(--ge-unit-size));
   color: inherit;
   background: #334155;
@@ -94,14 +94,14 @@ button {
   background: #2563eb;
 }
 
-button:disabled,
+button:disabled:where(:not(.ancadeba-scene *)),
 input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 input:focus-visible,
-button:focus-visible {
+button:focus-visible:where(:not(.ancadeba-scene *)) {
   outline: calc(2.5 * var(--ge-unit-size)) solid #93c5fd;
   outline-offset: calc(3.75 * var(--ge-unit-size));
 }
@@ -112,6 +112,7 @@ button:focus-visible {
 }
 
 .preview-content {
+  container-type: inline-size;
   min-height: calc(240 * var(--ge-unit-size));
   margin-top: calc(30 * var(--ge-unit-size));
   padding: 0.75rem;
@@ -121,7 +122,10 @@ button:focus-visible {
 }
 
 .preview-content > .ancadeba-game {
-  height: var(--ge-preview-height);
+  --ge-scene-line-height: 1.35;
+  --ge-scene-text-padding: calc(3 * var(--ge-scene-unit-size)) calc(8 * var(--ge-scene-unit-size));
+
+  height: clamp(min(52dvh, 100cqw), 75cqw, 66dvh);
 }
 
 .export-download {
@@ -150,7 +154,7 @@ fieldset {
   margin-top: 0.5rem;
   margin-bottom: 0;
 }
-select,
+select:where(:not(.ancadeba-scene *)),
 textarea {
   width: 100%;
   min-height: 2.75rem;
@@ -165,7 +169,7 @@ textarea {
   min-height: 5rem;
   resize: vertical;
 }
-select:focus-visible,
+select:focus-visible:where(:not(.ancadeba-scene *)),
 textarea:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 3px;
@@ -361,11 +365,13 @@ main {
   gap: 1.25rem;
   container-type: inline-size;
 }
-.editor-workspace > * {
-  flex: 1 1 24rem;
+#project-editor {
+  flex: 1 1 19rem;
   min-width: 0;
 }
 .preview-disclosure {
+  flex: 3 1 29rem;
+  min-width: 0;
   border: 1px solid #334155;
   border-radius: 0.5rem;
   background: #172033;
@@ -382,7 +388,23 @@ main {
   border: 0;
   padding-block-start: 0;
 }
-/* Two 24rem panes plus their gap. Stacked panes use normal page scrolling. */
+#preview-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+}
+.preview-language[open] {
+  flex-basis: 100%;
+}
+.preview-language > summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.preview-language > input {
+  margin-block-start: 0.5rem;
+}
+/* The 19rem editor, 29rem preview, and their gap fit on one row. */
 @container (min-width: 49.25rem) {
   .preview-disclosure {
     position: sticky;
@@ -393,13 +415,6 @@ main {
   .preview-disclosure:not([open]) {
     flex-basis: 18rem;
     flex-grow: 0;
-  }
-  .preview-content > .ancadeba-game {
-    --ge-scene-font-size: 0.85rem;
-    --ge-scene-heading-size: 1.15em;
-    --ge-scene-line-height: 1.35;
-    --ge-scene-text-padding: 0.2em;
-    height: min(var(--ge-preview-height), 50dvh);
   }
 }
 #editor-heading {
