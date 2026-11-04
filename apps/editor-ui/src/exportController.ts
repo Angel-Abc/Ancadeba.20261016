@@ -17,10 +17,11 @@ export class EditorExportController {
   async export(folder: string): Promise<void> {
     if (this.disposed || this.request) return
 
+    const request = new AbortController()
+    this.request = request
+
     try {
       const path = normalizeGameFolder(folder)
-      const request = new AbortController()
-      this.request = request
       this.onStateChange('exporting')
       const fetcher = this.fetcher
 
@@ -48,23 +49,29 @@ export class EditorExportController {
 
       const archive = await response.blob()
 
-      if (this.disposed) return
+      if (this.request !== request) return
       const name = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1]
       const fileName = name && /^[a-zA-Z0-9_-]+\.zip$/.test(name) ? name : 'game.zip'
       this.download(archive, fileName)
       this.onStateChange('ready', fileName)
     } catch (error) {
-      if (!this.disposed) {
+      if (this.request === request) {
         this.onStateChange('error', error instanceof Error ? error.message : String(error))
       }
     } finally {
-      this.request = undefined
+      if (this.request === request) this.request = undefined
     }
+  }
+
+  reset(): void {
+    this.request?.abort()
+    this.request = undefined
+
+    if (!this.disposed) this.onStateChange('idle')
   }
 
   dispose(): void {
     this.disposed = true
-    this.request?.abort()
-    this.request = undefined
+    this.reset()
   }
 }

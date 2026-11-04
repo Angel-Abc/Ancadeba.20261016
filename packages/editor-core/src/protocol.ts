@@ -16,6 +16,12 @@ export const projectViewSchema = z.object({
   diagnostics: z.array(diagnosticSchema),
 })
 
+export const projectListSchema = z.object({
+  projects: z.array(z.object({ path: z.string(), title: z.string() })),
+})
+
+export type ProjectChoice = z.infer<typeof projectListSchema>['projects'][number]
+
 export const apiErrorSchema = z.object({
   error: z.string(),
   code: z.string().optional(),

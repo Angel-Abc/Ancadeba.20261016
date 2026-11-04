@@ -1,4 +1,4 @@
-import type { ProjectView, EditorCommand } from '@ancadeba/editor-core'
+import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
 import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
 import type { Translate } from '@ancadeba/utilities'
@@ -24,7 +24,13 @@ export function bindProjectPanel(
   fetcher: typeof fetch,
   t: Translate = editorLocalization().t,
   subscribeLanguageChanges?: (listener: () => void) => () => void,
-  additionalSections: readonly ProjectWorkspaceSection[] = [],
+  {
+    additionalSections = [],
+    onProjectChange,
+  }: {
+    additionalSections?: readonly ProjectWorkspaceSection[]
+    onProjectChange?: (path: string) => void
+  } = {},
 ): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
     const element = root.querySelector<T>(`#${id}`)
@@ -34,7 +40,7 @@ export function bindProjectPanel(
     return element
   }
 
-  const folder = find<HTMLInputElement>('editor-folder')
+  const folder = find<HTMLSelectElement>('editor-folder')
   const load = find<HTMLButtonElement>('editor-load')
   const reload = find<HTMLButtonElement>('editor-reload')
   const metadata = find<HTMLFormElement>('editor-metadata')
@@ -47,7 +53,7 @@ export function bindProjectPanel(
   const error = find<HTMLElement>('editor-error')
   const header = find<HTMLElement>('editor-header')
   const workspace = find<HTMLElement>('editor-workspace')
-  const openControls = find<HTMLElement>('project-open-controls')
+  const openControls = find<HTMLFormElement>('project-open-controls')
   const openToggle = find<HTMLButtonElement>('project-open-toggle')
   const openFeedback = find<HTMLElement>('project-open-feedback')
   const value = (id: string) => find<HTMLInputElement>(id).value
@@ -64,9 +70,76 @@ export function bindProjectPanel(
   let view: ProjectView | undefined
   const dirtyForms = new Set<string>()
   let loadedPath = ''
+  let busy = false
   let openingProject = false
+  let openError = ''
+  let discoveryError: string | undefined
+  let discovery: AbortController | undefined
+  let projectChoices: ProjectChoice[] = []
+  const client = new HttpEditorClient(fetcher)
   let assetsPanel: ReturnType<typeof bindAssetsPanel> | undefined
   let tree: ReturnType<typeof bindProjectTree> | undefined
+
+  const renderOpenControls = () => {
+    const disabled = busy || Boolean(discovery) || !projectChoices.length
+    folder.disabled = disabled
+    load.disabled = disabled
+
+    let message = openError
+
+    if (discovery) message = t('project.discovering')
+    else if (openingProject) message = t('project.working')
+    else if (discoveryError) message = t('project.listError', { message: discoveryError })
+    else if (!projectChoices.length) message = t('project.emptyList')
+
+    openFeedback.textContent = message
+    openFeedback.hidden = !message
+  }
+
+  const renderProjectChoices = (preferredPath: string) => {
+    folder.replaceChildren(
+      ...projectChoices.map(({ path, title }) => {
+        const option = root.ownerDocument.createElement('option')
+        const location = path || t('workspace.root')
+        option.value = path
+        option.textContent = title && title !== location ? `${title} (${location})` : location
+
+        return option
+      }),
+    )
+    folder.value = projectChoices.some(({ path }) => path === preferredPath)
+      ? preferredPath
+      : (projectChoices[0]?.path ?? '')
+  }
+
+  const refreshProjects = async (focus = false) => {
+    discovery?.abort()
+    const request = new AbortController()
+    discovery = request
+    discoveryError = undefined
+    openError = ''
+    renderOpenControls()
+
+    try {
+      const choices = await client.listProjects(request.signal)
+
+      if (!request.signal.aborted) projectChoices = choices
+    } catch (error) {
+      if (!request.signal.aborted) {
+        discoveryError = error instanceof Error ? error.message : String(error)
+      }
+    }
+
+    if (request.signal.aborted) return
+
+    discovery = undefined
+    renderProjectChoices(loadedPath)
+    renderOpenControls()
+
+    if (focus && !openControls.hidden && root.ownerDocument.activeElement === openToggle) {
+      folder.focus()
+    }
+  }
 
   let selection: ProjectTreeNode = {
     key: 'game',
@@ -184,12 +257,15 @@ export function bindProjectPanel(
   const render: ProjectEditorListener = (state, replaceFields) => {
     assetsPanel?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
+    const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
     loadedPath = state.path
-    load.disabled = state.busy
+
+    if (projectChanged) onProjectChange?.(loadedPath)
+
+    busy = state.busy
     reload.disabled = state.busy || !view
     reload.hidden = !view
-    folder.disabled = state.busy
     scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
     fields.disabled = state.busy || !view?.game || Boolean(view.diagnostics.length)
     status.textContent = state.busy
@@ -213,8 +289,6 @@ export function bindProjectPanel(
         .join('\n') ||
       ''
     error.hidden = !error.textContent
-    openFeedback.textContent = view ? '' : error.textContent || status.textContent
-    openFeedback.hidden = !openFeedback.textContent
     header.hidden = !view
     workspace.hidden = !view
 
@@ -224,8 +298,12 @@ export function bindProjectPanel(
       if (replaceFields) {
         showOpenControls(false)
         openToggle.focus()
+      } else {
+        openError = state.error
       }
     }
+
+    renderOpenControls()
 
     const updateTree = () => {
       if (!tree) return
@@ -326,7 +404,7 @@ export function bindProjectPanel(
     updateTree()
   }
 
-  const controller = new ProjectEditorController(new HttpEditorClient(fetcher), render)
+  const controller = new ProjectEditorController(client, render)
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -350,7 +428,11 @@ export function bindProjectPanel(
     showSelection()
   }
 
-  const unsubscribeLanguage = subscribeLanguageChanges?.(() => refreshLanguage())
+  const unsubscribeLanguage = subscribeLanguageChanges?.(() => {
+    refreshLanguage()
+    renderProjectChoices(folder.value)
+    renderOpenControls()
+  })
 
   const listeners: (() => void)[] = []
 
@@ -359,14 +441,26 @@ export function bindProjectPanel(
     listeners.push(() => element.removeEventListener(event, listener))
   }
 
-  on(openToggle, 'click', () => showOpenControls(Boolean(openControls.hidden)))
+  on(openToggle, 'click', () => {
+    const show = Boolean(openControls.hidden)
+    showOpenControls(show)
 
-  on(load, 'click', () => {
-    if (load.disabled) return
+    if (show) void refreshProjects(true)
+  })
+  on(folder, 'keydown', (event) => {
+    if (!('key' in event) || event.key !== 'Enter') return
 
-    const path = folder.value.trim()
+    event.preventDefault()
+    openControls.requestSubmit()
+  })
+  on(openControls, 'submit', (event) => {
+    event.preventDefault()
+
+    if (load.disabled || !projectChoices.some(({ path }) => path === folder.value)) return
+
     openingProject = true
-    void controller.load(path.startsWith('/') ? path : path.replace(/\/+$/, ''))
+    openError = ''
+    void controller.load(folder.value)
   })
   on(reload, 'click', () => {
     void controller.load(loadedPath, dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
@@ -437,7 +531,10 @@ export function bindProjectPanel(
     void controller.refresh(() => dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
   })
 
+  void refreshProjects()
+
   return () => {
+    discovery?.abort()
     controller.dispose()
     assetsPanel?.dispose()
     tree?.dispose()

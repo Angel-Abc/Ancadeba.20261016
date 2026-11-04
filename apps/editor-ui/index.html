@@ -28,20 +28,16 @@
       <div class="editor-layout">
         <aside class="project-sidebar" aria-labelledby="tree-heading">
           <h2 id="tree-heading" data-i18n="tree.heading">Project explorer</h2>
-          <div id="project-open-controls">
-            <label for="editor-folder" data-i18n="game.folder">Game folder</label>
-            <input
-              id="editor-folder"
-              placeholder="Workspace root"
-              data-i18n-placeholder="workspace.placeholder"
-              autocomplete="off"
-              spellcheck="false"
-            />
+          <form id="project-open-controls">
+            <label for="editor-folder" data-i18n="project.available">Available games</label>
+            <select id="editor-folder" size="5" disabled></select>
             <div class="preview-actions editor-actions">
-              <button id="editor-load" type="button" data-i18n="project.load">Load project</button>
+              <button id="editor-load" type="submit" disabled data-i18n="project.load">
+                Open project
+              </button>
             </div>
             <p id="project-open-feedback" class="help" role="status" hidden></p>
-          </div>
+          </form>
           <button id="editor-reload" type="button" disabled hidden data-i18n="project.reload">
             Reload latest (keep entries)
           </button>
@@ -51,69 +47,6 @@
           <p id="tree-message" class="help" role="status"></p>
         </aside>
         <div id="editor-workspace" class="editor-workspace" hidden>
-          <details class="preview-disclosure">
-            <summary data-i18n="preview.heading">Engine preview</summary>
-            <section class="preview-panel" aria-labelledby="preview-heading" data-state="stopped">
-              <div class="preview-heading">
-                <h2 id="preview-heading" data-i18n="preview.heading">Engine preview</h2>
-                <span id="preview-status" class="status" role="status" data-i18n="preview.stopped"
-                  >Stopped</span
-                >
-              </div>
-              <form id="preview-form">
-                <label for="game-folder" data-i18n="game.folder">Game folder</label>
-                <input
-                  id="game-folder"
-                  type="text"
-                  placeholder="Workspace root"
-                  data-i18n-placeholder="workspace.placeholder"
-                  aria-describedby="game-folder-help"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <p id="game-folder-help" class="help" data-i18n="game.folderHelp">
-                  Relative to the editor workspace. Leave empty to use its root.
-                </p>
-                <label for="game-language" data-i18n="game.language">Game language</label>
-                <input
-                  id="game-language"
-                  placeholder="Saved choice or game default"
-                  data-i18n-placeholder="game.automatic"
-                  aria-describedby="game-language-help"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <p id="game-language-help" class="help" data-i18n="game.languageHelp">
-                  Language tag, for example en or nl. Leave empty for the saved choice or game's
-                  default. Restart the preview after changing it.
-                </p>
-                <div class="preview-actions">
-                  <button id="preview-start" type="submit" data-i18n="preview.start">Start</button>
-                  <button id="preview-stop" type="button" disabled data-i18n="preview.stop">
-                    Stop
-                  </button>
-                  <button id="game-export" type="button" data-i18n="export.button">Export</button>
-                </div>
-              </form>
-              <p id="export-status" class="help" role="status"></p>
-              <p id="export-error" class="error" role="alert" hidden></p>
-              <a id="export-download" class="export-download" hidden data-i18n="export.download"
-                >Download ZIP again</a
-              >
-              <p id="preview-error" class="error" role="alert" hidden></p>
-              <div
-                id="preview-content"
-                class="preview-content"
-                aria-label="Game preview"
-                data-i18n-aria-label="preview.label"
-                aria-busy="false"
-              >
-                <p id="preview-empty" class="preview-empty" data-i18n="preview.empty">
-                  Start the engine to preview the game.
-                </p>
-              </div>
-            </section>
-          </details>
           <section id="project-editor" class="preview-panel" aria-labelledby="editor-heading">
             <h2 id="editor-heading" data-i18n="project.heading">Game project</h2>
             <h3 id="workspace-heading"></h3>
@@ -175,6 +108,55 @@
               <pre id="component-json"></pre>
             </section>
           </section>
+          <details class="preview-disclosure" data-state="stopped">
+            <summary>
+              <span id="preview-heading" data-i18n="preview.heading">Engine preview</span>
+              <span id="preview-status" class="status" role="status" data-i18n="preview.stopped"
+                >Stopped</span
+              >
+            </summary>
+            <section class="preview-panel" aria-labelledby="preview-heading">
+              <form id="preview-form">
+                <label for="game-language" data-i18n="game.language">Game language</label>
+                <input
+                  id="game-language"
+                  placeholder="Saved choice or game default"
+                  data-i18n-placeholder="game.automatic"
+                  aria-describedby="game-language-help"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <p id="game-language-help" class="help" data-i18n="game.languageHelp">
+                  Language tag, for example en or nl. Leave empty for the saved choice or game's
+                  default. Restart the preview after changing it.
+                </p>
+                <div class="preview-actions">
+                  <button id="preview-start" type="submit" data-i18n="preview.start">Start</button>
+                  <button id="preview-stop" type="button" disabled data-i18n="preview.stop">
+                    Stop
+                  </button>
+                  <button id="game-export" type="button" data-i18n="export.button">Export</button>
+                </div>
+              </form>
+              <p id="export-status" class="help" role="status"></p>
+              <p id="export-error" class="error" role="alert" hidden></p>
+              <a id="export-download" class="export-download" hidden data-i18n="export.download"
+                >Download ZIP again</a
+              >
+              <p id="preview-error" class="error" role="alert" hidden></p>
+              <div
+                id="preview-content"
+                class="preview-content"
+                aria-label="Game preview"
+                data-i18n-aria-label="preview.label"
+                aria-busy="false"
+              >
+                <p id="preview-empty" class="preview-empty" data-i18n="preview.empty">
+                  Start the engine to preview the game.
+                </p>
+              </div>
+            </section>
+          </details>
         </div>
       </div>
     </main>

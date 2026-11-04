@@ -613,15 +613,16 @@ hard-coding sample gameplay into either browser host.
 
 ## Engine instances
 
-The editor includes Start and Stop controls and a Game folder field. Leave the
-field empty when the editor server's `workFolder` is the game directory, or enter
-a subfolder such as `basic` when the workspace contains multiple games. Start
-loads that folder's `game.json` and referenced scenes through `/api/files`, with
-caching disabled, and mounts a preview after the complete game is validated and
-assembled. Stop also works while loading. Each new start
+The editor lists games in the server's `workFolder`, including the workspace
+root and nested projects. Select a game and press Enter or click **Open project**.
+Start loads the open project's `game.json` and referenced scenes through
+`/api/files` with caching disabled. The preview mounts after the game is
+validated and assembled. Stop also works while loading. Each new start
 uses a fresh instance and reads the latest saved files; unsaved edits are not yet
 part of the resource source. Failures appear beside the controls and allow retrying.
 The preview renders the active scene and offers a selector for switching scenes.
+If the preview is running or loading when you switch projects, it starts over
+with the newly opened project.
 
 The editor UI composes its services in `apps/editor-ui/src/ioc/containerBuilder.ts`.
 The `factories/` folder registers console logging, preview engine creation, and
@@ -630,11 +631,11 @@ function, download callback, and UI state callbacks, then resolves the controlle
 from one container. Each preview start creates a fresh engine for the selected
 game folder; controller disposal remains owned by the entry point.
 
-Export uses the same Game folder field and downloads a ZIP containing the engine,
+Export uses the open project and downloads a ZIP containing the engine,
 `game.json`, and the game's assets. It works while a preview is running and uses
-the latest saved workspace files. The folder is locked while the export builds;
-Stop remains available for a running preview. A download link remains available
-afterward so the ZIP can be downloaded again. Unzip it and serve the complete
+the latest saved workspace files. Stop remains available for a running preview.
+The download link stays available until you switch projects or export again.
+Unzip the archive and serve the complete
 contents over HTTP(S), just like a command-line export.
 
 `@ancadeba/game-runtime` exports `Engine`, `IEngine`, `IEngineHost`, `EngineMessages`,

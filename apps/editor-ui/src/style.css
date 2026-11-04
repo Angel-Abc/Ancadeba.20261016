@@ -27,28 +27,17 @@ main {
 }
 
 .preview-panel {
-  margin-top: calc(40 * var(--ge-unit-size));
-  padding: calc(30 * var(--ge-unit-size));
+  padding: 1.25rem;
   border: calc(1.25 * var(--ge-unit-size)) solid #334155;
   border-radius: calc(15 * var(--ge-unit-size));
   background: #172033;
 }
 
-.preview-heading,
 .preview-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: calc(15 * var(--ge-unit-size));
-}
-
-.preview-heading {
-  justify-content: space-between;
-  margin-bottom: calc(30 * var(--ge-unit-size));
-}
-
-.preview-heading h2 {
-  margin: 0;
-  font-size: calc(22.5 * var(--ge-unit-size));
 }
 
 .status {
@@ -125,7 +114,7 @@ button:focus-visible {
 .preview-content {
   min-height: calc(240 * var(--ge-unit-size));
   margin-top: calc(30 * var(--ge-unit-size));
-  padding: calc(30 * var(--ge-unit-size));
+  padding: 0.75rem;
   border: calc(1.25 * var(--ge-unit-size)) dashed #475569;
   border-radius: calc(10 * var(--ge-unit-size));
   background: #111827;
@@ -137,6 +126,10 @@ button:focus-visible {
 
 .export-download {
   color: #93c5fd;
+}
+
+#export-status:empty {
+  display: none;
 }
 
 fieldset {
@@ -178,7 +171,6 @@ textarea:focus-visible {
   outline-offset: 3px;
 }
 .editor-actions {
-  flex-wrap: wrap;
   margin-top: 1rem;
 }
 #editor-error {
@@ -284,7 +276,7 @@ main {
 }
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 1.25rem;
   align-items: start;
 }
@@ -294,18 +286,13 @@ main {
   max-height: calc(100vh - 2rem);
   overflow: auto;
   resize: horizontal;
+  width: clamp(16rem, 21vw, 20rem);
   min-width: 16rem;
   max-width: 32rem;
   padding: 1rem;
   background: #172033;
   border: 1px solid #334155;
   border-radius: 0.5rem;
-}
-.editor-layout {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-.project-sidebar {
-  width: 20rem;
 }
 .project-sidebar h2 {
   margin: 0 0 1rem;
@@ -368,10 +355,15 @@ main {
 }
 .editor-workspace {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 1.25rem;
+  container-type: inline-size;
 }
-.editor-workspace .preview-panel {
-  margin-top: 1rem;
-  padding: 1.25rem;
+.editor-workspace > * {
+  flex: 1 1 24rem;
+  min-width: 0;
 }
 .preview-disclosure {
   border: 1px solid #334155;
@@ -382,9 +374,33 @@ main {
   padding: 1rem;
   cursor: pointer;
 }
+#preview-status {
+  float: inline-end;
+  margin-inline-start: 0.5rem;
+}
 .preview-disclosure .preview-panel {
   border: 0;
-  margin: 0;
+  padding-block-start: 0;
+}
+/* Two 24rem panes plus their gap. Stacked panes use normal page scrolling. */
+@container (min-width: 49.25rem) {
+  .preview-disclosure {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+  }
+  .preview-disclosure:not([open]) {
+    flex-basis: 18rem;
+    flex-grow: 0;
+  }
+  .preview-content > .ancadeba-game {
+    --ge-scene-font-size: 0.85rem;
+    --ge-scene-heading-size: 1.15em;
+    --ge-scene-line-height: 1.35;
+    --ge-scene-text-padding: 0.2em;
+    height: min(var(--ge-preview-height), 50dvh);
+  }
 }
 #editor-heading {
   font-size: 0.9rem;

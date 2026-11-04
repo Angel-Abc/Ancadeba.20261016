@@ -367,8 +367,8 @@ describe('application localization', () => {
   it('translates editor labels and dynamic messages with an English fallback', () => {
     const { language, t } = editorLocalization(['nl-NL'])
     expect(language).toBe('nl')
-    expect(t('project.load')).toBe('Project laden')
+    expect(t('project.load')).toBe('Project openen')
     expect(t('export.ready', { file: 'game.zip' })).toBe('Export gereed: game.zip')
-    expect(editorLocalization(['fr']).t('project.load')).toBe('Load project')
+    expect(editorLocalization(['fr']).t('project.load')).toBe('Open project')
   })
 })

@@ -72,6 +72,36 @@ describe('editor server', () => {
     await expect(nested.json()).resolves.toEqual({ entries: [] })
   })
 
+  it('discovers root and nested game manifests and skips ordinary folders', async () => {
+    const group = join(root, 'project-group')
+    const nested = join(group, 'nested game')
+    const broken = join(group, 'broken')
+    const rootManifest = join(root, 'game.json')
+
+    try {
+      await mkdir(nested, { recursive: true })
+      await mkdir(broken)
+      await mkdir(join(group, 'ordinary', 'game.json'), { recursive: true })
+      await writeFile(rootManifest, '{"title":"Root game"}')
+      await writeFile(join(nested, 'game.json'), '{"title":"Nested game"}')
+      await writeFile(join(broken, 'game.json'), '{invalid')
+
+      const response = await fetch(`${baseUrl}/api/editor/projects`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      await expect(response.json()).resolves.toEqual({
+        projects: [
+          { path: '', title: 'Root game' },
+          { path: 'project-group/broken', title: '' },
+          { path: 'project-group/nested game', title: 'Nested game' },
+        ],
+      })
+    } finally {
+      await rm(rootManifest, { force: true })
+      await rm(group, { recursive: true, force: true })
+    }
+  })
+
   it('reads file bytes', async () => {
     const response = await fetch(`${baseUrl}/api/files?path=hello.txt`)
     expect(response.status).toBe(200)

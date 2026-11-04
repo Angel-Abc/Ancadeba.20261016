@@ -29,6 +29,10 @@ class Control extends EventTarget {
 
   focus() {}
 
+  requestSubmit() {
+    this.fire('submit')
+  }
+
   setAttribute(name: string, value: string) {
     this.attributes.set(name, value)
   }
@@ -80,6 +84,7 @@ function panel() {
 
   let latest: ProjectView | undefined = project('one')
   const requests: CommandRequest[] = []
+  const onProjectChange = vi.fn<(path: string) => void>()
   let localization = editorLocalization()
   let languageChanged = () => {}
 
@@ -89,7 +94,16 @@ function panel() {
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
 
-  const fetcher: typeof fetch = async (_url, init) => {
+  const fetcher: typeof fetch = async (url, init) => {
+    if (url === '/api/editor/projects') {
+      return Response.json({
+        projects: [
+          { path: '', title: 'Root game' },
+          { path: 'basic', title: 'Basic game' },
+        ],
+      })
+    }
+
     if (init?.method === 'POST') {
       if (typeof init.body !== 'string') throw new Error('Expected a JSON request body')
       requests.push(commandRequestSchema.parse(JSON.parse(init.body)))
@@ -112,11 +126,22 @@ function panel() {
         languageChanged = () => {}
       }
     },
+    { onProjectChange },
   )
+
+  const submitProject = async (path?: string) => {
+    await vi.waitFor(() => expect(control('editor-load').disabled).toBe(false))
+
+    if (path !== undefined) control('editor-folder').value = path
+
+    control('project-open-controls').requestSubmit()
+  }
 
   return {
     control,
     requests,
+    onProjectChange,
+    submitProject,
     dispose,
     setLanguage: (language: string) => {
       localization = editorLocalization([language])
@@ -129,8 +154,42 @@ function panel() {
 }
 
 describe('project panel form reconciliation', () => {
+  it('reports the open project only after a successful change of folder', async () => {
+    const { control, onProjectChange, submitProject, setLatest, dispose } = panel()
+    const folder = control('editor-folder')
+    const load = control('editor-load')
+
+    try {
+      await submitProject()
+      await vi.waitFor(() => expect(onProjectChange.mock.calls).toEqual([['']]))
+      expect(folder.children.map(({ textContent }) => textContent)).toEqual([
+        'Root game (workspace root)',
+        'Basic game (basic)',
+      ])
+
+      setLatest(undefined)
+      await submitProject('basic')
+      await vi.waitFor(() =>
+        expect(control('editor-error').textContent).toBe('Project could not be loaded'),
+      )
+      expect(onProjectChange.mock.calls).toEqual([['']])
+
+      setLatest(project('two'))
+      const enter = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Enter' })
+      folder.dispatchEvent(enter)
+      expect(enter.defaultPrevented).toBe(true)
+      await vi.waitFor(() => expect(onProjectChange.mock.calls).toEqual([[''], ['basic']]))
+
+      control('editor-reload').fire('click')
+      await vi.waitFor(() => expect(load.disabled).toBe(false))
+      expect(onProjectChange.mock.calls).toEqual([[''], ['basic']])
+    } finally {
+      dispose()
+    }
+  })
+
   it('keeps folder controls visible on failure and hides them after an explicit open', async () => {
-    const { control, setLatest, dispose } = panel()
+    const { control, submitProject, setLatest, dispose } = panel()
     const openControls = control('project-open-controls')
     const workspace = control('editor-workspace')
     const toggle = control('project-open-toggle')
@@ -138,14 +197,14 @@ describe('project panel form reconciliation', () => {
 
     try {
       setLatest(undefined)
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(feedback.textContent).toBe('Project could not be loaded'))
       expect(openControls.hidden).toBe(false)
       expect(workspace.hidden).toBe(true)
       expect(control('editor-header').hidden).toBe(true)
 
       setLatest(project('one'))
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(workspace.hidden).toBe(false))
       expect(openControls.hidden).toBe(true)
       expect(control('editor-reload').hidden).toBe(false)
@@ -160,7 +219,7 @@ describe('project panel form reconciliation', () => {
       await vi.waitFor(() => expect(control('editor-reload').disabled).toBe(false))
       expect(openControls.hidden).toBe(false)
 
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(openControls.hidden).toBe(true))
     } finally {
       dispose()
@@ -168,10 +227,10 @@ describe('project panel form reconciliation', () => {
   })
 
   it('preserves unsaved drafts and selection while translating status messages', async () => {
-    const { control, requests, setLanguage, dispose } = panel()
+    const { control, requests, submitProject, setLanguage, dispose } = panel()
 
     try {
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(control('scene-title').value).toBe('shop'))
       control('scene-title').value = 'Unsaved draft'
       control('scene-metadata').fire('input')
@@ -187,11 +246,10 @@ describe('project panel form reconciliation', () => {
   })
 
   it('reloads clean forms while preserving only dirty form values', async () => {
-    const { control, requests, setLatest, dispose } = panel()
+    const { control, requests, submitProject, setLatest, dispose } = panel()
 
     try {
-      control('editor-folder').value = 'basic'
-      control('editor-load').fire('click')
+      await submitProject('basic')
       await vi.waitFor(() => expect(control('editor-title').value).toBe('Game'))
       control('scene-rows').value = '22'
       control('scene-layout').fire('input')
@@ -219,10 +277,10 @@ describe('project panel form reconciliation', () => {
   })
 
   it('never retargets a removed scene draft to the next scene after reload', async () => {
-    const { control, setLatest, dispose } = panel()
+    const { control, submitProject, setLatest, dispose } = panel()
 
     try {
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(control('scene-title').value).toBe('shop'))
       control('scene-title').value = 'Draft shop'
       control('scene-metadata').fire('input')
@@ -238,7 +296,7 @@ describe('project panel form reconciliation', () => {
       expect(control('scene-title').value).toBe('Draft shop')
       expect(control('scene-metadata').hidden).toBe(true)
 
-      control('editor-load').fire('click')
+      await submitProject()
       await vi.waitFor(() => expect(control('editor-scenes').value).toBe('other'))
       expect(control('scene-title').value).toBe('other')
       expect(control('editor-scenes').disabled).toBe(false)

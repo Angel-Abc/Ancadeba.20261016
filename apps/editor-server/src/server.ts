@@ -13,6 +13,7 @@ import { capabilities, EditorError } from '@ancadeba/editor-core'
 import { EditorCoordinator } from './editorCoordinator.js'
 import type { EditorProjectService } from './editorProjectService.js'
 import type { GameExportService } from './gameExports.js'
+import { listWorkspaceProjects } from './workspaceProjects.js'
 
 export const maxWriteBytes = 10 * 1024 * 1024
 
@@ -103,6 +104,12 @@ export function createEditorServer(
 
       if (request.method === 'GET' && url.pathname === '/api/editor/capabilities') {
         json(response, 200, capabilities)
+
+        return
+      }
+
+      if (request.method === 'GET' && url.pathname === '/api/editor/projects') {
+        json(response, 200, { projects: await listWorkspaceProjects(workspace) })
 
         return
       }

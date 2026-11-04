@@ -125,6 +125,39 @@ describe('editor export controller', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores a superseded export without clearing the next project’s request', async () => {
+    const { controller, fetcher, download, onStateChange } = createController()
+    let finishPrevious!: (response: Response) => void
+    let finishCurrent!: (response: Response) => void
+    fetcher
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishPrevious = resolve
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finishCurrent = resolve
+        }),
+      )
+
+    const previous = controller.export('basic')
+    controller.reset()
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+    const current = controller.export('graphics')
+
+    finishPrevious(archiveResponse())
+    await previous
+    expect(download).not.toHaveBeenCalled()
+    expect(onStateChange.mock.calls).toEqual([['exporting'], ['idle'], ['exporting']])
+
+    await controller.export('graphics')
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    finishCurrent(archiveResponse('graphics.zip'))
+    await current
+    expect(download).toHaveBeenCalledExactlyOnceWith(expect.any(Blob), 'graphics.zip')
+  })
+
   it('uses a safe fallback filename for an unexpected attachment name', async () => {
     const { controller, fetcher, download } = createController()
     fetcher.mockResolvedValueOnce(archiveResponse('../unexpected.zip'))

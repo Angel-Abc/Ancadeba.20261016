@@ -1,5 +1,5 @@
-import type { CommandRequest, Diagnostic, ProjectView } from '@ancadeba/editor-core'
-import { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
+import type { CommandRequest, Diagnostic, ProjectChoice, ProjectView } from '@ancadeba/editor-core'
+import { apiErrorSchema, projectListSchema, projectViewSchema } from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
   constructor(
@@ -28,11 +28,22 @@ export interface IEditorClient {
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
 
+  async listProjects(signal: AbortSignal): Promise<ProjectChoice[]> {
+    const value = await this.request('/api/editor/projects', { signal })
+    const parsed = projectListSchema.safeParse(value)
+
+    if (!parsed.success) {
+      throw new EditorClientError('invalid_response', 'Project list response was malformed')
+    }
+
+    return parsed.data.projects
+  }
+
   inspect(path: string): Promise<ProjectView> {
-    return this.request(`/api/editor/project?${new URLSearchParams({ path })}`)
+    return this.requestProject(`/api/editor/project?${new URLSearchParams({ path })}`)
   }
   apply(request: CommandRequest): Promise<ProjectView> {
-    return this.request('/api/editor/commands', {
+    return this.requestProject('/api/editor/commands', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -51,9 +62,19 @@ export class HttpEditorClient implements IEditorClient {
     body.set('metadata', JSON.stringify(metadata))
     body.set('file', file)
 
-    return this.request('/api/editor/assets/import', { method: 'POST', body })
+    return this.requestProject('/api/editor/assets/import', { method: 'POST', body })
   }
-  private async request(url: string, init?: RequestInit): Promise<ProjectView> {
+  private async requestProject(url: string, init?: RequestInit): Promise<ProjectView> {
+    const parsed = projectViewSchema.safeParse(await this.request(url, init))
+
+    if (!parsed.success) {
+      throw new EditorClientError('invalid_response', 'Editor response was malformed')
+    }
+
+    return parsed.data
+  }
+
+  private async request(url: string, init?: RequestInit): Promise<unknown> {
     const fetcher = this.fetcher
     const response = await fetcher(url, { ...init, cache: 'no-store' })
     const value: unknown = await response.json()
@@ -67,11 +88,6 @@ export class HttpEditorClient implements IEditorClient {
       )
     }
 
-    const parsed = projectViewSchema.safeParse(value)
-
-    if (!parsed.success)
-      throw new EditorClientError('invalid_response', 'Editor response was malformed')
-
-    return parsed.data
+    return value
   }
 }

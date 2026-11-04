@@ -46,7 +46,6 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 
 const form = element<HTMLFormElement>('#preview-form')
-const folder = element<HTMLInputElement>('#game-folder')
 const gameLanguage = element<HTMLInputElement>('#game-language')
 const editorLanguage = element<HTMLSelectElement>('#editor-language')
 
@@ -54,7 +53,7 @@ editorLanguage.value = localization.language
 
 const start = element<HTMLButtonElement>('#preview-start')
 const stop = element<HTMLButtonElement>('#preview-stop')
-const panel = element<HTMLElement>('.preview-panel')
+const panel = element<HTMLDetailsElement>('.preview-disclosure')
 const status = element<HTMLElement>('#preview-status')
 const error = element<HTMLElement>('#preview-error')
 const content = element<HTMLElement>('#preview-content')
@@ -64,6 +63,7 @@ const exportStatus = element<HTMLElement>('#export-status')
 const exportError = element<HTMLElement>('#export-error')
 const exportDownload = element<HTMLAnchorElement>('#export-download')
 
+let projectPath: string | undefined
 let previewState: EngineState = 'stopped'
 let exporting = false
 let downloadUrl: string | undefined
@@ -91,11 +91,10 @@ function renderPreviewState(): void {
 }
 
 function updateControls(): void {
-  start.disabled = previewState !== 'stopped' || exporting
+  start.disabled = projectPath === undefined || previewState !== 'stopped' || exporting
   stop.disabled = previewState === 'stopped'
-  folder.disabled = previewState !== 'stopped' || exporting
   gameLanguage.disabled = previewState !== 'stopped' || exporting
-  exportButton.disabled = exporting || previewState === 'starting'
+  exportButton.disabled = projectPath === undefined || exporting || previewState === 'starting'
 }
 
 function clearDownload(): void {
@@ -129,7 +128,7 @@ const container = new ContainerBuilder({
     renderExportState()
     exportError.hidden = state !== 'error'
 
-    if (state === 'exporting' || state === 'error') clearDownload()
+    if (state !== 'ready') clearDownload()
     updateControls()
   },
   onPreviewStateChange: (state, message) => {
@@ -149,13 +148,14 @@ const exportController = container.resolve('exportController')
 
 function onStart(event: SubmitEvent): void {
   event.preventDefault()
-  void controller.start(folder.value)
+
+  if (projectPath !== undefined) void controller.start(projectPath)
 }
 
 const onStop = () => controller.stop()
 
 const onExport = () => {
-  void exportController.export(folder.value)
+  if (projectPath !== undefined) void exportController.export(projectPath)
 }
 
 form.addEventListener('submit', onStart)
@@ -171,6 +171,16 @@ const disposeProjectPanel = bindProjectPanel(
   fetch,
   t,
   subscribeLanguageChanges,
+  {
+    onProjectChange(path) {
+      const restartPreview = previewState !== 'stopped'
+      projectPath = path
+      exportController.reset()
+      controller.stop()
+
+      if (restartPreview) void controller.start(path)
+    },
+  },
 )
 
 const onLanguageChange = () => {
