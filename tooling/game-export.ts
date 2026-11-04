@@ -136,7 +136,7 @@ export async function exportGame(options: GameExportOptions): Promise<GameExport
       }
     } catch (error) {
       throw new Error(
-        'Cannot export game: game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid; asset catalogues and sources and any inventory definition must also be valid',
+        'Cannot export game: game.json, a referenced scene, input definition, or language catalog is missing, malformed, or invalid; asset catalogues and sources and any inventory definition must also be valid, and any referenced stylesheet must exist',
         {
           cause: error,
         },

@@ -37,7 +37,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     const sources: [string, string | null][] = []
     const sourceDiagnostics: Diagnostic[] = []
 
-    const read = async (file: string, required = false) => {
+    const read = async (file: string, { required = false, json = true } = {}) => {
       let bytes: Uint8Array
 
       try {
@@ -51,12 +51,15 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           message: 'Referenced file does not exist',
         })
         sources.push([file, null])
-        documents[file] = null
+
+        if (json) documents[file] = null
 
         return
       }
 
       sources.push([file, Buffer.from(bytes).toString('base64')])
+
+      if (!json) return
 
       try {
         documents[file] = JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -71,7 +74,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       }
     }
 
-    await read('game.json', true)
+    await read('game.json', { required: true })
     const game = gameSchema.safeParse(documents['game.json'])
 
     if (game.success) {
@@ -82,6 +85,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       if (game.data.input) await read(game.data.input)
 
       if (game.data.inventory) await read(game.data.inventory)
+
+      if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
       if (typeof game.data.assets === 'string') {
         await read(game.data.assets)

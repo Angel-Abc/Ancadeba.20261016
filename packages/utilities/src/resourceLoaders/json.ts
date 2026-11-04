@@ -10,18 +10,20 @@ export class JsonResourceLoader implements IJsonResourceLoader {
     private readonly source: IResourceSource,
     private readonly logger: ILogger,
   ) {}
+  async readText(path: string): Promise<string> {
+    try {
+      return await this.source.readText(path)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(logName, 'Error loading resource from path {0}: {1}', path, message)
+      throw error
+    }
+  }
+
   async load<T>(path: string, schema: ZodType<T>): Promise<T> {
     this.logger.debug(logName, 'Loading JSON resource from path: {0}', path)
 
-    let text: string
-
-    try {
-      text = await this.source.readText(path)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.logger.error(logName, 'Error loading JSON resource from path {0}: {1}', path, message)
-      throw error
-    }
+    const text = await this.readText(path)
 
     let json: unknown
 

@@ -5,6 +5,7 @@
   "initial-scene": "start-screen",
   "scenes": ["standard", "inventory", "settings", "start-screen", "gallery"],
   "input": "input.json",
+  "stylesheet": "museum.css",
   "titleKey": "game.title",
   "descriptionKey": "game.description",
   "languages": {

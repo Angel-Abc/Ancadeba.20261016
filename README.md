@@ -412,15 +412,15 @@ keyboard activation and focus styling.
 The renderer supplies only data values through element-local CSS custom
 properties. It sets `--ge-scene-grid-rows` and `--ge-scene-grid-columns` on the
 scene, and `--ge-component-row`, `--ge-component-column`,
-`--ge-component-row-span`, `--ge-component-column-span`, and
-`--ge-component-text-align` on each text component. It does not write layout or
-alignment declarations directly.
+`--ge-component-row-span`, and `--ge-component-column-span` on each
+`.ancadeba-scene-item`. Text components also set `--ge-component-text-align`.
 
 `scene.css` interprets these values with
 `grid-template-columns: repeat(var(--ge-scene-grid-columns), minmax(0, 1fr))` and the same
 rule for rows. Component placement uses
 `grid-row: var(--ge-component-row) / span var(--ge-component-row-span)` and its
-column equivalent. The narrative example therefore covers rows and columns 3
+column equivalent. Each component keeps its own class for appearance and
+internal layout. The narrative example therefore covers rows and columns 3
 through 10. The values stay local to each element so separate previews can have
 different grid dimensions without overwriting each other.
 
@@ -445,6 +445,20 @@ breaks, zero minimum component sizes, and `overflow: auto` so long content scrol
 inside its assigned rectangle. Components are ordinary grid items, without
 absolute positioning. Default gap and outer padding are zero. Text and heading
 appearance and scene-picker spacing also read their defaults from `variables.css`.
+Simple read-only inventories arrange their items in a grid that adds columns as
+space permits. Set `--ge-inventory-item-min-width` to tune their column widths.
+
+Set the optional `"stylesheet": "museum.css"` field in `game.json` to load a
+game-relative CSS file in standalone play, editor preview, and exported games.
+The browser scopes the stylesheet to the game viewport. Use `:scope` for
+viewport-wide variables and component classes or `data-scene-id` for specific
+styles. The preview's scene picker sits outside that scope.
+
+Game stylesheets use a browser with native `@scope` support and may include
+selectors, media queries, support queries, and container queries. Keep the CSS
+self-contained. Imports are ignored and global at-rules such as `@font-face`,
+`@keyframes`, and `@layer` are rejected. The museum's `museum.css` sets inventory
+column widths and styles the inspection details.
 
 Appearance can be adjusted on a containing element through CSS custom properties:
 

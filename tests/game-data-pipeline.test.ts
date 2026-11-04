@@ -102,6 +102,7 @@ describe('game data pipeline', () => {
       language: 'en',
       version: '1.0.0',
       initialScene: 'start-screen',
+      stylesheet: expect.stringContaining('--ge-inventory-item-min-width: 9em'),
       input: {
         virtualKeys: ['north', 'confirm'],
         keyboard: { KeyW: 'north', ArrowUp: 'north', Enter: 'confirm' },
@@ -136,6 +137,23 @@ describe('game data pipeline', () => {
     })
     expect(game.scenes.get('inventory')?.components.length).toBe(4)
     expect(game.scenes.get('settings')?.components.length).toBe(4)
+  })
+
+  it.each(['../theme.css', '/theme.css', 'https://example.com/theme.css', 'theme.json'])(
+    'rejects an invalid stylesheet path %s',
+    (stylesheet) => {
+      expect(gameSchema.safeParse({ ...definition, stylesheet }).success).toBe(false)
+    },
+  )
+
+  it('reports a missing stylesheet before mounting a game', async () => {
+    const { engine, host } = createPipeline({
+      'game.json': { ...definition, stylesheet: 'theme.css' },
+      'scenes/start-screen.json': scene,
+    })
+
+    await expect(engine.start()).rejects.toThrow('Missing resource: theme.css')
+    expect(host.mount).not.toHaveBeenCalled()
   })
 
   it('assembles scenes in manifest order without sharing mutable definition objects', () => {

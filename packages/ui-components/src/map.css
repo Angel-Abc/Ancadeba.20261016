@@ -1,10 +1,6 @@
 .ancadeba-map-view {
   display: grid;
   place-items: center;
-  grid-row: var(--ge-component-row) / span var(--ge-component-row-span);
-  grid-column: var(--ge-component-column) / span var(--ge-component-column-span);
-  min-width: 0;
-  min-height: 0;
   container-type: size;
 }
 

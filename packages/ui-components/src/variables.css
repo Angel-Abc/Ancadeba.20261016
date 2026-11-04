@@ -27,6 +27,8 @@
   --ge-scene-heading-size: calc(28 * var(--ge-scene-unit-size));
   --ge-scene-heading-weight: 600;
 
+  --ge-inventory-item-min-width: max(7.5em, 5rem);
+
   --ge-scene-picker-gap: calc(15 * var(--ge-unit-size));
   --ge-scene-picker-margin: 0 0 calc(15 * var(--ge-unit-size));
   --ge-scene-picker-padding: calc(8 * var(--ge-unit-size)) calc(12 * var(--ge-unit-size));

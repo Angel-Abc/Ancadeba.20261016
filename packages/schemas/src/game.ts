@@ -15,6 +15,10 @@ export const gameSchema = z
     languages: gameLanguagesSchema.optional(),
     version: z.string().trim().min(1),
     'initial-scene': gameIdSchema.optional(),
+    stylesheet: z
+      .string()
+      .regex(/^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.css$/)
+      .optional(),
     // Older projects sometimes carried an ignored asset list as extension metadata.
     assets: z.union([z.string().regex(/^[a-zA-Z0-9_-]+\.json$/), z.array(z.string())]).optional(),
     inventory: z

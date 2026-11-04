@@ -298,6 +298,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         }
 
         const carried = simple ? document.createElement('ul') : appendGroup(section, 'Carried')
+        carried.className = 'ancadeba-inventory-items'
 
         for (const item of ownerItems) {
           if (item.placement.type === 'carried') carried.append(itemRow(item, owner.label))

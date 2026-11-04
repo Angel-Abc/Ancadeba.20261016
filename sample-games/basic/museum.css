@@ -1,0 +1,10 @@
+.ancadeba-inventory--simple {
+  --ge-inventory-item-min-width: 9em;
+  --ge-scene-line-height: 1.4;
+}
+
+.ancadeba-inventory-inspection:not(:empty) {
+  border-inline-start: 0.15em solid currentColor;
+  padding-inline-start: 0.5em;
+  font-size: 0.9em;
+}

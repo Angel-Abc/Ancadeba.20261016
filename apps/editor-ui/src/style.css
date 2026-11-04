@@ -122,9 +122,6 @@ button:focus-visible:where(:not(.ancadeba-scene *)) {
 }
 
 .preview-content > .ancadeba-game {
-  --ge-scene-line-height: 1.35;
-  --ge-scene-text-padding: calc(3 * var(--ge-scene-unit-size)) calc(8 * var(--ge-scene-unit-size));
-
   height: clamp(min(52dvh, 100cqw), 75cqw, 66dvh);
 }
 

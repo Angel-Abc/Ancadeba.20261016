@@ -66,14 +66,20 @@ function createPreview() {
 }
 
 describe('editor preview', () => {
-  it('loads referenced scenes from the selected workspace folder before mounting', async () => {
+  it('loads referenced scenes and styles from the selected workspace folder before mounting', async () => {
     const { controller, fetcher, host } = createPreview()
+    const stylesheet = ':scope { color: gold }'
     fetcher
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ ...gameDefinition('Workspace game'), scenes: ['start-screen'] }),
+          JSON.stringify({
+            ...gameDefinition('Workspace game'),
+            scenes: ['start-screen'],
+            stylesheet: 'styles/museum.css',
+          }),
         ),
       )
+      .mockResolvedValueOnce(new Response(stylesheet))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -92,8 +98,10 @@ describe('editor preview', () => {
 
     expect(fetcher.mock.calls).toEqual([
       ['/api/files?path=basic%2Fgame.json', { cache: 'no-store' }],
+      ['/api/files?path=basic%2Fstyles%2Fmuseum.css', { cache: 'no-store' }],
       ['/api/files?path=basic%2Fscenes%2Fstart-screen.json', { cache: 'no-store' }],
     ])
+    expect(host.mount.mock.calls[0]?.[0].stylesheet).toBe(stylesheet)
     expect(host.mount.mock.calls[0]?.[0].scenes.get('start-screen')?.screen.grid).toEqual({
       rows: 20,
       columns: 20,

@@ -31,22 +31,21 @@
   }
 }
 
-.ancadeba-text,
-.ancadeba-graphic,
-.ancadeba-button,
-.ancadeba-language-select {
+.ancadeba-scene-item {
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
-  margin: 0;
   grid-row: var(--ge-component-row) / span var(--ge-component-row-span);
   grid-column: var(--ge-component-column) / span var(--ge-component-column-span);
+}
+
+.ancadeba-text {
+  margin: 0;
   text-align: var(--ge-component-text-align);
   padding: var(--ge-scene-text-padding);
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font: inherit;
   line-height: var(--ge-scene-line-height);
   color: var(--ge-scene-text-color);
   background: var(--ge-scene-text-background);
@@ -54,9 +53,7 @@
 
 .ancadeba-graphic {
   position: relative;
-  padding: 0;
   overflow: hidden;
-  white-space: normal;
 }
 .ancadeba-graphic[hidden] {
   display: none;
@@ -84,9 +81,18 @@
 }
 
 .ancadeba-button {
+  margin: 0;
+  padding: var(--ge-scene-text-padding);
   border: 1px solid currentColor;
   border-radius: 0.35rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: var(--ge-scene-line-height);
   text-align: center;
+  color: var(--ge-scene-text-color);
+  background: var(--ge-scene-text-background);
   cursor: pointer;
 }
 
@@ -106,6 +112,14 @@
   flex-direction: column;
   justify-content: center;
   gap: 0.5em;
+  margin: 0;
+  padding: var(--ge-scene-text-padding);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: var(--ge-scene-line-height);
+  color: var(--ge-scene-text-color);
+  background: var(--ge-scene-text-background);
 }
 
 .ancadeba-language-select select {
@@ -121,16 +135,11 @@
 }
 
 .ancadeba-inventory {
-  box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  min-width: 0;
-  min-height: 0;
   overflow: auto;
   overflow-wrap: anywhere;
   padding: var(--ge-scene-text-padding);
-  grid-row: var(--ge-component-row) / span var(--ge-component-row-span);
-  grid-column: var(--ge-component-column) / span var(--ge-component-column-span);
 }
 
 .ancadeba-inventory-owners,
@@ -208,7 +217,14 @@
   opacity: 0.72;
 }
 
-.ancadeba-inventory--simple .ancadeba-inventory-owners > section > ul {
+.ancadeba-inventory--simple .ancadeba-inventory-items {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--ge-inventory-item-min-width)), 1fr)
+  );
+  align-items: start;
+  column-gap: 0.6em;
   padding-inline-start: 0;
   list-style: none;
 }

@@ -134,6 +134,7 @@ export class SceneRenderer {
         const rendered = this.components.render(component, context)
         components.push(rendered)
         const { element } = rendered
+        element.classList.add('ancadeba-scene-item')
         element.dataset.componentId = component.id
         const { row, column, rowSpan, columnSpan } = component.placement
         element.style.setProperty('--ge-component-row', String(row))

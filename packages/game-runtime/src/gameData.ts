@@ -94,6 +94,8 @@ export interface GameData {
   readonly description: string
   readonly version: string
   readonly initialScene?: string
+  /** Contents of the optional game stylesheet. */
+  readonly stylesheet?: string
   readonly input?: InputData
   /** Iteration follows the manifest order. */
   readonly scenes: ReadonlyMap<string, SceneData>

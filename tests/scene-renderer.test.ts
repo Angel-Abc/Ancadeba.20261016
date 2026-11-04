@@ -43,13 +43,24 @@ class TestStyle {
   }
 }
 
+class CSSScopeRule {
+  readonly cssRules: unknown[] = []
+}
+
 class TestElement extends EventTarget {
   readonly children: TestElement[] = []
   readonly style = new TestStyle()
   readonly dataset: Record<string, string> = {}
   readonly attributes = new Map<string, string>()
+  readonly sheet = { insertRule: vi.fn(), cssRules: [new CSSScopeRule()] }
   parent: TestElement | undefined
   className = ''
+  media = ''
+  readonly classList = {
+    add: (name: string) => {
+      this.className = [this.className, name].filter(Boolean).join(' ')
+    },
+  }
   tabIndex = -1
   title = ''
   value = ''
@@ -482,6 +493,7 @@ describe('scene renderer', () => {
         expect(context.document).toBe(document)
         expect(context.bindings).toBeUndefined()
         const element = document.createElement('aside')
+        element.className = 'custom-button'
 
         return { element: element.asElement(), dispose }
       }),
@@ -500,8 +512,11 @@ describe('scene renderer', () => {
 
     const menu = target.children[0]!
     expect(menu.children[0]!.tagName).toBe('H2')
+    expect(menu.children[0]!.className.split(' ')).toContain('ancadeba-text')
+    expect(menu.children[0]!.className.split(' ')).toContain('ancadeba-scene-item')
     const button = menu.children[1]!
     expect(button.tagName).toBe('ASIDE')
+    expect(button.className.split(' ')).toEqual(['custom-button', 'ancadeba-scene-item'])
     expect(button.dataset.componentId).toBe('new-game')
     expect(button.style.getPropertyValue('--ge-component-row')).toBe('5')
     expect(button.style.getPropertyValue('--ge-component-column-span')).toBe('4')
@@ -592,6 +607,20 @@ describe('scene renderer', () => {
     expect(firstNode.parent).toBeUndefined()
     expect(target.children).toHaveLength(1)
     expect(target.children[0]?.dataset.sceneId).toBe('inventory')
+    const inventory = target.find((element) => element.dataset.componentId === 'items')!
+    expect(inventory.className.split(' ')).toContain('ancadeba-scene-item')
+    expect(
+      inventory.find((element) => element.className === 'ancadeba-inventory-empty'),
+    ).toBeDefined()
+
+    playthrough.inventory?.move('folded-letter', { type: 'carried', owner: 'player' })
+    playthrough.inventory?.move('harbour-chart', { type: 'carried', owner: 'player' })
+    const itemList = inventory.find((element) => element.className === 'ancadeba-inventory-items')!
+    expect(itemList.tagName).toBe('UL')
+    expect(itemList.children.map((item) => item.textContent)).toEqual([
+      'Folded letter',
+      'Harbour chart',
+    ])
     expect(
       target.children[0]
         ?.find((element) => element.dataset.componentId === 'footer')
@@ -1054,6 +1083,13 @@ describe.each([
 
     await engine.start()
     const lifecycle = engine.lifecycle!
+    const style = target.find((element) => element.tagName === 'STYLE')!
+    expect(style.parent?.className).toBe('ancadeba-scene-viewport')
+    expect(style.sheet.insertRule).toHaveBeenCalledExactlyOnceWith(
+      `@scope {\n${engine.game?.stylesheet}\n}`,
+      0,
+    )
+    expect(style.media).toBe('')
     expect(lifecycle.activeScene?.data.id).toBe('start-screen')
     expect(lifecycle.currentGame).toBeUndefined()
     startSampleGame(target)
@@ -1070,6 +1106,7 @@ describe.each([
     expect(target.children).toHaveLength(0)
     await engine.start()
     expect(target.find((element) => element.dataset.sceneId === 'start-screen')).toBeDefined()
+    expect(target.find((element) => element.tagName === 'STYLE')).not.toBe(style)
     engine.stop()
   })
 })

@@ -31,6 +31,10 @@ export class GameLoader implements IGameLoader {
   async load(): Promise<GameData> {
     const definition = await this.resources.load('game.json', gameSchema)
 
+    const styling = definition.stylesheet
+      ? { stylesheet: await this.resources.readText(definition.stylesheet) }
+      : {}
+
     const scenes = await Promise.all(
       definition.scenes.map(async (id) => {
         const scene = await this.resources.load(`scenes/${id}.json`, sceneSchema)
@@ -63,7 +67,10 @@ export class GameLoader implements IGameLoader {
       : undefined
 
     if (!definition.languages)
-      return assembleGameData(definition, new Map(scenes), input, assets, maps, inventory)
+      return {
+        ...assembleGameData(definition, new Map(scenes), input, assets, maps, inventory),
+        ...styling,
+      }
 
     const { available, default: fallbackLanguage } = definition.languages
     const saved = this.preferences?.read(definition.id)
@@ -92,6 +99,7 @@ export class GameLoader implements IGameLoader {
       const localized = localizeDefinitions(definition, new Map(scenes), { fallback, messages })
       variants.set(tag, {
         ...assembleGameData(localized.game, localized.scenes, input, assets, maps, inventory),
+        ...styling,
         language: tag,
       })
     }

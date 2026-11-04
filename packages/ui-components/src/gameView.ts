@@ -1,6 +1,7 @@
 import type { GameData, IGameLifecycle, SceneData } from '@ancadeba/game-runtime'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
 import { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
+import { mountGameStylesheet } from './gameStylesheet.js'
 
 export interface GameViewSession {
   readonly lifecycle: IGameLifecycle
@@ -132,6 +133,8 @@ export function mountGameView(
 
     root.append(viewport)
     target.append(root)
+
+    if (game.stylesheet !== undefined) mountGameStylesheet(viewport, game.stylesheet)
 
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
