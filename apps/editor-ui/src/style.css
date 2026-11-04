@@ -265,18 +265,22 @@ main {
   max-width: none;
   padding: 1.5rem;
 }
-#app > h1 {
+#editor-header > h1 {
   margin: 0 0 0.5rem;
   font-size: 1.6rem;
 }
-#app > .intro {
+#editor-header > .intro {
   margin: 0 0 1rem;
 }
-#app > label,
-#editor-language {
+#editor-header > label,
+#editor-language,
+#project-open-toggle {
   display: inline-block;
   width: auto;
   margin: 0 0.75rem 1rem 0;
+}
+#project-open-feedback {
+  white-space: pre-wrap;
 }
 .editor-layout {
   display: grid;
@@ -315,6 +319,10 @@ main {
 .project-sidebar .editor-actions {
   display: grid;
   gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+#editor-reload {
+  width: 100%;
   margin-bottom: 1rem;
 }
 #project-search {

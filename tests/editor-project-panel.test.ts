@@ -9,6 +9,7 @@ class Control extends EventTarget {
   textContent = ''
   disabled = false
   hidden = false
+  attributes = new Map<string, string>()
   children: Control[] = []
 
   constructor(readonly id: string) {
@@ -25,6 +26,12 @@ class Control extends EventTarget {
   }
 
   reset() {}
+
+  focus() {}
+
+  setAttribute(name: string, value: string) {
+    this.attributes.set(name, value)
+  }
 
   fire(event: string) {
     this.dispatchEvent(new Event(event))
@@ -71,7 +78,7 @@ function panel() {
     return result
   }
 
-  let latest = project('one')
+  let latest: ProjectView | undefined = project('one')
   const requests: CommandRequest[] = []
   let localization = editorLocalization()
   let languageChanged = () => {}
@@ -87,6 +94,8 @@ function panel() {
       if (typeof init.body !== 'string') throw new Error('Expected a JSON request body')
       requests.push(commandRequestSchema.parse(JSON.parse(init.body)))
     }
+
+    if (!latest) throw new Error('Project could not be loaded')
 
     return new Response(JSON.stringify(latest))
   }
@@ -113,13 +122,51 @@ function panel() {
       localization = editorLocalization([language])
       languageChanged()
     },
-    setLatest: (view: ProjectView) => {
+    setLatest: (view: ProjectView | undefined) => {
       latest = view
     },
   }
 }
 
 describe('project panel form reconciliation', () => {
+  it('keeps folder controls visible on failure and hides them after an explicit open', async () => {
+    const { control, setLatest, dispose } = panel()
+    const openControls = control('project-open-controls')
+    const workspace = control('editor-workspace')
+    const toggle = control('project-open-toggle')
+    const feedback = control('project-open-feedback')
+
+    try {
+      setLatest(undefined)
+      control('editor-load').fire('click')
+      await vi.waitFor(() => expect(feedback.textContent).toBe('Project could not be loaded'))
+      expect(openControls.hidden).toBe(false)
+      expect(workspace.hidden).toBe(true)
+      expect(control('editor-header').hidden).toBe(true)
+
+      setLatest(project('one'))
+      control('editor-load').fire('click')
+      await vi.waitFor(() => expect(workspace.hidden).toBe(false))
+      expect(openControls.hidden).toBe(true)
+      expect(control('editor-reload').hidden).toBe(false)
+      expect(feedback.hidden).toBe(true)
+      expect(toggle.attributes.get('aria-expanded')).toBe('false')
+
+      toggle.fire('click')
+      expect(openControls.hidden).toBe(false)
+      expect(toggle.attributes.get('aria-expanded')).toBe('true')
+
+      control('editor-reload').fire('click')
+      await vi.waitFor(() => expect(control('editor-reload').disabled).toBe(false))
+      expect(openControls.hidden).toBe(false)
+
+      control('editor-load').fire('click')
+      await vi.waitFor(() => expect(openControls.hidden).toBe(true))
+    } finally {
+      dispose()
+    }
+  })
+
   it('preserves unsaved drafts and selection while translating status messages', async () => {
     const { control, requests, setLanguage, dispose } = panel()
 

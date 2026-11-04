@@ -7,36 +7,50 @@
   </head>
   <body>
     <main id="app">
-      <h1 data-i18n="app.title">Ancadeba Editor</h1>
-      <p class="intro" data-i18n="app.intro">Preview a game from your editor workspace.</p>
-      <label for="editor-language" data-i18n="editor.language">Editor language</label>
-      <select id="editor-language">
-        <option value="en" lang="en">English</option>
-        <option value="nl" lang="nl">Nederlands</option>
-      </select>
+      <header id="editor-header" hidden>
+        <h1 data-i18n="app.title">Ancadeba Editor</h1>
+        <p class="intro" data-i18n="app.intro">Preview a game from your editor workspace.</p>
+        <label for="editor-language" data-i18n="editor.language">Editor language</label>
+        <select id="editor-language">
+          <option value="en" lang="en">English</option>
+          <option value="nl" lang="nl">Nederlands</option>
+        </select>
+        <button
+          id="project-open-toggle"
+          type="button"
+          aria-controls="project-open-controls"
+          aria-expanded="false"
+          data-i18n="project.openAnother"
+        >
+          Open another project
+        </button>
+      </header>
       <div class="editor-layout">
         <aside class="project-sidebar" aria-labelledby="tree-heading">
           <h2 id="tree-heading" data-i18n="tree.heading">Project explorer</h2>
-          <label for="editor-folder" data-i18n="game.folder">Game folder</label>
-          <input
-            id="editor-folder"
-            placeholder="Workspace root"
-            data-i18n-placeholder="workspace.placeholder"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <div class="preview-actions editor-actions">
-            <button id="editor-load" type="button" data-i18n="project.load">Load project</button>
-            <button id="editor-reload" type="button" disabled data-i18n="project.reload">
-              Reload latest (keep entries)
-            </button>
+          <div id="project-open-controls">
+            <label for="editor-folder" data-i18n="game.folder">Game folder</label>
+            <input
+              id="editor-folder"
+              placeholder="Workspace root"
+              data-i18n-placeholder="workspace.placeholder"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="preview-actions editor-actions">
+              <button id="editor-load" type="button" data-i18n="project.load">Load project</button>
+            </div>
+            <p id="project-open-feedback" class="help" role="status" hidden></p>
           </div>
+          <button id="editor-reload" type="button" disabled hidden data-i18n="project.reload">
+            Reload latest (keep entries)
+          </button>
           <label for="project-search" class="sr-only" data-i18n="tree.search">Search project</label>
           <input id="project-search" type="search" autocomplete="off" />
           <div id="project-tree" role="tree"></div>
           <p id="tree-message" class="help" role="status"></p>
         </aside>
-        <div class="editor-workspace">
+        <div id="editor-workspace" class="editor-workspace" hidden>
           <details class="preview-disclosure">
             <summary data-i18n="preview.heading">Engine preview</summary>
             <section class="preview-panel" aria-labelledby="preview-heading" data-state="stopped">

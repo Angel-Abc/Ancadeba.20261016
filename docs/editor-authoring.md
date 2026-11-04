@@ -158,7 +158,10 @@ or crash-recovery journal.
 
 ## Visual editor
 
-Enter the game folder in the left Project explorer and select Load project.
+The editor starts with only the Project explorer visible. Enter the game folder
+and select Load project. The folder and load controls collapse after opening a
+project, and the navigation tree remains visible. Use Open another project to
+show the folder controls again.
 The searchable tree contains Game properties, Scenes with their components,
 and Assets grouped into Images, Parts, and Compositions. Scene types and the
 startup scene are labeled. Shared assets appear once in the asset library.

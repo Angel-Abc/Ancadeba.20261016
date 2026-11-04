@@ -45,7 +45,17 @@ export function bindProjectPanel(
   const fields = find<HTMLFieldSetElement>('editor-fields')
   const status = find<HTMLElement>('editor-status')
   const error = find<HTMLElement>('editor-error')
+  const header = find<HTMLElement>('editor-header')
+  const workspace = find<HTMLElement>('editor-workspace')
+  const openControls = find<HTMLElement>('project-open-controls')
+  const openToggle = find<HTMLButtonElement>('project-open-toggle')
+  const openFeedback = find<HTMLElement>('project-open-feedback')
   const value = (id: string) => find<HTMLInputElement>(id).value
+
+  const showOpenControls = (show: boolean) => {
+    openControls.hidden = !show
+    openToggle.setAttribute('aria-expanded', String(show))
+  }
 
   const set = (id: string, text: string | number) => {
     find<HTMLInputElement>(id).value = String(text)
@@ -54,6 +64,7 @@ export function bindProjectPanel(
   let view: ProjectView | undefined
   const dirtyForms = new Set<string>()
   let loadedPath = ''
+  let openingProject = false
   let assetsPanel: ReturnType<typeof bindAssetsPanel> | undefined
   let tree: ReturnType<typeof bindProjectTree> | undefined
 
@@ -177,6 +188,7 @@ export function bindProjectPanel(
     loadedPath = state.path
     load.disabled = state.busy
     reload.disabled = state.busy || !view
+    reload.hidden = !view
     folder.disabled = state.busy
     scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
     fields.disabled = state.busy || !view?.game || Boolean(view.diagnostics.length)
@@ -201,6 +213,19 @@ export function bindProjectPanel(
         .join('\n') ||
       ''
     error.hidden = !error.textContent
+    openFeedback.textContent = view ? '' : error.textContent || status.textContent
+    openFeedback.hidden = !openFeedback.textContent
+    header.hidden = !view
+    workspace.hidden = !view
+
+    if (openingProject && !state.busy) {
+      openingProject = false
+
+      if (replaceFields) {
+        showOpenControls(false)
+        openToggle.focus()
+      }
+    }
 
     const updateTree = () => {
       if (!tree) return
@@ -334,8 +359,13 @@ export function bindProjectPanel(
     listeners.push(() => element.removeEventListener(event, listener))
   }
 
+  on(openToggle, 'click', () => showOpenControls(Boolean(openControls.hidden)))
+
   on(load, 'click', () => {
+    if (load.disabled) return
+
     const path = folder.value.trim()
+    openingProject = true
     void controller.load(path.startsWith('/') ? path : path.replace(/\/+$/, ''))
   })
   on(reload, 'click', () => {

@@ -31,6 +31,7 @@
   "project.heading": "Spelproject",
   "project.help": "Bewerk opgeslagen spelbestanden. Herstart de preview om wijzigingen te zien.",
   "project.load": "Project laden",
+  "project.openAnother": "Ander project openen",
   "project.reload": "Nieuwste laden (invoer behouden)",
   "project.properties": "Projecteigenschappen",
   "game.title": "Speltitel",

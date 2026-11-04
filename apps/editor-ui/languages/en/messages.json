@@ -31,6 +31,7 @@
   "project.heading": "Game project",
   "project.help": "Edit saved game files. Restart the preview to see changes.",
   "project.load": "Load project",
+  "project.openAnother": "Open another project",
   "project.reload": "Reload latest (keep entries)",
   "project.properties": "Project properties",
   "game.title": "Game title",
