@@ -1,0 +1,52 @@
+{
+  "schema-version": "1.0.0",
+  "itemTypes": {
+    "folded-letter": {
+      "label": "Folded letter",
+      "inspection": {
+        "action": "inspect-letter",
+        "details": {
+          "source": "game.state",
+          "path": ["letterClue"]
+        }
+      }
+    },
+    "harbour-chart": {
+      "label": "Harbour chart",
+      "inspection": {
+        "action": "inspect-chart",
+        "details": {
+          "source": "game.state",
+          "path": ["chartDetails"]
+        }
+      }
+    }
+  },
+  "owners": {
+    "player": {
+      "label": "Player"
+    },
+    "lobby": {
+      "label": "Museum lobby"
+    },
+    "display-case": {
+      "label": "Display case"
+    }
+  },
+  "items": {
+    "folded-letter": {
+      "itemType": "folded-letter",
+      "placement": {
+        "type": "carried",
+        "owner": "lobby"
+      }
+    },
+    "harbour-chart": {
+      "itemType": "harbour-chart",
+      "placement": {
+        "type": "carried",
+        "owner": "display-case"
+      }
+    }
+  }
+}

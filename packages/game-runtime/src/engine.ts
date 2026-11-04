@@ -20,7 +20,7 @@ export type EngineState = 'stopped' | 'starting' | 'running'
 export interface EngineRuntimeServices {
   readonly createGameRules?: GameRulesFactory
   /** Return a fresh lifecycle for each loaded engine session. */
-  readonly createGameLifecycle?: (game: GameData) => IGameLifecycle
+  readonly createGameLifecycle?: (game: GameData) => IGameLifecycle | undefined
   readonly scheduler: ITaskScheduler
   readonly clock: IMonotonicClock
 }

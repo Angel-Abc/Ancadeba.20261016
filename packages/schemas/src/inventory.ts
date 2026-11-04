@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { gameBindingSchema } from './bindings.js'
 import {
   assetIdSchema as gameIdSchema,
   colorSchema,
@@ -22,6 +23,7 @@ const itemTypeSchema = z.object({
   equipmentSlots: z.array(gameIdSchema).default([]),
   icon: gameIdSchema.optional(),
   wornPart: gameIdSchema.optional(),
+  inspection: z.object({ action: gameIdSchema, details: gameBindingSchema }).optional(),
 })
 
 export const inventorySchema = z.object({

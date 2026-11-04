@@ -1,0 +1,28 @@
+{
+  "schema-version": "1.0.0",
+  "type": "square-grid",
+  "width": 7,
+  "height": 3,
+  "terrain": {
+    "wall": {
+      "color": "#29313a",
+      "walkable": false
+    },
+    "lobby": {
+      "color": "#8b755b",
+      "movementCostMs": 60000
+    },
+    "doorway": {
+      "color": "#a1927d"
+    },
+    "gallery": {
+      "color": "#496d73",
+      "movementCostMs": 60000
+    }
+  },
+  "tiles": [
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall"],
+    ["wall", "lobby", "lobby", "doorway", "gallery", "gallery", "wall"],
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall"]
+  ]
+}

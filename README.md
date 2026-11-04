@@ -428,8 +428,10 @@ The scene fills its host's available width and height. The standalone host fills
 `#app`, whose height follows the browser viewport. The editor sizes the preview
 canvas from its pane width and caps its height at 66% of the viewport. The scene
 selector takes its own space above the scene. Rows divide the remaining height
-equally and columns divide the width equally. Cells are not forced to be square.
-Resizing preserves placement and proportions.
+equally and columns divide the width equally by default. To give panels more
+room on square canvases, set `screen.grid.compactColumns` to one positive integer
+weight per column. These weights apply when the scene viewport is at or below a
+3:2 width-to-height ratio. Component placements and spans stay the same.
 
 Both applications import `@ancadeba/ui-components/game.css`. This entry point
 imports `variables.css` for defaults and `scene.css` for rendering rules, and

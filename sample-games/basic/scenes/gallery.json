@@ -1,0 +1,263 @@
+{
+  "schema-version": "1.0.0",
+  "id": "gallery",
+  "type": "game",
+  "titleKey": "scenes.gallery.title",
+  "descriptionKey": "scenes.gallery.description",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12,
+      "compactColumns": [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3]
+    }
+  },
+  "components": [
+    {
+      "id": "location-title",
+      "type": "text",
+      "placement": {
+        "row": 1,
+        "column": 3,
+        "rowSpan": 2,
+        "columnSpan": 8
+      },
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      },
+      "textKey": "scenes.gallery.title"
+    },
+    {
+      "id": "player-status",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 2
+      },
+      "bindings": {
+        "health": {
+          "source": "game.state",
+          "path": ["player", "health"],
+          "fallback": "40"
+        }
+      },
+      "textKey": "scenes.gallery.components.player-status.text"
+    },
+    {
+      "id": "narrative",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 3,
+        "rowSpan": 7,
+        "columnSpan": 8
+      },
+      "textKey": "scenes.gallery.components.narrative.text",
+      "bindings": {
+        "case": {
+          "source": "game.state",
+          "path": ["caseDescription"],
+          "fallback": "A locked display case bears a brass crest with two raised symbols."
+        }
+      }
+    },
+    {
+      "id": "nearby",
+      "type": "text",
+      "placement": {
+        "row": 3,
+        "column": 11,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "scenes.gallery.components.nearby.text",
+      "bindings": {
+        "case": {
+          "source": "game.state",
+          "path": ["caseLabel"],
+          "fallback": "Locked display case"
+        }
+      }
+    },
+    {
+      "id": "footer",
+      "type": "text",
+      "placement": {
+        "row": 12,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 8
+      },
+      "bindings": {
+        "turn": {
+          "source": "game.progression",
+          "path": ["turn"]
+        },
+        "worldTimeMs": {
+          "source": "game.progression",
+          "path": ["worldTimeMs"]
+        }
+      },
+      "presentation": {
+        "align": "center"
+      },
+      "textKey": "scenes.gallery.components.footer.text"
+    },
+    {
+      "id": "map-key",
+      "type": "text",
+      "placement": {
+        "row": 6,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "museum.map-key"
+    },
+    {
+      "id": "museum-map",
+      "type": "map-view",
+      "labelKey": "museum.map-gallery",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "map": "museum",
+      "viewport": {
+        "columns": 7,
+        "rows": 3
+      },
+      "playerSpawn": {
+        "x": 5,
+        "y": 1
+      },
+      "interactive": false
+    },
+    {
+      "id": "clock",
+      "type": "text",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "museum.clock",
+      "bindings": {
+        "time": {
+          "source": "game.state",
+          "path": ["clock"],
+          "fallback": "09:00"
+        }
+      }
+    },
+    {
+      "id": "items",
+      "type": "inventory",
+      "placement": {
+        "row": 5,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "owners": ["player"],
+      "readOnly": true,
+      "labelKey": "scenes.inventory.title"
+    },
+    {
+      "id": "event-log",
+      "type": "text",
+      "placement": {
+        "row": 9,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "textKey": "museum.event-log",
+      "bindings": {
+        "log": {
+          "source": "game.state",
+          "path": ["log"],
+          "fallback": ""
+        }
+      }
+    },
+    {
+      "id": "press-crown",
+      "type": "button",
+      "placement": {
+        "row": 10,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.press-crown",
+      "action": {
+        "type": "request-action",
+        "action": "press-crown",
+        "enabledWhen": {
+          "source": "game.state",
+          "path": ["canOpenCase"]
+        }
+      }
+    },
+    {
+      "id": "press-heron",
+      "type": "button",
+      "placement": {
+        "row": 10,
+        "column": 7,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.press-heron",
+      "action": {
+        "type": "request-action",
+        "action": "press-heron",
+        "enabledWhen": {
+          "source": "game.state",
+          "path": ["canOpenCase"]
+        }
+      }
+    },
+    {
+      "id": "take-chart",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.take-chart",
+      "action": {
+        "type": "request-action",
+        "action": "take-chart",
+        "enabledWhen": {
+          "source": "game.state",
+          "path": ["canTakeChart"]
+        }
+      }
+    },
+    {
+      "id": "walk-west",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 7,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.walk-west",
+      "action": {
+        "type": "request-action",
+        "action": "walk-west"
+      }
+    }
+  ]
+}

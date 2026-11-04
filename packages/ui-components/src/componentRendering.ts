@@ -1,5 +1,6 @@
 import type {
   ButtonComponentData,
+  IGameActions,
   IGameBindings,
   SceneComponentData,
   TextResolutionOptions,
@@ -9,17 +10,23 @@ import type {
 import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
 import type { IGraphicResources } from './graphicResources.js'
 
+type SceneNavigation = Exclude<
+  NonNullable<ButtonComponentData['action']>,
+  { type: 'request-action' }
+>
+
 export interface ComponentRendererOptions {
   readonly assets?: AssetCatalog | undefined
   readonly graphics?: IGraphicResources | undefined
   readonly localization?: IGameLocalization | undefined
   readonly bindingMode?: TextResolutionOptions['mode']
-  readonly onButtonActivate?: (action: NonNullable<ButtonComponentData['action']>) => void
+  readonly onButtonActivate?: (action: SceneNavigation) => void
 }
 
 export interface ComponentRenderContext extends ComponentRendererOptions {
   readonly document: Document
   readonly bindings?: IGameBindings | undefined
+  readonly actions?: IGameActions | undefined
   readonly inventory?: IGameInventory | undefined
   readonly inventoryDefinition?: InventoryDefinition | undefined
 }

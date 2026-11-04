@@ -23,7 +23,8 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     const { map, viewport } = component
     const root = document.createElement('div')
     root.className = 'ancadeba-map-view'
-    root.tabIndex = 0
+
+    if (component.interactive !== false) root.tabIndex = 0
     root.setAttribute('role', 'region')
     root.setAttribute('aria-label', component.label)
     root.style.setProperty('--ge-map-view-columns', String(viewport.columns))
@@ -123,7 +124,7 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
       } else panTo(x + direction.x, y + direction.y)
     }
 
-    root.addEventListener('keydown', onKeyDown)
+    if (component.interactive !== false) root.addEventListener('keydown', onKeyDown)
 
     return {
       element: root,

@@ -3,12 +3,14 @@
   "id": "basic-game",
   "version": "1.0.0",
   "initial-scene": "start-screen",
-  "scenes": ["standard", "inventory", "settings", "start-screen"],
+  "scenes": ["standard", "inventory", "settings", "start-screen", "gallery"],
   "input": "input.json",
   "titleKey": "game.title",
   "descriptionKey": "game.description",
   "languages": {
     "default": "en",
     "available": ["en", "nl"]
-  }
+  },
+  "maps": ["museum"],
+  "inventory": "inventory.json"
 }

@@ -2,6 +2,7 @@ import type { InventoryComponentData, InventoryItemSnapshot } from '@ancadeba/ga
 import {
   inventoryColors,
   inventoryIcon,
+  type GameBindingDefinition,
   type InventoryPlacement,
   type SlotAppearance,
 } from '@ancadeba/schemas'
@@ -35,7 +36,9 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
   render(component: InventoryComponentData, context: ComponentRenderContext): RenderedComponent {
     const { document, assets, inventory, inventoryDefinition: definition } = context
     const root = document.createElement('section')
-    root.className = 'ancadeba-inventory'
+    root.className = component.readOnly
+      ? 'ancadeba-inventory ancadeba-inventory--read-only'
+      : 'ancadeba-inventory'
     root.setAttribute('aria-label', component.label)
     const title = document.createElement('h2')
     title.textContent = component.label
@@ -46,6 +49,16 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
       return { element: root, dispose: () => root.remove() }
     }
+
+    const onlyOwner = component.owners.length === 1 ? component.owners[0] : undefined
+
+    const simple =
+      component.readOnly &&
+      onlyOwner !== undefined &&
+      !component.previews[onlyOwner] &&
+      !Object.keys(definition.owners[onlyOwner]!.equipmentSlots).length
+
+    if (simple) root.className += ' ancadeba-inventory--simple'
 
     const renderGraphic = (visual: string, alt = '', initial = appearance) =>
       this.graphics.render(
@@ -75,7 +88,9 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     const status = document.createElement('p')
     status.setAttribute('role', 'status')
     controls.append(label, move, status)
-    root.append(owners, controls)
+    root.append(owners)
+
+    if (!component.readOnly) root.append(controls)
 
     const icons = new Map<string, RenderedGraphic>()
     const previews = new Map<string, RenderedGraphic>()
@@ -89,6 +104,16 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     let selected: string | undefined
     let destinations: Destination[] = []
     const buttons = new Map<string, HTMLButtonElement>()
+    const inspectionDetails = new Map<HTMLElement, GameBindingDefinition>()
+
+    const updateInspections = () => {
+      for (const [details, binding] of inspectionDetails) {
+        const result = context.bindings?.read(binding)
+        const text = result?.status === 'resolved' ? String(result.value) : (binding.fallback ?? '')
+
+        if (details.textContent !== text) details.textContent = text
+      }
+    }
 
     const syncSelection = (choices: readonly Destination[]) => {
       for (const [id, button] of buttons)
@@ -143,21 +168,35 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         selected !== undefined && buttons.get(selected) === document.activeElement
 
       buttons.clear()
+      inspectionDetails.clear()
 
       const itemRow = (item: InventoryItemSnapshot, path: string): HTMLLIElement => {
         const type = definition.itemTypes[item.itemType]!
         const row = document.createElement('li')
-        const button = document.createElement('button')
-        button.type = 'button'
-        button.dataset.itemId = item.id
-        button.textContent = type.label
-        button.addEventListener('click', () => {
-          selected = item.id
-          status.textContent = ''
-          syncSelection(choices)
-        })
-        buttons.set(item.id, button)
-        row.append(button)
+        const line = simple ? document.createElement('div') : row
+
+        if (simple) {
+          line.className = 'ancadeba-inventory-item-line'
+          row.append(line)
+        }
+
+        if (component.readOnly) {
+          const name = document.createElement('span')
+          name.textContent = type.label
+          line.append(name)
+        } else {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.dataset.itemId = item.id
+          button.textContent = type.label
+          button.addEventListener('click', () => {
+            selected = item.id
+            status.textContent = ''
+            syncSelection(choices)
+          })
+          buttons.set(item.id, button)
+          line.append(button)
+        }
 
         const icon = type.icon && inventoryIcon(assets, type.icon)
 
@@ -174,7 +213,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           }
 
           visibleIcons.add(item.id)
-          row.prepend(graphic.element)
+          line.prepend(graphic.element)
         }
 
         if (type.container)
@@ -193,12 +232,32 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           row.append(list)
         }
 
+        if (type.inspection && context.actions) {
+          const { action, details: binding } = type.inspection
+          const inspect = document.createElement('button')
+          inspect.type = 'button'
+          inspect.dataset.inspectItem = item.id
+          inspect.textContent = 'Inspect'
+          inspect.setAttribute('aria-label', `Inspect ${type.label}`)
+          inspect.addEventListener('click', () => {
+            if (inspectionDetails.has(details)) context.actions?.request(action, item.id)
+          })
+          const details = document.createElement('p')
+          details.className = 'ancadeba-inventory-inspection'
+          details.setAttribute('role', 'status')
+          inspectionDetails.set(details, binding)
+          line.append(inspect)
+          row.append(details)
+        }
+
         return row
       }
 
       for (const ownerId of component.owners) {
         const owner = definition.owners[ownerId]!
         const ownerItems = roots.get(ownerId) ?? []
+        const equipmentSlots = Object.entries(owner.equipmentSlots)
+        const preview = previews.get(ownerId)
         const equipped = new Map<string, InventoryItemSnapshot>()
 
         for (const item of ownerItems) {
@@ -208,15 +267,17 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         const section = document.createElement('section')
         section.dataset.inventoryOwner = ownerId
         section.setAttribute('aria-label', owner.label)
-        const heading = document.createElement('h3')
-        heading.textContent = owner.label
-        section.append(heading)
+
+        if (!simple) {
+          const heading = document.createElement('h3')
+          heading.textContent = owner.label
+          section.append(heading)
+        }
+
         choices.push({
           label: `Carried by ${owner.label}`,
           placement: { type: 'carried', owner: ownerId },
         })
-
-        const preview = previews.get(ownerId)
 
         if (preview) {
           const slots: Record<string, SlotAppearance> = {}
@@ -236,22 +297,29 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           section.append(preview.element)
         }
 
-        const carried = appendGroup(section, 'Carried')
+        const carried = simple ? document.createElement('ul') : appendGroup(section, 'Carried')
 
         for (const item of ownerItems) {
           if (item.placement.type === 'carried') carried.append(itemRow(item, owner.label))
         }
 
         if (!carried.firstChild) {
-          const empty = document.createElement('li')
+          const empty = document.createElement(simple ? 'p' : 'li')
           empty.textContent = 'Empty'
-          carried.append(empty)
+
+          if (simple) {
+            empty.className = 'ancadeba-inventory-empty'
+            section.append(empty)
+          } else carried.append(empty)
+        } else if (simple) {
+          carried.setAttribute('role', 'list')
+          section.append(carried)
         }
 
-        if (Object.keys(owner.equipmentSlots).length) {
+        if (equipmentSlots.length) {
           const worn = appendGroup(section, 'Worn')
 
-          for (const [slot, name] of Object.entries(owner.equipmentSlots)) {
+          for (const [slot, name] of equipmentSlots) {
             const slotLabel = document.createElement('span')
             const item = equipped.get(slot)
             const row = item ? itemRow(item, owner.label) : document.createElement('li')
@@ -275,6 +343,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
       }
 
       owners.replaceChildren(...sections)
+      updateInspections()
 
       if (selected !== undefined && !buttons.has(selected)) selected = undefined
       syncSelection(choices)
@@ -301,10 +370,18 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     update()
     const unsubscribe = inventory.subscribeChanges(update)
 
+    const unsubscribeInspections = Object.values(definition.itemTypes).some(
+      (type) => type.inspection,
+    )
+      ? context.bindings?.subscribeChanges(updateInspections)
+      : undefined
+
     return {
       element: root,
       dispose() {
         unsubscribe()
+        unsubscribeInspections?.()
+        inspectionDetails.clear()
 
         for (const graphic of [...icons.values(), ...previews.values()]) graphic.dispose()
         root.remove()

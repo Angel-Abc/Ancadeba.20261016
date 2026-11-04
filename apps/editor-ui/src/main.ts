@@ -1,7 +1,7 @@
 import './style.css'
 import '@ancadeba/ui-components/game.css'
 import { bindProjectPanel } from './projectPanel.js'
-import type { EngineState } from '@ancadeba/game-runtime'
+import { withMuseumDemo, type EngineState } from '@ancadeba/game-runtime'
 import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
 import { ContainerBuilder } from './ioc/containerBuilder'
@@ -112,7 +112,7 @@ const container = new ContainerBuilder({
   getPreferredGameLanguages: () => {
     return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []
   },
-  runtime: createBrowserTiming(window),
+  runtime: withMuseumDemo(createBrowserTiming(window)),
   download: (archive, fileName) => {
     clearDownload()
     downloadUrl = URL.createObjectURL(archive)

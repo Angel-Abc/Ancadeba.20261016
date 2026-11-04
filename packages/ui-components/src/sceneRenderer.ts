@@ -83,8 +83,16 @@ export class SceneRenderer {
     root.className = 'ancadeba-scene'
     root.dataset.sceneId = data.id
     root.setAttribute('aria-label', data.title)
-    root.style.setProperty('--ge-scene-grid-rows', `${data.screen.grid.rows}`)
-    root.style.setProperty('--ge-scene-grid-columns', `${data.screen.grid.columns}`)
+    const { rows, columns, compactColumns } = data.screen.grid
+
+    root.style.setProperty('--ge-scene-grid-rows', String(rows))
+    root.style.setProperty('--ge-scene-grid-columns', String(columns))
+
+    if (compactColumns)
+      root.style.setProperty(
+        '--ge-scene-compact-columns',
+        compactColumns.map((weight) => `minmax(0, ${weight}fr)`).join(' '),
+      )
 
     const components: RenderedComponent[] = []
     let active = true
@@ -116,6 +124,7 @@ export class SceneRenderer {
       ...this.options,
       document,
       bindings: scene.type === 'game' ? scene.game.bindings : undefined,
+      actions: scene.type === 'game' ? scene.game.actions : undefined,
       inventory: scene.type === 'game' ? scene.game.inventory : undefined,
       inventoryDefinition: scene.type === 'game' ? scene.game.data.inventory : undefined,
     }

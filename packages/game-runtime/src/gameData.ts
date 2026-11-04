@@ -75,7 +75,11 @@ export interface SceneData {
   readonly type: SceneDefinition['type']
   readonly screen: {
     readonly type: 'grid'
-    readonly grid: { readonly rows: number; readonly columns: number }
+    readonly grid: {
+      readonly rows: number
+      readonly columns: number
+      readonly compactColumns?: readonly number[] | undefined
+    }
   }
   readonly components: readonly SceneComponentData[]
 }
@@ -135,12 +139,17 @@ export function assembleGameData(
       throw new Error(`Scene scenes/${id}.json has ID ${scene.id}; expected ${id}`)
     }
 
+    const { rows, columns, compactColumns } = scene.screen.grid
+
     scenes.set(id, {
       id: scene.id,
       title: scene.title,
       description: scene.description,
       type: scene.type,
-      screen: { type: scene.screen.type, grid: { ...scene.screen.grid } },
+      screen: {
+        type: scene.screen.type,
+        grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
+      },
       components: scene.components.map((component) => {
         if (component.type === 'map-view')
           return {
@@ -151,14 +160,17 @@ export function assembleGameData(
             map: resolveMapView(maps, component.map, component.viewport, component.playerSpawn),
           }
 
+        if (component.type === 'button' && component.action) {
+          const action = { ...component.action }
+
+          if (action.type === 'request-action' && action.enabledWhen)
+            action.enabledWhen = { ...action.enabledWhen, path: [...action.enabledWhen.path] }
+
+          return { ...component, placement: { ...component.placement }, action }
+        }
+
         return component.type !== 'text'
-          ? {
-              ...component,
-              placement: { ...component.placement },
-              ...(component.type === 'button' && component.action
-                ? { action: { ...component.action } }
-                : {}),
-            }
+          ? { ...component, placement: { ...component.placement } }
           : {
               ...component,
               placement: { ...component.placement },
@@ -204,7 +216,12 @@ export function assembleGameData(
         if (issue) throw new Error(`Scene ${scene.id}, panel ${component.id}: ${issue.message}`)
       }
 
-      if (component.type !== 'button' || !component.action) continue
+      if (
+        component.type !== 'button' ||
+        !component.action ||
+        component.action.type === 'request-action'
+      )
+        continue
       const target = scenes.get(component.action.scene)
 
       if (!target)

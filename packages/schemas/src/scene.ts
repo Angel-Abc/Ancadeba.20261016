@@ -1,7 +1,12 @@
 import { z } from 'zod'
 import { gameIdSchema } from './game.js'
 import { translationKeySchema } from './languages.js'
-import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
+import {
+  bindingAliasSchema,
+  gameBindingSchema,
+  textBindingsSchema,
+  textPlaceholders,
+} from './bindings.js'
 import { graphicAppearanceSchema, graphicHasBindings, assetIdSchema } from './assets.js'
 import { mapPositionSchema, mapViewportSchema } from './map.js'
 import { inventoryPreviewSchema } from './inventory.js'
@@ -44,6 +49,11 @@ export const textComponentSchema = z
 export const buttonActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
   z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
+  z.object({
+    type: z.literal('request-action'),
+    action: gameIdSchema,
+    enabledWhen: gameBindingSchema.optional(),
+  }),
 ])
 
 export const buttonComponentSchema = z
@@ -95,6 +105,7 @@ export const mapViewComponentSchema = z
     labelKey: translationKeySchema.optional(),
     viewport: mapViewportSchema,
     playerSpawn: mapPositionSchema.optional(),
+    interactive: z.boolean().optional(),
   })
   .refine((component) => Boolean(component.label || component.labelKey), {
     path: ['label'],
@@ -113,6 +124,7 @@ export const inventoryComponentSchema = z
       .min(1)
       .refine((owners) => new Set(owners).size === owners.length),
     previews: z.record(gameIdSchema, inventoryPreviewSchema).default({}),
+    readOnly: z.boolean().optional(),
   })
   .refine((component) => Boolean(component.label || component.labelKey))
 
@@ -141,11 +153,21 @@ export const sceneSchema = z
       grid: z.object({
         rows: z.number().int().positive(),
         columns: z.number().int().positive(),
+        compactColumns: z.array(z.number().int().positive()).optional(),
       }),
     }),
     components: z.array(sceneComponentSchema),
   })
   .superRefine((scene, context) => {
+    const { rows, columns, compactColumns } = scene.screen.grid
+
+    if (compactColumns && compactColumns.length !== columns)
+      context.addIssue({
+        code: 'custom',
+        path: ['screen', 'grid', 'compactColumns'],
+        message: 'Compact column weights must match the number of grid columns',
+      })
+
     if (!scene.title && !scene.titleKey)
       context.addIssue({
         code: 'custom',
@@ -154,6 +176,17 @@ export const sceneSchema = z
       })
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (
+        scene.type === 'stand-alone' &&
+        component.type === 'button' &&
+        component.action?.type === 'request-action'
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index, 'action'],
+          message: 'Action requests require a game scene',
+        })
+
       if (scene.type === 'stand-alone' && component.type === 'inventory')
         context.addIssue({
           code: 'custom',
@@ -192,14 +225,14 @@ export const sceneSchema = z
       ids.add(component.id)
       const { row, column, rowSpan, columnSpan } = component.placement
 
-      if (row > scene.screen.grid.rows || rowSpan - 1 > scene.screen.grid.rows - row)
+      if (row > rows || rowSpan - 1 > rows - row)
         context.addIssue({
           code: 'custom',
           path: ['components', index, 'placement'],
           message: 'Component exceeds the scene grid rows',
         })
 
-      if (column > scene.screen.grid.columns || columnSpan - 1 > scene.screen.grid.columns - column)
+      if (column > columns || columnSpan - 1 > columns - column)
         context.addIssue({
           code: 'custom',
           path: ['components', index, 'placement'],

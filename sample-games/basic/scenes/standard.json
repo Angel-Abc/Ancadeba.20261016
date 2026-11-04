@@ -6,7 +6,8 @@
     "type": "grid",
     "grid": {
       "rows": 12,
-      "columns": 12
+      "columns": 12,
+      "compactColumns": [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3]
     }
   },
   "components": [
@@ -31,7 +32,7 @@
       "placement": {
         "row": 3,
         "column": 1,
-        "rowSpan": 8,
+        "rowSpan": 3,
         "columnSpan": 2
       },
       "bindings": {
@@ -60,19 +61,26 @@
       "placement": {
         "row": 3,
         "column": 11,
-        "rowSpan": 8,
+        "rowSpan": 2,
         "columnSpan": 2
       },
-      "textKey": "scenes.standard.components.nearby.text"
+      "textKey": "scenes.standard.components.nearby.text",
+      "bindings": {
+        "items": {
+          "source": "game.state",
+          "path": ["nearby"],
+          "fallback": "Folded letter"
+        }
+      }
     },
     {
       "id": "footer",
       "type": "text",
       "placement": {
-        "row": 11,
-        "column": 1,
-        "rowSpan": 2,
-        "columnSpan": 12
+        "row": 12,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 8
       },
       "bindings": {
         "turn": {
@@ -88,6 +96,121 @@
         "align": "center"
       },
       "textKey": "scenes.standard.components.footer.text"
+    },
+    {
+      "id": "map-key",
+      "type": "text",
+      "placement": {
+        "row": 6,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "museum.map-key"
+    },
+    {
+      "id": "museum-map",
+      "type": "map-view",
+      "labelKey": "museum.map-lobby",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "map": "museum",
+      "viewport": {
+        "columns": 7,
+        "rows": 3
+      },
+      "playerSpawn": {
+        "x": 1,
+        "y": 1
+      },
+      "interactive": false
+    },
+    {
+      "id": "clock",
+      "type": "text",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textKey": "museum.clock",
+      "bindings": {
+        "time": {
+          "source": "game.state",
+          "path": ["clock"],
+          "fallback": "09:00"
+        }
+      }
+    },
+    {
+      "id": "items",
+      "type": "inventory",
+      "placement": {
+        "row": 5,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "owners": ["player"],
+      "readOnly": true,
+      "labelKey": "scenes.inventory.title"
+    },
+    {
+      "id": "event-log",
+      "type": "text",
+      "placement": {
+        "row": 9,
+        "column": 11,
+        "rowSpan": 4,
+        "columnSpan": 2
+      },
+      "textKey": "museum.event-log",
+      "bindings": {
+        "log": {
+          "source": "game.state",
+          "path": ["log"],
+          "fallback": ""
+        }
+      }
+    },
+    {
+      "id": "take-letter",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 3,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.take-letter",
+      "action": {
+        "type": "request-action",
+        "action": "take-letter",
+        "enabledWhen": {
+          "source": "game.state",
+          "path": ["canTakeLetter"]
+        }
+      }
+    },
+    {
+      "id": "walk-east",
+      "type": "button",
+      "placement": {
+        "row": 11,
+        "column": 7,
+        "rowSpan": 1,
+        "columnSpan": 4
+      },
+      "labelKey": "museum.walk-east",
+      "action": {
+        "type": "request-action",
+        "action": "walk-east"
+      }
     }
   ],
   "titleKey": "scenes.standard.title",

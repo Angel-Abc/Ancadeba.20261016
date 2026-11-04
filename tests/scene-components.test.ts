@@ -68,6 +68,18 @@ describe('language selector definitions', () => {
 })
 
 describe('text component definitions', () => {
+  it('requires one positive compact track weight per column', () => {
+    const parse = (compactColumns: number[]) =>
+      sceneSchema.safeParse({
+        ...scene,
+        screen: { type: 'grid', grid: { rows: 12, columns: 3, compactColumns } },
+      })
+
+    expect(parse([1, 2, 3]).data?.screen.grid.compactColumns).toEqual([1, 2, 3])
+    expect(parse([1, 2]).success).toBe(false)
+    expect(parse([1, 0, 3]).success).toBe(false)
+  })
+
   it('defaults to a single grid cell and body text aligned to the start', () => {
     expect(textComponentSchema.parse(text)).toEqual({
       ...text,
@@ -201,15 +213,16 @@ describe('button component definitions', () => {
     const assembled = assembleGameData(manifest, new Map([['standard', definition]]))
     const component = definition.components[0]!
 
-    if (component.type !== 'button') throw new Error('Expected button')
-    component.action!.scene = 'missing'
+    if (component.type !== 'button' || component.action?.type !== 'new-game')
+      throw new Error('Expected new game button')
+    component.action.scene = 'missing'
     expect(assembled.scenes.get('standard')!.components[0]).toMatchObject({
       action: { scene: 'standard' },
     })
     expect(() => assembleGameData(manifest, new Map([['standard', definition]]))).toThrow(
       'missing scene',
     )
-    component.action!.scene = 'standard'
+    component.action.scene = 'standard'
     definition.type = 'stand-alone'
     expect(() => assembleGameData(manifest, new Map([['standard', definition]]))).toThrow(
       'must target a game scene',

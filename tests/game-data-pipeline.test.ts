@@ -112,12 +112,19 @@ describe('game data pipeline', () => {
         initialContext: 'gameplay',
       },
     })
-    expect([...game.scenes.keys()]).toEqual(['standard', 'inventory', 'settings', 'start-screen'])
+    expect([...game.scenes.keys()]).toEqual([
+      'standard',
+      'inventory',
+      'settings',
+      'start-screen',
+      'gallery',
+    ])
     expect([...game.scenes.values()].map(({ type }) => type)).toEqual([
       'game',
       'game',
       'stand-alone',
       'stand-alone',
+      'game',
     ])
     expect(game.scenes.get('standard')?.components[0]).toEqual({
       id: 'location-title',

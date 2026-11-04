@@ -1,6 +1,6 @@
 import './styling/main.css'
 import '@ancadeba/ui-components/game.css'
-import type { IEngine } from '@ancadeba/game-runtime'
+import { withMuseumDemo, type IEngine } from '@ancadeba/game-runtime'
 import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
@@ -44,7 +44,7 @@ try {
       applicationUrl,
       fetch,
       new DomEngineHost(app, new HttpGameResources(config.gameUrl, applicationUrl, fetch)),
-      createBrowserTiming(window),
+      withMuseumDemo(createBrowserTiming(window)),
       preferredLanguages,
       new BrowserGameLanguagePreferences(() => window.localStorage),
     ).build()

@@ -13,20 +13,43 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     element.className = 'ancadeba-button'
     element.textContent = component.label
     const action = component.action
-    element.disabled = !action || !context.onButtonActivate
     let active = true
 
-    const onClick = () => {
-      if (active && action) context.onButtonActivate?.(action)
+    const update = () => {
+      if (action?.type !== 'request-action') {
+        element.disabled = !action || !context.onButtonActivate
+
+        return
+      }
+
+      const enabled = action.enabledWhen && context.bindings?.read(action.enabledWhen)
+      element.disabled =
+        !context.actions ||
+        Boolean(action.enabledWhen && (enabled?.status !== 'resolved' || enabled.value !== true))
     }
 
-    if (!element.disabled) element.addEventListener('click', onClick)
+    const onClick = () => {
+      if (!active || element.disabled || !action) return
+
+      if (action.type === 'request-action') context.actions?.request(action.action)
+      else context.onButtonActivate?.(action)
+    }
+
+    update()
+
+    const unsubscribe =
+      action?.type === 'request-action' && action.enabledWhen
+        ? context.bindings?.subscribeChanges(update)
+        : undefined
+
+    if (action) element.addEventListener('click', onClick)
 
     return {
       element,
       dispose() {
         if (!active) return
         active = false
+        unsubscribe?.()
         element.removeEventListener('click', onClick)
         element.remove()
       },

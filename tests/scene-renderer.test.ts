@@ -5,6 +5,7 @@ import {
   Engine,
   GameLifecycle,
   GameLoader,
+  withMuseumDemo,
   type EngineMessages,
   type GameData,
   type IEngineHost,
@@ -77,11 +78,20 @@ class TestElement extends EventTarget {
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value)
   }
+
+  get firstChild(): TestElement | undefined {
+    return this.children[0]
+  }
   append(...children: TestElement[]): void {
     for (const child of children) {
       child.parent = this
       this.children.push(child)
     }
+  }
+
+  replaceChildren(...children: TestElement[]): void {
+    this.textContent = ''
+    this.append(...children)
   }
   remove(): void {
     if (!this.parent) return
@@ -225,6 +235,147 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it('uses the museum letter to open the case and carries the inspected chart between rooms', async ({
+    onTestFinished,
+  }) => {
+    const game = await loader.load()
+    const { target } = setup(game)
+
+    const engine = new Engine(
+      { load: async () => game },
+      new DomEngineHost(target.asElement()),
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      withMuseumDemo(timing),
+    )
+
+    onTestFinished(() => engine.stop())
+    await engine.start()
+    startSampleGame(target)
+
+    const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+
+    const mapColumn = () =>
+      component('museum-map')
+        .find((node) => node.className === 'ancadeba-map-player')
+        ?.style.getPropertyValue('--ge-map-player-column')
+
+    const click = (id: string) => component(id).dispatchEvent(new Event('click'))
+
+    const inspectLetter = () =>
+      component('items').find((node) => node.dataset.inspectItem === 'folded-letter')
+
+    const inspectChart = () =>
+      component('items').find((node) => node.dataset.inspectItem === 'harbour-chart')
+
+    expect(component('nearby').textContent).toContain('Folded letter')
+    expect(component('player-status').textContent).toContain('Health 40 / 40')
+    expect(component('items').textContent).toContain('Empty')
+    expect(inspectLetter()).toBeUndefined()
+    expect(component('clock').textContent).toContain('09:00')
+    expect(mapColumn()).toBe('2')
+
+    click('take-letter')
+    click('take-letter')
+    flush(engine)
+    expect(component('take-letter').disabled).toBe(true)
+    expect(component('nearby').textContent).toContain('Nothing to pick up.')
+    expect(component('items').textContent).toContain('Folded letter')
+    expect(component('event-log').textContent.match(/Picked up the folded letter/g)).toHaveLength(1)
+    expect(engine.actions?.progression.worldTimeMs).toBe(0)
+
+    click('walk-east')
+    click('walk-east')
+    flush(engine)
+    expect(engine.lifecycle?.activeScene?.data.id).toBe('gallery')
+    expect(mapColumn()).toBe('6')
+    expect(component('clock').textContent).toContain('09:01')
+    expect(component('items').textContent).toContain('Folded letter')
+    expect(component('event-log').textContent).toContain('Picked up the folded letter')
+    expect(component('event-log').textContent).toContain('Entered the east gallery')
+    expect(engine.actions?.progression.worldTimeMs).toBe(60_000)
+    expect(component('nearby').textContent).toContain('Locked display case')
+    expect(component('press-crown').disabled).toBe(true)
+    expect(component('press-heron').disabled).toBe(true)
+    expect(component('take-chart').disabled).toBe(true)
+    expect(inspectChart()).toBeUndefined()
+    expect(component('items').textContent).not.toContain('press the heron')
+
+    engine.actions?.request('press-heron')
+    engine.actions?.request('take-chart')
+    engine.actions?.request('inspect-chart', 'harbour-chart')
+    flush(engine)
+    expect(component('nearby').textContent).toContain('Locked display case')
+    expect(component('event-log').textContent).not.toContain('Traced the safe route')
+    expect(inspectChart()).toBeUndefined()
+
+    inspectLetter()!.dispatchEvent(new Event('click'))
+    flush(engine)
+    expect(component('items').textContent).toContain('press the heron beneath the crown')
+    expect(component('event-log').textContent).toContain('Read the letter and found a clue')
+    expect(component('press-heron').disabled).toBe(false)
+
+    click('press-crown')
+    flush(engine)
+    expect(component('nearby').textContent).toContain('Locked display case')
+    expect(component('narrative').textContent).toContain('The case stays locked.')
+
+    click('press-heron')
+    flush(engine)
+    expect(component('nearby').textContent).toContain('Open display case')
+    expect(component('narrative').textContent).toContain('a chart of the old harbour')
+    expect(component('event-log').textContent).toContain('Opened the display case')
+    expect(component('press-heron').disabled).toBe(true)
+    expect(component('take-chart').disabled).toBe(false)
+    expect(component('nearby').textContent).toContain('Harbour chart')
+    expect(inspectChart()).toBeUndefined()
+
+    click('take-chart')
+    click('take-chart')
+    flush(engine)
+    expect(component('take-chart').disabled).toBe(true)
+    expect(component('nearby').textContent).not.toContain('Harbour chart')
+    expect(component('narrative').textContent).toContain('where the chart lay')
+    expect(component('items').textContent).toContain('Harbour chart')
+    expect(component('items').textContent).not.toContain('north cliffs')
+    expect(component('event-log').textContent.match(/Took the harbour chart/g)).toHaveLength(1)
+
+    inspectChart()!.dispatchEvent(new Event('click'))
+    inspectChart()!.dispatchEvent(new Event('click'))
+    flush(engine)
+    expect(component('items').textContent).toContain('a landing below the north cliffs')
+    expect(component('event-log').textContent.match(/Traced the safe route/g)).toHaveLength(1)
+    expect(component('clock').textContent).toContain('09:01')
+
+    click('walk-west')
+    flush(engine)
+    expect(engine.lifecycle?.activeScene?.data.id).toBe('standard')
+    expect(mapColumn()).toBe('2')
+    expect(component('clock').textContent).toContain('09:02')
+    expect(component('take-letter').disabled).toBe(true)
+    expect(component('items').textContent).toContain('press the heron beneath the crown')
+    expect(component('items').textContent).toContain('a landing below the north cliffs')
+
+    click('walk-east')
+    flush(engine)
+    expect(component('nearby').textContent).toContain('Open display case')
+    expect(component('take-chart').disabled).toBe(true)
+
+    engine.lifecycle?.enterScene('start-screen')
+    startSampleGame(target)
+    expect(component('take-letter').disabled).toBe(false)
+    expect(component('items').textContent).toContain('Empty')
+    expect(component('event-log').textContent).not.toContain('Picked up the folded letter')
+    expect(component('clock').textContent).toContain('09:00')
+
+    click('walk-east')
+    flush(engine)
+    expect(component('nearby').textContent).toContain('Locked display case')
+    expect(component('press-heron').disabled).toBe(true)
+    expect(component('take-chart').disabled).toBe(true)
+    expect(inspectChart()).toBeUndefined()
+  })
+
   it('follows the Coast Road player at terrain speed and stops at forests and map edges', async ({
     onTestFinished,
   }) => {
@@ -415,6 +566,9 @@ describe('scene renderer', () => {
     expect(standard.attributes.get('aria-label')).toBe('Standard view')
     expect(standard.style.getPropertyValue('--ge-scene-grid-rows')).toBe('12')
     expect(standard.style.getPropertyValue('--ge-scene-grid-columns')).toBe('12')
+    expect(standard.style.getPropertyValue('--ge-scene-compact-columns')).toBe(
+      [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3].map((weight) => `minmax(0, ${weight}fr)`).join(' '),
+    )
     expect(standard.style).not.toHaveProperty('gridTemplateRows')
     expect(standard.style).not.toHaveProperty('gridTemplateColumns')
     const heading = standard.find((element) => element.dataset.componentId === 'location-title')!

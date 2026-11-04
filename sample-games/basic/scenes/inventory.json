@@ -27,14 +27,16 @@
     },
     {
       "id": "items",
-      "type": "text",
+      "type": "inventory",
       "placement": {
         "row": 3,
         "column": 1,
         "rowSpan": 8,
         "columnSpan": 4
       },
-      "textKey": "scenes.inventory.components.items.text"
+      "owners": ["player"],
+      "readOnly": true,
+      "labelKey": "scenes.inventory.title"
     },
     {
       "id": "details",
