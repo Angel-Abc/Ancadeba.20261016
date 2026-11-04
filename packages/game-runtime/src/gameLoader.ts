@@ -7,6 +7,7 @@ import {
   selectLanguage,
   assetCatalogSchema,
   mapDefinitionSchema,
+  inventorySchema,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -57,8 +58,12 @@ export class GameLoader implements IGameLoader {
         ? await this.resources.load(definition.assets, assetCatalogSchema)
         : undefined
 
+    const inventory = definition.inventory
+      ? await this.resources.load(definition.inventory, inventorySchema)
+      : undefined
+
     if (!definition.languages)
-      return assembleGameData(definition, new Map(scenes), input, assets, maps)
+      return assembleGameData(definition, new Map(scenes), input, assets, maps, inventory)
 
     const { available, default: fallbackLanguage } = definition.languages
     const saved = this.preferences?.read(definition.id)
@@ -86,7 +91,7 @@ export class GameLoader implements IGameLoader {
     for (const [tag, messages] of catalogs) {
       const localized = localizeDefinitions(definition, new Map(scenes), { fallback, messages })
       variants.set(tag, {
-        ...assembleGameData(localized.game, localized.scenes, input, assets, maps),
+        ...assembleGameData(localized.game, localized.scenes, input, assets, maps, inventory),
         language: tag,
       })
     }

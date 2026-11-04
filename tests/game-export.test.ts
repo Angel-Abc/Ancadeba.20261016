@@ -170,6 +170,11 @@ describe('standalone game export', () => {
       const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
       const loaded = await new GameLoader(new JsonResourceLoader(resources, logger)).load()
       expect(loaded.assets?.parts.cloak?.pieces).toHaveLength(2)
+      expect(loaded.inventory?.items['moss-cloak']?.placement).toEqual({
+        type: 'inside',
+        container: 'travel-pack',
+      })
+      expect(loaded.scenes.get('wardrobe')?.components[0]?.type).toBe('inventory')
 
       for (const image of Object.values(loaded.assets!.images)) {
         const bytes = await resources.readBytes(image.source)

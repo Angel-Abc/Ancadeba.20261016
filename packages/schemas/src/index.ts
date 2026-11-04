@@ -16,6 +16,8 @@ export * from './bindings.js'
 
 export * from './assets.js'
 
+export * from './inventory.js'
+
 export * from './editorExport.js'
 
 export interface HealthResponse {

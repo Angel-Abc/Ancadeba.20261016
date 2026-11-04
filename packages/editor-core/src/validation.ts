@@ -13,6 +13,9 @@ import {
   mapDefinitionSchema,
   resolveMapView,
   type MapDefinition,
+  inventorySchema,
+  inventoryIssues,
+  inventoryPanelIssues,
 } from '@ancadeba/schemas'
 import type { Diagnostic, ProjectDocuments } from './project.js'
 
@@ -74,8 +77,31 @@ export function validateProject(
   const assets =
     typeof game.data.assets === 'string' ? check(game.data.assets, assetCatalogSchema) : undefined
 
+  const inventoryFile = game.data.inventory
+  const inventory = inventoryFile ? check(inventoryFile, inventorySchema).data : undefined
+
+  if (inventoryFile && inventory) {
+    for (const issue of inventoryIssues(inventory, assets?.data))
+      diagnostics.push({ ...issue, file: inventoryFile, code: 'invalid_inventory' })
+  }
+
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
+      if (component.type === 'inventory') {
+        for (const issue of inventoryPanelIssues(
+          component.owners,
+          component.previews,
+          inventory,
+          assets?.data,
+        ))
+          diagnostics.push({
+            code: 'invalid_inventory_panel',
+            file: `scenes/${id}.json`,
+            path: ['components', index, ...issue.path],
+            message: issue.message,
+          })
+      }
+
       if (component.type !== 'graphic' && component.type !== 'map-view') return
 
       try {

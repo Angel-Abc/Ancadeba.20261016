@@ -1,0 +1,33 @@
+{
+  "schema-version": "1.0.0",
+  "itemTypes": {
+    "backpack": { "label": "Backpack", "container": true, "equipmentSlots": ["back"] },
+    "letter": { "label": "Folded letter" },
+    "cloak": {
+      "label": "Traveling cloak",
+      "equipmentSlots": ["outerwear"],
+      "icon": "cloak",
+      "wornPart": "cloak"
+    }
+  },
+  "owners": {
+    "wayfarer": {
+      "label": "Wayfarer",
+      "equipmentSlots": { "back": "Back", "outerwear": "Outerwear" }
+    },
+    "ranger": { "label": "Ranger", "equipmentSlots": { "back": "Back", "outerwear": "Outerwear" } }
+  },
+  "items": {
+    "travel-pack": {
+      "itemType": "backpack",
+      "placement": { "type": "carried", "owner": "wayfarer" }
+    },
+    "letter": { "itemType": "letter", "placement": { "type": "carried", "owner": "wayfarer" } },
+    "moss-cloak": {
+      "itemType": "cloak",
+      "placement": { "type": "inside", "container": "travel-pack" },
+      "colors": { "fabric": "#397c73" }
+    },
+    "royal-cloak": { "itemType": "cloak", "placement": { "type": "carried", "owner": "ranger" } }
+  }
+}

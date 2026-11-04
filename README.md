@@ -109,7 +109,10 @@ edits palettes, previews compositions, and places graphics in scenes. MCP expose
 the same revision-checked authoring commands.
 
 `sample-games/graphics` is a self-contained wardrobe example with two independent
-characters, item previews, and a two-piece cloak. Export it with
+characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
+to equip the cloak and move items between characters and their bags. The sample's
+`inventory.json` shows how to define items, owners, slots, and starting contents in
+any game. Export it with
 `pnpm export:game sample-games/graphics` or select it in the editor workspace.
 The development workshop at `http://localhost:5173/asset-lab.html` uses the same
 catalogue, artwork, and renderer. See [the graphics guide](docs/asset-workshop.md)

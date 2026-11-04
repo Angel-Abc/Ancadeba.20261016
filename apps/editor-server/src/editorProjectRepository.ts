@@ -81,6 +81,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       if (game.data.input) await read(game.data.input)
 
+      if (game.data.inventory) await read(game.data.inventory)
+
       if (typeof game.data.assets === 'string') {
         await read(game.data.assets)
         const catalog = assetCatalogSchema.safeParse(documents[game.data.assets])

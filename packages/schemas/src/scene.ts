@@ -4,6 +4,7 @@ import { translationKeySchema } from './languages.js'
 import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
 import { graphicAppearanceSchema, graphicHasBindings, assetIdSchema } from './assets.js'
 import { mapPositionSchema, mapViewportSchema } from './map.js'
+import { inventoryPreviewSchema } from './inventory.js'
 
 export const gridPlacementSchema = z.object({
   row: z.number().int().positive(),
@@ -100,12 +101,30 @@ export const mapViewComponentSchema = z
     message: 'A label or labelKey is required',
   })
 
+export const inventoryComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('inventory'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default('Inventory'),
+    labelKey: translationKeySchema.optional(),
+    owners: z
+      .array(gameIdSchema)
+      .min(1)
+      .refine((owners) => new Set(owners).size === owners.length),
+    previews: z.record(gameIdSchema, inventoryPreviewSchema).default({}),
+  })
+  .refine((component) => Boolean(component.label || component.labelKey))
+
+export type InventoryComponentDefinition = z.infer<typeof inventoryComponentSchema>
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
   graphicComponentSchema,
   mapViewComponentSchema,
+  inventoryComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -135,6 +154,13 @@ export const sceneSchema = z
       })
     const ids = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (scene.type === 'stand-alone' && component.type === 'inventory')
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index],
+          message: 'Inventory panels require a game scene',
+        })
+
       if (
         scene.type === 'stand-alone' &&
         component.type === 'graphic' &&

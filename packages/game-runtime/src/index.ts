@@ -49,7 +49,10 @@ export {
   type SceneComponentData,
   type GraphicComponentData,
   type MapViewComponentData,
+  type InventoryComponentData,
 } from './gameData.js'
+
+export type { IGameInventory, InventoryItemSnapshot, InventoryMoveResult } from './inventory.js'
 
 export {
   GameLifecycle,

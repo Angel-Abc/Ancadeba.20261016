@@ -116,6 +116,8 @@ export class SceneRenderer {
       ...this.options,
       document,
       bindings: scene.type === 'game' ? scene.game.bindings : undefined,
+      inventory: scene.type === 'game' ? scene.game.inventory : undefined,
+      inventoryDefinition: scene.type === 'game' ? scene.game.data.inventory : undefined,
     }
 
     try {

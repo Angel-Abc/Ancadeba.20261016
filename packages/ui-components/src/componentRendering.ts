@@ -4,8 +4,9 @@ import type {
   SceneComponentData,
   TextResolutionOptions,
   IGameLocalization,
+  IGameInventory,
 } from '@ancadeba/game-runtime'
-import type { AssetCatalog } from '@ancadeba/schemas'
+import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
 import type { IGraphicResources } from './graphicResources.js'
 
 export interface ComponentRendererOptions {
@@ -19,6 +20,8 @@ export interface ComponentRendererOptions {
 export interface ComponentRenderContext extends ComponentRendererOptions {
   readonly document: Document
   readonly bindings?: IGameBindings | undefined
+  readonly inventory?: IGameInventory | undefined
+  readonly inventoryDefinition?: InventoryDefinition | undefined
 }
 
 export interface RenderedComponent {

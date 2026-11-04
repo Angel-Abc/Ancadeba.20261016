@@ -1,6 +1,7 @@
 import type { GameData, SceneData } from './gameData.js'
 import type { IGameActions } from './actions.js'
 import type { IGameBindings } from './gameBindings.js'
+import { GameInventory, type IGameInventory } from './inventory.js'
 
 export interface IGameRuntime {
   readonly actions: IGameActions
@@ -13,6 +14,7 @@ export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
   readonly data: GameData
+  readonly inventory?: IGameInventory | undefined
   readonly actions: IGameActions | undefined
   readonly bindings: IGameBindings | undefined
   /** Released on disposal. Retained instances must no longer be used. */
@@ -97,6 +99,11 @@ class OwnedInstance<TData, TState> {
 
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
+  private inventoryState: GameInventory | undefined
+
+  get inventory(): IGameInventory | undefined {
+    return this.inventoryState
+  }
 
   get actions(): IGameActions | undefined {
     return this.runtime?.actions
@@ -107,6 +114,7 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   }
 
   initialize(factory: GameRuntimeFactory | undefined): void {
+    if (this.data.inventory) this.inventoryState = new GameInventory(this.data.inventory)
     this.runtime = factory?.(this)
   }
 
@@ -117,6 +125,8 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   override dispose(): void {
     const runtime = this.runtime
     this.runtime = undefined
+    this.inventoryState?.dispose()
+    this.inventoryState = undefined
     const errors: unknown[] = []
 
     try {

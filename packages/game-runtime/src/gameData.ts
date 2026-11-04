@@ -9,9 +9,17 @@ import type {
   MapDefinition,
   MapViewComponentDefinition,
   AssetCatalog,
+  InventoryDefinition,
+  InventoryComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
-import { assertGameLanguages, assertGraphicReference, resolveMapView } from '@ancadeba/schemas'
+import {
+  assertGameLanguages,
+  assertGraphicReference,
+  inventoryIssues,
+  inventoryPanelIssues,
+  resolveMapView,
+} from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
 export interface TextComponentData extends TextTemplate {
@@ -43,8 +51,11 @@ export type SceneComponentData =
   | LanguageSelectComponentData
   | GraphicComponentDefinition
   | MapViewComponentData
+  | InventoryComponentData
 
 export type GraphicComponentData = GraphicComponentDefinition
+
+export type InventoryComponentData = InventoryComponentDefinition
 
 export interface MapViewComponentData extends Omit<MapViewComponentDefinition, 'map'> {
   readonly map: MapDefinition
@@ -71,6 +82,7 @@ export interface SceneData {
 
 export interface GameData {
   readonly assets?: AssetCatalog
+  readonly inventory?: InventoryDefinition
   readonly localization?: IGameLocalization
   readonly language?: string
   readonly id: string
@@ -90,6 +102,7 @@ export function assembleGameData(
   inputDefinition?: InputDefinition,
   assets?: AssetCatalog,
   maps: ReadonlyMap<string, MapDefinition> = new Map(),
+  inventory?: InventoryDefinition,
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -98,6 +111,16 @@ export function assembleGameData(
 
   if (Boolean(definition.input) !== Boolean(inputDefinition)) {
     throw new Error('Input definition must match the game input reference')
+  }
+
+  if (Boolean(definition.inventory) !== Boolean(inventory))
+    throw new Error('Inventory definition must match the game inventory reference')
+
+  if (inventory) {
+    const issue = inventoryIssues(inventory, assets)[0]
+
+    if (issue)
+      throw new Error(`${definition.inventory} (${issue.path.join('.')}): ${issue.message}`)
   }
 
   const scenes = new Map<string, SceneData>()
@@ -170,6 +193,17 @@ export function assembleGameData(
         assertGraphicReference(assets, component.visual, component.appearance)
       }
 
+      if (component.type === 'inventory') {
+        const issue = inventoryPanelIssues(
+          component.owners,
+          component.previews,
+          inventory,
+          assets,
+        )[0]
+
+        if (issue) throw new Error(`Scene ${scene.id}, panel ${component.id}: ${issue.message}`)
+      }
+
       if (component.type !== 'button' || !component.action) continue
       const target = scenes.get(component.action.scene)
 
@@ -184,6 +218,7 @@ export function assembleGameData(
 
   return {
     ...(assets ? { assets } : {}),
+    ...(inventory ? { inventory } : {}),
     id: definition.id,
     title: definition.title,
     description: definition.description,
