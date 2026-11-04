@@ -13,5 +13,6 @@
     "available": ["en", "nl"]
   },
   "maps": ["museum"],
-  "inventory": "inventory.json"
+  "inventory": "inventory.json",
+  "rules": ["rules.json", "museum-puzzle.json"]
 }

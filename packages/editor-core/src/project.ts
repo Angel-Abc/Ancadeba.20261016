@@ -1,4 +1,12 @@
-import type { GameDefinition, SceneDefinition, AssetCatalog } from '@ancadeba/schemas'
+import {
+  gameRuleFiles,
+  type GameDefinition,
+  type SceneDefinition,
+  type AssetCatalog,
+  type InventoryDefinition,
+  type GameRulesDefinition,
+  type RuleSource,
+} from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
 
@@ -16,11 +24,29 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  rules?: GameRulesDefinition | undefined
+  ruleFiles?: Record<string, GameRulesDefinition> | undefined
   assets?: AssetCatalog | undefined
+  inventory?: InventoryDefinition | undefined
+  translationKeys?: string[] | undefined
   revision: string
   game: GameDefinition | null
   scenes: SceneDefinition[]
   diagnostics: Diagnostic[]
+}
+
+export function projectRuleSources(
+  reference: GameDefinition['rules'],
+  load: (file: string) => GameRulesDefinition | undefined,
+): RuleSource[] {
+  if (reference && typeof reference === 'object' && !Array.isArray(reference))
+    return [{ file: 'game.json', rules: reference }]
+
+  return gameRuleFiles(reference).flatMap((file) => {
+    const rules = load(file)
+
+    return rules ? [{ file, rules }] : []
+  })
 }
 
 export interface CommandResult {

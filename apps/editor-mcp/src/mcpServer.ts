@@ -13,8 +13,20 @@ import {
 } from './protocol.js'
 import { toolResult } from './toolResults.js'
 
-const [gameMetadata, createScene, sceneMetadata, sceneLayout, ...assetCommands] =
-  commandSchema.options
+const [
+  gameMetadata,
+  createScene,
+  sceneMetadata,
+  sceneLayout,
+  image,
+  part,
+  composition,
+  removeAsset,
+  graphic,
+  removeGraphic,
+] = commandSchema.options
+
+const assetCommands = [image, part, composition, removeAsset, graphic, removeGraphic] as const
 
 const revision = { expectedRevision: commandRequestSchema.shape.expectedRevision }
 const readAnnotations = { readOnlyHint: true, openWorldHint: false }

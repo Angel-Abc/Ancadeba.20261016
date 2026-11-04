@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { gameSchema, sceneSchema, assetCatalogSchema } from '@ancadeba/schemas'
+import { gameSchema, sceneSchema, assetCatalogSchema, gameRuleFiles } from '@ancadeba/schemas'
 import { validateImageSource } from '@ancadeba/game-runtime'
 import {
   EditorError,
@@ -85,6 +85,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       if (game.data.input) await read(game.data.input)
 
       if (game.data.inventory) await read(game.data.inventory)
+
+      for (const file of gameRuleFiles(game.data.rules)) await read(file)
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
@@ -182,24 +184,48 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     } else if (change.changedFiles.length === 2 && newScene) {
       const path = projectPath(folder, newScene)
       const bytes = encode(newScene)
+      const manifestPath = projectPath(folder, 'game.json')
+      const manifestBytes = encode('game.json')
+
+      const createsRules = gameRuleFiles(
+        gameSchema.parse(change.project.documents['game.json']).rules,
+      ).includes(newScene)
+
       await this.workspace.create(path, bytes)
 
       try {
-        await this.workspace.write(projectPath(folder, 'game.json'), encode('game.json'))
+        await this.workspace.write(manifestPath, manifestBytes)
       } catch (error) {
-        const current = await this.workspace.read(projectPath(folder, 'game.json'))
+        try {
+          const current = await this.workspace.read(manifestPath)
 
-        if (Buffer.from(current).equals(encode('game.json'))) return
-        const manifest = gameSchema.safeParse(JSON.parse(Buffer.from(current).toString('utf8')))
+          if (Buffer.from(current).equals(manifestBytes)) return
 
-        if (manifest.success && manifest.data.assets !== newScene)
+          const manifest = gameSchema.parse(JSON.parse(Buffer.from(current).toString('utf8')))
+
+          const references = [
+            manifest.assets,
+            ...gameRuleFiles(manifest.rules),
+            manifest.inventory,
+            manifest.input,
+          ]
+
+          if (
+            references.some(
+              (file) => typeof file === 'string' && file.toLowerCase() === newScene.toLowerCase(),
+            )
+          )
+            throw new Error('The manifest references the new file')
+
           await this.workspace.removeCreated(path, bytes)
-        else
+        } catch {
           throw new EditorError(
             500,
-            'asset_publication_failed',
-            `Catalogue publication is uncertain; inspect before retrying. File: ${newScene}`,
+            createsRules ? 'rules_publication_failed' : 'asset_publication_failed',
+            `Could not confirm rollback of ${newScene}. Reload the project before retrying.`,
           )
+        }
+
         throw error
       }
     } else {

@@ -46,14 +46,16 @@ export const textComponentSchema = z
     }
   })
 
+export const requestActionSchema = z.object({
+  type: z.literal('request-action'),
+  action: gameIdSchema,
+  enabledWhen: gameBindingSchema.optional(),
+})
+
 export const buttonActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
   z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
-  z.object({
-    type: z.literal('request-action'),
-    action: gameIdSchema,
-    enabledWhen: gameBindingSchema.optional(),
-  }),
+  requestActionSchema,
 ])
 
 export const buttonComponentSchema = z

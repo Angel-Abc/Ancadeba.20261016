@@ -621,15 +621,33 @@ show markers and a title tooltip containing each alias, source, path, and reason
 The tooltip clears when the values resolve. `DomEngineHost` explicitly selects
 `standalone`, displaying fallback text without editor diagnostic metadata.
 
-The basic sample's Standard view binds health in the player panel and turn/world
-time in the footer. Inventory reads the same values in its footer, while Settings
-has no game bindings. The default browser composition supplies no RPG state or
-game rules: health therefore shows a marker in preview and the authored fallback
-of `40` in standalone play; progression starts at zero. Games supply live values
-and actions through the existing lifecycle and rules factories. Renderer integration
-tests inject health-changing actions and elapsed time to verify updates, recovery
-from missing values, and transitions through all three sample scenes without
-hard-coding sample gameplay into either browser host.
+### Authored gameplay rules
+
+Open **Rules** in the editor to declare state, build actions, and link them to
+scene buttons or inventory inspection. Save actions before linking them. State
+paths use dots in the form, so `player.health` is the binding path
+`["player", "health"]` in JSON.
+
+Set `rules` in `game.json` to a filename or an ordered list of filenames, such as
+`["rules.json", "museum-puzzle.json"]`. In the **Rules** panel, use the **Rule file**
+selector to edit a file or choose **New rule file…** to add one. Saving an existing
+file updates that file, while adding a file also updates the manifest.
+
+The Basic Game separates [movement and the activity log](sample-games/basic/rules.json)
+from [the museum puzzle](sample-games/basic/museum-puzzle.json). Actions can use
+state and the activity log from other rule files. Action IDs and state paths must
+be unique across the game, and the game can define one clock and one activity log.
+Each action runs its first branch whose
+conditions all match. Branches can update state, move a carried item or enter a
+game scene, and add activity entries. An empty effect list acknowledges a
+request without changing state. A scene transition can use its destination map
+view's spawn tile to charge world time.
+
+Each new game starts with fresh state. Rule text can use a literal or a catalog
+key resolved in the playthrough's starting language. A running editor preview
+restarts when rules or their trigger links are saved. Standalone export uses the
+same manifest and runtime. Hosts can supply custom TypeScript behavior by
+providing a lifecycle or rules factory.
 
 ## Engine instances
 

@@ -9,8 +9,6 @@ export {
 
 export type { EngineMessages } from './messages.js'
 
-export { withMuseumDemo } from './museumDemo.js'
-
 export {
   GameBindings,
   type IGameBindings,

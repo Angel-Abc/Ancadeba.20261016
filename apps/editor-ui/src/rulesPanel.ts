@@ -1,0 +1,213 @@
+import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
+import { defaultRulesFile, gameRuleFiles, type GameRulesDefinition } from '@ancadeba/schemas'
+import type { ProjectEditorState } from './projectController.js'
+import { ruleFormControls } from './ruleFormControls.js'
+import { rulesDefinitionForm } from './rulesDefinitionForm.js'
+import { ruleTriggerForms } from './ruleTriggerForms.js'
+
+export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand) => void) {
+  const document = panel.ownerDocument
+  const rulesFields = document.createElement('fieldset')
+  const triggerFields = document.createElement('fieldset')
+  const navigation = document.createElement('div')
+  const error = document.createElement('p')
+  error.className = 'error'
+  error.setAttribute('role', 'alert')
+  panel.replaceChildren(navigation, error, rulesFields, triggerFields)
+
+  let view: ProjectView | undefined
+  let loadedPath: string | undefined
+  let draft: GameRulesDefinition = { state: [], actions: {} }
+  let file = defaultRulesFile
+  let newFilename = ''
+  let submittedFile = ''
+  let selected = ''
+  let rulesDirty = false
+  let triggersDirty = false
+  let busy = false
+
+  const submit = (command: EditorCommand) => {
+    if (busy) return
+    const parsed = commandSchema.safeParse(command)
+    error.textContent = parsed.success
+      ? ''
+      : parsed.error.issues.map(({ path, message }) => `${path.join('.')}: ${message}`).join('\n')
+
+    if (parsed.success) save(parsed.data)
+  }
+
+  const rulesControls = ruleFormControls(document, () => {
+    rulesDirty = true
+  })
+
+  const triggerControls = ruleFormControls(document, () => {
+    triggersDirty = true
+  })
+
+  const definitions = rulesControls.button('Rule definitions', () => showTriggers(false))
+  const triggers = rulesControls.button('Trigger links', () => showTriggers(true))
+  navigation.append(definitions, triggers)
+  showTriggers(false)
+
+  function showTriggers(show: boolean) {
+    rulesFields.hidden = show
+    triggerFields.hidden = !show
+    definitions.setAttribute('aria-pressed', String(!show))
+    triggers.setAttribute('aria-pressed', String(show))
+  }
+
+  const selectAction = (id: string) => {
+    selected = id
+  }
+
+  const change = (edit: () => void) => {
+    edit()
+    rulesDirty = true
+    renderRules()
+  }
+
+  function renderRules() {
+    rulesFields.replaceChildren()
+
+    if (!view?.game) return
+    const form = document.createElement('form')
+    const files = gameRuleFiles(view.game.rules)
+    const choices = files.length ? files : [defaultRulesFile]
+
+    const filePicker = rulesControls.select(
+      'Rule file',
+      file,
+      [...choices, ['', 'New rule file…']],
+      (next) => {
+        if (rulesDirty) {
+          filePicker.querySelector('select')!.value = file
+          error.textContent = 'Save or discard this draft before switching rule files.'
+
+          return
+        }
+
+        file = next
+        newFilename = ''
+        error.textContent = ''
+        resetRules()
+      },
+      false,
+    )
+
+    form.append(filePicker)
+
+    if (!file)
+      form.append(
+        rulesControls.input('New rule filename', newFilename, (value) => {
+          newFilename = value.trim()
+        }),
+      )
+
+    const otherFields = Object.entries(view.ruleFiles ?? {})
+      .filter(([name]) => name !== file)
+      .flatMap(([, rules]) => rules.state)
+
+    const saveButton = document.createElement('button')
+    saveButton.type = 'submit'
+    saveButton.textContent = 'Save rules'
+    form.append(
+      saveButton,
+      rulesControls.button('Discard rule draft', () => {
+        newFilename = ''
+        resetRules()
+        error.textContent = ''
+      }),
+      ...rulesDefinitionForm(
+        rulesControls,
+        view,
+        draft,
+        selected,
+        (id) => {
+          selectAction(id)
+          renderRules()
+        },
+        change,
+        renderRules,
+        otherFields,
+      ),
+    )
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+
+      if (!file && files.some((name) => name.toLowerCase() === newFilename.toLowerCase())) {
+        error.textContent = 'Choose a filename that is not already listed.'
+
+        return
+      }
+
+      submittedFile = file || newFilename
+      submit({ type: 'game.updateRules', file: submittedFile, rules: draft })
+    })
+    rulesFields.append(form)
+  }
+
+  function renderTriggers() {
+    triggerFields.replaceChildren()
+
+    if (!view?.game) return
+    triggerFields.append(
+      triggerControls.button('Discard trigger draft', () => {
+        triggersDirty = false
+        error.textContent = ''
+        renderTriggers()
+      }),
+      ...ruleTriggerForms(triggerControls, view, submit),
+    )
+  }
+
+  function resetRules() {
+    const files = gameRuleFiles(view?.game?.rules)
+
+    if (file && files.length && !files.includes(file)) file = files[0]!
+    const saved = files.length ? view?.ruleFiles?.[file] : view?.rules
+    draft = structuredClone(saved ?? { state: [], actions: {} })
+
+    if (!Object.hasOwn(draft.actions, selected)) selected = Object.keys(draft.actions)[0] ?? ''
+    rulesDirty = false
+    renderRules()
+  }
+
+  return {
+    render(state: ProjectEditorState, replaceFields: boolean) {
+      const projectChanged = state.path !== loadedPath
+      const viewChanged = view !== state.view
+      view = state.view
+      loadedPath = state.path
+      busy = state.busy
+      const rulesSaved = replaceFields && state.lastCommand === 'game.updateRules'
+
+      const triggerSaved =
+        replaceFields &&
+        (state.lastCommand === 'scene.upsertRuleButton' ||
+          state.lastCommand === 'inventory.setRuleInspection')
+
+      const reset = projectChanged || (replaceFields && !state.preserveDrafts)
+
+      if (reset) {
+        file = gameRuleFiles(view?.game?.rules)[0] ?? defaultRulesFile
+        newFilename = ''
+      }
+
+      if (rulesSaved) file = submittedFile
+
+      if (reset || rulesSaved || (viewChanged && !rulesDirty)) {
+        resetRules()
+      }
+
+      if (reset || triggerSaved || (viewChanged && !triggersDirty)) {
+        triggersDirty = false
+        renderTriggers()
+      }
+
+      if (reset || rulesSaved || triggerSaved) error.textContent = ''
+      rulesFields.disabled = busy || !view?.game
+      triggerFields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
+    },
+    hasDrafts: () => rulesDirty || triggersDirty,
+  }
+}

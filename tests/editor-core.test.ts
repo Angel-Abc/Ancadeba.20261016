@@ -189,7 +189,7 @@ describe('editor core', () => {
   })
 
   it('publishes machine-readable requests and examples for every command', () => {
-    expect(capabilities.commands).toHaveLength(10)
+    expect(capabilities.commands).toHaveLength(13)
     expect(capabilities.requestSchema).toHaveProperty('properties')
 
     for (const command of capabilities.commands) expect(command.example.type).toBe(command.type)

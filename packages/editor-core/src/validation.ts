@@ -16,8 +16,10 @@ import {
   inventorySchema,
   inventoryIssues,
   inventoryPanelIssues,
+  validateRuleSources,
+  gameRulesSchema,
 } from '@ancadeba/schemas'
-import type { Diagnostic, ProjectDocuments } from './project.js'
+import { projectRuleSources, type Diagnostic, type ProjectDocuments } from './project.js'
 
 export function validateProject(
   documents: ProjectDocuments,
@@ -122,6 +124,8 @@ export function validateProject(
     })
   }
 
+  let defaultMessages: LanguageCatalog | undefined
+
   if (game.data.languages) {
     const catalogs = new Map<string, LanguageCatalog>()
 
@@ -132,6 +136,7 @@ export function validateProject(
     }
 
     const fallback = catalogs.get(game.data.languages.default)
+    defaultMessages = fallback
 
     if (fallback && scenes.size === game.data.scenes.length) {
       for (const [language, messages] of catalogs) {
@@ -148,6 +153,15 @@ export function validateProject(
       }
     }
   }
+
+  const sources = projectRuleSources(game.data.rules, (file) => check(file, gameRulesSchema).data)
+
+  for (const issue of validateRuleSources(sources, scenes, maps, inventory, defaultMessages).issues)
+    diagnostics.push({
+      ...issue,
+      path: issue.file === 'game.json' ? ['rules', ...issue.path] : issue.path,
+      code: 'invalid_rules',
+    })
 
   try {
     assertGameLanguages(game.data, scenes)

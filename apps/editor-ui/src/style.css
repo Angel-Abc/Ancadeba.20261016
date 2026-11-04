@@ -177,6 +177,33 @@ textarea:focus-visible {
 #editor-error {
   white-space: pre-wrap;
 }
+#rules-panel .error {
+  white-space: pre-wrap;
+}
+#rules-panel .error:empty {
+  display: none;
+}
+#rules-panel fieldset {
+  min-inline-size: 0;
+  margin-block: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #475569;
+  border-radius: 0.375rem;
+}
+#rules-panel fieldset[hidden] {
+  display: none;
+}
+#rules-panel label {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.65rem;
+}
+#rules-panel button {
+  margin: 0.25rem 0.25rem 0.25rem 0;
+}
+#rules-panel button[aria-pressed='true'] {
+  border-color: #93c5fd;
+}
 /* Asset authoring uses the same renderer and resources as game preview. */
 #assets-panel {
   border-top: 1px solid var(--border-color, #52606b);

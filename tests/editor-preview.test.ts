@@ -66,6 +66,77 @@ function createPreview() {
 }
 
 describe('editor preview', () => {
+  it('reloads saved rule state and actions on a preview restart', async () => {
+    const { controller, fetcher, host, createInstance } = createPreview()
+
+    const scene = {
+      'schema-version': '1.0.0',
+      id: 'room',
+      title: 'Room',
+      type: 'game',
+      screen: { type: 'grid', grid: { rows: 2, columns: 2 } },
+      components: [],
+    }
+
+    let text = 'First version'
+    fetcher.mockImplementation(async (url) => {
+      const address = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+
+      if (address.includes('game.json')) {
+        return Response.json({
+          ...gameDefinition('Rule preview'),
+          scenes: ['room'],
+          'initial-scene': 'room',
+          rules: ['museum-rules.json', 'museum-state.json'],
+        })
+      }
+
+      if (address.includes('museum-rules.json')) {
+        return Response.json({
+          state: [],
+          actions: {
+            show: [
+              {
+                when: [],
+                effects: [{ type: 'set-state', path: ['message'], value: text }],
+              },
+            ],
+          },
+        })
+      }
+
+      if (address.includes('museum-state.json')) {
+        return Response.json({ state: [{ path: ['message'], value: '' }], actions: {} })
+      }
+
+      return Response.json(scene)
+    })
+
+    const show = (index: number) => {
+      const session = host.mount.mock.calls[index]![1]
+      const engine = createInstance.mock.results[index]!.value
+      session.actions!.request('show')
+
+      for (let batch = 0; batch < 3; batch++) engine.flushMessages()
+
+      return session.lifecycle.currentGame?.bindings?.read({
+        source: 'game.state',
+        path: ['message'],
+      })
+    }
+
+    try {
+      await controller.start('basic')
+      expect(show(0)).toEqual({ status: 'resolved', value: text })
+      controller.stop()
+      text = 'Saved edit'
+      await controller.start('basic')
+      expect(show(1)).toEqual({ status: 'resolved', value: text })
+    } finally {
+      controller.dispose()
+    }
+  })
+
   it('loads referenced scenes and styles from the selected workspace folder before mounting', async () => {
     const { controller, fetcher, host } = createPreview()
     const stylesheet = ':scope { color: gold }'

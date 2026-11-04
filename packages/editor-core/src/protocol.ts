@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import { gameSchema, sceneSchema, assetCatalogSchema } from '@ancadeba/schemas'
+import {
+  gameSchema,
+  sceneSchema,
+  assetCatalogSchema,
+  inventorySchema,
+  gameRulesSchema,
+  ruleFilenameSchema,
+} from '@ancadeba/schemas'
 
 export const diagnosticSchema = z.object({
   code: z.string(),
@@ -9,7 +16,11 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  rules: gameRulesSchema.optional(),
+  ruleFiles: z.record(ruleFilenameSchema, gameRulesSchema).optional(),
   assets: assetCatalogSchema.optional(),
+  inventory: inventorySchema.optional(),
+  translationKeys: z.array(z.string()).optional(),
   revision: z.string().min(1),
   game: gameSchema.nullable(),
   scenes: z.array(sceneSchema),

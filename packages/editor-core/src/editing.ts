@@ -3,6 +3,7 @@ import { commandSchema, type EditorCommand } from './commands.js'
 import { EditorError, object, type CommandResult, type ProjectSnapshot } from './project.js'
 import { validateProject } from './validation.js'
 import { editAssets } from './assetEditing.js'
+import { editRules } from './ruleEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -20,7 +21,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const repairSource = repairing ? object(object(catalog.images)[command.id]).source : undefined
 
   const diagnostics = initialDiagnostics.filter(
-    (diagnostic) => !repairing || diagnostic.file !== repairSource,
+    (diagnostic) =>
+      (!repairing || diagnostic.file !== repairSource) &&
+      (command.type !== 'game.updateRules' || diagnostic.code !== 'invalid_rules'),
   )
 
   if (diagnostics.length)
@@ -40,6 +43,12 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.removeGraphic'
   ) {
     changedFiles.push(...editAssets(documents, command))
+  } else if (
+    command.type === 'game.updateRules' ||
+    command.type === 'scene.upsertRuleButton' ||
+    command.type === 'inventory.setRuleInspection'
+  ) {
+    changedFiles.push(...editRules(documents, game, command))
   } else if (command.type === 'game.updateMetadata') {
     documents['game.json'] = {
       ...object(documents['game.json']),

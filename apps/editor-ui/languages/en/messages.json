@@ -116,5 +116,6 @@
   "tree.noResults": "No matching entries.",
   "tree.empty": "Load a project to explore its content.",
   "tree.saveFirst": "Save pending edits before selecting another object. Your entries are preserved.",
-  "tree.readOnly": "This component is available for inspection. Editing is not yet supported."
+  "tree.readOnly": "This component is available for inspection. Editing is not yet supported.",
+  "rules.heading": "Rules"
 }

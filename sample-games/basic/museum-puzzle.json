@@ -1,0 +1,383 @@
+{
+  "state": [
+    {
+      "path": ["canTakeLetter"],
+      "value": true
+    },
+    {
+      "path": ["canOpenCase"],
+      "value": false
+    },
+    {
+      "path": ["canTakeChart"],
+      "value": false
+    },
+    {
+      "path": ["letterRead"],
+      "value": false
+    },
+    {
+      "path": ["chartRead"],
+      "value": false
+    },
+    {
+      "path": ["letterClue"],
+      "value": ""
+    },
+    {
+      "path": ["chartDetails"],
+      "value": ""
+    },
+    {
+      "path": ["caseLabel"],
+      "value": {
+        "textKey": "museum.rules.caseLabel"
+      }
+    },
+    {
+      "path": ["caseDescription"],
+      "value": {
+        "textKey": "museum.rules.caseLocked"
+      }
+    },
+    {
+      "path": ["nearby"],
+      "value": {
+        "textKey": "museum.rules.letter"
+      }
+    }
+  ],
+  "actions": {
+    "take-letter": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "standard"
+          },
+          {
+            "type": "state-is",
+            "path": ["canTakeLetter"],
+            "value": true
+          },
+          {
+            "type": "item-carried-by",
+            "item": "folded-letter",
+            "owner": "lobby"
+          }
+        ],
+        "effects": [
+          {
+            "type": "move-item",
+            "item": "folded-letter",
+            "owner": "player"
+          },
+          {
+            "type": "set-state",
+            "path": ["canTakeLetter"],
+            "value": false
+          },
+          {
+            "type": "set-state",
+            "path": ["nearby"],
+            "value": {
+              "textKey": "museum.rules.empty"
+            }
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.pickup"
+            }
+          }
+        ]
+      }
+    ],
+    "inspect-letter": [
+      {
+        "when": [
+          {
+            "type": "payload-is-item",
+            "item": "folded-letter"
+          },
+          {
+            "type": "item-carried-by",
+            "item": "folded-letter",
+            "owner": "player"
+          },
+          {
+            "type": "state-is",
+            "path": ["letterRead"],
+            "value": false
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["letterRead"],
+            "value": true
+          },
+          {
+            "type": "set-state",
+            "path": ["letterClue"],
+            "value": {
+              "textKey": "museum.rules.clue"
+            }
+          },
+          {
+            "type": "set-state",
+            "path": ["canOpenCase"],
+            "value": true
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.read"
+            }
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "type": "payload-is-item",
+            "item": "folded-letter"
+          },
+          {
+            "type": "item-carried-by",
+            "item": "folded-letter",
+            "owner": "player"
+          }
+        ],
+        "effects": []
+      }
+    ],
+    "press-crown": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "gallery"
+          },
+          {
+            "type": "state-is",
+            "path": ["canOpenCase"],
+            "value": true
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["caseDescription"],
+            "value": {
+              "textKey": "museum.rules.wrongSymbol"
+            }
+          }
+        ]
+      }
+    ],
+    "press-heron": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "gallery"
+          },
+          {
+            "type": "state-is",
+            "path": ["canOpenCase"],
+            "value": true
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "display-case"
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["canOpenCase"],
+            "value": false
+          },
+          {
+            "type": "set-state",
+            "path": ["canTakeChart"],
+            "value": true
+          },
+          {
+            "type": "set-state",
+            "path": ["caseLabel"],
+            "value": {
+              "textKey": "museum.rules.caseOpenWithChart"
+            }
+          },
+          {
+            "type": "set-state",
+            "path": ["caseDescription"],
+            "value": {
+              "textKey": "museum.rules.caseOpen"
+            }
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.opened"
+            }
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "gallery"
+          },
+          {
+            "type": "state-is",
+            "path": ["canOpenCase"],
+            "value": true
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["canOpenCase"],
+            "value": false
+          },
+          {
+            "type": "set-state",
+            "path": ["canTakeChart"],
+            "value": false
+          },
+          {
+            "type": "set-state",
+            "path": ["caseLabel"],
+            "value": {
+              "textKey": "museum.rules.caseOpenLabel"
+            }
+          },
+          {
+            "type": "set-state",
+            "path": ["caseDescription"],
+            "value": {
+              "textKey": "museum.rules.caseOpen"
+            }
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.opened"
+            }
+          }
+        ]
+      }
+    ],
+    "take-chart": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "gallery"
+          },
+          {
+            "type": "state-is",
+            "path": ["canTakeChart"],
+            "value": true
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "display-case"
+          }
+        ],
+        "effects": [
+          {
+            "type": "move-item",
+            "item": "harbour-chart",
+            "owner": "player"
+          },
+          {
+            "type": "set-state",
+            "path": ["canTakeChart"],
+            "value": false
+          },
+          {
+            "type": "set-state",
+            "path": ["caseLabel"],
+            "value": {
+              "textKey": "museum.rules.caseOpenLabel"
+            }
+          },
+          {
+            "type": "set-state",
+            "path": ["caseDescription"],
+            "value": {
+              "textKey": "museum.rules.caseEmpty"
+            }
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.chartPickup"
+            }
+          }
+        ]
+      }
+    ],
+    "inspect-chart": [
+      {
+        "when": [
+          {
+            "type": "payload-is-item",
+            "item": "harbour-chart"
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "player"
+          },
+          {
+            "type": "state-is",
+            "path": ["chartRead"],
+            "value": false
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["chartRead"],
+            "value": true
+          },
+          {
+            "type": "set-state",
+            "path": ["chartDetails"],
+            "value": {
+              "textKey": "museum.rules.chartDetails"
+            }
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.chartRead"
+            }
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "type": "payload-is-item",
+            "item": "harbour-chart"
+          },
+          {
+            "type": "item-carried-by",
+            "item": "harbour-chart",
+            "owner": "player"
+          }
+        ],
+        "effects": []
+      }
+    ]
+  }
+}

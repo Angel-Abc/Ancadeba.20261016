@@ -20,8 +20,14 @@ import { loadRuntimeConfig } from '../apps/engine/src/config.js'
 import { ContainerBuilder } from '../apps/engine/src/ioc/containerBuilder.js'
 import { HttpGameResources } from '../apps/engine/src/gameResources.js'
 import { exportGame } from '../tooling/game-export.js'
-import { GameLoader, resolveGraphic, validateImageSource } from '@ancadeba/game-runtime'
-import { JsonResourceLoader, type ILogger } from '@ancadeba/utilities'
+import {
+  Engine,
+  GameLoader,
+  resolveGraphic,
+  validateImageSource,
+  type EngineMessages,
+} from '@ancadeba/game-runtime'
+import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { graphicAppearanceSchema } from '@ancadeba/schemas'
 
 const input = {
@@ -200,6 +206,77 @@ describe('standalone game export', () => {
       'code',
       'ENOENT',
     )
+  })
+
+  it('plays the museum rules from a served standalone export', async () => {
+    const destination = join(temp, 'museum-output')
+    await exportGame({
+      gameDirectory: fileURLToPath(new URL('../sample-games/basic/', import.meta.url)),
+      outputDirectory: destination,
+    })
+
+    const server = await preview({
+      configFile: false,
+      root: temp,
+      base: '/museum/',
+      logLevel: 'silent',
+      build: { outDir: destination },
+      preview: { host: '127.0.0.1', port: 0, strictPort: true },
+    })
+
+    const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+    let engine: Engine | undefined
+
+    try {
+      // SAFETY: Vite preview is configured to listen on loopback TCP.
+      const { port } = server.httpServer.address() as AddressInfo
+      const base = `http://127.0.0.1:${port}/museum/`
+      const config = await loadRuntimeConfig(base, fetch)
+
+      const loader = new GameLoader(
+        new JsonResourceLoader(new HttpGameResources(config.gameUrl, base, fetch), logger),
+      )
+
+      engine = new Engine(
+        loader,
+        { mount: () => () => {} },
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          clock: { now: () => 0 },
+          scheduler: { schedule: () => () => {} },
+        },
+      )
+      await engine.start()
+      const lifecycle = engine.lifecycle!
+      const game = lifecycle.startGame()
+      lifecycle.enterScene('standard')
+      const actions = game.actions!
+      actions.request('take-letter')
+      actions.request('inspect-letter', 'folded-letter')
+      actions.request('walk-east')
+      actions.request('press-crown')
+      actions.request('press-heron')
+      actions.request('take-chart')
+      actions.request('inspect-chart', 'harbour-chart')
+      actions.request('walk-west')
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+
+      expect(lifecycle.activeScene?.data.id).toBe('standard')
+      expect(actions.progression.worldTimeMs).toBe(120_000)
+      expect(game.inventory?.snapshot.find(({ id }) => id === 'harbour-chart')?.placement).toEqual({
+        type: 'carried',
+        owner: 'player',
+      })
+      expect(game.bindings?.read({ source: 'game.state', path: ['chartDetails'] })).toMatchObject({
+        status: 'resolved',
+        value: expect.stringContaining('north cliffs'),
+      })
+    } finally {
+      engine?.stop()
+      await server.close()
+    }
   })
 
   it('packages the engine and game, then runs from a relocated nested URL', async () => {

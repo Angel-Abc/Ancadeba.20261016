@@ -14,6 +14,7 @@ import type { GameRulesFactory, IGameActions } from './actions.js'
 import { GameLifecycle, type GameInstance, type IGameLifecycle } from './gameLifecycle.js'
 import { GameActionRuntime } from './gameActionRuntime.js'
 import { GameMessageScopes } from './gameMessageScope.js'
+import { AuthoredPlaythrough } from './authoredRules.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
@@ -189,10 +190,21 @@ export class Engine implements IEngine {
 
       if (this.session !== session || !game) return
 
+      const authored =
+        this.runtime.createGameLifecycle || this.runtime.createGameRules ? undefined : game.rules
+
+      const playthroughs = new WeakMap<object, AuthoredPlaythrough>()
+
       const lifecycle =
         this.runtime.createGameLifecycle?.(game) ??
         new GameLifecycle(game, {
-          createGameState: () => undefined,
+          createGameState: () => {
+            if (!authored) return undefined
+            const playthrough = new AuthoredPlaythrough(authored, game)
+            playthroughs.set(playthrough.state, playthrough)
+
+            return playthrough.state
+          },
           createSceneState: () => undefined,
         })
 
@@ -204,7 +216,11 @@ export class Engine implements IEngine {
 
       session.lifecycle = lifecycle
       lifecycle.bindGameRuntime((instance) => {
-        const rules = this.runtime.createGameRules?.(game, instance) ?? { handlers: new Map() }
+        const playthrough =
+          instance.state instanceof Map ? playthroughs.get(instance.state) : undefined
+
+        const rules = playthrough?.createRules(game, instance, lifecycle, this.logger) ??
+          this.runtime.createGameRules?.(game, instance) ?? { handlers: new Map() }
 
         if (this.session !== session) throw new Error('Engine stopped while creating game rules')
 

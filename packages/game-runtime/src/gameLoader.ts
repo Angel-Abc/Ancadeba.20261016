@@ -8,6 +8,8 @@ import {
   assetCatalogSchema,
   mapDefinitionSchema,
   inventorySchema,
+  gameRulesSchema,
+  gameRuleFiles,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -66,9 +68,26 @@ export class GameLoader implements IGameLoader {
       ? await this.resources.load(definition.inventory, inventorySchema)
       : undefined
 
+    const rules = new Map(
+      await Promise.all(
+        gameRuleFiles(definition.rules).map(
+          async (file) => [file, await this.resources.load(file, gameRulesSchema)] as const,
+        ),
+      ),
+    )
+
     if (!definition.languages)
       return {
-        ...assembleGameData(definition, new Map(scenes), input, assets, maps, inventory),
+        ...assembleGameData(
+          definition,
+          new Map(scenes),
+          input,
+          assets,
+          maps,
+          inventory,
+          undefined,
+          rules,
+        ),
         ...styling,
       }
 
@@ -98,7 +117,19 @@ export class GameLoader implements IGameLoader {
     for (const [tag, messages] of catalogs) {
       const localized = localizeDefinitions(definition, new Map(scenes), { fallback, messages })
       variants.set(tag, {
-        ...assembleGameData(localized.game, localized.scenes, input, assets, maps, inventory),
+        ...assembleGameData(
+          localized.game,
+          localized.scenes,
+          input,
+          assets,
+          maps,
+          inventory,
+          {
+            fallback,
+            messages,
+          },
+          rules,
+        ),
         ...styling,
         language: tag,
       })
@@ -125,6 +156,9 @@ export class GameLoader implements IGameLoader {
       },
       get scenes() {
         return localization.current.scenes
+      },
+      get ruleTranslation() {
+        return variants.get(localization.current.language)?.ruleTranslation
       },
     }
   }

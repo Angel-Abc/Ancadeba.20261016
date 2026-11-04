@@ -7,6 +7,11 @@ import {
   compositionSchema,
   graphicComponentSchema,
   assetIdSchema,
+  gameRulesSchema,
+  ruleFilenameSchema,
+  gameBindingSchema,
+  buttonComponentSchema,
+  requestActionSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -65,6 +70,21 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
   }),
+  z.strictObject({
+    type: z.literal('game.updateRules'),
+    file: ruleFilenameSchema.optional(),
+    rules: gameRulesSchema,
+  }),
+  z.strictObject({
+    type: z.literal('scene.upsertRuleButton'),
+    sceneId: gameIdSchema,
+    component: buttonComponentSchema.safeExtend({ action: requestActionSchema.optional() }),
+  }),
+  z.strictObject({
+    type: z.literal('inventory.setRuleInspection'),
+    itemType: gameIdSchema,
+    inspection: z.strictObject({ action: gameIdSchema, details: gameBindingSchema }).nullable(),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -99,6 +119,31 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.updateRules',
+      example: {
+        type: 'game.updateRules',
+        rules: { state: [], actions: { greet: [{ when: [], effects: [] }] } },
+      },
+    },
+    {
+      type: 'scene.upsertRuleButton',
+      example: {
+        type: 'scene.upsertRuleButton',
+        sceneId: 'shop',
+        component: {
+          type: 'button',
+          id: 'greet',
+          label: 'Greet',
+          placement: { row: 1, column: 1 },
+          action: { type: 'request-action', action: 'greet' },
+        },
+      },
+    },
+    {
+      type: 'inventory.setRuleInspection',
+      example: { type: 'inventory.setRuleInspection', itemType: 'letter', inspection: null },
+    },
     {
       type: 'game.updateMetadata',
       example: { type: 'game.updateMetadata', title: 'My game', description: '', version: '1.0.0' },

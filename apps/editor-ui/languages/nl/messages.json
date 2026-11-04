@@ -116,5 +116,6 @@
   "tree.noResults": "Geen overeenkomende items.",
   "tree.empty": "Laad een project om de inhoud te bekijken.",
   "tree.saveFirst": "Sla openstaande wijzigingen op voordat je een ander object selecteert. Je invoer blijft behouden.",
-  "tree.readOnly": "Je kunt dit component bekijken. Bewerken wordt nog niet ondersteund."
+  "tree.readOnly": "Je kunt dit component bekijken. Bewerken wordt nog niet ondersteund.",
+  "rules.heading": "Spelregels"
 }

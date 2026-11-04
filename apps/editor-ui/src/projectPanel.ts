@@ -5,6 +5,7 @@ import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { bindAssetsPanel } from './assetsPanel.js'
 import { bindProjectTree } from './projectTreeView.js'
+import { bindRulesPanel } from './rulesPanel.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -150,7 +151,14 @@ export function bindProjectPanel(
 
   let assetTarget = ''
   const treeElement = root.querySelector<HTMLElement>('#project-tree')
-  const sections = [...projectTreeSections, ...additionalSections]
+  const rulesElement = treeElement && root.querySelector<HTMLElement>('#rules-panel')
+  let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
+
+  const sections = [
+    ...projectTreeSections,
+    ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: () => [] }] : []),
+    ...additionalSections,
+  ]
 
   const showSelection = () => {
     if (!treeElement) return
@@ -174,6 +182,8 @@ export function bindProjectPanel(
     create.hidden = node.section !== 'scenes' || !['section', 'new-scene'].includes(node.kind)
     fields.hidden = metadata.hidden && sceneMetadata.hidden && create.hidden
     find('assets-panel').hidden = node.section !== 'assets' && !graphic
+
+    if (rulesElement) rulesElement.hidden = node.section !== 'rules'
     find('component-details').hidden =
       node.section !== 'scenes' || node.kind !== 'component' || graphic
     find('component-json').textContent =
@@ -256,12 +266,19 @@ export function bindProjectPanel(
 
   const render: ProjectEditorListener = (state, replaceFields) => {
     assetsPanel?.render(state, replaceFields)
+    rulesPanel?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
     loadedPath = state.path
 
-    if (projectChanged) onProjectChange?.(loadedPath)
+    const ruleChange =
+      replaceFields &&
+      (state.lastCommand === 'game.updateRules' ||
+        state.lastCommand === 'scene.upsertRuleButton' ||
+        state.lastCommand === 'inventory.setRuleInspection')
+
+    if (projectChanged || ruleChange) onProjectChange?.(loadedPath)
 
     busy = state.busy
     reload.disabled = state.busy || !view
@@ -405,6 +422,11 @@ export function bindProjectPanel(
   }
 
   const controller = new ProjectEditorController(client, render)
+
+  if (rulesElement)
+    rulesPanel = bindRulesPanel(rulesElement, (command) => {
+      void controller.save(command)
+    })
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -462,8 +484,12 @@ export function bindProjectPanel(
     openError = ''
     void controller.load(folder.value)
   })
+
+  const hasDrafts = () =>
+    dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts() || rulesPanel?.hasDrafts())
+
   on(reload, 'click', () => {
-    void controller.load(loadedPath, dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
+    void controller.load(loadedPath, hasDrafts())
   })
 
   for (const form of [metadata, sceneMetadata, layout, create]) {
@@ -528,7 +554,7 @@ export function bindProjectPanel(
     })
   })
   on(root.ownerDocument.defaultView!, 'focus', () => {
-    void controller.refresh(() => dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts()))
+    void controller.refresh(hasDrafts)
   })
 
   void refreshProjects()

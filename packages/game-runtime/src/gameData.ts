@@ -11,6 +11,8 @@ import type {
   AssetCatalog,
   InventoryDefinition,
   InventoryComponentDefinition,
+  GameRulesDefinition,
+  GameTranslation,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -18,6 +20,8 @@ import {
   assertGraphicReference,
   inventoryIssues,
   inventoryPanelIssues,
+  gameRuleFiles,
+  validateRuleSources,
   resolveMapView,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
@@ -87,6 +91,8 @@ export interface SceneData {
 export interface GameData {
   readonly assets?: AssetCatalog
   readonly inventory?: InventoryDefinition
+  readonly rules?: GameRulesDefinition
+  readonly ruleTranslation?: GameTranslation | undefined
   readonly localization?: IGameLocalization
   readonly language?: string
   readonly id: string
@@ -109,8 +115,32 @@ export function assembleGameData(
   assets?: AssetCatalog,
   maps: ReadonlyMap<string, MapDefinition> = new Map(),
   inventory?: InventoryDefinition,
+  ruleTranslation?: GameTranslation,
+  ruleFiles: ReadonlyMap<string, GameRulesDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
+
+  const sources = gameRuleFiles(definition.rules).map((file) => {
+    const rules = ruleFiles.get(file)
+
+    if (!rules) throw new Error(`Missing rule definition: ${file}`)
+
+    return { file, rules }
+  })
+
+  if (definition.rules && typeof definition.rules === 'object' && !Array.isArray(definition.rules))
+    sources.push({ file: 'game.json', rules: definition.rules })
+
+  const validated = sources.length
+    ? validateRuleSources(sources, sceneDefinitions, maps, inventory, ruleTranslation?.fallback)
+    : undefined
+
+  const issue = validated?.issues[0]
+
+  if (issue) {
+    const path = issue.file === 'game.json' ? ['rules', ...issue.path] : issue.path
+    throw new Error(`${issue.file} (${path.join('.')}): ${issue.message}`)
+  }
 
   if ((typeof definition.assets === 'string') !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')
@@ -238,6 +268,7 @@ export function assembleGameData(
   return {
     ...(assets ? { assets } : {}),
     ...(inventory ? { inventory } : {}),
+    ...(validated ? { rules: validated.rules, ruleTranslation } : {}),
     id: definition.id,
     title: definition.title,
     description: definition.description,

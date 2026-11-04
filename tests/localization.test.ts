@@ -288,7 +288,7 @@ describe('game localization', () => {
       'game.json',
       ...[...english.scenes.keys()].map((id) => `scenes/${id}.json`),
     ]) {
-      expect(await read(path), path).not.toMatch(/"(?:title|description|text|label)"\s*:/)
+      expect(await read(path), path).not.toMatch(/"(?:title|description|text|label)"\s*:\s*"/)
     }
   })
 

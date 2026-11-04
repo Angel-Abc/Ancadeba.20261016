@@ -1,0 +1,69 @@
+{
+  "state": [
+    {
+      "path": ["player", "health"],
+      "value": 40
+    }
+  ],
+  "clock": {
+    "path": ["clock"],
+    "startMinute": 540
+  },
+  "log": {
+    "path": ["log"],
+    "capacity": 8,
+    "initial": [
+      {
+        "textKey": "museum.rules.lobby"
+      }
+    ]
+  },
+  "actions": {
+    "walk-east": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "standard"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "gallery",
+            "mapView": "museum-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.gallery"
+            }
+          }
+        ]
+      }
+    ],
+    "walk-west": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "gallery"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "standard",
+            "mapView": "museum-map"
+          },
+          {
+            "type": "append-log",
+            "text": {
+              "textKey": "museum.rules.lobby"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
