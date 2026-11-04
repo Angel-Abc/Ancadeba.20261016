@@ -112,7 +112,10 @@ class TestElement extends EventTarget {
 }
 
 class TestDocument extends EventTarget {
-  readonly defaultView = new EventTarget()
+  readonly defaultView = Object.assign(new EventTarget(), {
+    setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
+    clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+  })
   activeElement: TestElement | null = null
   hidden = false
   createElement(tag: string): TestElement {
@@ -222,6 +225,100 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it('follows the Coast Road player at terrain speed and stops at forests and map edges', async ({
+    onTestFinished,
+  }) => {
+    const game = await new GameLoader(
+      new JsonResourceLoader(
+        {
+          ...source,
+          readText: (path) =>
+            readFile(new URL(`../sample-games/square-map/${path}`, import.meta.url), 'utf8'),
+        },
+        logger,
+      ),
+    ).load()
+
+    vi.useFakeTimers()
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
+
+    const { lifecycle, target } = setup(game)
+    const dispose = mountGameView(target.asElement(), game, { lifecycle, input: undefined })
+    const view = target.find((element) => element.dataset.componentId === 'coast-map')!
+    const grid = view.children[0]!.children[0]!
+    const player = grid.find((element) => element.className === 'ancadeba-map-player')!
+
+    const cameraPosition = () =>
+      ['--ge-map-x', '--ge-map-y'].map((property) => grid.style.getPropertyValue(property))
+
+    const playerCell = () =>
+      ['--ge-map-player-column', '--ge-map-player-row'].map((property) =>
+        player.style.getPropertyValue(property),
+      )
+
+    const press = (key: string) => {
+      const event = new Event('keydown', { cancelable: true })
+      Object.defineProperty(event, 'key', { value: key })
+      view.dispatchEvent(event)
+
+      return event.defaultPrevented
+    }
+
+    expect(view.tabIndex).toBe(0)
+    expect(
+      grid.children.filter((element) => element.className === 'ancadeba-map-tile'),
+    ).toHaveLength(16 * 10)
+    expect(playerCell()).toEqual(['10', '5'])
+    expect(cameraPosition()).toEqual(['5', '2'])
+    expect(press('ArrowUp')).toBe(true)
+    expect(playerCell()).toEqual(['10', '5'])
+    expect(cameraPosition()).toEqual(['5', '2'])
+    expect(press('ArrowRight')).toBe(true)
+    vi.advanceTimersByTime(149)
+    expect(playerCell()).toEqual(['10', '5'])
+    expect(cameraPosition()).toEqual(['5', '2'])
+    vi.advanceTimersByTime(1)
+    expect(playerCell()).toEqual(['11', '5'])
+    expect(cameraPosition()).toEqual(['6', '2'])
+    expect(press('Enter')).toBe(false)
+
+    for (const key of ['ArrowRight', 'ArrowDown', 'ArrowRight']) {
+      press(key)
+      vi.advanceTimersByTime(150)
+    }
+
+    expect(playerCell()).toEqual(['13', '6'])
+    expect(cameraPosition()).toEqual(['7', '3'])
+
+    press('ArrowRight')
+    vi.advanceTimersByTime(150)
+    expect(playerCell()).toEqual(['13', '6'])
+    press('ArrowLeft')
+    vi.advanceTimersByTime(149)
+    expect(playerCell()).toEqual(['13', '6'])
+    vi.advanceTimersByTime(1)
+    expect(playerCell()).toEqual(['14', '6'])
+
+    for (let step = 0; step < 10; step++) {
+      press('ArrowRight')
+      vi.advanceTimersByTime(300)
+      press('ArrowDown')
+      vi.advanceTimersByTime(300)
+    }
+
+    expect(playerCell()).toEqual(['16', '10'])
+    expect(cameraPosition()).toEqual(['7', '4'])
+
+    press('ArrowLeft')
+    lifecycle.leaveScene()
+    vi.advanceTimersByTime(300)
+    expect(press('ArrowLeft')).toBe(false)
+    expect(playerCell()).toEqual(['16', '10'])
+    dispose()
+  })
+
   it('uses injected component renderers while owning placement and component lifetimes', async () => {
     const game = await loader.load()
     const { lifecycle, target, document } = setup(game)

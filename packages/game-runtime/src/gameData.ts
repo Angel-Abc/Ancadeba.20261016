@@ -6,10 +6,12 @@ import type {
   ButtonComponentDefinition,
   LanguageSelectComponentDefinition,
   GraphicComponentDefinition,
+  MapDefinition,
+  MapViewComponentDefinition,
   AssetCatalog,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
-import { assertGameLanguages, assertGraphicReference } from '@ancadeba/schemas'
+import { assertGameLanguages, assertGraphicReference, resolveMapView } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
 export interface TextComponentData extends TextTemplate {
@@ -40,8 +42,13 @@ export type SceneComponentData =
   | ButtonComponentData
   | LanguageSelectComponentData
   | GraphicComponentDefinition
+  | MapViewComponentData
 
 export type GraphicComponentData = GraphicComponentDefinition
+
+export interface MapViewComponentData extends Omit<MapViewComponentDefinition, 'map'> {
+  readonly map: MapDefinition
+}
 
 export interface InputData {
   readonly virtualKeys: readonly string[]
@@ -82,6 +89,7 @@ export function assembleGameData(
   sceneDefinitions: ReadonlyMap<string, SceneDefinition>,
   inputDefinition?: InputDefinition,
   assets?: AssetCatalog,
+  maps: ReadonlyMap<string, MapDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -110,8 +118,17 @@ export function assembleGameData(
       description: scene.description,
       type: scene.type,
       screen: { type: scene.screen.type, grid: { ...scene.screen.grid } },
-      components: scene.components.map((component) =>
-        component.type !== 'text'
+      components: scene.components.map((component) => {
+        if (component.type === 'map-view')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            viewport: { ...component.viewport },
+            ...(component.playerSpawn && { playerSpawn: { ...component.playerSpawn } }),
+            map: resolveMapView(maps, component.map, component.viewport, component.playerSpawn),
+          }
+
+        return component.type !== 'text'
           ? {
               ...component,
               placement: { ...component.placement },
@@ -133,8 +150,8 @@ export function assembleGameData(
                       ]),
                     ),
                   }),
-            },
-      ),
+            }
+      }),
     })
   }
 

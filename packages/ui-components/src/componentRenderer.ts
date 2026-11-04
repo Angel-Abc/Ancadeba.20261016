@@ -3,6 +3,7 @@ import { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 import { TextComponentRenderer } from './textComponentRenderer.js'
 import { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
 import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
+import { MapViewComponentRenderer } from './mapViewComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -19,6 +20,7 @@ export class ComponentRenderer implements IComponentRenderer {
       graphic: new GraphicComponentRenderer(),
       button: new ButtonComponentRenderer(),
       'language-select': new LanguageSelectComponentRenderer(),
+      'map-view': new MapViewComponentRenderer(),
       ...renderers,
     }
   }
@@ -33,6 +35,8 @@ export class ComponentRenderer implements IComponentRenderer {
         return this.renderers.button.render(component, context)
       case 'language-select':
         return this.renderers['language-select'].render(component, context)
+      case 'map-view':
+        return this.renderers['map-view'].render(component, context)
       default: {
         const unsupported: never = component
         throw new Error(`Unsupported scene component: ${String(unsupported)}`)

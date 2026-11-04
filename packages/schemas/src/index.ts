@@ -10,6 +10,8 @@ export * from './input.js'
 
 export * from './scene.js'
 
+export * from './map.js'
+
 export * from './bindings.js'
 
 export * from './assets.js'

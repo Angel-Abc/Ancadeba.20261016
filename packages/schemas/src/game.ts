@@ -21,6 +21,12 @@ export const gameSchema = z
       .string()
       .regex(/^[a-zA-Z0-9_-]+\.json$/)
       .optional(),
+    maps: z
+      .array(gameIdSchema)
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: 'Map references must be unique',
+      })
+      .optional(),
     scenes: z.array(gameIdSchema).refine((ids) => new Set(ids).size === ids.length, {
       message: 'Scene references must be unique',
     }),

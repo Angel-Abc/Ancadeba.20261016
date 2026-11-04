@@ -48,6 +48,7 @@ export {
   type LanguageSelectComponentData,
   type SceneComponentData,
   type GraphicComponentData,
+  type MapViewComponentData,
 } from './gameData.js'
 
 export {

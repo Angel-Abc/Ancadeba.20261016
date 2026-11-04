@@ -77,6 +77,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     if (game.success) {
       for (const id of game.data.scenes) await read(`scenes/${id}.json`)
 
+      for (const id of game.data.maps ?? []) await read(`maps/${id}.json`)
+
       if (game.data.input) await read(game.data.input)
 
       if (typeof game.data.assets === 'string') {

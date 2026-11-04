@@ -10,6 +10,9 @@ import {
   type SceneDefinition,
   assetCatalogSchema,
   assertGraphicReference,
+  mapDefinitionSchema,
+  resolveMapView,
+  type MapDefinition,
 } from '@ancadeba/schemas'
 import type { Diagnostic, ProjectDocuments } from './project.js'
 
@@ -60,19 +63,31 @@ export function validateProject(
 
   if (game.data.input) check(game.data.input, inputSchema)
 
+  const maps = new Map<string, MapDefinition>()
+
+  for (const id of game.data.maps ?? []) {
+    const map = check(`maps/${id}.json`, mapDefinitionSchema)
+
+    if (map.success) maps.set(id, map.data)
+  }
+
   const assets =
     typeof game.data.assets === 'string' ? check(game.data.assets, assetCatalogSchema) : undefined
 
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
-      if (component.type !== 'graphic') return
+      if (component.type !== 'graphic' && component.type !== 'map-view') return
 
       try {
-        if (!assets?.success) throw new Error('Graphic requires a valid asset catalogue')
-        assertGraphicReference(assets.data, component.visual, component.appearance)
+        if (component.type === 'map-view')
+          resolveMapView(maps, component.map, component.viewport, component.playerSpawn)
+        else {
+          if (!assets?.success) throw new Error('Graphic requires a valid asset catalogue')
+          assertGraphicReference(assets.data, component.visual, component.appearance)
+        }
       } catch (error) {
         diagnostics.push({
-          code: 'invalid_graphic',
+          code: component.type === 'graphic' ? 'invalid_graphic' : 'invalid_map_view',
           file: `scenes/${id}.json`,
           path: ['components', index],
           message: error instanceof Error ? error.message : String(error),

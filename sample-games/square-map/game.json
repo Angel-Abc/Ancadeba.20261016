@@ -1,0 +1,10 @@
+{
+  "schema-version": "1.0.0",
+  "id": "square-map",
+  "title": "Coast Road",
+  "description": "Explore a square map with a camera that follows the player.",
+  "version": "1.0.0",
+  "initial-scene": "coast",
+  "scenes": ["coast"],
+  "maps": ["coast"]
+}

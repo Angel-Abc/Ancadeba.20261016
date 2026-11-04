@@ -1,0 +1,32 @@
+{
+  "schema-version": "1.0.0",
+  "id": "coast",
+  "title": "Coast Road",
+  "type": "stand-alone",
+  "screen": { "type": "grid", "grid": { "rows": 10, "columns": 1 } },
+  "components": [
+    {
+      "id": "heading",
+      "type": "text",
+      "placement": { "row": 1, "column": 1 },
+      "text": "Coast Road",
+      "presentation": { "variant": "heading", "align": "center" }
+    },
+    {
+      "id": "controls",
+      "type": "text",
+      "placement": { "row": 2, "column": 1 },
+      "text": "Click or Tab to the map and use the arrow keys to move. Sand is slower and forests block the way.",
+      "presentation": { "align": "center" }
+    },
+    {
+      "id": "coast-map",
+      "type": "map-view",
+      "placement": { "row": 3, "column": 1, "rowSpan": 8 },
+      "map": "coast",
+      "label": "Coast Road map",
+      "viewport": { "columns": 9, "rows": 6 },
+      "playerSpawn": { "x": 9, "y": 4 }
+    }
+  ]
+}

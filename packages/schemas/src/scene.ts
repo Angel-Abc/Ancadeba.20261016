@@ -3,6 +3,7 @@ import { gameIdSchema } from './game.js'
 import { translationKeySchema } from './languages.js'
 import { bindingAliasSchema, textBindingsSchema, textPlaceholders } from './bindings.js'
 import { graphicAppearanceSchema, graphicHasBindings, assetIdSchema } from './assets.js'
+import { mapPositionSchema, mapViewportSchema } from './map.js'
 
 export const gridPlacementSchema = z.object({
   row: z.number().int().positive(),
@@ -83,11 +84,28 @@ export const graphicComponentSchema = z.object({
   appearance: graphicAppearanceSchema.default({ colors: {}, visible: true, slots: {} }),
 })
 
+export const mapViewComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('map-view'),
+    placement: gridPlacementSchema,
+    map: gameIdSchema,
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+    viewport: mapViewportSchema,
+    playerSpawn: mapPositionSchema.optional(),
+  })
+  .refine((component) => Boolean(component.label || component.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
   graphicComponentSchema,
+  mapViewComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -169,6 +187,8 @@ export type SceneDefinition = z.infer<typeof sceneSchema>
 export type SceneComponentDefinition = z.infer<typeof sceneComponentSchema>
 
 export type GraphicComponentDefinition = z.infer<typeof graphicComponentSchema>
+
+export type MapViewComponentDefinition = z.infer<typeof mapViewComponentSchema>
 
 export type TextComponentDefinition = z.infer<typeof textComponentSchema>
 

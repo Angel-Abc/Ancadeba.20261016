@@ -6,6 +6,7 @@
     "dist",
     "src/scene.css",
     "src/game.css",
+    "src/map.css",
     "src/variables.css"
   ],
   "type": "module",

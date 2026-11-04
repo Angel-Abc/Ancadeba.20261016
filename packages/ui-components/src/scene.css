@@ -1,3 +1,5 @@
+@import './map.css';
+
 .ancadeba-scene-viewport {
   flex: 1;
   min-width: 0;

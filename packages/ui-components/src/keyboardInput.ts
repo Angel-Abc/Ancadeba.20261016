@@ -32,6 +32,8 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     !usesNativeKeyboard(document.activeElement)
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+
     if (!hasFocus() || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
 
     if (event.repeat) {

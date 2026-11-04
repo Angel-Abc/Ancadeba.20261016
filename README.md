@@ -334,6 +334,23 @@ menus, and status templates.
 
 ## Scene rendering
 
+Open `square-map` in the editor preview to try Coast Road. Click or Tab to the
+map and use the arrow keys to move the player one tile at a time. The viewport
+follows the player and shows 9 columns and 6 rows of a
+16 by 10 map. For a standalone copy, run `pnpm export:game sample-games/square-map`.
+
+List reusable map IDs in `game.json` under `maps`, with a definition at
+`maps/<id>.json` for each. A `square-grid` map defines `width`, `height`, a
+`terrain` table of named colors, and `tiles` in row order. Set `walkable: false`
+on a terrain type to block player movement and spawning on its tiles. Set
+`movementCostMs` to set how long it takes to enter a tile of that terrain. By
+default, steps finish immediately. Coast Road uses 150 ms for road and 300 ms for
+beach. A `map-view` scene component references the map by ID and sets
+`viewport.columns` and `viewport.rows`. Its optional `viewport.x` and `viewport.y` start at zero and
+identify the top-left visible tile when panning manually. Set `playerSpawn` to
+zero-based map coordinates to place a player and make the viewport follow them.
+The player and viewport both stop at the map edges.
+
 Both browser hosts use `mountGameView` and `SceneRenderer` from
 `@ancadeba/ui-components`. The engine opens the scene selected by `initial-scene`
 before mounting the host, unless the lifecycle already has an active scene.
