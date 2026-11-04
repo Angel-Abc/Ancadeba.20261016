@@ -1,15 +1,23 @@
-import { assetCatalogSchema, sceneSchema } from '@ancadeba/schemas'
+import {
+  assetCatalogFile,
+  assetCatalogSchema,
+  sceneSchema,
+  type GameDefinition,
+} from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
 
-export function editAssets(documents: Record<string, unknown>, command: EditorCommand): string[] {
-  const game = object(documents['game.json'])
-
+export function editAssets(
+  documents: Record<string, unknown>,
+  game: GameDefinition,
+  command: EditorCommand,
+): string[] {
   if (command.type.startsWith('assets.')) {
-    const file = typeof game.assets === 'string' ? game.assets : 'assets.json'
+    const id = game.assets ?? 'catalogue'
+    const file = assetCatalogFile(id)
 
     const catalog = assetCatalogSchema.parse(
-      typeof game.assets === 'string' ? documents[file] : { 'schema-version': '1.0.0' },
+      game.assets ? documents[file] : { 'schema-version': '1.0.0' },
     )
 
     if (command.type === 'assets.upsertImage') catalog.images[command.id] = command.image
@@ -24,8 +32,8 @@ export function editAssets(documents: Record<string, unknown>, command: EditorCo
 
     documents[file] = { ...object(documents[file]), ...catalog }
 
-    if (typeof game.assets !== 'string') {
-      documents['game.json'] = { ...game, assets: file }
+    if (!game.assets) {
+      documents['game.json'] = { ...object(documents['game.json']), assets: id }
 
       return [file, 'game.json']
     }

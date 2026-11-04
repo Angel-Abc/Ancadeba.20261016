@@ -46,7 +46,7 @@ and graphics; the focused graphic commands edit only graphic components.
 Input definitions are loaded and validated but cannot be edited through commands.
 
 Graphic components can be created, edited, and removed without changing other
-component types. The first asset operation initializes `assets.json` and its
+component types. The first asset operation initializes `assets/catalogue.json` and its
 manifest reference. Inspection includes the parsed catalogue as `assets` when
 present. See [the graphics guide](asset-workshop.md) for source and composition
 formats, palettes, and game-state bindings.

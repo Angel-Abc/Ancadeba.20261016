@@ -160,7 +160,10 @@ describe('game data pipeline', () => {
     { inventory: 'inventory.json' },
     { inventory: ['inventory/museum.json'] },
     { inventory: ['museum', 'museum'] },
-  ])('rejects invalid rule and inventory references %j', (references) => {
+    { assets: 'assets.json' },
+    { assets: 'assets/wardrobe.json' },
+    { assets: ['wardrobe'] },
+  ])('rejects invalid manifest references %j', (references) => {
     expect(gameSchema.safeParse({ ...definition, ...references }).success).toBe(false)
   })
 

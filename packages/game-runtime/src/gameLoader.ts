@@ -1,11 +1,13 @@
 import {
   gameSchema,
   inputSchema,
+  inputFile,
   languageCatalogSchema,
   localizeDefinitions,
   sceneSchema,
   selectLanguage,
   assetCatalogSchema,
+  assetCatalogFile,
   mapDefinitionSchema,
   inventorySchema,
   inventoryFile,
@@ -57,13 +59,12 @@ export class GameLoader implements IGameLoader {
     )
 
     const input = definition.input
-      ? await this.resources.load(definition.input, inputSchema)
+      ? await this.resources.load(inputFile(definition.input), inputSchema)
       : undefined
 
-    const assets =
-      typeof definition.assets === 'string'
-        ? await this.resources.load(definition.assets, assetCatalogSchema)
-        : undefined
+    const assets = definition.assets
+      ? await this.resources.load(assetCatalogFile(definition.assets), assetCatalogSchema)
+      : undefined
 
     const inventory = new Map(
       await Promise.all(

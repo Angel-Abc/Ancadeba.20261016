@@ -173,9 +173,9 @@ describe('editor core', () => {
     ).toThrow('Fix project diagnostics')
     expect(
       validateProject({
-        'game.json': { ...object(project().documents['game.json']), input: 'input.json' },
+        'game.json': { ...object(project().documents['game.json']), input: 'controls' },
       }).map((d) => d.file),
-    ).toContain('input.json')
+    ).toContain('input/controls.json')
   })
 
   it('normalizes newly created scene metadata and detaches extension data from its input', () => {

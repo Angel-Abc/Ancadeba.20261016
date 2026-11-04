@@ -443,7 +443,7 @@ describe('shared editor project API', () => {
     expect(rejected.status).toBe(409)
     await writeFile(
       join(root, 'basic/game.json'),
-      JSON.stringify({ ...manifest, input: 'input.json' }),
+      JSON.stringify({ ...manifest, input: 'controls' }),
     )
 
     const input = {
@@ -454,10 +454,11 @@ describe('shared editor project API', () => {
       'initial-context': 'menu',
     }
 
-    await writeFile(join(root, 'basic/input.json'), JSON.stringify(input))
+    await mkdir(join(root, 'basic/input'))
+    await writeFile(join(root, 'basic/input/controls.json'), JSON.stringify(input))
     const before = await inspect()
     await writeFile(
-      join(root, 'basic/input.json'),
+      join(root, 'basic/input/controls.json'),
       JSON.stringify({ ...input, keyboard: { Space: 'confirm' } }),
     )
     expect((await inspect()).revision).not.toBe(before.revision)

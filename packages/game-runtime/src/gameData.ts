@@ -152,7 +152,7 @@ export function assembleGameData(
 
   if (issue) throw new Error(`${issue.file} (${issue.path.join('.')}): ${issue.message}`)
 
-  if ((typeof definition.assets === 'string') !== Boolean(assets))
+  if (Boolean(definition.assets) !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')
 
   if (Boolean(definition.input) !== Boolean(inputDefinition)) {

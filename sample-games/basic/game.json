@@ -13,7 +13,7 @@
     "shoals",
     "north-cliff-landing"
   ],
-  "input": "input.json",
+  "input": "controls",
   "stylesheet": "museum.css",
   "titleKey": "game.title",
   "descriptionKey": "game.description",

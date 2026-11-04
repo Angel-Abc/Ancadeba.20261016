@@ -26,16 +26,12 @@ export const gameSchema = z
       .string()
       .regex(/^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.css$/)
       .optional(),
-    // Older projects sometimes carried an ignored asset list as extension metadata.
-    assets: z.union([z.string().regex(/^[a-zA-Z0-9_-]+\.json$/), z.array(z.string())]).optional(),
+    assets: gameIdSchema.optional(),
     inventory: z
       .array(gameIdSchema)
       .refine(uniqueFileIds, { message: 'Inventory references must be unique' })
       .optional(),
-    input: z
-      .string()
-      .regex(/^[a-zA-Z0-9_-]+\.json$/)
-      .optional(),
+    input: gameIdSchema.optional(),
     maps: z
       .array(gameIdSchema)
       .refine((ids) => new Set(ids).size === ids.length, {
@@ -66,4 +62,12 @@ export function ruleFile(id: string): string {
 
 export function inventoryFile(id: string): string {
   return `inventory/${id}.json`
+}
+
+export function assetCatalogFile(id: string): string {
+  return `assets/${id}.json`
+}
+
+export function inputFile(id: string): string {
+  return `input/${id}.json`
 }

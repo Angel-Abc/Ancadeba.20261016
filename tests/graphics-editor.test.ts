@@ -90,9 +90,12 @@ describe('revision-checked graphics authoring', () => {
     expect(original.colors).toEqual({ fabric: '#123456' })
     expect(await readFile(join(root, 'game', original.source), 'utf8')).toBe(artwork)
     expect(JSON.parse(await readFile(join(root, 'game/game.json'), 'utf8'))).toMatchObject({
-      assets: 'assets.json',
+      assets: 'catalogue',
       extension: 'preserve',
     })
+    expect(
+      JSON.parse(await readFile(join(root, 'game/assets/catalogue.json'), 'utf8')),
+    ).toHaveProperty('images.art.source', original.source)
     expect((await upload(first.revision, artwork.replace('#123456', '#654321'))).status).toBe(200)
     const replaced = await inspect()
     const latest = replaced.assets!.images.art!
@@ -265,6 +268,23 @@ describe('revision-checked graphics authoring', () => {
     ).toBe(413)
   })
 
+  it('imports into the catalogue selected by the manifest ID', async () => {
+    const catalogue = join(root, 'game/assets/wardrobe.json')
+
+    await mkdir(join(root, 'game/assets'))
+    await writeFile(catalogue, JSON.stringify({ 'schema-version': '1.0.0' }))
+    await writeFile(
+      join(root, 'game/game.json'),
+      JSON.stringify({ ...manifest, assets: 'wardrobe' }),
+    )
+
+    const initial = await inspect()
+    expect(initial.diagnostics).toEqual([])
+    expect((await upload(initial.revision)).status).toBe(200)
+    expect(JSON.parse(await readFile(catalogue, 'utf8'))).toHaveProperty('images.art.format', 'svg')
+    expect((await inspect()).game?.assets).toBe('wardrobe')
+  })
+
   it('reports a publication failure and preserves the original manifest, with an identifiable orphan source', async () => {
     const fault: ProjectWorkspace = {
       list: (path) => workspace.list(path),
@@ -291,6 +311,6 @@ describe('revision-checked graphics authoring', () => {
     ).rejects.toMatchObject({ code: 'asset_publication_failed' })
     expect(JSON.parse(await readFile(join(root, 'game/game.json'), 'utf8'))).toEqual(manifest)
     expect(await readdir(join(root, 'game/assets/images'))).toHaveLength(1)
-    expect(await readdir(join(root, 'game'))).not.toContain('assets.json')
+    expect(await readdir(join(root, 'game/assets'))).not.toContain('catalogue.json')
   })
 })

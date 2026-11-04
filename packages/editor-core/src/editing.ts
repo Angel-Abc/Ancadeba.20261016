@@ -1,4 +1,4 @@
-import { gameSchema, sceneSchema } from '@ancadeba/schemas'
+import { assetCatalogFile, gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand } from './commands.js'
 import { EditorError, object, type CommandResult, type ProjectSnapshot } from './project.js'
 import { validateProject } from './validation.js'
@@ -15,7 +15,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const manifest = object(project.documents['game.json'])
 
   const catalog = object(
-    project.documents[typeof manifest.assets === 'string' ? manifest.assets : 'assets.json'],
+    typeof manifest.assets === 'string'
+      ? project.documents[assetCatalogFile(manifest.assets)]
+      : undefined,
   )
 
   const repairSource = repairing ? object(object(catalog.images)[command.id]).source : undefined
@@ -42,7 +44,7 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.upsertGraphic' ||
     command.type === 'scene.removeGraphic'
   ) {
-    changedFiles.push(...editAssets(documents, command))
+    changedFiles.push(...editAssets(documents, game, command))
   } else if (
     command.type === 'game.updateRules' ||
     command.type === 'scene.upsertRuleButton' ||

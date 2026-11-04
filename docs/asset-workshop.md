@@ -1,9 +1,9 @@
 # Graphics assets and layered appearances
 
-Add `"assets": "assets.json"` to a game's manifest. The catalogue has
+Set `assets` in the game manifest to a catalogue ID. For example,
+`"assets": "wardrobe"` loads `assets/wardrobe.json`. The catalogue has
 `"schema-version": "1.0.0"` and `images`, `parts`, and `compositions` dictionaries.
-Visual IDs are unique across those dictionaries. Existing games need no changes;
-older ignored `assets` arrays remain passive metadata rather than catalogues.
+Visual IDs are unique across those dictionaries.
 
 `sample-games/graphics` is the complete reference game: two independent characters,
 matching item icons, tunic palettes, sword materials, and a cloak with rear fabric

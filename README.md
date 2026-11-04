@@ -103,8 +103,9 @@ development, the editor UI proxies `/health` and `/api` to its configured
 
 ## Graphics assets
 
-Games can reference an `assets.json` catalogue containing SVG/PNG/JPEG/WebP images,
-grouped parts, and layered compositions. The editor's Assets panel imports artwork,
+Games can reference an asset catalogue by ID in `game.json`. For example,
+`"assets": "wardrobe"` loads `assets/wardrobe.json`, which defines SVG/PNG/JPEG/WebP
+images, grouped parts, and layered compositions. The editor's Assets panel imports artwork,
 edits palettes, previews compositions, and places graphics in scenes. MCP exposes
 the same revision-checked authoring commands.
 
@@ -1395,9 +1396,8 @@ recurrence, persistence, pause policies, and additional UI remain future work.
 
 ## Game-specific input
 
-Games can add an optional `"input": "input.json"` reference to `game.json`.
-The filename must be a single game-root JSON filename: letters, digits,
-underscores, or hyphens followed by `.json`. Existing games can omit it.
+Games can add an optional input ID to `game.json`. For example,
+`"input": "controls"` loads `input/controls.json`.
 Startup and export validate the referenced file before mounting or publishing.
 
 ```json

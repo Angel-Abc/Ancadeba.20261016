@@ -27,7 +27,7 @@ const game = {
   description: '',
   version: '1',
   scenes: [],
-  input: 'input.json',
+  input: 'controls',
 }
 
 const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
@@ -55,6 +55,7 @@ describe('input definitions', () => {
   })
 
   it.each([
+    'input.json',
     '../input.json',
     'nested/input.json',
     'input\\file.json',
@@ -62,7 +63,7 @@ describe('input definitions', () => {
     'input.txt',
     '.json',
     'https://example.com/input.json',
-  ])('rejects unsafe input reference %s', (input) => {
+  ])('rejects invalid input ID %s', (input) => {
     expect(gameSchema.safeParse({ ...game, input }).success).toBe(false)
   })
 
@@ -76,7 +77,7 @@ describe('input definitions', () => {
     )
 
     const data = await loader.load()
-    expect(readText.mock.calls).toEqual([['game.json'], ['input.json']])
+    expect(readText.mock.calls).toEqual([['game.json'], ['input/controls.json']])
     expect(data.input).toEqual({
       virtualKeys: ['north', 'confirm'],
       keyboard: definition.keyboard,
@@ -95,8 +96,8 @@ describe('input definitions', () => {
   })
 
   it('supports games without input and rejects inconsistent assembly inputs', async () => {
-    const { input: _input, ...legacy } = game
-    const readText = vi.fn(async () => JSON.stringify(legacy))
+    const { input: _input, ...withoutInput } = game
+    const readText = vi.fn(async () => JSON.stringify(withoutInput))
 
     const data = await new GameLoader(
       new JsonResourceLoader({ readText, readBytes: async () => new Uint8Array() }, logger),
@@ -106,7 +107,7 @@ describe('input definitions', () => {
     expect(readText).toHaveBeenCalledExactlyOnceWith('game.json')
     expect(() => assembleGameData(gameSchema.parse(game), new Map())).toThrow('Input definition')
     expect(() =>
-      assembleGameData(gameSchema.parse(legacy), new Map(), inputSchema.parse(definition)),
+      assembleGameData(gameSchema.parse(withoutInput), new Map(), inputSchema.parse(definition)),
     ).toThrow('Input definition')
   })
 
@@ -114,7 +115,7 @@ describe('input definitions', () => {
     const readText = async (path: string) => {
       if (path === 'game.json') return JSON.stringify(game)
 
-      if (kind === 'missing') throw new Error('Missing input.json')
+      if (kind === 'missing') throw new Error(`Missing ${path}`)
 
       return kind === 'malformed' ? '{broken' : JSON.stringify({ ...definition, contexts: {} })
     }

@@ -2,6 +2,7 @@ import {
   gameSchema,
   sceneSchema,
   assetCatalogSchema,
+  assetCatalogFile,
   inventorySchema,
   languageCatalogSchema,
   gameRulesSchema,
@@ -19,10 +20,9 @@ import {
 export function inspectProject(project: ProjectSnapshot): ProjectView {
   const game = gameSchema.safeParse(project.documents['game.json'])
 
-  const assets =
-    game.success && typeof game.data.assets === 'string'
-      ? assetCatalogSchema.safeParse(project.documents[game.data.assets])
-      : undefined
+  const assets = game.data?.assets
+    ? assetCatalogSchema.safeParse(project.documents[assetCatalogFile(game.data.assets)])
+    : undefined
 
   const inventorySources = projectInventorySources(
     game.data?.inventory,

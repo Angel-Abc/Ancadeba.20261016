@@ -3,6 +3,8 @@ import {
   gameSchema,
   sceneSchema,
   assetCatalogSchema,
+  assetCatalogFile,
+  inputFile,
   ruleFile,
   inventoryFile,
 } from '@ancadeba/schemas'
@@ -88,7 +90,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const id of game.data.maps ?? []) await read(`maps/${id}.json`)
 
-      if (game.data.input) await read(game.data.input)
+      if (game.data.input) await read(inputFile(game.data.input))
 
       for (const id of game.data.inventory ?? []) await read(inventoryFile(id))
 
@@ -96,9 +98,11 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
-      if (typeof game.data.assets === 'string') {
-        await read(game.data.assets)
-        const catalog = assetCatalogSchema.safeParse(documents[game.data.assets])
+      if (game.data.assets) {
+        const file = assetCatalogFile(game.data.assets)
+
+        await read(file)
+        const catalog = assetCatalogSchema.safeParse(documents[file])
 
         if (catalog.success) {
           for (const [id, image] of Object.entries(catalog.data.images)) {
@@ -208,9 +212,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           const manifest = gameSchema.parse(JSON.parse(Buffer.from(current).toString('utf8')))
 
           const references = [
-            manifest.assets,
+            manifest.assets && assetCatalogFile(manifest.assets),
             ...(manifest.rules ?? []).map(ruleFile),
-            manifest.input,
           ]
 
           if (
@@ -245,8 +248,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   ): Promise<Diagnostic[]> {
     const game = gameSchema.parse(project.documents['game.json'])
 
-    if (typeof game.assets !== 'string') return []
-    const catalog = assetCatalogSchema.parse(project.documents[game.assets])
+    if (!game.assets) return []
+    const catalog = assetCatalogSchema.parse(project.documents[assetCatalogFile(game.assets)])
     const diagnostics: Diagnostic[] = []
 
     for (const [id, image] of Object.entries(catalog.images)) {

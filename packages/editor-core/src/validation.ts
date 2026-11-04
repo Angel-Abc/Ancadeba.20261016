@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import {
   gameSchema,
   inputSchema,
+  inputFile,
   sceneSchema,
   languageCatalogSchema,
   localizeDefinitions,
@@ -9,6 +10,7 @@ import {
   type LanguageCatalog,
   type SceneDefinition,
   assetCatalogSchema,
+  assetCatalogFile,
   assertGraphicReference,
   mapDefinitionSchema,
   resolveMapView,
@@ -71,7 +73,7 @@ export function validateProject(
     }
   }
 
-  if (game.data.input) check(game.data.input, inputSchema)
+  if (game.data.input) check(inputFile(game.data.input), inputSchema)
 
   const maps = new Map<string, MapDefinition>()
 
@@ -81,8 +83,9 @@ export function validateProject(
     if (map.success) maps.set(id, map.data)
   }
 
-  const assets =
-    typeof game.data.assets === 'string' ? check(game.data.assets, assetCatalogSchema) : undefined
+  const assets = game.data.assets
+    ? check(assetCatalogFile(game.data.assets), assetCatalogSchema)
+    : undefined
 
   const inventorySources = projectInventorySources(
     game.data.inventory,

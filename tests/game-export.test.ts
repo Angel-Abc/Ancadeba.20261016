@@ -93,8 +93,7 @@ describe('standalone game export', () => {
 
   const game = {
     ...gameDefinition('Export test'),
-    input: 'input.json',
-    assets: ['assets/my sprite.bin'],
+    input: 'controls',
   }
 
   const bytes = new Uint8Array([0, 255, 128, 42])
@@ -107,8 +106,9 @@ describe('standalone game export', () => {
     await mkdir(join(source, '.git'))
     await mkdir(join(source, 'node_modules'))
     await mkdir(join(source, 'scenes'))
+    await mkdir(join(source, 'input'))
     await writeFile(join(source, 'game.json'), JSON.stringify(game))
-    await writeFile(join(source, 'input.json'), JSON.stringify(input))
+    await writeFile(join(source, 'input/controls.json'), JSON.stringify(input))
     await writeFile(join(source, 'scenes/start-screen.json'), JSON.stringify(scene))
     await writeFile(join(source, 'assets/my sprite.bin'), bytes)
     await writeFile(join(source, 'assets/dialogue/intro.txt'), 'Café 🎮')
@@ -287,7 +287,9 @@ describe('standalone game export', () => {
       gameUrl: './game/',
     })
     expect(await readFile(join(output, 'game/game.json'), 'utf8')).toBe(JSON.stringify(game))
-    expect(JSON.parse(await readFile(join(output, 'game/input.json'), 'utf8'))).toEqual(input)
+    expect(JSON.parse(await readFile(join(output, 'game/input/controls.json'), 'utf8'))).toEqual(
+      input,
+    )
     expect(
       JSON.parse(await readFile(join(output, 'game/scenes/start-screen.json'), 'utf8')),
     ).toEqual(scene)
@@ -458,8 +460,9 @@ describe('standalone game export', () => {
     const invalid = join(temp, `scene-${kind}`)
     const output = join(temp, `failed-scene-${kind}`)
     await mkdir(join(invalid, 'scenes'), { recursive: true })
+    await mkdir(join(invalid, 'input'))
     await writeFile(join(invalid, 'game.json'), JSON.stringify(game))
-    await writeFile(join(invalid, 'input.json'), JSON.stringify(input))
+    await writeFile(join(invalid, 'input/controls.json'), JSON.stringify(input))
 
     if (contents !== undefined) await writeFile(join(invalid, 'scenes/start-screen.json'), contents)
 
@@ -477,10 +480,10 @@ describe('standalone game export', () => {
   ])('rejects %s input without publishing an export', async (kind, contents) => {
     const invalid = join(temp, `input-${kind}`)
     const output = join(temp, `failed-input-${kind}`)
-    await mkdir(invalid)
+    await mkdir(join(invalid, 'input'), { recursive: true })
     await writeFile(join(invalid, 'game.json'), JSON.stringify({ ...game, scenes: [] }))
 
-    if (contents !== undefined) await writeFile(join(invalid, 'input.json'), contents)
+    if (contents !== undefined) await writeFile(join(invalid, 'input/controls.json'), contents)
     await expect(exportGame({ gameDirectory: invalid, outputDirectory: output })).rejects.toThrow(
       'input definition',
     )

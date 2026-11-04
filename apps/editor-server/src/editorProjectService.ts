@@ -8,7 +8,7 @@ import {
   type Diagnostic,
   assetImportMetadataSchema,
 } from '@ancadeba/editor-core'
-import { gameIdSchema, gameSchema, assetCatalogSchema } from '@ancadeba/schemas'
+import { gameIdSchema, gameSchema, assetCatalogSchema, assetCatalogFile } from '@ancadeba/schemas'
 import { inspectImageSource } from '@ancadeba/game-runtime'
 import { randomUUID } from 'node:crypto'
 import { applyCommand as editProject } from '@ancadeba/editor-core'
@@ -118,10 +118,9 @@ export class EditorProjectService {
 
       const game = gameSchema.parse(current.documents['game.json'])
 
-      const catalog =
-        typeof game.assets === 'string'
-          ? assetCatalogSchema.parse(current.documents[game.assets])
-          : undefined
+      const catalog = game.assets
+        ? assetCatalogSchema.parse(current.documents[assetCatalogFile(game.assets)])
+        : undefined
 
       const previous = catalog?.images[request.id]
       const colors = { ...info.colors }

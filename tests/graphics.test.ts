@@ -22,7 +22,10 @@ import type { EngineMessages } from '@ancadeba/game-runtime'
 
 const catalog = assetCatalogSchema.parse(
   JSON.parse(
-    await readFile(new URL('../sample-games/graphics/assets.json', import.meta.url), 'utf8'),
+    await readFile(
+      new URL('../sample-games/graphics/assets/wardrobe.json', import.meta.url),
+      'utf8',
+    ),
   ),
 )
 
@@ -111,7 +114,7 @@ describe('graphics definitions and source profile', () => {
     expect(inspectImageSource('webp', webp).bounds).toMatchObject({ width: 20, height: 30 })
   })
 
-  it('keeps old manifests valid and localizes graphic alternative text including a decorative translation', () => {
+  it('localizes graphic alternative text including a decorative translation', () => {
     const game = gameSchema.parse({
       'schema-version': '1.0.0',
       id: 'test',
