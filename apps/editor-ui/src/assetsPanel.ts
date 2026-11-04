@@ -32,6 +32,7 @@ export function bindAssetsPanel(
   actions: AssetPanelActions,
   fetcher: typeof fetch,
   t: Translate,
+  onSelectAsset?: (id: string) => void,
 ) {
   const panel = root.querySelector<HTMLElement>('#assets-panel')
   const dirty = new Set<string>()
@@ -41,6 +42,7 @@ export function bindAssetsPanel(
   let resources: BrowserGraphicResources | undefined
   let resourceRevision = ''
   let selected = ''
+  let navigationKey = ''
   let preview: RenderedGraphic | undefined
   let thumbnails: RenderedComponent[] = []
   let appearance = graphicAppearanceSchema.parse({})
@@ -51,11 +53,12 @@ export function bindAssetsPanel(
       render: (_state: ProjectEditorState, _replace: boolean) => {},
       dispose: () => {},
       hasDrafts: () => false,
+      navigate: (_kind: string, _id?: string, _sceneId?: string) => {},
     }
   const document = panel.ownerDocument
   panel.innerHTML = `
     <h3 data-i18n="assets.heading"></h3><p class="help" data-i18n="assets.help"></p>
-    <div id="asset-gallery" class="asset-gallery"></div>
+    <div id="asset-gallery" class="asset-gallery"></div><div id="asset-workshop">
     <label for="asset-select" data-i18n="assets.visual"></label><select id="asset-select"></select>
     <div id="asset-preview" class="asset-preview"></div><div id="asset-preview-controls" class="asset-preview-controls"></div>
     <p class="help" data-i18n="assets.temporary"></p>
@@ -63,7 +66,7 @@ export function bindAssetsPanel(
       <label for="asset-preset-name" data-i18n="assets.presetName"></label><input id="asset-preset-name" pattern="[a-zA-Z0-9_-]+" />
       <div class="preview-actions"><button type="button" id="asset-save-defaults" data-i18n="assets.saveDefaults"></button><button type="submit" data-i18n="assets.savePreset"></button><button type="button" id="asset-remove-preset" data-i18n="assets.removePreset"></button></div>
     </form>
-    <form id="asset-image"><h4 data-i18n="assets.import"></h4>
+    </div><form id="asset-image"><h4 data-i18n="assets.import"></h4>
       <label for="asset-image-id" data-i18n="metadata.id"></label><input id="asset-image-id" required pattern="[a-zA-Z0-9_-]+" />
       <label for="asset-format" data-i18n="assets.format"></label><select id="asset-format"><option>svg</option><option>png</option><option>jpeg</option><option>webp</option></select>
       <label for="asset-file" data-i18n="assets.file"></label><input id="asset-file" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" />
@@ -514,6 +517,46 @@ export function bindAssetsPanel(
 
   return {
     hasDrafts: () => dirty.size > 0,
+    navigate(kind: string, id?: string, sceneId?: string) {
+      const nextKey = `${kind}:${sceneId ?? ''}:${id ?? ''}`
+      const changing = nextKey !== navigationKey
+      navigationKey = nextKey
+      const graphic = kind === 'component' || kind === 'new-graphic'
+      const browsing = ['section', 'images', 'parts', 'compositions'].includes(kind)
+      find('asset-gallery').hidden = !browsing
+
+      for (const thumbnail of panel.querySelectorAll<HTMLElement>('.asset-thumbnail'))
+        thumbnail.hidden = kind !== 'section' && thumbnail.dataset.assetKind !== kind
+      find('asset-workshop').hidden = kind !== 'asset'
+      find('asset-image').hidden =
+        kind !== 'import' && !(kind === 'asset' && id && catalog().images[id])
+      const definition = find('asset-definition').parentElement!
+      definition.hidden = kind !== 'asset' && kind !== 'new-asset'
+      definition.toggleAttribute('open', kind === 'new-asset')
+      find('asset-graphic').hidden = !graphic
+
+      if (kind === 'asset' && id && (changing || selected !== id)) {
+        selected = id
+        set('asset-select', id)
+        appearance = graphicAppearanceSchema.parse({})
+        fillSelection(false)
+      }
+
+      if (changing && kind === 'import' && !dirty.has('asset-image'))
+        find<HTMLFormElement>('asset-image').reset()
+
+      if (changing && kind === 'new-asset' && !dirty.has('asset-definition')) {
+        set('asset-definition-id', '')
+        set('asset-json', '{}')
+      }
+
+      if (graphic && sceneId && !dirty.has('asset-graphic')) {
+        set('graphic-scene', sceneId)
+        fillGraphics()
+        set('graphic-existing', kind === 'component' ? (id ?? '') : '')
+        fillGraphics()
+      }
+    },
     render(next: ProjectEditorState, replace: boolean) {
       state = next
 
@@ -592,10 +635,11 @@ export function bindAssetsPanel(
         const gallery = find('asset-gallery')
         gallery.replaceChildren()
 
-        for (const id of Object.keys(definitions.images)) {
+        for (const id of visuals) {
           const button = document.createElement('button')
           button.type = 'button'
           button.className = 'asset-thumbnail'
+          button.dataset.assetKind = kindOf(id)
           button.setAttribute('aria-label', id)
 
           const thumbnail = renderer.render(makeGraphic(id), {
@@ -610,6 +654,12 @@ export function bindAssetsPanel(
           caption.textContent = id
           button.append(thumbnail.element, caption)
           button.addEventListener('click', () => {
+            if (onSelectAsset) {
+              onSelectAsset(id)
+
+              return
+            }
+
             if (dirty.has('asset-definition') || dirty.has('asset-palettes')) return
             selected = id
             set('asset-select', id)

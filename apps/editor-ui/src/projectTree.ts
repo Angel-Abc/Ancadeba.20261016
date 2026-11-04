@@ -1,0 +1,119 @@
+import type { ProjectView } from '@ancadeba/editor-core'
+import type { Translate } from '@ancadeba/utilities'
+
+export interface ProjectTreeNode {
+  key: string
+  label: string
+  section: string
+  kind: string
+  id?: string
+  parentId?: string
+  detail?: string
+  children?: ProjectTreeNode[]
+}
+
+/** New systems supply a section and handle its selections in the workspace. */
+export interface ProjectTreeSection {
+  id: string
+  labelKey: string
+  nodes(view: ProjectView, t: Translate): ProjectTreeNode[]
+}
+
+export const projectTreeSections: readonly ProjectTreeSection[] = [
+  {
+    id: 'game',
+    labelKey: 'project.properties',
+    nodes: () => [],
+  },
+  {
+    id: 'scenes',
+    labelKey: 'tree.scenes',
+    nodes: (view, t) => [
+      ...view.scenes.map((scene): ProjectTreeNode => ({
+        key: `scene:${scene.id}`,
+        section: 'scenes',
+        kind: 'scene',
+        id: scene.id,
+        label: scene.title || scene.id,
+        detail: `${t(scene.type === 'game' ? 'scene.game' : 'scene.standalone')}${view.game?.['initial-scene'] === scene.id ? ` · ${t('tree.startup')}` : ''}`,
+        children: [
+          ...scene.components.map((component): ProjectTreeNode => ({
+            key: `component:${scene.id}:${component.id}`,
+            section: 'scenes',
+            kind: 'component',
+            id: component.id,
+            parentId: scene.id,
+            label: component.id,
+            detail: t(`tree.${component.type}`),
+          })),
+          {
+            key: `graphic-new:${scene.id}`,
+            section: 'scenes',
+            kind: 'new-graphic',
+            parentId: scene.id,
+            label: t('tree.addGraphic'),
+          },
+        ],
+      })),
+      { key: 'scene-new', section: 'scenes', kind: 'new-scene', label: t('scene.add') },
+    ],
+  },
+  {
+    id: 'assets',
+    labelKey: 'assets.heading',
+    nodes: (view, t) => [
+      ...(['images', 'parts', 'compositions'] as const).map((kind): ProjectTreeNode => ({
+        key: `assets:${kind}`,
+        section: 'assets',
+        kind,
+        label: t(`tree.${kind}`),
+        children: Object.keys(view.assets?.[kind] ?? {}).map((id) => ({
+          key: `asset:${id}`,
+          section: 'assets',
+          kind: 'asset',
+          id,
+          label: id,
+        })),
+      })),
+      { key: 'asset-import', section: 'assets', kind: 'import', label: t('assets.import') },
+      { key: 'asset-new', section: 'assets', kind: 'new-asset', label: t('tree.addDefinition') },
+    ],
+  },
+]
+
+export function buildProjectTree(
+  view: ProjectView,
+  t: Translate,
+  sections: readonly ProjectTreeSection[] = projectTreeSections,
+): ProjectTreeNode[] {
+  return sections.map((section) => ({
+    key: section.id,
+    section: section.id,
+    kind: 'section',
+    label: t(section.labelKey),
+    children: section.nodes(view, t),
+  }))
+}
+
+/** Filtering retains ancestors and includes a whole branch when its parent matches. */
+export function filterProjectTree(
+  nodes: readonly ProjectTreeNode[],
+  query: string,
+): ProjectTreeNode[] {
+  const search = query.trim().toLocaleLowerCase()
+
+  return nodes.flatMap((node) => {
+    if (
+      !search ||
+      `${node.label} ${node.id ?? ''} ${node.detail ?? ''}`.toLocaleLowerCase().includes(search)
+    )
+      return [node]
+    const children = filterProjectTree(node.children ?? [], search)
+
+    return children.length ? [{ ...node, children }] : []
+  })
+}
+
+export function flattenProjectTree(nodes: readonly ProjectTreeNode[]): ProjectTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenProjectTree(node.children ?? [])])
+}

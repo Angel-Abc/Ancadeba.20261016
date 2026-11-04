@@ -96,5 +96,22 @@
   "assets.defaults": "Defaults",
   "assets.none": "None",
   "assets.newGraphic": "New graphic",
-  "assets.requirePreset": "Enter a preset name."
+  "assets.requirePreset": "Enter a preset name.",
+  "tree.heading": "Project explorer",
+  "tree.search": "Search project",
+  "tree.scenes": "Scenes",
+  "tree.startup": "Startup",
+  "tree.text": "Text",
+  "tree.button": "Button",
+  "tree.language-select": "Language selector",
+  "tree.graphic": "Graphic",
+  "tree.images": "Images",
+  "tree.parts": "Parts",
+  "tree.compositions": "Compositions",
+  "tree.addGraphic": "Add graphic",
+  "tree.addDefinition": "Add definition",
+  "tree.noResults": "No matching entries.",
+  "tree.empty": "Load a project to explore its content.",
+  "tree.saveFirst": "Save pending edits before selecting another object. Your entries are preserved.",
+  "tree.readOnly": "This component is available for inspection. Editing is not yet supported."
 }

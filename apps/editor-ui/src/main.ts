@@ -167,7 +167,7 @@ exportButton.addEventListener('click', onExport)
 controller.stop()
 
 const disposeProjectPanel = bindProjectPanel(
-  element<HTMLElement>('#project-editor'),
+  element<HTMLElement>('#app'),
   fetch,
   t,
   subscribeLanguageChanges,

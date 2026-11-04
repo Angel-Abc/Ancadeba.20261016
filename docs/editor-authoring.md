@@ -158,10 +158,49 @@ or crash-recovery journal.
 
 ## Visual editor
 
-Enter the game folder in the Game project panel and select Load project. Edit
-game properties, create scenes, select a scene, and edit its properties or grid.
+Enter the game folder in the left Project explorer and select Load project.
+The searchable tree contains Game properties, Scenes with their components,
+and Assets grouped into Images, Parts, and Compositions. Scene types and the
+startup scene are labeled. Shared assets appear once in the asset library.
+
+Select an entry to open its editing controls. Scene branches include Add graphic;
+Scenes includes Add scene; Assets includes image import and definition creation.
+Asset groups display filtered thumbnail galleries. Selecting a thumbnail also
+selects and reveals the corresponding tree entry. Components other than graphics
+currently display read-only definitions. Engine preview is collapsible and has an
+independent selection and lifetime; project navigation never starts a playthrough
+or changes its active scene.
+
+Use Up/Down and Home/End to move keyboard focus, Right/Left to expand or collapse
+branches, and Enter/Space to select. Search retains matching entries' ancestor
+paths. Expansion and selection survive project refreshes during the editor session.
+The sidebar can be resized horizontally on desktop and stacks above the workspace
+on narrow screens. English and Dutch labels follow the editor language.
+
 Each form saves independently; saving one form preserves drafts in other forms.
-Save pending scene edits before selecting a different scene.
+Save pending scene edits before selecting a different scene, and asset/graphic
+edits before selecting another asset/graphic target. Blocked navigation preserves
+the current selection and form entries and explains which action is needed.
+Unrelated panels can be visited without discarding drafts.
+
+### Extending the project explorer
+
+`apps/editor-ui/src/projectTree.ts` builds navigation from injected
+`ProjectTreeSection` providers. Each provider supplies a unique section ID,
+a translated label key, and nodes with stable globally unique keys. This model
+has no browser dependencies and stores definitions rather than runtime instances.
+`projectTreeView.ts` handles searching, expansion, focus, and selection independently
+of resource types.
+
+To add a system such as maps, actors, items, dialogs, or scripts, supply a
+`ProjectWorkspaceSection` to the final `bindProjectPanel` argument. It extends the
+tree provider with `show(node, view)` and `hide()` callbacks for that system's
+workspace. The workspace must preserve its drafts across show/hide calls and use
+the shared revision-checked editing API when authoring commands become available.
+Its optional `canSelect(node)` guard can refuse a selection that would replace
+unsaved values.
+No tree renderer change is needed. Future world and narrative definitions belong
+in their own sections; scenes remain screen layouts that reference shared content.
 
 On a revision conflict, entries remain intact. Reload latest (keep entries) refreshes
 clean forms and preserves dirty forms. Review the intended values, then save again.

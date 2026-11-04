@@ -78,7 +78,7 @@ function panel() {
 
   const root = {
     querySelector: (selector: string) =>
-      selector === '#assets-panel' ? null : control(selector.slice(1)),
+      ['#assets-panel', '#project-tree'].includes(selector) ? null : control(selector.slice(1)),
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
 

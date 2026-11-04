@@ -4,12 +4,27 @@ import { ProjectEditorController, type ProjectEditorListener } from './projectCo
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { bindAssetsPanel } from './assetsPanel.js'
+import { bindProjectTree } from './projectTreeView.js'
+import {
+  buildProjectTree,
+  flattenProjectTree,
+  projectTreeSections,
+  type ProjectTreeNode,
+  type ProjectTreeSection,
+} from './projectTree.js'
+
+export interface ProjectWorkspaceSection extends ProjectTreeSection {
+  canSelect?(node: ProjectTreeNode): boolean
+  show(node: ProjectTreeNode, view: ProjectView | undefined): void
+  hide(): void
+}
 
 export function bindProjectPanel(
   root: HTMLElement,
   fetcher: typeof fetch,
   t: Translate = editorLocalization().t,
   subscribeLanguageChanges?: (listener: () => void) => () => void,
+  additionalSections: readonly ProjectWorkspaceSection[] = [],
 ): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
     const element = root.querySelector<T>(`#${id}`)
@@ -40,6 +55,100 @@ export function bindProjectPanel(
   const dirtyForms = new Set<string>()
   let loadedPath = ''
   let assetsPanel: ReturnType<typeof bindAssetsPanel> | undefined
+  let tree: ReturnType<typeof bindProjectTree> | undefined
+
+  let selection: ProjectTreeNode = {
+    key: 'game',
+    section: 'game',
+    kind: 'section',
+    label: t('project.properties'),
+  }
+
+  let assetTarget = ''
+  const treeElement = root.querySelector<HTMLElement>('#project-tree')
+  const sections = [...projectTreeSections, ...additionalSections]
+
+  const showSelection = () => {
+    if (!treeElement) return
+
+    const node = selection
+
+    const sceneId =
+      node.section === 'scenes' ? (node.kind === 'scene' ? node.id : node.parentId) : undefined
+
+    const component = view?.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.find((component) => component.id === node.id)
+
+    const graphic =
+      node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
+
+    metadata.hidden = node.section !== 'game'
+    sceneMetadata.hidden =
+      node.kind !== 'scene' || !view?.scenes.some((scene) => scene.id === sceneId)
+    layout.hidden = sceneMetadata.hidden
+    create.hidden = node.section !== 'scenes' || !['section', 'new-scene'].includes(node.kind)
+    fields.hidden = metadata.hidden && sceneMetadata.hidden && create.hidden
+    find('assets-panel').hidden = node.section !== 'assets' && !graphic
+    find('component-details').hidden =
+      node.section !== 'scenes' || node.kind !== 'component' || graphic
+    find('component-json').textContent =
+      component && !graphic ? JSON.stringify(component, null, 2) : ''
+    find('workspace-heading').textContent =
+      node.kind === 'section'
+        ? t(sections.find((section) => section.id === node.section)?.labelKey ?? node.label)
+        : node.label
+
+    for (const section of additionalSections) {
+      if (section.id === node.section) section.show(node, view)
+      else section.hide()
+    }
+  }
+
+  const navigate = (node: ProjectTreeNode) => {
+    const sceneId =
+      node.section === 'scenes' ? (node.kind === 'scene' ? node.id : node.parentId) : undefined
+
+    const sceneChanges = sceneId && sceneId !== scenes.value
+
+    const usesAssets =
+      node.section === 'assets' ||
+      (node.section === 'scenes' &&
+        (node.kind === 'new-graphic' ||
+          view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.some(
+              (component) => component.id === node.id && component.type === 'graphic',
+            )))
+
+    if (
+      (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
+      (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
+      additionalSections.find((section) => section.id === node.section)?.canSelect?.(node) === false
+    ) {
+      find('tree-message').textContent = t('tree.saveFirst')
+
+      return false
+    }
+
+    find('tree-message').textContent = ''
+
+    if (sceneId) {
+      scenes.value = sceneId
+      fillScene()
+    }
+
+    selection = node
+
+    if (usesAssets) {
+      assetTarget = node.key
+      assetsPanel?.navigate(node.kind, node.id, sceneId)
+    }
+
+    showSelection()
+
+    return true
+  }
 
   const fillScene = () => {
     const scene = view?.scenes.find((scene) => scene.id === scenes.value)
@@ -93,7 +202,25 @@ export function bindProjectPanel(
       ''
     error.hidden = !error.textContent
 
-    if (!replaceFields || !view?.game) return
+    const updateTree = () => {
+      if (!tree) return
+
+      const updated =
+        view &&
+        flattenProjectTree(buildProjectTree(view, t, sections)).find(
+          (node) => node.key === selection.key,
+        )
+
+      if (updated) selection = updated
+      showSelection()
+      tree.render(view, state.busy, selection.key)
+    }
+
+    if (!replaceFields || !view?.game) {
+      updateTree()
+
+      return
+    }
 
     const formCommands: Partial<Record<EditorCommand['type'], string>> = {
       'game.updateMetadata': metadata.id,
@@ -106,6 +233,9 @@ export function bindProjectPanel(
 
     if (savedForm) dirtyForms.delete(savedForm)
     else if (!state.preserveDrafts) dirtyForms.clear()
+
+    if (treeElement && !dirtyForms.size && !assetsPanel?.hasDrafts())
+      find('tree-message').textContent = ''
 
     if (!dirtyForms.has(create.id)) create.reset()
     scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
@@ -143,6 +273,32 @@ export function bindProjectPanel(
 
     if (view.scenes.some((scene) => scene.id === selected)) scenes.value = selected
     fillScene()
+
+    if (treeElement && !state.preserveDrafts) {
+      assetTarget = ''
+
+      if (
+        state.lastCommand === null &&
+        !view.scenes.some(
+          (scene) => scene.id === selection.id || scene.id === selection.parentId,
+        ) &&
+        selection.section === 'scenes'
+      )
+        selection = {
+          key: 'game',
+          section: 'game',
+          kind: 'section',
+          label: t('project.properties'),
+        }
+    }
+
+    if (
+      selection.section === 'assets' ||
+      (selection.section === 'scenes' &&
+        (selection.kind === 'component' || selection.kind === 'new-graphic'))
+    )
+      assetsPanel?.navigate(selection.kind, selection.id, selection.parentId)
+    updateTree()
   }
 
   const controller = new ProjectEditorController(new HttpEditorClient(fetcher), render)
@@ -154,7 +310,21 @@ export function bindProjectPanel(
     },
     fetcher,
     t,
+    (id) => tree?.select(`asset:${id}`),
   )
+
+  if (treeElement) {
+    tree = bindProjectTree(
+      treeElement,
+      find<HTMLInputElement>('project-search'),
+      navigate,
+      t,
+      sections,
+    )
+    tree.render(undefined, false)
+    showSelection()
+  }
+
   const unsubscribeLanguage = subscribeLanguageChanges?.(() => refreshLanguage())
 
   const listeners: (() => void)[] = []
@@ -240,6 +410,7 @@ export function bindProjectPanel(
   return () => {
     controller.dispose()
     assetsPanel?.dispose()
+    tree?.dispose()
     unsubscribeLanguage?.()
 
     for (const remove of listeners) remove()

@@ -96,5 +96,22 @@
   "assets.defaults": "Standaard",
   "assets.none": "Geen",
   "assets.newGraphic": "Nieuwe illustratie",
-  "assets.requirePreset": "Vul een paletnaam in."
+  "assets.requirePreset": "Vul een paletnaam in.",
+  "tree.heading": "Projectverkenner",
+  "tree.search": "Project doorzoeken",
+  "tree.scenes": "Scènes",
+  "tree.startup": "Opstartscène",
+  "tree.text": "Tekst",
+  "tree.button": "Knop",
+  "tree.language-select": "Taalkeuze",
+  "tree.graphic": "Afbeelding",
+  "tree.images": "Afbeeldingen",
+  "tree.parts": "Onderdelen",
+  "tree.compositions": "Composities",
+  "tree.addGraphic": "Afbeelding toevoegen",
+  "tree.addDefinition": "Definitie toevoegen",
+  "tree.noResults": "Geen overeenkomende items.",
+  "tree.empty": "Laad een project om de inhoud te bekijken.",
+  "tree.saveFirst": "Sla openstaande wijzigingen op voordat je een ander object selecteert. Je invoer blijft behouden.",
+  "tree.readOnly": "Je kunt dit component bekijken. Bewerken wordt nog niet ondersteund."
 }
