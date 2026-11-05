@@ -15,7 +15,11 @@ import { EditorError, object, projectRuleSources } from './project.js'
 type RuleCommand = Extract<
   EditorCommand,
   {
-    type: 'game.updateRules' | 'scene.upsertRuleButton' | 'inventory.setRuleInspection'
+    type:
+      | 'game.updateRules'
+      | 'scene.upsertRuleButton'
+      | 'inventory.setRuleInspection'
+      | 'inventory.setItemActions'
   }
 >
 
@@ -103,6 +107,11 @@ export function editRules(
       for (const itemType of Object.values(itemTypes)) {
         const inspection = object(object(itemType).inspection)
         checkLink(inspection.action, inspection.details, false)
+
+        for (const entry of Object.values(object(object(itemType).actions))) {
+          const action = object(entry)
+          checkLink(action.action, action.enabledWhen, true)
+        }
       }
     }
 
@@ -127,7 +136,10 @@ export function editRules(
     return rules
   }
 
-  if (command.type === 'inventory.setRuleInspection') {
+  if (
+    command.type === 'inventory.setRuleInspection' ||
+    command.type === 'inventory.setItemActions'
+  ) {
     const source = inventories.find(({ itemTypes }) => Object.hasOwn(itemTypes, command.itemType))
 
     if (!source)
@@ -135,7 +147,30 @@ export function editRules(
     const { file, inventory, itemTypes } = source
     const { inspection: previous, ...itemType } = object(itemTypes[command.itemType])
 
-    if (command.inspection) {
+    if (command.type === 'inventory.setItemActions') {
+      for (const action of Object.values(command.actions)) {
+        requireAction(action.action)
+
+        if (action.enabledWhen) checkBinding(rules, action.enabledWhen, true)
+      }
+
+      const previousActions = object(itemType.actions)
+      itemType.actions = {
+        ...Object.fromEntries(
+          Object.entries(command.actions).map(([id, action]) => [
+            id,
+            {
+              ...object(previousActions[id]),
+              ...action,
+              enabledWhen: action.enabledWhen,
+            },
+          ]),
+        ),
+      }
+
+      // Item-action edits retain the separately authored inspection definition.
+      if (previous) itemType.inspection = previous
+    } else if (command.inspection) {
       const { action, details } = command.inspection
       checkBinding(requireAction(action), details, false)
       itemType.inspection = { ...object(previous), ...command.inspection }

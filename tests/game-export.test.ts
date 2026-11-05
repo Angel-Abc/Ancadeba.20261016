@@ -208,6 +208,69 @@ describe('standalone game export', () => {
     )
   })
 
+  it('moves the map player using configured inputs from a served standalone export', async () => {
+    const destination = join(temp, 'coast-output')
+    await exportGame({
+      gameDirectory: fileURLToPath(new URL('../sample-games/square-map/', import.meta.url)),
+      outputDirectory: destination,
+    })
+
+    const server = await preview({
+      configFile: false,
+      root: temp,
+      base: '/coast/',
+      logLevel: 'silent',
+      build: { outDir: destination },
+      preview: { host: '127.0.0.1', port: 0, strictPort: true },
+    })
+
+    const logger: ILogger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+    const steps: (() => void)[] = []
+    let engine: Engine | undefined
+
+    try {
+      // SAFETY: Vite preview is configured to listen on loopback TCP.
+      const { port } = server.httpServer.address() as AddressInfo
+      const base = `http://127.0.0.1:${port}/coast/`
+      const config = await loadRuntimeConfig(base, fetch)
+
+      const loader = new GameLoader(
+        new JsonResourceLoader(new HttpGameResources(config.gameUrl, base, fetch), logger),
+      )
+
+      engine = new Engine(
+        loader,
+        { mount: () => () => {} },
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          clock: { now: () => 0 },
+          scheduler: {
+            schedule(callback, delay) {
+              if (delay > 0) steps.push(callback)
+
+              return () => {}
+            },
+          },
+        },
+      )
+      await engine.start()
+      const scene = engine.lifecycle!.activeScene!
+      const movement = engine.lifecycle!.currentGame!.mapMovement!
+      expect(movement.getPosition(scene, 'coast-map')).toEqual({ x: 9, y: 4 })
+      engine.input!.pressKey('KeyD')
+      engine.input!.releaseKey('KeyD')
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      expect(steps).toHaveLength(1)
+      steps[0]!()
+      expect(movement.getPosition(scene, 'coast-map')).toEqual({ x: 10, y: 4 })
+    } finally {
+      engine?.stop()
+      await server.close()
+    }
+  })
+
   it('plays the museum rules from a served standalone export', async () => {
     const destination = join(temp, 'museum-output')
     await exportGame({

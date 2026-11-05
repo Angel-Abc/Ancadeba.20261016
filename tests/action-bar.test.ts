@@ -371,7 +371,7 @@ describe('action bar runtime routing', () => {
     expect(
       bar.handleInput({ context: 'gameplay', input: 'programmatic', phase: 'pressed' }, request),
     ).toBe(true)
-    expect(request).toHaveBeenCalledExactlyOnceWith('first')
+    expect(request).toHaveBeenCalledExactlyOnceWith('first', undefined)
     expect(
       bar.handleInput({ context: 'gameplay', input: 'programmatic', phase: 'released' }, request),
     ).toBe(true)

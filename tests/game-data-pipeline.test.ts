@@ -151,7 +151,13 @@ describe('game data pipeline', () => {
       placement: { row: 1, column: 3, rowSpan: 2, columnSpan: 8 },
       presentation: { variant: 'heading', align: 'center' },
     })
-    expect(game.scenes.get('inventory')?.components.length).toBe(4)
+    expect(game.scenes.get('inventory')?.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'items', type: 'inventory' }),
+        expect.objectContaining({ id: 'action-bar', type: 'action-bar' }),
+      ]),
+    )
+    expect(game.inventory?.itemTypes['folded-letter']?.inspection?.inline).toBe(false)
     expect(game.scenes.get('settings')?.components.length).toBe(4)
   })
 

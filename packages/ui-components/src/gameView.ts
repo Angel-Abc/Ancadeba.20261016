@@ -159,14 +159,16 @@ export function mountGameView(
       const input = session.input
 
       const capturesKey = (code: string) => {
-        const bar = session.lifecycle.activeScene?.data.components.find(
-          (component) => component.type === 'action-bar',
-        )
+        const scene = session.lifecycle.activeScene
+
+        const bar = scene?.data.components.find((component) => component.type === 'action-bar')
 
         return Boolean(
           bar &&
-          Object.values(bar.slots).some(
-            ({ inputBinding: binding }) =>
+          Object.entries(bar.slots).some(
+            ([id, { inputBinding: binding }]) =>
+              scene?.type === 'game' &&
+              scene.game.actionBar?.getSlot(scene, bar.id, id) &&
               binding &&
               binding.context === input.context &&
               input.getKeyboardCodes?.(binding.context, binding.input).includes(code),

@@ -29,6 +29,11 @@
         ],
         "effects": [
           {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
+          {
             "type": "enter-scene",
             "scene": "gallery",
             "mapView": "museum-map"
@@ -51,6 +56,11 @@
           }
         ],
         "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
           {
             "type": "enter-scene",
             "scene": "standard",

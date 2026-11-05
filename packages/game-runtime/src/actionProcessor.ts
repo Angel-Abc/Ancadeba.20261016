@@ -117,7 +117,7 @@ export class ActionProcessor implements IGameActions {
     private readonly isRunning: () => boolean,
     private readonly routeSceneInput?: (
       event: VirtualInput,
-      request: (action: string) => void,
+      request: (action: string, payload?: unknown) => void,
     ) => boolean,
   ) {
     this.handlers = new Map(rules.handlers)
@@ -292,10 +292,10 @@ export class ActionProcessor implements IGameActions {
     if (this.disposed || !this.isRunning()) return
 
     if (
-      this.routeSceneInput?.(event, (action) => {
+      this.routeSceneInput?.(event, (action, payload) => {
         this.enqueue(
           action,
-          undefined,
+          payload,
           Object.freeze({
             type: 'input',
             event: Object.freeze({ ...event }),

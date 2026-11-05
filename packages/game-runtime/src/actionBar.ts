@@ -1,8 +1,14 @@
-import type { ActionBarSlotDefinition } from '@ancadeba/schemas'
+import { inventoryEntry, type ActionBarSlotDefinition } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { VirtualInput } from './input.js'
+import { GameInventoryContext, type InventorySelectionSnapshot } from './inventoryContext.js'
+import type { IGameMapMovement } from './mapMovement.js'
 
 export interface IGameActionBar {
+  getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined
+  getSelectedItem(scene: SceneInstance, inventory: string): string | undefined
+  selectInventoryItem(scene: SceneInstance, inventory: string, item?: string): void
+  subscribeChanges(listener: () => void): () => void
   isEnabled(scene: SceneInstance, bar: string, slot: string): boolean
   activate(scene: SceneInstance, bar: string, slot: string): void
 }
@@ -11,6 +17,7 @@ interface CapturedSlot {
   readonly scene: SceneInstance
   readonly bar: string
   readonly slot: string
+  readonly selection?: InventorySelectionSnapshot | undefined
 }
 
 /** Resolves scene-owned slots before general input bindings, independently of the host. */
@@ -18,8 +25,33 @@ export class GameActionBar implements IGameActionBar {
   private readonly gestures = new Map<string, CapturedSlot | null>()
   private captured = new WeakMap<VirtualInput, CapturedSlot | null>()
   private disposed = false
+  private readonly inventoryContext: GameInventoryContext
 
-  constructor(private readonly lifecycle: IGameLifecycle) {}
+  constructor(
+    private readonly lifecycle: IGameLifecycle,
+    inventory = lifecycle.currentGame?.inventory,
+    private readonly mapMovement: IGameMapMovement | undefined = lifecycle.currentGame?.mapMovement,
+  ) {
+    this.inventoryContext = new GameInventoryContext(lifecycle, inventory)
+  }
+
+  getSelectedItem(scene: SceneInstance, inventory: string): string | undefined {
+    return this.inventoryContext.get(scene, inventory)?.item
+  }
+
+  selectInventoryItem(scene: SceneInstance, inventory: string, item?: string): void {
+    this.inventoryContext.select(scene, inventory, item)
+  }
+
+  subscribeChanges(listener: () => void): () => void {
+    const inventory = this.inventoryContext.subscribe(listener)
+    const maps = this.mapMovement?.subscribeChanges(listener)
+
+    return () => {
+      inventory()
+      maps?.()
+    }
+  }
 
   private definition(
     scene: SceneInstance,
@@ -31,6 +63,53 @@ export class GameActionBar implements IGameActionBar {
     return component?.type === 'action-bar' ? component.slots[slot] : undefined
   }
 
+  private resolve(
+    scene: SceneInstance,
+    bar: string,
+    slot: string,
+  ):
+    | {
+        definition: ActionBarSlotDefinition
+        payload?: string
+        selection?: InventorySelectionSnapshot
+      }
+    | undefined {
+    const definition = this.definition(scene, bar, slot)
+
+    if (!definition) return
+
+    if (definition.action.type !== 'inventory-action') return { definition }
+
+    if (scene.type !== 'game') return
+    const source = definition.action
+    const selection = this.inventoryContext.get(scene, source.inventory)
+    const item = scene.game.inventory?.snapshot.find((item) => item.id === selection?.item)
+    const definitionInventory = scene.game.data.inventory
+
+    const type =
+      item && definitionInventory && inventoryEntry(definitionInventory.itemTypes, item.itemType)
+
+    const action =
+      (type?.actions && inventoryEntry(type.actions, source.action)) ??
+      (source.action === 'inspect' && type?.inspection
+        ? { action: type.inspection.action }
+        : undefined)
+
+    if (!selection || !action) return
+
+    return {
+      definition: { ...definition, action: { type: 'request-action', ...action } },
+      payload: selection.item,
+      selection,
+    }
+  }
+
+  getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined {
+    return this.disposed || scene.disposed || scene !== this.lifecycle.activeScene
+      ? undefined
+      : this.resolve(scene, bar, slot)?.definition
+  }
+
   isEnabled(scene: SceneInstance, bar: string, slot: string): boolean {
     if (
       this.disposed ||
@@ -39,9 +118,12 @@ export class GameActionBar implements IGameActionBar {
       scene.type !== 'game'
     )
       return false
-    const action = this.definition(scene, bar, slot)?.action
+    const action = this.getSlot(scene, bar, slot)?.action
 
     if (!action) return false
+
+    if (action.type === 'move-map')
+      return this.mapMovement?.canMove(scene, action.mapView, action.direction) ?? false
 
     if (action.type !== 'request-action') return true
 
@@ -54,21 +136,35 @@ export class GameActionBar implements IGameActionBar {
   }
 
   activate(scene: SceneInstance, bar: string, slot: string): void {
-    this.activateSlot({ scene, bar, slot })
+    this.activateSlot({ scene, bar, slot, selection: this.resolve(scene, bar, slot)?.selection })
   }
 
-  private activateSlot(target: CapturedSlot, request?: (action: string) => void): void {
+  private activateSlot(
+    target: CapturedSlot,
+    request?: (action: string, payload?: unknown) => void,
+  ): void {
     const { scene, bar, slot } = target
 
     if (!this.isEnabled(scene, bar, slot) || scene.type !== 'game') return
-    const action = this.definition(scene, bar, slot)!.action
+    const resolved = this.resolve(scene, bar, slot)
 
-    if (action.type === 'request-action') {
-      if (request) request(action.action)
-      else scene.game.actions?.request(action.action)
+    if (!resolved || resolved.selection !== target.selection) return
+    const action = resolved.definition.action
+
+    if (action.type === 'move-map') {
+      this.mapMovement?.move(scene, action.mapView, action.direction)
 
       return
     }
+
+    if (action.type === 'request-action') {
+      if (request) request(action.action, resolved.payload)
+      else scene.game.actions?.request(action.action, resolved.payload)
+
+      return
+    }
+
+    if (action.type === 'inventory-action') return
 
     if (action.type === 'new-game') this.lifecycle.startGame()
     this.lifecycle.enterScene(action.scene)
@@ -95,7 +191,10 @@ export class GameActionBar implements IGameActionBar {
               definition.inputBinding.input === event.input,
           )
 
-        if (bar && slot) target = { scene, bar: bar.id, slot: slot[0] }
+        const resolved = bar && slot && this.resolve(scene, bar.id, slot[0])
+
+        if (bar && slot && resolved)
+          target = { scene, bar: bar.id, slot: slot[0], selection: resolved.selection }
       }
 
       this.gestures.set(key, target)
@@ -104,7 +203,7 @@ export class GameActionBar implements IGameActionBar {
     this.captured.set(event, target)
   }
 
-  handleInput(event: VirtualInput, request: (action: string) => void): boolean {
+  handleInput(event: VirtualInput, request: (action: string, payload?: unknown) => void): boolean {
     if (!this.captured.has(event)) this.captureInput(event)
     const target = this.captured.get(event)
 
@@ -117,6 +216,7 @@ export class GameActionBar implements IGameActionBar {
 
   dispose(): void {
     this.disposed = true
+    this.inventoryContext.dispose()
     this.gestures.clear()
     this.captured = new WeakMap()
   }

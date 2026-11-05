@@ -51,7 +51,8 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   } else if (
     command.type === 'game.updateRules' ||
     command.type === 'scene.upsertRuleButton' ||
-    command.type === 'inventory.setRuleInspection'
+    command.type === 'inventory.setRuleInspection' ||
+    command.type === 'inventory.setItemActions'
   ) {
     changedFiles.push(...editRules(documents, game, command))
   } else if (command.type === 'game.updateMetadata') {

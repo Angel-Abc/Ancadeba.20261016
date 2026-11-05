@@ -65,6 +65,7 @@ class TestElement extends EventTarget {
   title = ''
   value = ''
   disabled = false
+  hidden = false
   private content = ''
 
   constructor(
@@ -249,6 +250,64 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it.each([undefined, true, false])(
+    'retains optional inline inspection when inline is %s',
+    async (inline) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...source,
+            readText: async (path) => {
+              const text = await source.readText(path)
+
+              if (path !== 'inventory/museum.json') return text
+              const inventory = JSON.parse(text)
+              inventory.itemTypes['folded-letter'].inspection.inline = inline
+
+              return JSON.stringify(inventory)
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+
+      const engine = new Engine(
+        { load: async () => game },
+        new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.actions!.request('take-letter')
+      flush(engine)
+      const inspect = target.find((node) => node.dataset.inspectItem === 'folded-letter')
+      expect(Boolean(inspect)).toBe(inline !== false)
+
+      if (!inspect) return
+      inspect.focus()
+      inspect.dispatchEvent(new Event('click'))
+      flush(engine)
+
+      const catalog = languageCatalogSchema.parse(
+        JSON.parse(await source.readText('languages/en/messages.json')),
+      )
+
+      expect(target.find((node) => node.dataset.componentId === 'items')!.textContent).toContain(
+        catalog['museum.rules.clue'],
+      )
+      engine.input!.pressKey('KeyQ')
+      engine.input!.releaseKey('KeyQ')
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('old-harbour')
+    },
+  )
+
   it.each([
     { host: 'standalone', firstKey: 'KeyQ', badge: 'Q / 1' },
     { host: 'preview', firstKey: 'KeyY', badge: 'Y / 1' },
@@ -299,11 +358,33 @@ describe('scene renderer', () => {
       expect(actionBar().children).toHaveLength(15)
       expect(button('1').children[1]!.textContent).toBe(badge)
       expect(button('2').disabled).toBe(false)
+      expect(button('4').hidden).toBe(true)
       button('2').focus()
       button('2').dispatchEvent(new Event('click'))
       flush(engine)
       expect(button('2').disabled).toBe(true)
       expect(document.activeElement).toBe(surface)
+      const item = target.find((node) => node.dataset.itemId === 'folded-letter')!
+      item.focus()
+      item.dispatchEvent(new Event('click'))
+      expect(item.attributes.get('aria-pressed')).toBe('true')
+      expect(button('4').hidden).toBe(false)
+      expect(button('5').hidden).toBe(false)
+      engine.input!.pressKey('KeyR')
+      engine.input!.releaseKey('KeyR')
+      flush(engine)
+      expect(
+        target.find((node) => node.dataset.componentId === 'narrative')!.textContent,
+      ).toContain(
+        languageCatalogSchema.parse(
+          JSON.parse(await source.readText('languages/en/messages.json')),
+        )['museum.rules.clue'],
+      )
+      target
+        .find((node) => node.tagName === 'BUTTON' && node.textContent === 'Clear selection')!
+        .dispatchEvent(new Event('click'))
+      expect(button('4').hidden).toBe(true)
+      expect(item.attributes.get('aria-pressed')).toBe('false')
       engine.input!.setContext('menu')
       expect(button('1').children[1]!.textContent).toBe('')
       engine.input!.setContext('gameplay')
@@ -326,6 +407,17 @@ describe('scene renderer', () => {
       const catalog = JSON.parse(await source.readText('languages/nl/messages.json'))
       expect(button('1').children[0]!.textContent).toBe(catalog['harbour.walk-to-harbour'])
       expect(button('1').children[1]!.textContent).toBe(badge)
+      expect(target.find((node) => node.dataset.inspectItem === 'folded-letter')).toBeUndefined()
+      const selectedItem = target.find((node) => node.dataset.itemId === 'folded-letter')!
+      selectedItem.focus()
+      selectedItem.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(document.activeElement).toBe(selectedItem)
+      engine.input!.pressKey(firstKey)
+      engine.input!.releaseKey(firstKey)
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('old-harbour')
+      expect(document.activeElement).toBe(surface)
       engine.stop()
       expect(target.find((node) => node.className === 'ancadeba-game')).toBeUndefined()
     },
@@ -387,11 +479,17 @@ describe('scene renderer', () => {
 
       const click = (id: string) => component(id).dispatchEvent(new Event('click'))
 
-      const inspectLetter = () =>
-        component('items').find((node) => node.dataset.inspectItem === 'folded-letter')
+      const inspectItem = (item: string) => {
+        const selected = component('items').find((node) => node.dataset.itemId === item)
 
-      const inspectChart = () =>
-        component('items').find((node) => node.dataset.inspectItem === 'harbour-chart')
+        if (!selected) return
+        selected.dispatchEvent(new Event('click'))
+
+        return component('action-bar').find((node) => node.dataset.actionBarSlot === '4')
+      }
+
+      const inspectLetter = () => inspectItem('folded-letter')
+      const inspectChart = () => inspectItem('harbour-chart')
 
       expect(component('nearby').textContent).toContain(message('letter'))
       expect(component('player-status').textContent).toContain('40 / 40')
@@ -436,7 +534,9 @@ describe('scene renderer', () => {
 
       inspectLetter()!.dispatchEvent(new Event('click'))
       flush(engine)
-      expect(component('items').textContent).toContain(message('clue'))
+      expect(component('items').textContent).not.toContain(message('clue'))
+      expect(component('items').find((node) => Boolean(node.dataset.inspectItem))).toBeUndefined()
+      expect(component('narrative').textContent).toContain(message('clue'))
       expect(component('event-log').textContent).toContain(message('read'))
       expect(component('press-heron').disabled).toBe(false)
 
@@ -473,7 +573,13 @@ describe('scene renderer', () => {
       expect(mapColumn()).toBe('2')
       expect(component('clock').textContent).toContain('09:02')
       expect(component('take-letter').disabled).toBe(true)
-      expect(component('items').textContent).toContain(message('clue'))
+      expect(component('items').textContent).not.toContain(message('clue'))
+      expect(component('narrative').textContent).not.toContain(message('clue'))
+      // Reinspection restores the result without repeating discovery effects.
+      inspectLetter()!.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(component('narrative').textContent).toContain(message('clue'))
+      expect(occurrences(component('event-log').textContent, 'read')).toBe(1)
 
       click('walk-to-harbour')
       flush(engine)
@@ -489,7 +595,8 @@ describe('scene renderer', () => {
       inspectChart()!.dispatchEvent(new Event('click'))
       inspectChart()!.dispatchEvent(new Event('click'))
       flush(engine)
-      expect(component('items').textContent).toContain(message('chartDetails'))
+      expect(component('items').textContent).not.toContain(message('chartDetails'))
+      expect(component('narrative').textContent).toContain(message('chartDetails'))
       expect(occurrences(component('event-log').textContent, 'chartRead')).toBe(1)
       expect(component('follow-chart-to-buoy').disabled).toBe(false)
 
@@ -505,7 +612,8 @@ describe('scene renderer', () => {
       expect(mapColumn('harbour-map')).toBe('6')
       expect(component('clock').textContent).toContain('09:12')
       expect(component('event-log').textContent).toContain(`09:12  ${message('landing')}`)
-      expect(component('items').textContent).toContain(message('chartDetails'))
+      expect(component('items').textContent).not.toContain(message('chartDetails'))
+      expect(component('narrative').textContent).not.toContain(message('chartDetails'))
 
       click('return-to-buoy')
       flush(engine)
@@ -589,6 +697,101 @@ describe('scene renderer', () => {
     expect(game.actions?.progression.worldTimeMs).toBe(60_000)
     expect(logError).toHaveBeenCalledTimes(2)
   })
+
+  it.each(['preview', 'standalone'])(
+    'shares directional buttons, mapped input, and focused-map arrows in %s',
+    async (host) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...source,
+            readText: async (path) => {
+              const text = await readFile(
+                new URL(`../sample-games/square-map/${path}`, import.meta.url),
+                'utf8',
+              )
+
+              if (path !== 'scenes/coast.json') return text
+              const scene = JSON.parse(text)
+              scene.components.push({
+                id: 'east-button',
+                type: 'button',
+                label: 'East',
+                placement: { row: 2, column: 1 },
+                action: { type: 'move-map', mapView: 'coast-map', direction: 'east' },
+              })
+
+              return JSON.stringify(scene)
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+      const tasks: { callback: () => void; cancelled: boolean }[] = []
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          clock: { now: () => 0 },
+          scheduler: {
+            schedule(callback, delay) {
+              if (!delay) return () => {}
+
+              const task = { callback, cancelled: false }
+              tasks.push(task)
+
+              return () => {
+                task.cancelled = true
+              }
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const button = (slot: string) => target.find((node) => node.dataset.actionBarSlot === slot)!
+      const player = () => target.find((node) => node.className === 'ancadeba-map-player')!
+      const column = () => player().style.getPropertyValue('--ge-map-player-column')
+      const east = target.find((node) => node.dataset.componentId === 'east-button')!
+      expect(button('2').disabled).toBe(true)
+      expect(button('8').disabled).toBe(false)
+      expect(button('8').children[1]!.textContent).toBe('D / ArrowRight')
+      east.dispatchEvent(new Event('click'))
+      expect(button('8').disabled).toBe(true)
+      expect(east.disabled).toBe(true)
+      expect(column()).toBe('10')
+      tasks[0]!.callback()
+      expect(column()).toBe('11')
+      expect(east.disabled).toBe(false)
+      engine.input!.pressKey('KeyA')
+      engine.input!.releaseKey('KeyA')
+      flush(engine)
+      tasks[1]!.callback()
+      expect(column()).toBe('10')
+      const view = target.find((node) => node.dataset.componentId === 'coast-map')!
+      const key = new Event('keydown', { cancelable: true })
+      Object.defineProperty(key, 'key', { value: 'ArrowRight' })
+      view.dispatchEvent(key)
+      expect(key.defaultPrevented).toBe(true)
+      expect(tasks).toHaveLength(3)
+      engine.lifecycle!.leaveScene()
+      engine.lifecycle!.enterScene('coast')
+      expect(tasks[2]!.cancelled).toBe(true)
+      tasks[2]!.callback()
+      expect(column()).toBe('10')
+      engine.stop()
+      east.dispatchEvent(new Event('click'))
+      expect(tasks).toHaveLength(3)
+    },
+  )
 
   it('follows the Coast Road player at terrain speed and stops at forests and map edges', async ({
     onTestFinished,

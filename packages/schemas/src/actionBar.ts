@@ -6,6 +6,7 @@ export function actionBarIssues(
   bar: ActionBarComponentDefinition,
   input: InputDefinition | undefined,
   scenes: ReadonlyMap<string, SceneDefinition>,
+  scene?: SceneDefinition,
 ): { path: (string | number)[]; message: string }[] {
   const issues: { path: (string | number)[]; message: string }[] = []
 
@@ -20,7 +21,21 @@ export function actionBarIssues(
 
     const action = slot.action
 
-    if (action.type === 'request-action') continue
+    if (action.type === 'inventory-action') {
+      if (
+        !scene?.components.some(
+          (component) => component.id === action.inventory && component.type === 'inventory',
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'inventory'],
+          message: `Unknown inventory panel: ${action.inventory}`,
+        })
+
+      continue
+    }
+
+    if (action.type === 'request-action' || action.type === 'move-map') continue
     const target = scenes.get(action.scene)
 
     if (!target || (action.type === 'new-game' && target.type !== 'game'))

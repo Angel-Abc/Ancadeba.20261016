@@ -35,6 +35,20 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
   render(component: InventoryComponentData, context: ComponentRenderContext): RenderedComponent {
     const { document, assets, inventory, inventoryDefinition: definition } = context
+    const scene = context.scene
+    const actionBar = scene?.type === 'game' ? scene.game.actionBar : undefined
+
+    const contextual = Boolean(
+      actionBar &&
+      scene?.data.components.some(
+        (entry) =>
+          entry.type === 'action-bar' &&
+          Object.values(entry.slots).some(
+            ({ action }) => action.type === 'inventory-action' && action.inventory === component.id,
+          ),
+      ),
+    )
+
     const root = document.createElement('section')
     root.className = component.readOnly
       ? 'ancadeba-inventory ancadeba-inventory--read-only'
@@ -102,6 +116,15 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     }
 
     let selected: string | undefined
+    let selectionChoices: Destination[] = []
+    const clearSelection = document.createElement('button')
+    clearSelection.type = 'button'
+    clearSelection.textContent = 'Clear selection'
+    clearSelection.addEventListener('click', () => {
+      if (scene) actionBar?.selectInventoryItem(scene, component.id)
+    })
+
+    if (contextual) root.append(clearSelection)
     let destinations: Destination[] = []
     const buttons = new Map<string, HTMLButtonElement>()
     const inspectionDetails = new Map<HTMLElement, GameBindingDefinition>()
@@ -116,6 +139,12 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     }
 
     const syncSelection = (choices: readonly Destination[]) => {
+      if (contextual && scene) selected = actionBar?.getSelectedItem(scene, component.id)
+      const clearFocused = document.activeElement === clearSelection
+      clearSelection.hidden = selected === undefined
+
+      if (clearFocused && clearSelection.hidden) context.onActionBarFocusLost?.()
+
       for (const [id, button] of buttons)
         button.setAttribute('aria-pressed', String(id === selected))
 
@@ -167,6 +196,9 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
       const restoreFocus =
         selected !== undefined && buttons.get(selected) === document.activeElement
 
+      const lostButtonFocus =
+        document.activeElement?.tagName === 'BUTTON' && owners.contains(document.activeElement)
+
       buttons.clear()
       inspectionDetails.clear()
 
@@ -180,7 +212,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           row.append(line)
         }
 
-        if (component.readOnly) {
+        if (component.readOnly && !contextual) {
           const name = document.createElement('span')
           name.textContent = type.label
           line.append(name)
@@ -190,7 +222,8 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           button.dataset.itemId = item.id
           button.textContent = type.label
           button.addEventListener('click', () => {
-            selected = item.id
+            if (contextual && scene) actionBar?.selectInventoryItem(scene, component.id, item.id)
+            else selected = item.id
             status.textContent = ''
             syncSelection(choices)
           })
@@ -232,7 +265,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           row.append(list)
         }
 
-        if (type.inspection && context.actions) {
+        if (type.inspection && type.inspection.inline !== false && context.actions) {
           const { action, details: binding } = type.inspection
           const inspect = document.createElement('button')
           inspect.type = 'button'
@@ -240,7 +273,10 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           inspect.textContent = 'Inspect'
           inspect.setAttribute('aria-label', `Inspect ${type.label}`)
           inspect.addEventListener('click', () => {
-            if (inspectionDetails.has(details)) context.actions?.request(action, item.id)
+            if (!inspectionDetails.has(details)) return
+
+            if (contextual && scene) actionBar?.selectInventoryItem(scene, component.id, item.id)
+            context.actions?.request(action, item.id)
           })
           const details = document.createElement('p')
           details.className = 'ancadeba-inventory-inspection'
@@ -345,11 +381,13 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
       owners.replaceChildren(...sections)
       updateInspections()
+      selectionChoices = choices
 
       if (selected !== undefined && !buttons.has(selected)) selected = undefined
       syncSelection(choices)
 
       if (restoreFocus && selected !== undefined) buttons.get(selected)?.focus()
+      else if (lostButtonFocus) context.onActionBarFocusLost?.()
     }
 
     select.addEventListener('change', () => {
@@ -371,8 +409,12 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     update()
     const unsubscribe = inventory.subscribeChanges(update)
 
+    const unsubscribeContext = contextual
+      ? actionBar?.subscribeChanges(() => syncSelection(selectionChoices))
+      : undefined
+
     const unsubscribeInspections = Object.values(definition.itemTypes).some(
-      (type) => type.inspection,
+      (type) => type.inspection && type.inspection.inline !== false,
     )
       ? context.bindings?.subscribeChanges(updateInspections)
       : undefined
@@ -381,6 +423,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
       element: root,
       dispose() {
         unsubscribe()
+        unsubscribeContext?.()
         unsubscribeInspections?.()
         inspectionDetails.clear()
 

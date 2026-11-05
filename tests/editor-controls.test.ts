@@ -8,10 +8,18 @@ import {
   type EditorCommand,
   type ProjectSnapshot,
 } from '@ancadeba/editor-core'
-import { actionBarComponentSchema, inputSchema } from '@ancadeba/schemas'
+import {
+  actionBarComponentSchema,
+  inputSchema,
+  inventorySchema,
+  sceneComponentSchema,
+} from '@ancadeba/schemas'
 import { bindActionBarPanel } from '../apps/editor-ui/src/actionBarPanel.js'
 import { createInputDraft, readInputDraft } from '../apps/editor-ui/src/inputDefinitionForm.js'
 import type { ProjectEditorState } from '../apps/editor-ui/src/projectController.js'
+import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm.js'
+import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
+import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -251,6 +259,10 @@ class Control extends EventTarget {
 }
 
 class ControlDocument {
+  asDocument(): Document {
+    // @ts-expect-error -- Partial DOM fixture supplies the form's document operations.
+    return this
+  }
   createElement(tag: string): Control {
     return new Control(this, tag)
   }
@@ -322,6 +334,140 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors directional movement for an interactive map in the selected scene', () => {
+    const { controls, initial, edit, submit, commands } = panel()
+    const view = structuredClone(initial.view!)
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'world-map',
+        type: 'map-view',
+        map: 'world',
+        label: 'World map',
+        placement: { row: 1, column: 2 },
+        viewport: { columns: 3, rows: 3 },
+        playerSpawn: { x: 1, y: 1 },
+      }),
+    )
+    controls.render({ ...initial, view }, true)
+    edit('Action type', 'move-map')
+    edit('Slot label', 'West')
+    edit('Target map view', 'world-map')
+    edit('Direction', 'west')
+    submit('Save action bar')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': {
+            label: 'West',
+            action: { type: 'move-map', mapView: 'world-map', direction: 'west' },
+          },
+        },
+      },
+    })
+  })
+
+  it('configures inline inspection independently of its action and output binding', () => {
+    const { initial, root, edit, submit, commands } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [{ path: ['result'], value: '' }],
+      actions: { inspect: [{ when: [], effects: [] }] },
+    }
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: {
+        letter: {
+          label: 'Letter',
+          inspection: {
+            action: 'inspect',
+            details: { source: 'game.state', path: ['result'] },
+          },
+        },
+      },
+      owners: {},
+      items: {},
+    })
+    root.replaceChildren()
+    root.asElement().append(
+      ...ruleTriggerForms(
+        ruleFormControls(root.ownerDocument.asDocument(), () => {}),
+        view,
+        (command) => commands.push(command),
+      ),
+    )
+    expect(root.textContent).toContain('To show results in the main text')
+    edit('Show inspection in inventory', 'no')
+    submit('Save inspection')
+    expect(commands[0]).toEqual({
+      type: 'inventory.setRuleInspection',
+      itemType: 'letter',
+      inspection: {
+        action: 'inspect',
+        details: { source: 'game.state', path: ['result'] },
+        inline: false,
+      },
+    })
+  })
+
+  it('authors inventory providers and game-defined selected-item actions', () => {
+    const { controls, initial, edit, submit, commands, root, click } = panel()
+    const view = structuredClone(initial.view!)
+    view.game!.inventory = ['items']
+    view.game!.rules = ['items']
+    view.rules = { state: [], actions: { act: [{ when: [], effects: [] }] } }
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { letter: { label: 'Letter' } },
+      owners: { player: { label: 'Player' } },
+      items: {},
+    })
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'items',
+        type: 'inventory',
+        label: 'Inventory',
+        owners: ['player'],
+        placement: { row: 1, column: 2 },
+      }),
+    )
+    controls.render({ ...initial, view }, true)
+    edit('Action type', 'inventory-action')
+    edit('Slot label', 'Inspect')
+    edit('Inventory panel', 'items')
+    edit('Item action ID', 'inspect')
+    submit('Save action bar')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': { action: { type: 'inventory-action', inventory: 'items', action: 'inspect' } },
+        },
+      },
+    })
+    root.replaceChildren()
+    let edited = false
+    root.asElement().append(
+      inventoryActionsForm(
+        ruleFormControls(root.ownerDocument.asDocument(), () => {
+          edited = true
+        }),
+        view,
+        (command) => {
+          commands.push(command)
+        },
+      ),
+    )
+    click('Add item action')
+    edit('Item action ID', 'read')
+    submit('Save item actions')
+    expect(edited).toBe(true)
+    expect(commands[1]).toEqual({
+      type: 'inventory.setItemActions',
+      itemType: 'letter',
+      actions: { read: { action: 'act' } },
+    })
+  })
   it('edits slot content and bindings, preserves dirty drafts on conflict, and guards scene changes', () => {
     const { controls, commands, root, initial, field, edit, submit } = panel()
     expect(root.all().filter((node) => node.className === 'action-bar-slot')).toHaveLength(15)

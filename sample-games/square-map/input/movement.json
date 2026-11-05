@@ -1,0 +1,23 @@
+{
+  "schema-version": "1.0.0",
+  "virtual-keys": ["north", "east", "south", "west"],
+  "keyboard": {
+    "KeyW": "north",
+    "ArrowUp": "north",
+    "KeyD": "east",
+    "ArrowRight": "east",
+    "KeyS": "south",
+    "ArrowDown": "south",
+    "KeyA": "west",
+    "ArrowLeft": "west"
+  },
+  "contexts": {
+    "explore": {
+      "north": "north",
+      "east": "east",
+      "south": "south",
+      "west": "west"
+    }
+  },
+  "initial-context": "explore"
+}

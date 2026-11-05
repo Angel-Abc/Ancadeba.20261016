@@ -11,6 +11,11 @@ import {
 const labelSchema = z.string().trim().min(1)
 const colorsSchema = z.record(gameIdSchema, colorSchema)
 
+export const inventoryItemActionSchema = z.object({
+  action: gameIdSchema,
+  enabledWhen: gameBindingSchema.optional(),
+})
+
 export const inventoryPlacementSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('carried'), owner: gameIdSchema }),
   z.object({ type: z.literal('equipped'), owner: gameIdSchema, slot: gameIdSchema }),
@@ -23,7 +28,14 @@ const itemTypeSchema = z.object({
   equipmentSlots: z.array(gameIdSchema).default([]),
   icon: gameIdSchema.optional(),
   wornPart: gameIdSchema.optional(),
-  inspection: z.object({ action: gameIdSchema, details: gameBindingSchema }).optional(),
+  inspection: z
+    .object({
+      action: gameIdSchema,
+      details: gameBindingSchema,
+      inline: z.boolean().optional(),
+    })
+    .optional(),
+  actions: z.record(gameIdSchema, inventoryItemActionSchema).optional(),
 })
 
 export const inventorySchema = z.object({

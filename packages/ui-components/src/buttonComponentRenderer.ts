@@ -13,9 +13,17 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     element.className = 'ancadeba-button'
     element.textContent = component.label
     const action = component.action
+    const scene = context.scene
+    const movement = scene?.type === 'game' ? scene.game.mapMovement : undefined
     let active = true
 
     const update = () => {
+      if (action?.type === 'move-map') {
+        element.disabled = !scene || !movement?.canMove(scene, action.mapView, action.direction)
+
+        return
+      }
+
       if (action?.type !== 'request-action') {
         element.disabled = !action || !context.onButtonActivate
 
@@ -31,6 +39,12 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     const onClick = () => {
       if (!active || element.disabled || !action) return
 
+      if (action.type === 'move-map') {
+        if (scene) movement?.move(scene, action.mapView, action.direction)
+
+        return
+      }
+
       if (action.type === 'request-action') context.actions?.request(action.action)
       else context.onButtonActivate?.(action)
     }
@@ -42,6 +56,9 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
         ? context.bindings?.subscribeChanges(update)
         : undefined
 
+    const unsubscribeMovement =
+      action?.type === 'move-map' ? movement?.subscribeChanges(update) : undefined
+
     if (action) element.addEventListener('click', onClick)
 
     return {
@@ -50,6 +67,7 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
         if (!active) return
         active = false
         unsubscribe?.()
+        unsubscribeMovement?.()
         element.removeEventListener('click', onClick)
         element.remove()
       },

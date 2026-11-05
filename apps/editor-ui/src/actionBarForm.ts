@@ -23,6 +23,7 @@ export function actionBarForm(
   selectedSlot: string,
   selectSlot: (id: string) => void,
   change: (edit: () => void) => void,
+  sceneId?: string,
 ): HTMLElement[] {
   const { create, input, select, button, group } = controls
   const grid = create('div')
@@ -52,6 +53,20 @@ export function actionBarForm(
   const slot = draft.slots[selectedSlot]
   const actions = Object.keys(view.rules?.actions ?? {})
   const gameScenes = view.scenes.filter(({ type }) => type === 'game').map(({ id }) => id)
+
+  const inventoryPanels =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter((component) => component.type === 'inventory') ?? []
+
+  const mapViews =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter(
+        (component) =>
+          component.type === 'map-view' && component.interactive !== false && component.playerSpawn,
+      ) ?? []
+
   const detail = group(`Slot ${selectedSlot}`)
   detail.append(
     select(
@@ -62,6 +77,8 @@ export function actionBarForm(
         ['request-action', 'Request game action'],
         ['enter-scene', 'Enter scene'],
         ['new-game', 'New game'],
+        ['inventory-action', 'Selected inventory item'],
+        ['move-map', 'Move on map'],
       ],
       (type) =>
         change(() => {
@@ -74,12 +91,16 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'request-action'
-                ? { type, action: actions[0] ?? '' }
-                : {
-                    type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                    scene: gameScenes[0] ?? '',
-                  },
+              type === 'move-map'
+                ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                : type === 'inventory-action'
+                  ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                  : type === 'request-action'
+                    ? { type, action: actions[0] ?? '' }
+                    : {
+                        type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                        scene: gameScenes[0] ?? '',
+                      },
           }
         }),
     ),
@@ -102,7 +123,43 @@ export function actionBarForm(
     )
     const action = slot.action
 
-    if (action.type === 'request-action') {
+    if (action.type === 'move-map') {
+      detail.append(
+        select(
+          'Target map view',
+          action.mapView,
+          mapViews.map(({ id }) => id),
+          (value) => {
+            action.mapView = value
+          },
+        ),
+        select('Direction', action.direction, ['north', 'east', 'south', 'west'], (value) => {
+          if (value === 'north' || value === 'east' || value === 'south' || value === 'west')
+            action.direction = value
+        }),
+      )
+
+      if (!mapViews.length)
+        detail.append('Add an interactive map view with a player spawn in this scene first.')
+    } else if (action.type === 'inventory-action') {
+      detail.append(
+        select(
+          'Inventory panel',
+          action.inventory,
+          inventoryPanels.map(({ id }) => id),
+          (value) => {
+            action.inventory = value
+          },
+        ),
+        input('Item action ID', action.action, (value) => {
+          action.action = value.trim()
+        }),
+      )
+      const help = create('p')
+      help.textContent =
+        'The slot appears when a selected item supports this action. The inspect ID uses its existing inspection action.'
+      detail.append(help)
+    } else if (action.type === 'request-action') {
       const binding = action.enabledWhen
 
       const options = (view.rules?.state ?? [])

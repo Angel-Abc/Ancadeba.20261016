@@ -60,8 +60,17 @@ export function editControls(
               action: {
                 ...object(previousSlot.action),
                 ...action,
-                scene: action.type === 'request-action' ? undefined : action.scene,
-                action: action.type === 'request-action' ? action.action : undefined,
+                scene:
+                  action.type === 'enter-scene' || action.type === 'new-game'
+                    ? action.scene
+                    : undefined,
+                action:
+                  action.type === 'request-action' || action.type === 'inventory-action'
+                    ? action.action
+                    : undefined,
+                inventory: action.type === 'inventory-action' ? action.inventory : undefined,
+                mapView: action.type === 'move-map' ? action.mapView : undefined,
+                direction: action.type === 'move-map' ? action.direction : undefined,
                 enabledWhen: action.type === 'request-action' ? action.enabledWhen : undefined,
               },
               inputBinding: slot.inputBinding

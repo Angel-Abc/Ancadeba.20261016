@@ -52,11 +52,8 @@ export class SceneRenderer {
     if (this.disposed) return
     const focused = this.target.ownerDocument.activeElement
 
-    // SAFETY: the owned scene contains only HTML elements created by its renderers.
-    const focusedSlot =
-      focused &&
-      this.scene?.element.contains(focused) &&
-      (focused as HTMLElement).dataset.actionBarSlot
+    const focusedButton =
+      focused && this.scene?.element.contains(focused) && focused.tagName === 'BUTTON'
 
     // SAFETY: this renderer creates only HTML elements inside its owned scene.
     const focusedId =
@@ -82,7 +79,7 @@ export class SceneRenderer {
       const active = this.target.ownerDocument.activeElement
 
       if (
-        focusedSlot &&
+        focusedButton &&
         (!active || active === focused || active === this.target.ownerDocument.body)
       )
         this.options.onActionBarFocusLost?.()

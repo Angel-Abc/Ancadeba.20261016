@@ -13,6 +13,7 @@ import {
   requestActionSchema,
   actionBarComponentSchema,
   inputSchema,
+  inventoryItemActionSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -84,7 +85,13 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('inventory.setRuleInspection'),
     itemType: gameIdSchema,
-    inspection: z.strictObject({ action: gameIdSchema, details: gameBindingSchema }).nullable(),
+    inspection: z
+      .strictObject({
+        action: gameIdSchema,
+        details: gameBindingSchema,
+        inline: z.boolean().optional(),
+      })
+      .nullable(),
   }),
   z.strictObject({
     type: z.literal('scene.setActionBar'),
@@ -95,6 +102,11 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('game.updateInput'),
     inputId: gameIdSchema,
     input: inputSchema,
+  }),
+  z.strictObject({
+    type: z.literal('inventory.setItemActions'),
+    itemType: gameIdSchema,
+    actions: z.record(gameIdSchema, inventoryItemActionSchema),
   }),
 ])
 
@@ -130,6 +142,14 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'inventory.setItemActions',
+      example: {
+        type: 'inventory.setItemActions',
+        itemType: 'letter',
+        actions: { read: { action: 'read-letter' } },
+      },
+    },
     {
       type: 'scene.setActionBar',
       example: {

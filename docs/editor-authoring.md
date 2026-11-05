@@ -27,20 +27,21 @@ unchanged.
 
 Each request contains one command. Metadata commands supply all listed fields.
 
-| Command                    | Fields                                                             |
-| -------------------------- | ------------------------------------------------------------------ |
-| `game.updateMetadata`      | `title`, `description`, `version`                                  |
-| `scene.create`             | A complete `scene` matching the current scene schema               |
-| `scene.updateMetadata`     | `sceneId`, `title`, `description`                                  |
-| `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`                   |
-| `assets.upsertImage`       | `id`, complete `image` definition                                  |
-| `assets.upsertPart`        | `id`, complete `part` definition                                   |
-| `assets.upsertComposition` | `id`, complete `composition` definition                            |
-| `assets.remove`            | `kind` (`images`, `parts`, or `compositions`), `id`                |
-| `scene.upsertGraphic`      | `sceneId`, complete graphic `component`                            |
-| `scene.removeGraphic`      | `sceneId`, `componentId`                                           |
-| `scene.setActionBar`       | `sceneId`, complete action-bar `component`, or `null` to remove it |
-| `game.updateInput`         | `inputId`, complete input `input` definition                       |
+| Command                    | Fields                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `game.updateMetadata`      | `title`, `description`, `version`                                                    |
+| `scene.create`             | A complete `scene` matching the current scene schema                                 |
+| `scene.updateMetadata`     | `sceneId`, `title`, `description`                                                    |
+| `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`                                     |
+| `assets.upsertImage`       | `id`, complete `image` definition                                                    |
+| `assets.upsertPart`        | `id`, complete `part` definition                                                     |
+| `assets.upsertComposition` | `id`, complete `composition` definition                                              |
+| `assets.remove`            | `kind` (`images`, `parts`, or `compositions`), `id`                                  |
+| `scene.upsertGraphic`      | `sceneId`, complete graphic `component`                                              |
+| `scene.removeGraphic`      | `sceneId`, `componentId`                                                             |
+| `scene.setActionBar`       | `sceneId`, complete action-bar `component`, or `null` to remove it                   |
+| `game.updateInput`         | `inputId`, complete input `input` definition                                         |
+| `inventory.setItemActions` | `itemType`, map of item action IDs to requested actions and optional enable bindings |
 
 Scene creation updates both the scene document and the manifest reference.
 Game and scene IDs cannot be changed. Scenes support text, buttons, language selectors,
@@ -200,6 +201,14 @@ requested action or scene navigation, boolean enable condition, and context/inpu
 binding. Choose **Empty slot** to clear a position. Bars can be added to game
 scenes and removed using the panel's controls.
 
+Choose **Move on map** as a slot's action type to expose directional movement.
+Select **Target map view** from the interactive maps in that scene and choose
+**Direction** (`north`, `east`, `south`, or `west`). The map must have a player
+spawn and must not set `interactive: false`. Save those map settings in the
+project files before configuring movement slots. Each slot can use any of the
+game's existing context/input bindings. Buttons disable for blocked destinations
+and while a step is underway. The Coast Road sample demonstrates this setup.
+
 **Game input bindings** edits the existing physical-key → virtual-key →
 context-specific input pipeline. Configure virtual keys, physical keyboard codes,
 context mappings, and the initial context. Multiple physical keys can map to the
@@ -213,6 +222,27 @@ changes before assigning newly created inputs to slots. The slot editor shows al
 saved physical shortcuts for each binding. Both forms use revision-checked saves,
 keep their drafts on conflicts, and preserve drafts in the other form after a save.
 Restart the preview to load the saved configuration.
+
+To populate a slot from inventory selection, choose **Selected inventory item** as
+its action type, select an inventory panel from the same scene, and enter an item
+action ID. The `inspect` ID uses the item's inspection definition. Under **Rules →
+Trigger links → Selected-item actions**, configure additional IDs such as `read`
+or `use`, their requested game actions, and boolean enable conditions. Requests
+include the selected item ID as their payload, supporting `payload-is-item` rules.
+Only applicable item actions appear in the reserved slots. Scene commands remain
+available beside them. Inventory names become selectable in linked read-only
+panels, and **Clear selection** removes their contextual actions.
+
+Under **Rules → Trigger links → Inventory inspection**, set **Show inspection in
+inventory** to **Hide inline inspection** to remove the inventory Inspect button
+and result. This keeps its action available to contextual slots. Existing games
+retain inline inspection when this setting is omitted.
+
+To place results in the main narrative, add a string state field in **Rules**, have
+the inspection action set that field, and bind it in the scene's main text with an
+alias such as `{{inspection}}`. The basic sample uses `inspectionResult` for this
+purpose. Its rules clear the result after other actions and show it again on
+reinspection, without repeating discovery effects.
 
 ### Extending the project explorer
 

@@ -11,6 +11,11 @@
         ],
         "effects": [
           {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
+          {
             "type": "enter-scene",
             "scene": "old-harbour",
             "mapView": "harbour-map"
@@ -33,6 +38,11 @@
           }
         ],
         "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
           {
             "type": "enter-scene",
             "scene": "standard",
@@ -67,6 +77,11 @@
         ],
         "effects": [
           {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
+          {
             "type": "enter-scene",
             "scene": "shoals",
             "mapView": "harbour-map"
@@ -89,6 +104,11 @@
           }
         ],
         "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
           {
             "type": "enter-scene",
             "scene": "old-harbour",
@@ -123,6 +143,11 @@
         ],
         "effects": [
           {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
+          {
             "type": "enter-scene",
             "scene": "north-cliff-landing",
             "mapView": "harbour-map"
@@ -145,6 +170,11 @@
           }
         ],
         "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": ""
+          },
           {
             "type": "enter-scene",
             "scene": "shoals",

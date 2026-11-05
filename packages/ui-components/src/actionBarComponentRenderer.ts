@@ -19,24 +19,36 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
     const root = document.createElement('div')
     root.className = 'ancadeba-action-bar'
     const actionBar = scene?.type === 'game' ? scene.game.actionBar : undefined
-    const buttons = new Map<string, { button: HTMLButtonElement; badge: HTMLElement }>()
+
+    const buttons = new Map<
+      string,
+      { button: HTMLButtonElement; badge: HTMLElement; empty: HTMLElement | undefined }
+    >()
+
     const cleanups: (() => void)[] = []
     let active = true
 
     const update = () => {
       if (!active) return
 
-      for (const [id, { button, badge }] of buttons) {
+      for (const [id, { button, badge, empty }] of buttons) {
         const focused = document.activeElement === button
 
+        const available =
+          component.slots[id]!.action.type !== 'inventory-action' ||
+          Boolean(scene && actionBar?.getSlot(scene, component.id, id))
+
         button.disabled = !scene || !actionBar?.isEnabled(scene, component.id, id)
+        button.hidden = !available
+
+        if (empty) empty.hidden = available
 
         if (focused && button.disabled) context.onActionBarFocusLost?.()
 
         const binding = component.slots[id]!.inputBinding
 
         const codes =
-          binding && binding.context === input?.context
+          available && binding && binding.context === input?.context
             ? (input.getKeyboardCodes?.(binding.context, binding.input) ?? [])
             : []
 
@@ -64,7 +76,11 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         button.className = 'ancadeba-button ancadeba-action-bar-button'
         button.dataset.actionBarSlot = id
         button.dataset.slotAction =
-          slot.action.type === 'request-action' ? slot.action.action : slot.action.scene
+          slot.action.type === 'move-map'
+            ? `${slot.action.mapView}:${slot.action.direction}`
+            : 'action' in slot.action
+              ? slot.action.action
+              : slot.action.scene
         const label = document.createElement('span')
         label.textContent = slot.label
         const badge = document.createElement('kbd')
@@ -77,8 +93,18 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
 
         button.addEventListener('click', activate)
         cleanups.push(() => button.removeEventListener('click', activate))
-        buttons.set(id, { button, badge })
-        root.append(button)
+        let empty: HTMLElement | undefined
+
+        if (slot.action.type === 'inventory-action') {
+          const cell = document.createElement('div')
+          cell.className = 'ancadeba-action-bar-cell'
+          empty = document.createElement('div')
+          empty.className = 'ancadeba-action-bar-empty'
+          empty.setAttribute('aria-hidden', 'true')
+          cell.append(button, empty)
+          root.append(cell)
+        } else root.append(button)
+        buttons.set(id, { button, badge, empty })
       }
 
       update()
@@ -88,6 +114,9 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
       const unsubscribeInput = input?.subscribeContextChanges?.(update)
 
       if (unsubscribeInput) cleanups.push(unsubscribeInput)
+      const unsubscribeContext = actionBar?.subscribeChanges(update)
+
+      if (unsubscribeContext) cleanups.push(unsubscribeContext)
     } catch (error) {
       for (const cleanup of cleanups.reverse()) cleanup()
       root.remove()

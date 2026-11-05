@@ -37,7 +37,14 @@
         "rowSpan": 6,
         "columnSpan": 8
       },
-      "textKey": "scenes.old-harbour.narrative"
+      "textKey": "scenes.old-harbour.narrative",
+      "bindings": {
+        "inspection": {
+          "source": "game.state",
+          "path": ["inspectionResult"],
+          "fallback": ""
+        }
+      }
     },
     {
       "id": "nearby",
@@ -183,6 +190,30 @@
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-2"
+          }
+        },
+        "4": {
+          "labelKey": "actions.inspect",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "inspect"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "actions.read",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "read"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
           }
         }
       }

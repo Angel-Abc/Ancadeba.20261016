@@ -345,8 +345,8 @@ menus, and status templates.
 
 ## Scene rendering
 
-Open `square-map` in the editor preview to try Coast Road. Click or Tab to the
-map and use the arrow keys to move the player one tile at a time. The viewport
+Open `square-map` in the editor preview to try Coast Road. Use its North, East,
+South, and West action-bar buttons, WASD, or arrow keys to move one tile at a time. The viewport
 follows the player and shows 9 columns and 6 rows of a
 16 by 10 map. For a standalone copy, run `pnpm export:game sample-games/square-map`.
 
@@ -361,6 +361,29 @@ beach. A `map-view` scene component references the map by ID and sets
 identify the top-left visible tile when panning manually. Set `playerSpawn` to
 zero-based map coordinates to place a player and make the viewport follow them.
 The player and viewport both stop at the map edges.
+
+In a game scene, regular buttons and action-bar slots can move a specific map
+view with an action such as:
+
+```json
+{ "type": "move-map", "mapView": "coast-map", "direction": "north" }
+```
+
+Directions are `north`, `east`, `south`, and `west`. The target is a component ID
+in the same scene, with `playerSpawn` set and `interactive` enabled (the default).
+Invalid targets, maps without a player, and maps with `interactive: false` are
+rejected. Authors choose which scenes expose movement and where each direction
+sits in the bar. Slots use the game's existing `inputBinding` context/input pair;
+physical keys remain in the game's input file. Coast Road demonstrates WASD and
+arrow keys mapped to the same directional inputs.
+
+The per-playthrough `mapMovement` service shares scene-local positions between
+the map view, buttons, and keyboard. A movement button disables when the destination
+is blocked or outside the map, and all directions disable while a step is pending.
+Terrain delays use the injected scheduler, matching focused-map arrow movement;
+they do not advance game turns or world time. Leaving the scene cancels pending
+steps, and a new scene instance starts at its authored spawn. Display-only maps
+and standalone maps retain their existing behavior.
 
 Both browser hosts use `mountGameView` and `SceneRenderer` from
 `@ancadeba/ui-components`. The engine opens the scene selected by `initial-scene`
@@ -466,7 +489,7 @@ Game stylesheets use a browser with native `@scope` support and may include
 selectors, media queries, support queries, and container queries. Keep the CSS
 self-contained. Imports are ignored and global at-rules such as `@font-face`,
 `@keyframes`, and `@layer` are rejected. The museum's `museum.css` sets inventory
-column widths and styles the inspection details.
+column widths and includes an optional style for inline inspection details.
 
 Appearance can be adjusted on a containing element through CSS custom properties:
 
@@ -1521,10 +1544,42 @@ including while disabled. They activate once on `pressed` and consume the matchi
 controls. Captured slot input belongs to its originating scene instance and is
 discarded if that scene is disposed before delivery.
 
-Standalone play and editor preview share this behavior. Shortcuts work while a
-bar button has focus, with Enter and Space retaining native button activation.
-Leaving a focused bar through a scene transition returns focus to the game surface.
+Standalone play and editor preview share this behavior. Action-bar shortcuts work
+while game buttons have focus, including inventory Inspect buttons, with Enter
+and Space retaining native button activation.
+Leaving a focused game button through a scene transition returns focus to the game surface.
 Project diagnostics, startup, and export validate the component and its references.
+
+Slots can also use `{ "type": "inventory-action", "inventory": "items", "action": "inspect" }`.
+Here `items` identifies an inventory component in the same scene. Selecting an item
+in that panel populates the slot when the item supports its action. The `inspect`
+ID uses the item's existing inspection action. Additional actions belong to the
+item type, for example `"actions": { "read": { "action": "read-letter" } }`.
+Each action can include an `enabledWhen` binding, and its request receives the
+selected item's ID as the payload. Explicit item actions take priority over the
+implicit inspection action with the same ID.
+
+Inventory inspection is optional presentation. Set `inspection.inline` to `false`
+on an item type to hide its inventory Inspect button and inline result while keeping
+its action available to the action bar. Omitting the flag retains inline inspection
+for existing games. The editor exposes this under **Rules → Trigger links → Inventory
+inspection → Show inspection in inventory**.
+
+An inspection action can write its result to an ordinary string state field using
+`set-state`. Bind that field in the scene's main text and include its alias in the
+text template, for example `{{inspection}}` with
+`"inspection": { "source": "game.state", "path": ["inspectionResult"] }`.
+The basic sample uses this flow: Inspect and Read show localized results in the main
+narrative, later actions clear the result, and repeated inspection shows it again
+without repeating discovery effects. Games can choose their own output bindings
+and rules for retaining or replacing results.
+
+Contextual slots use the game's regular input bindings and coexist with scene
+commands. Unsupported actions display an empty cell. Clear selection removes the
+item actions, as does moving the selected item or its container outside the panel's
+owners. Scene transitions clear selection. Queued and held shortcuts retain their
+original item selection and are discarded if it changes before activation. The
+basic game's museum and harbour demonstrate Inspect on R and Read on T.
 
 ## Queued messaging
 

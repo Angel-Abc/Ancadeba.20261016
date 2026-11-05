@@ -9,12 +9,16 @@ export interface KeyboardInputSink {
   reset(): void
 }
 
-function usesNativeKeyboard(element: Element | null): boolean {
+function usesNativeKeyboard(element: Element | null, allowButtons = false): boolean {
   if (element && 'isContentEditable' in element && element.isContentEditable === true) return true
   const button = element?.closest('button')
 
   // SAFETY: the button selector identifies an HTML button with an HTMLElement dataset.
-  if (button && 'dataset' in button && (button as HTMLElement).dataset.actionBarSlot) return false
+  if (
+    button &&
+    (allowButtons || ('dataset' in button && (button as HTMLElement).dataset.actionBarSlot))
+  )
+    return false
 
   return Boolean(
     element &&
@@ -39,15 +43,22 @@ export function bindKeyboardInput(
     input.reset()
   }
 
-  const hasFocus = () =>
+  const hasFocus = (allowButtons: boolean) =>
     !document.hidden &&
     surface.contains(document.activeElement) &&
-    !usesNativeKeyboard(document.activeElement)
+    !usesNativeKeyboard(document.activeElement, allowButtons)
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
 
-    if (!hasFocus() || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
+    if (
+      !hasFocus(capturesKey?.(event.code) === true) ||
+      event.isComposing ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    )
+      return
 
     // Native button activation owns Enter and Space, even when a game maps those codes.
     if (

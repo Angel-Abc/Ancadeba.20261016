@@ -52,7 +52,7 @@
       "placement": {
         "row": 3,
         "column": 3,
-        "rowSpan": 7,
+        "rowSpan": 6,
         "columnSpan": 8
       },
       "textKey": "scenes.gallery.components.narrative.text",
@@ -61,6 +61,11 @@
           "source": "game.state",
           "path": ["caseDescription"],
           "fallback": "A locked display case bears a brass crest with two raised symbols."
+        },
+        "inspection": {
+          "source": "game.state",
+          "path": ["inspectionResult"],
+          "fallback": ""
         }
       }
     },
@@ -86,7 +91,7 @@
       "id": "footer",
       "type": "text",
       "placement": {
-        "row": 12,
+        "row": 9,
         "column": 3,
         "rowSpan": 1,
         "columnSpan": 8
@@ -188,75 +193,95 @@
       }
     },
     {
-      "id": "press-crown",
-      "type": "button",
+      "id": "action-bar",
+      "type": "action-bar",
       "placement": {
         "row": 10,
         "column": 3,
-        "rowSpan": 1,
-        "columnSpan": 4
+        "rowSpan": 3,
+        "columnSpan": 8
       },
-      "labelKey": "museum.press-crown",
-      "action": {
-        "type": "request-action",
-        "action": "press-crown",
-        "enabledWhen": {
-          "source": "game.state",
-          "path": ["canOpenCase"]
+      "slots": {
+        "1": {
+          "labelKey": "museum.walk-west",
+          "action": {
+            "type": "request-action",
+            "action": "walk-west"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "labelKey": "museum.press-crown",
+          "action": {
+            "type": "request-action",
+            "action": "press-crown",
+            "enabledWhen": {
+              "source": "game.state",
+              "path": ["canOpenCase"]
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "3": {
+          "labelKey": "museum.press-heron",
+          "action": {
+            "type": "request-action",
+            "action": "press-heron",
+            "enabledWhen": {
+              "source": "game.state",
+              "path": ["canOpenCase"]
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "4": {
+          "labelKey": "actions.inspect",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "inspect"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "actions.read",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "read"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "6": {
+          "labelKey": "museum.take-chart",
+          "action": {
+            "type": "request-action",
+            "action": "take-chart",
+            "enabledWhen": {
+              "source": "game.state",
+              "path": ["canTakeChart"]
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
         }
-      }
-    },
-    {
-      "id": "press-heron",
-      "type": "button",
-      "placement": {
-        "row": 10,
-        "column": 7,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "museum.press-heron",
-      "action": {
-        "type": "request-action",
-        "action": "press-heron",
-        "enabledWhen": {
-          "source": "game.state",
-          "path": ["canOpenCase"]
-        }
-      }
-    },
-    {
-      "id": "take-chart",
-      "type": "button",
-      "placement": {
-        "row": 11,
-        "column": 3,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "museum.take-chart",
-      "action": {
-        "type": "request-action",
-        "action": "take-chart",
-        "enabledWhen": {
-          "source": "game.state",
-          "path": ["canTakeChart"]
-        }
-      }
-    },
-    {
-      "id": "walk-west",
-      "type": "button",
-      "placement": {
-        "row": 11,
-        "column": 7,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "museum.walk-west",
-      "action": {
-        "type": "request-action",
-        "action": "walk-west"
       }
     }
   ]

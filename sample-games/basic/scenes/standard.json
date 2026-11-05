@@ -53,7 +53,14 @@
         "rowSpan": 6,
         "columnSpan": 8
       },
-      "textKey": "scenes.standard.components.narrative.text"
+      "textKey": "scenes.standard.components.narrative.text",
+      "bindings": {
+        "inspection": {
+          "source": "game.state",
+          "path": ["inspectionResult"],
+          "fallback": ""
+        }
+      }
     },
     {
       "id": "nearby",
@@ -223,6 +230,30 @@
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-3"
+          }
+        },
+        "4": {
+          "labelKey": "actions.inspect",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "inspect"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "actions.read",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "read"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
           }
         }
       }

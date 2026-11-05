@@ -161,6 +161,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
           barDirty = true
           renderBar()
         },
+        sceneId,
       ),
     )
     form.addEventListener('submit', (event) => {

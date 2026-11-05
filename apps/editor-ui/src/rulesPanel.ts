@@ -187,7 +187,8 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       const triggerSaved =
         replaceFields &&
         (state.lastCommand === 'scene.upsertRuleButton' ||
-          state.lastCommand === 'inventory.setRuleInspection')
+          state.lastCommand === 'inventory.setRuleInspection' ||
+          state.lastCommand === 'inventory.setItemActions')
 
       const reset = projectChanged || (replaceFields && !state.preserveDrafts)
 

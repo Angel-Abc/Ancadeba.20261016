@@ -78,7 +78,7 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     return box
   }
 
-  return { create, input, select, button, group }
+  return { create, input, select, button, group, markEdited: onEdit }
 }
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>

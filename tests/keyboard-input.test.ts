@@ -135,7 +135,7 @@ function key(
   return event
 }
 
-function setup() {
+function setup(capturesKey?: (code: string) => boolean) {
   const document = new TestDocument()
   const surface = document.createElement('section')
   const messages = new MessageBus<EngineMessages>()
@@ -155,7 +155,7 @@ function setup() {
 
   const handler = vi.fn<(event: EngineMessages['input.virtual']) => void>()
   messages.subscribe('input.virtual', handler)
-  const cleanup = bindKeyboardInput(surface.asElement(), input)
+  const cleanup = bindKeyboardInput(surface.asElement(), input, capturesKey)
 
   return { document, surface, messages, input, handler, cleanup }
 }
@@ -183,6 +183,49 @@ describe('browser timing adapter', () => {
 })
 
 describe('shared keyboard adapter', () => {
+  it('accepts claimed action-bar keys while an inventory Inspect button has focus', () => {
+    const { document, surface, messages, input, handler, cleanup } = setup((code) =>
+      ['KeyW', 'Enter', 'Space'].includes(code),
+    )
+
+    input.setContext('menu')
+    const inspect = document.createElement('button')
+    inspect.dataset.inspectItem = 'folded-letter'
+    surface.append(inspect)
+    document.activeElement = inspect
+    surface.dispatchEvent(new Event('focusin'))
+    expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(true)
+    expect(key(surface, 'keydown', 'KeyW', { repeat: true }).defaultPrevented).toBe(true)
+    expect(key(surface, 'keyup', 'KeyW').defaultPrevented).toBe(true)
+    expect(key(surface, 'keydown', 'ArrowUp').defaultPrevented).toBe(false)
+    expect(key(surface, 'keydown', 'Enter').defaultPrevented).toBe(false)
+    expect(key(surface, 'keydown', 'Space').defaultPrevented).toBe(false)
+    expect(key(surface, 'keydown', 'KeyW', { ctrlKey: true }).defaultPrevented).toBe(false)
+    messages.flush()
+    expect(handler.mock.calls.map(([event]) => event)).toEqual([
+      { context: 'menu', input: 'selectPrevious', phase: 'pressed' },
+      { context: 'menu', input: 'selectPrevious', phase: 'released' },
+    ])
+    expect(document.activeElement).toBe(inspect)
+    cleanup()
+  })
+
+  it.each(['input', 'textarea', 'select', 'contenteditable', 'outside'])(
+    'ignores claimed action-bar keys while focus is in %s',
+    (kind) => {
+      const { document, surface, messages, handler, cleanup } = setup(() => true)
+      const target = document.createElement(kind === 'outside' ? 'button' : kind)
+      target.isContentEditable = kind === 'contenteditable'
+
+      if (kind !== 'outside') surface.append(target)
+      document.activeElement = target
+      expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(false)
+      messages.flush()
+      expect(handler).not.toHaveBeenCalled()
+      cleanup()
+    },
+  )
+
   it('accepts shortcuts on action-bar buttons while preserving native Enter and Space', () => {
     const { document, surface, messages, input, handler, cleanup } = setup()
     input.setContext('menu')

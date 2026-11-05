@@ -34,10 +34,17 @@
       "placement": {
         "row": 3,
         "column": 3,
-        "rowSpan": 8,
+        "rowSpan": 6,
         "columnSpan": 8
       },
-      "textKey": "scenes.north-cliff-landing.narrative"
+      "textKey": "scenes.north-cliff-landing.narrative",
+      "bindings": {
+        "inspection": {
+          "source": "game.state",
+          "path": ["inspectionResult"],
+          "fallback": ""
+        }
+      }
     },
     {
       "id": "nearby",
@@ -150,18 +157,50 @@
       }
     },
     {
-      "id": "return-to-buoy",
-      "type": "button",
+      "id": "action-bar",
+      "type": "action-bar",
       "placement": {
-        "row": 11,
+        "row": 10,
         "column": 3,
-        "rowSpan": 1,
+        "rowSpan": 3,
         "columnSpan": 8
       },
-      "labelKey": "harbour.return-to-buoy",
-      "action": {
-        "type": "request-action",
-        "action": "return-to-buoy"
+      "slots": {
+        "1": {
+          "labelKey": "harbour.return-to-buoy",
+          "action": {
+            "type": "request-action",
+            "action": "return-to-buoy"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "4": {
+          "labelKey": "actions.inspect",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "inspect"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "actions.read",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "read"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        }
       }
     }
   ]

@@ -56,6 +56,11 @@ export const buttonActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
   z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
   requestActionSchema,
+  z.object({
+    type: z.literal('move-map'),
+    mapView: gameIdSchema,
+    direction: z.enum(['north', 'east', 'south', 'west']),
+  }),
 ])
 
 export const buttonComponentSchema = z
@@ -77,7 +82,14 @@ export const actionBarSlotSchema = z
   .object({
     label: z.string().trim().default(''),
     labelKey: translationKeySchema.optional(),
-    action: buttonActionSchema,
+    action: z.discriminatedUnion('type', [
+      ...buttonActionSchema.options,
+      z.object({
+        type: z.literal('inventory-action'),
+        inventory: gameIdSchema,
+        action: gameIdSchema,
+      }),
+    ]),
     inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
   })
   .refine((slot) => Boolean(slot.label || slot.labelKey), {
@@ -220,6 +232,34 @@ export const sceneSchema = z
     const ids = new Set<string>()
     let hasActionBar = false
     scene.components.forEach((component, index) => {
+      const movementActions =
+        component.type === 'action-bar'
+          ? Object.entries(component.slots).map(([id, slot]) => ({
+              action: slot.action,
+              path: ['components', index, 'slots', id, 'action'],
+            }))
+          : component.type === 'button' && component.action
+            ? [{ action: component.action, path: ['components', index, 'action'] }]
+            : []
+
+      for (const { action, path } of movementActions) {
+        if (action.type !== 'move-map') continue
+        const map = scene.components.find((entry) => entry.id === action.mapView)
+
+        if (
+          scene.type !== 'game' ||
+          map?.type !== 'map-view' ||
+          !map.playerSpawn ||
+          map.interactive === false
+        )
+          context.addIssue({
+            code: 'custom',
+            path: [...path, 'mapView'],
+            message:
+              'Map movement requires an interactive map view with a player spawn in the same game scene',
+          })
+      }
+
       if (component.type === 'action-bar') {
         if (scene.type !== 'game' || hasActionBar)
           context.addIssue({

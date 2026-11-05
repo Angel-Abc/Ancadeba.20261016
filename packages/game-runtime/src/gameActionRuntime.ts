@@ -3,6 +3,7 @@ import { ActionProcessor } from './actionProcessor.js'
 import type { GameRules } from './actions.js'
 import type { GameInstance, IGameRuntime, IGameLifecycle } from './gameLifecycle.js'
 import { GameActionBar } from './actionBar.js'
+import { GameMapMovement } from './mapMovement.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
@@ -12,6 +13,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly actions: ActionProcessor
   readonly bindings: GameBindings
   readonly actionBar: GameActionBar | undefined
+  readonly mapMovement: GameMapMovement | undefined
   private readonly timers: TimerService
   private started = false
   private disposed = false
@@ -30,7 +32,10 @@ export class GameActionRuntime implements IGameRuntime {
     lifecycle?: IGameLifecycle,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
-    this.actionBar = lifecycle ? new GameActionBar(lifecycle) : undefined
+    this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
+    this.actionBar = lifecycle
+      ? new GameActionBar(lifecycle, game.inventory, this.mapMovement)
+      : undefined
 
     try {
       this.actions = new ActionProcessor(
@@ -48,6 +53,7 @@ export class GameActionRuntime implements IGameRuntime {
       )
     } catch (error) {
       this.actionBar?.dispose()
+      this.mapMovement?.dispose()
       this.timers.dispose()
       messages.dispose()
       throw error
@@ -65,6 +71,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed) return
     this.disposed = true
     this.actionBar?.dispose()
+    this.mapMovement?.dispose()
     this.bindings.dispose()
 
     try {

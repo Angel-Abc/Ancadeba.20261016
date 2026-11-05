@@ -1,4 +1,4 @@
-import type { MapViewComponentData } from '@ancadeba/game-runtime'
+import type { MapViewComponentData, MapDirection } from '@ancadeba/game-runtime'
 import { getMapMovementCostMs, type MapPosition } from '@ancadeba/schemas'
 import { createBrowserTiming } from './browserTiming.js'
 import type {
@@ -14,13 +14,28 @@ const directions = new Map([
   ['ArrowRight', { x: 1, y: 0 }],
 ])
 
+const movementDirections = new Map<string, MapDirection>([
+  ['ArrowUp', 'north'],
+  ['ArrowRight', 'east'],
+  ['ArrowDown', 'south'],
+  ['ArrowLeft', 'west'],
+])
+
 function clampCoordinate(value: number, maximum: number): number {
   return Math.min(maximum, Math.max(0, value))
 }
 
 export class MapViewComponentRenderer implements IComponentRenderer<MapViewComponentData> {
-  render(component: MapViewComponentData, { document }: ComponentRenderContext): RenderedComponent {
+  render(
+    component: MapViewComponentData,
+    { document, scene }: ComponentRenderContext,
+  ): RenderedComponent {
     const { map, viewport } = component
+    const movement = scene?.type === 'game' ? scene.game.mapMovement : undefined
+
+    const sharedMovement =
+      movement && scene && movement.getPosition(scene, component.id) !== undefined
+
     const root = document.createElement('div')
     root.className = 'ancadeba-map-view'
 
@@ -61,7 +76,11 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     const maxY = map.height - viewport.rows
     let x = 0
     let y = 0
-    let playerPosition = component.playerSpawn
+
+    let playerPosition = sharedMovement
+      ? movement.getPosition(scene, component.id)
+      : component.playerSpawn
+
     let cancelStep: (() => void) | undefined
 
     const panTo = (nextX: number, nextY: number) => {
@@ -83,6 +102,17 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     if (playerPosition) showPlayer(playerPosition)
     else panTo(viewport.x, viewport.y)
 
+    const unsubscribeMovement = sharedMovement
+      ? movement.subscribeChanges(() => {
+          const position = movement.getPosition(scene, component.id)
+
+          if (position) {
+            playerPosition = position
+            showPlayer(position)
+          }
+        })
+      : undefined
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -96,6 +126,14 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
 
       if (!direction) return
       event.preventDefault()
+
+      if (sharedMovement) {
+        const direction = movementDirections.get(event.key)
+
+        if (direction) movement.move(scene, component.id, direction)
+
+        return
+      }
 
       if (playerPosition) {
         if (cancelStep) return
@@ -130,6 +168,7 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
       element: root,
       dispose() {
         cancelStep?.()
+        unsubscribeMovement?.()
         root.removeEventListener('keydown', onKeyDown)
         root.remove()
       },

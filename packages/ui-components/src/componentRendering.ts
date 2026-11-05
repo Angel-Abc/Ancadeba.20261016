@@ -12,9 +12,9 @@ import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
 import type { IGraphicResources } from './graphicResources.js'
 import type { KeyboardInputSink } from './keyboardInput.js'
 
-type SceneNavigation = Exclude<
+type SceneNavigation = Extract<
   NonNullable<ButtonComponentData['action']>,
-  { type: 'request-action' }
+  { type: 'new-game' | 'enter-scene' }
 >
 
 export interface ComponentRendererOptions {

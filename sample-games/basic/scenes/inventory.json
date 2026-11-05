@@ -44,18 +44,25 @@
       "placement": {
         "row": 3,
         "column": 5,
-        "rowSpan": 8,
+        "rowSpan": 6,
         "columnSpan": 8
       },
-      "textKey": "scenes.inventory.components.details.text"
+      "textKey": "scenes.inventory.components.details.text",
+      "bindings": {
+        "inspection": {
+          "source": "game.state",
+          "path": ["inspectionResult"],
+          "fallback": ""
+        }
+      }
     },
     {
       "id": "footer",
       "type": "text",
       "placement": {
-        "row": 11,
+        "row": 12,
         "column": 1,
-        "rowSpan": 2,
+        "rowSpan": 1,
         "columnSpan": 12
       },
       "bindings": {
@@ -77,6 +84,42 @@
         "align": "end"
       },
       "textKey": "scenes.inventory.components.footer.text"
+    },
+    {
+      "id": "action-bar",
+      "type": "action-bar",
+      "placement": {
+        "row": 9,
+        "column": 5,
+        "rowSpan": 3,
+        "columnSpan": 8
+      },
+      "slots": {
+        "4": {
+          "labelKey": "actions.inspect",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "inspect"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "actions.read",
+          "action": {
+            "type": "inventory-action",
+            "inventory": "items",
+            "action": "read"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        }
+      }
     }
   ],
   "titleKey": "scenes.inventory.title",

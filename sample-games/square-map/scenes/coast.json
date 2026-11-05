@@ -2,31 +2,118 @@
   "schema-version": "1.0.0",
   "id": "coast",
   "title": "Coast Road",
-  "type": "stand-alone",
-  "screen": { "type": "grid", "grid": { "rows": 10, "columns": 1 } },
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 1
+    }
+  },
   "components": [
     {
       "id": "heading",
       "type": "text",
-      "placement": { "row": 1, "column": 1 },
+      "placement": {
+        "row": 1,
+        "column": 1
+      },
       "text": "Coast Road",
-      "presentation": { "variant": "heading", "align": "center" }
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      }
     },
     {
       "id": "controls",
       "type": "text",
-      "placement": { "row": 2, "column": 1 },
-      "text": "Click or Tab to the map and use the arrow keys to move. Sand is slower and forests block the way.",
-      "presentation": { "align": "center" }
+      "placement": {
+        "row": 2,
+        "column": 1
+      },
+      "text": "Use the direction buttons, WASD, or arrow keys to move. Sand is slower and forests block the way.",
+      "presentation": {
+        "align": "center"
+      }
     },
     {
       "id": "coast-map",
       "type": "map-view",
-      "placement": { "row": 3, "column": 1, "rowSpan": 8 },
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 7
+      },
       "map": "coast",
       "label": "Coast Road map",
-      "viewport": { "columns": 9, "rows": 6 },
-      "playerSpawn": { "x": 9, "y": 4 }
+      "viewport": {
+        "columns": 9,
+        "rows": 6
+      },
+      "playerSpawn": {
+        "x": 9,
+        "y": 4
+      }
+    },
+    {
+      "id": "movement-bar",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 1
+      },
+      "slots": {
+        "2": {
+          "label": "North",
+          "action": {
+            "type": "move-map",
+            "mapView": "coast-map",
+            "direction": "north"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "north"
+          }
+        },
+        "6": {
+          "label": "West",
+          "action": {
+            "type": "move-map",
+            "mapView": "coast-map",
+            "direction": "west"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "west"
+          }
+        },
+        "7": {
+          "label": "South",
+          "action": {
+            "type": "move-map",
+            "mapView": "coast-map",
+            "direction": "south"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "south"
+          }
+        },
+        "8": {
+          "label": "East",
+          "action": {
+            "type": "move-map",
+            "mapView": "coast-map",
+            "direction": "east"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "east"
+          }
+        }
+      }
     }
   ]
 }

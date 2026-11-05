@@ -1,6 +1,7 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
 import { parseStatePath, statePath, type RuleFormControls } from './ruleFormControls.js'
+import { inventoryActionsForm } from './inventoryActionsForm.js'
 
 const binding = (path: string): GameBindingDefinition => ({
   source: 'game.state',
@@ -169,6 +170,7 @@ export function ruleTriggerForms(
       const previous = view.inventory!.itemTypes[itemType]?.inspection
       let action = previous?.action ?? ''
       let path = previous?.details.path.join('.') ?? ''
+      let inline = previous?.inline !== false
       const form = create('form')
       form.append(
         select('Requested action', action, [noAction, ...actions], (next) => {
@@ -177,12 +179,26 @@ export function ruleTriggerForms(
         select('Inspection details', path, details, (next) => {
           path = next
         }),
+        select(
+          'Show inspection in inventory',
+          inline ? 'yes' : 'no',
+          [
+            ['yes', 'Show inline Inspect button and result'],
+            ['no', 'Hide inline inspection'],
+          ],
+          (next) => {
+            inline = next === 'yes'
+          },
+        ),
+      )
+      form.append(
+        'To show results in the main text, have the action set a text state field and bind that field in a text component. Hiding inline inspection keeps the action available to the action bar.',
       )
       submit(form, 'Save inspection', () =>
         save({
           type: 'inventory.setRuleInspection',
           itemType,
-          inspection: action ? { action, details: binding(path) } : null,
+          inspection: action ? { action, details: binding(path), inline } : null,
         }),
       )
       formArea.replaceChildren(form)
@@ -204,5 +220,5 @@ export function ruleTriggerForms(
     render()
   } else inspection.append('Add inventory item types before linking an inspection.')
 
-  return [buttons, inspection]
+  return [buttons, inspection, inventoryActionsForm(controls, view, save)]
 }

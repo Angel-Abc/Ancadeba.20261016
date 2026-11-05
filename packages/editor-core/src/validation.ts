@@ -100,7 +100,7 @@ export function validateProject(
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
       if (component.type === 'action-bar')
-        for (const issue of actionBarIssues(component, input, scenes))
+        for (const issue of actionBarIssues(component, input, scenes, scene))
           diagnostics.push({
             code: 'invalid_action_bar',
             file: `scenes/${id}.json`,

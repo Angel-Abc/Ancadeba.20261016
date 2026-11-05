@@ -302,6 +302,7 @@ export function bindProjectPanel(
       (state.lastCommand === 'game.updateRules' ||
         state.lastCommand === 'scene.upsertRuleButton' ||
         state.lastCommand === 'inventory.setRuleInspection' ||
+        state.lastCommand === 'inventory.setItemActions' ||
         state.lastCommand === 'scene.setActionBar' ||
         state.lastCommand === 'game.updateInput')
 

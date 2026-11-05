@@ -140,6 +140,17 @@
   opacity: 0.35;
 }
 
+.ancadeba-action-bar-cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ancadeba-action-bar-button[hidden],
+.ancadeba-action-bar-empty[hidden] {
+  display: none;
+}
+
 .ancadeba-language-select {
   display: flex;
   flex-direction: column;

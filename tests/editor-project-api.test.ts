@@ -409,12 +409,14 @@ describe('shared editor project API', () => {
       inspection: {
         action: 'read',
         details: { source: 'game.state', path: ['clue'] },
+        inline: false,
       },
     })
 
     expect(inspectLink.status).toBe(200)
     const afterInspection = projectViewSchema.parse(await inspectLink.json())
     expect(afterInspection.inventory?.itemTypes.letter?.inspection?.action).toBe('read')
+    expect(afterInspection.inventory?.itemTypes.letter?.inspection?.inline).toBe(false)
     expect(
       JSON.parse(await readFile(join(root, 'basic/inventory/letters.json'), 'utf8')),
     ).toHaveProperty('itemTypes.letter.inspection.action', 'read')
@@ -570,7 +572,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(15)
+    expect((await capabilities.json()).commands).toHaveLength(16)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

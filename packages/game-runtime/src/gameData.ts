@@ -269,7 +269,12 @@ export function assembleGameData(
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
       if (component.type === 'action-bar') {
-        const issue = actionBarIssues(component, inputDefinition, sceneDefinitions)[0]
+        const issue = actionBarIssues(
+          component,
+          inputDefinition,
+          sceneDefinitions,
+          sceneDefinitions.get(scene.id),
+        )[0]
 
         if (issue) throw new Error(`Scene ${scene.id}, bar ${component.id}: ${issue.message}`)
       }
@@ -293,7 +298,7 @@ export function assembleGameData(
       if (
         component.type !== 'button' ||
         !component.action ||
-        component.action.type === 'request-action'
+        (component.action.type !== 'new-game' && component.action.type !== 'enter-scene')
       )
         continue
       const target = scenes.get(component.action.scene)
