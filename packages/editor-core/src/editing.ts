@@ -4,6 +4,7 @@ import { EditorError, object, type CommandResult, type ProjectSnapshot } from '.
 import { validateProject } from './validation.js'
 import { editAssets } from './assetEditing.js'
 import { editRules } from './ruleEditing.js'
+import { editControls } from './controlEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -39,7 +40,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
 
-  if (
+  if (command.type === 'scene.setActionBar' || command.type === 'game.updateInput') {
+    changedFiles.push(...editControls(documents, game, command))
+  } else if (
     command.type.startsWith('assets.') ||
     command.type === 'scene.upsertGraphic' ||
     command.type === 'scene.removeGraphic'

@@ -6,9 +6,11 @@ import type {
   TextResolutionOptions,
   IGameLocalization,
   IGameInventory,
+  SceneInstance,
 } from '@ancadeba/game-runtime'
 import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
 import type { IGraphicResources } from './graphicResources.js'
+import type { KeyboardInputSink } from './keyboardInput.js'
 
 type SceneNavigation = Exclude<
   NonNullable<ButtonComponentData['action']>,
@@ -16,6 +18,7 @@ type SceneNavigation = Exclude<
 >
 
 export interface ComponentRendererOptions {
+  readonly input?: KeyboardInputSink | undefined
   readonly assets?: AssetCatalog | undefined
   readonly graphics?: IGraphicResources | undefined
   readonly localization?: IGameLocalization | undefined
@@ -24,6 +27,8 @@ export interface ComponentRendererOptions {
 }
 
 export interface ComponentRenderContext extends ComponentRendererOptions {
+  readonly scene?: SceneInstance | undefined
+  readonly onActionBarFocusLost?: (() => void) | undefined
   readonly document: Document
   readonly bindings?: IGameBindings | undefined
   readonly actions?: IGameActions | undefined

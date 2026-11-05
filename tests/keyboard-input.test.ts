@@ -15,6 +15,7 @@ import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
 // A focused EventTarget harness exercises real listener registration and cleanup
 // without introducing DOM globals into the runtime or a browser-test dependency.
 class TestElement extends EventTarget {
+  readonly dataset: Record<string, string> = {}
   readonly nodeType = 1
   readonly children: TestElement[] = []
   parent: TestElement | undefined
@@ -182,6 +183,25 @@ describe('browser timing adapter', () => {
 })
 
 describe('shared keyboard adapter', () => {
+  it('accepts shortcuts on action-bar buttons while preserving native Enter and Space', () => {
+    const { document, surface, messages, input, handler, cleanup } = setup()
+    input.setContext('menu')
+    const button = document.createElement('button')
+    button.dataset.actionBarSlot = '1'
+    surface.append(button)
+    document.activeElement = button
+    surface.dispatchEvent(new Event('focusin'))
+    expect(key(surface, 'keydown', 'KeyW').defaultPrevented).toBe(true)
+    expect(key(surface, 'keydown', 'KeyW', { repeat: true }).defaultPrevented).toBe(true)
+    expect(key(surface, 'keyup', 'KeyW').defaultPrevented).toBe(true)
+    expect(key(surface, 'keydown', 'Enter').defaultPrevented).toBe(false)
+    expect(key(surface, 'keydown', 'Space').defaultPrevented).toBe(false)
+    expect(key(surface, 'keydown', 'KeyW', { ctrlKey: true }).defaultPrevented).toBe(false)
+    messages.flush()
+    expect(handler.mock.calls.map(([event]) => event.phase)).toEqual(['pressed', 'released'])
+    cleanup()
+  })
+
   it('does not steal focus and only accepts input within the game surface', () => {
     const { document, surface, messages, handler, cleanup } = setup()
     expect(document.activeElement).toBeNull()

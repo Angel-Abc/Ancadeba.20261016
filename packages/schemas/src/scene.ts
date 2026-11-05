@@ -73,6 +73,46 @@ export const buttonComponentSchema = z
     message: 'A label or labelKey is required',
   })
 
+export const actionBarSlotSchema = z
+  .object({
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+    action: buttonActionSchema,
+    inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
+  })
+  .refine((slot) => Boolean(slot.label || slot.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
+export const actionBarComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('action-bar'),
+    placement: gridPlacementSchema,
+    slots: z.record(z.string().regex(/^(?:[1-9]|1[0-5])$/), actionBarSlotSchema),
+  })
+  .superRefine((bar, context) => {
+    const bindings = new Set<string>()
+
+    for (const [id, slot] of Object.entries(bar.slots)) {
+      if (!slot.inputBinding) continue
+      const key = JSON.stringify([slot.inputBinding.context, slot.inputBinding.input])
+
+      if (bindings.has(key))
+        context.addIssue({
+          code: 'custom',
+          path: ['slots', id, 'inputBinding'],
+          message: 'Input bindings must be unique within an action bar',
+        })
+      bindings.add(key)
+    }
+  })
+
+export type ActionBarComponentDefinition = z.infer<typeof actionBarComponentSchema>
+
+export type ActionBarSlotDefinition = z.infer<typeof actionBarSlotSchema>
+
 export const languageSelectComponentSchema = z
   .object({
     id: gameIdSchema,
@@ -139,6 +179,7 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   graphicComponentSchema,
   mapViewComponentSchema,
   inventoryComponentSchema,
+  actionBarComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -177,7 +218,18 @@ export const sceneSchema = z
         message: 'A title or titleKey is required',
       })
     const ids = new Set<string>()
+    let hasActionBar = false
     scene.components.forEach((component, index) => {
+      if (component.type === 'action-bar') {
+        if (scene.type !== 'game' || hasActionBar)
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index],
+            message: 'Only one action bar is allowed per game scene',
+          })
+        hasActionBar = true
+      }
+
       if (
         scene.type === 'stand-alone' &&
         component.type === 'button' &&

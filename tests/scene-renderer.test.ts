@@ -93,6 +93,9 @@ class TestElement extends EventTarget {
   get firstChild(): TestElement | undefined {
     return this.children[0]
   }
+  focus(): void {
+    this.ownerDocument.activeElement = this
+  }
   append(...children: TestElement[]): void {
     for (const child of children) {
       child.parent = this
@@ -247,6 +250,88 @@ function flush(engine: Engine): void {
 
 describe('scene renderer', () => {
   it.each([
+    { host: 'standalone', firstKey: 'KeyQ', badge: 'Q / 1' },
+    { host: 'preview', firstKey: 'KeyY', badge: 'Y / 1' },
+  ])(
+    'renders and activates game-defined action-bar keys in $host',
+    async ({ host, firstKey, badge }) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...source,
+            readText: async (path) => {
+              const text = await source.readText(path)
+
+              if (path !== 'input/controls.json') return text
+              const input = JSON.parse(text)
+              delete input.keyboard.KeyQ
+              input.keyboard[firstKey] = 'slot-1'
+              input.keyboard.Digit1 = 'slot-1'
+
+              return JSON.stringify(input)
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { document, target } = setup(game)
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      const surface = target.find((node) => node.className === 'ancadeba-game')!
+      const actionBar = () => target.find((node) => node.dataset.componentId === 'action-bar')!
+
+      const button = (slot: string) =>
+        actionBar().find((node) => node.dataset.actionBarSlot === slot)!
+
+      expect(actionBar().children).toHaveLength(15)
+      expect(button('1').children[1]!.textContent).toBe(badge)
+      expect(button('2').disabled).toBe(false)
+      button('2').focus()
+      button('2').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(button('2').disabled).toBe(true)
+      expect(document.activeElement).toBe(surface)
+      engine.input!.setContext('menu')
+      expect(button('1').children[1]!.textContent).toBe('')
+      engine.input!.setContext('gameplay')
+      expect(button('1').children[1]!.textContent).toBe(badge)
+      const oldButton = button('1')
+      oldButton.focus()
+      oldButton.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('old-harbour')
+      expect(document.activeElement).toBe(surface)
+      expect(button('1').children[1]!.textContent).toBe(badge)
+      oldButton.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('old-harbour')
+      engine.input!.pressKey(firstKey)
+      engine.input!.releaseKey(firstKey)
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('standard')
+      game.localization!.select('nl')
+      const catalog = JSON.parse(await source.readText('languages/nl/messages.json'))
+      expect(button('1').children[0]!.textContent).toBe(catalog['harbour.walk-to-harbour'])
+      expect(button('1').children[1]!.textContent).toBe(badge)
+      engine.stop()
+      expect(target.find((node) => node.className === 'ancadeba-game')).toBeUndefined()
+    },
+  )
+
+  it.each([
     { language: 'en', id: 'basic-game' },
     { language: 'nl', id: 'renamed-museum' },
   ])(
@@ -292,7 +377,8 @@ describe('scene renderer', () => {
       await engine.start()
       startSampleGame(target)
 
-      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+      const component = (id: string) =>
+        target.find((node) => node.dataset.componentId === id || node.dataset.slotAction === id)!
 
       const mapColumn = (id = 'museum-map') =>
         component(id)
@@ -717,7 +803,7 @@ describe('scene renderer', () => {
     const narrative = standard.find((element) => element.dataset.componentId === 'narrative')!
     expect(narrative.tagName).toBe('DIV')
     expect(narrative.style.getPropertyValue('--ge-component-row')).toBe('3')
-    expect(narrative.style.getPropertyValue('--ge-component-row-span')).toBe('7')
+    expect(narrative.style.getPropertyValue('--ge-component-row-span')).toBe('6')
     expect(narrative.textContent).toContain('\n\n')
     const firstNode = standard
     lifecycle.enterScene('inventory')

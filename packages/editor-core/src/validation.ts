@@ -20,6 +20,7 @@ import {
   inventoryPanelIssues,
   validateRuleSources,
   gameRulesSchema,
+  actionBarIssues,
 } from '@ancadeba/schemas'
 import {
   projectInventorySources,
@@ -73,7 +74,7 @@ export function validateProject(
     }
   }
 
-  if (game.data.input) check(inputFile(game.data.input), inputSchema)
+  const input = game.data.input ? check(inputFile(game.data.input), inputSchema).data : undefined
 
   const maps = new Map<string, MapDefinition>()
 
@@ -98,6 +99,15 @@ export function validateProject(
 
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
+      if (component.type === 'action-bar')
+        for (const issue of actionBarIssues(component, input, scenes))
+          diagnostics.push({
+            code: 'invalid_action_bar',
+            file: `scenes/${id}.json`,
+            path: ['components', index, ...issue.path],
+            message: issue.message,
+          })
+
       if (component.type === 'inventory') {
         for (const issue of inventoryPanelIssues(
           component.owners,

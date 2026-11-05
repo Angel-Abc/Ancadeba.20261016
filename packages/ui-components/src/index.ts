@@ -10,6 +10,8 @@ export { TextComponentRenderer } from './textComponentRenderer.js'
 
 export { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 
+export { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
+
 export { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
 
 export {

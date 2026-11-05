@@ -8,6 +8,8 @@ export interface VirtualInput {
 
 export interface IGameInput {
   readonly context: string
+  getKeyboardCodes(context: string, input: string): readonly string[]
+  subscribeContextChanges(listener: (context: string) => void): () => void
   setContext(id: string): void
   isKeyMapped(code: string): boolean
   pressKey(code: string): boolean
@@ -25,6 +27,7 @@ export class InputController implements IGameInput {
   private inputs = new Set<string>()
   private activeContext: string
   private disposed = false
+  private readonly contextListeners = new Set<(context: string) => void>()
 
   constructor(
     data: InputData,
@@ -46,6 +49,23 @@ export class InputController implements IGameInput {
     return this.activeContext
   }
 
+  getKeyboardCodes(context: string, input: string): readonly string[] {
+    if (this.disposed) return []
+    const mappings = this.contexts.get(context)
+
+    return [...this.keyboard]
+      .filter(([, key]) => mappings?.get(key) === input)
+      .map(([code]) => code)
+  }
+
+  subscribeContextChanges(listener: (context: string) => void): () => void {
+    if (this.disposed) return () => {}
+
+    this.contextListeners.add(listener)
+
+    return () => this.contextListeners.delete(listener)
+  }
+
   isKeyMapped(code: string): boolean {
     const key = this.keyboard.get(code)
 
@@ -62,6 +82,19 @@ export class InputController implements IGameInput {
 
     for (const code of this.held.keys()) this.suppressed.add(code)
     this.activeContext = id
+    const errors: unknown[] = []
+
+    for (const listener of [...this.contextListeners]) {
+      if (!this.contextListeners.has(listener)) continue
+
+      try {
+        listener(id)
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+
+    if (errors.length) throw new AggregateError(errors, 'Input context subscribers failed')
   }
 
   pressKey(code: string): boolean {
@@ -100,6 +133,7 @@ export class InputController implements IGameInput {
     this.suppressed.clear()
     this.virtualKeys.clear()
     this.inputs.clear()
+    this.contextListeners.clear()
   }
 
   private cancelInputs(): void {

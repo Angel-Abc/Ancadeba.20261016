@@ -244,6 +244,7 @@ export class Engine implements IEngine {
           () => session.input?.reset(),
           () => ++session.nextTimerId,
           () => session.gameRuntimes.delete(instance),
+          lifecycle,
         )
 
         session.gameRuntimes.set(instance, runtime)
@@ -271,6 +272,7 @@ export class Engine implements IEngine {
             }
 
             const messages = owner?.messages ?? session.messages
+            owner?.actionBar?.captureInput(payload)
             messages.publish(topic, payload)
           },
         })

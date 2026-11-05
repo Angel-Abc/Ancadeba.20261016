@@ -2,8 +2,10 @@ import type { GameData, SceneData } from './gameData.js'
 import type { IGameActions } from './actions.js'
 import type { IGameBindings } from './gameBindings.js'
 import { GameInventory, type IGameInventory } from './inventory.js'
+import type { IGameActionBar } from './actionBar.js'
 
 export interface IGameRuntime {
+  readonly actionBar?: IGameActionBar | undefined
   readonly actions: IGameActions
   readonly bindings: IGameBindings
   start(): void
@@ -13,6 +15,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly actionBar?: IGameActionBar | undefined
   readonly data: GameData
   readonly inventory?: IGameInventory | undefined
   readonly actions: IGameActions | undefined
@@ -100,6 +103,10 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+
+  get actionBar(): IGameActionBar | undefined {
+    return this.runtime?.actionBar
+  }
 
   get inventory(): IGameInventory | undefined {
     return this.inventoryState

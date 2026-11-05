@@ -8,6 +8,8 @@ import {
   gameRulesSchema,
   mergeRuleSources,
   mergeInventorySources,
+  inputSchema,
+  inputFile,
 } from '@ancadeba/schemas'
 import { validateProject } from './validation.js'
 import {
@@ -19,6 +21,10 @@ import {
 
 export function inspectProject(project: ProjectSnapshot): ProjectView {
   const game = gameSchema.safeParse(project.documents['game.json'])
+
+  const input = game.data?.input
+    ? inputSchema.safeParse(project.documents[inputFile(game.data.input)])
+    : undefined
 
   const assets = game.data?.assets
     ? assetCatalogSchema.safeParse(project.documents[assetCatalogFile(game.data.assets)])
@@ -45,6 +51,7 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     languageCatalogSchema.safeParse(project.documents[`languages/${language}/messages.json`])
 
   return {
+    ...(input?.success ? { input: input.data } : {}),
     ...(sources.length ? { rules: mergeRuleSources(sources).rules, ruleFiles } : {}),
     ...(assets?.success ? { assets: assets.data } : {}),
     ...(inventory ? { inventory } : {}),

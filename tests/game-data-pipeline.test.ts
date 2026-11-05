@@ -104,8 +104,18 @@ describe('game data pipeline', () => {
       initialScene: 'start-screen',
       stylesheet: expect.stringContaining('--ge-inventory-item-min-width: 9em'),
       input: {
-        virtualKeys: ['north', 'confirm'],
-        keyboard: { KeyW: 'north', ArrowUp: 'north', Enter: 'confirm' },
+        virtualKeys: [
+          'north',
+          'confirm',
+          ...Array.from({ length: 15 }, (_, index) => `slot-${index + 1}`),
+        ],
+        keyboard: {
+          KeyQ: 'slot-1',
+          KeyW: 'slot-2',
+          KeyB: 'slot-15',
+          ArrowUp: 'north',
+          Enter: 'confirm',
+        },
         contexts: {
           gameplay: { north: 'moveNorth', confirm: 'interact' },
           menu: { north: 'selectPrevious', confirm: 'accept' },

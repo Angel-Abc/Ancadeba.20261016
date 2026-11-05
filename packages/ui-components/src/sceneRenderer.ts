@@ -7,7 +7,9 @@ import type {
   RenderedComponent,
 } from './componentRendering.js'
 
-export type SceneRendererOptions = ComponentRendererOptions
+export interface SceneRendererOptions extends ComponentRendererOptions {
+  readonly onActionBarFocusLost?: () => void
+}
 
 /** Renders only the active scene. Geometry comes from data; appearance comes from CSS. */
 export class SceneRenderer {
@@ -50,6 +52,12 @@ export class SceneRenderer {
     if (this.disposed) return
     const focused = this.target.ownerDocument.activeElement
 
+    // SAFETY: the owned scene contains only HTML elements created by its renderers.
+    const focusedSlot =
+      focused &&
+      this.scene?.element.contains(focused) &&
+      (focused as HTMLElement).dataset.actionBarSlot
+
     // SAFETY: this renderer creates only HTML elements inside its owned scene.
     const focusedId =
       focused && this.scene?.element.contains(focused)
@@ -70,6 +78,14 @@ export class SceneRenderer {
         next?.element
           .querySelector<HTMLElement>(`select[data-component-id="${focusedId}"]`)
           ?.focus()
+
+      const active = this.target.ownerDocument.activeElement
+
+      if (
+        focusedSlot &&
+        (!active || active === focused || active === this.target.ownerDocument.body)
+      )
+        this.options.onActionBarFocusLost?.()
     } catch (error) {
       next?.dispose()
       throw error
@@ -123,6 +139,8 @@ export class SceneRenderer {
     const context: ComponentRenderContext = {
       ...this.options,
       document,
+      scene,
+      onActionBarFocusLost: this.options.onActionBarFocusLost,
       bindings: scene.type === 'game' ? scene.game.bindings : undefined,
       actions: scene.type === 'game' ? scene.game.actions : undefined,
       inventory: scene.type === 'game' ? scene.game.inventory : undefined,

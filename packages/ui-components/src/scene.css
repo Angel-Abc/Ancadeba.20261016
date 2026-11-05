@@ -107,6 +107,39 @@
   cursor: default;
 }
 
+.ancadeba-action-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.ancadeba-action-bar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  position: relative;
+  padding: 0.2rem 1.8rem 0.2rem 0.4rem;
+  font-size: 0.85em;
+}
+
+.ancadeba-action-bar-key {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  font: inherit;
+  font-size: 0.65em;
+  opacity: 0.75;
+}
+
+.ancadeba-action-bar-empty {
+  border: 1px solid currentColor;
+  border-radius: 0.35rem;
+  background: var(--ge-scene-text-background);
+  opacity: 0.35;
+}
+
 .ancadeba-language-select {
   display: flex;
   flex-direction: column;

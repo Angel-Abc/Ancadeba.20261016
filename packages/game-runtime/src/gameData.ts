@@ -13,6 +13,7 @@ import type {
   InventoryComponentDefinition,
   GameRulesDefinition,
   GameTranslation,
+  ActionBarComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -24,6 +25,7 @@ import {
   ruleFile,
   validateRuleSources,
   resolveMapView,
+  actionBarIssues,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
@@ -57,6 +59,7 @@ export type SceneComponentData =
   | GraphicComponentDefinition
   | MapViewComponentData
   | InventoryComponentData
+  | ActionBarComponentDefinition
 
 export type GraphicComponentData = GraphicComponentDefinition
 
@@ -190,6 +193,32 @@ export function assembleGameData(
         grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
       },
       components: scene.components.map((component) => {
+        if (component.type === 'action-bar')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            slots: Object.fromEntries(
+              Object.entries(component.slots).map(([id, slot]) => [
+                id,
+                {
+                  ...slot,
+                  ...(slot.inputBinding && { inputBinding: { ...slot.inputBinding } }),
+                  action: {
+                    ...slot.action,
+                    ...(slot.action.type === 'request-action' && slot.action.enabledWhen
+                      ? {
+                          enabledWhen: {
+                            ...slot.action.enabledWhen,
+                            path: [...slot.action.enabledWhen.path],
+                          },
+                        }
+                      : {}),
+                  },
+                },
+              ]),
+            ),
+          }
+
         if (component.type === 'map-view')
           return {
             ...component,
@@ -239,6 +268,12 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'action-bar') {
+        const issue = actionBarIssues(component, inputDefinition, sceneDefinitions)[0]
+
+        if (issue) throw new Error(`Scene ${scene.id}, bar ${component.id}: ${issue.message}`)
+      }
+
       if (component.type === 'graphic') {
         if (!assets) throw new Error(`Graphic ${component.id} requires an asset catalogue`)
         assertGraphicReference(assets, component.visual, component.appearance)

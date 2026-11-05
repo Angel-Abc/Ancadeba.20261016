@@ -27,23 +27,28 @@ unchanged.
 
 Each request contains one command. Metadata commands supply all listed fields.
 
-| Command                    | Fields                                               |
-| -------------------------- | ---------------------------------------------------- |
-| `game.updateMetadata`      | `title`, `description`, `version`                    |
-| `scene.create`             | A complete `scene` matching the current scene schema |
-| `scene.updateMetadata`     | `sceneId`, `title`, `description`                    |
-| `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`     |
-| `assets.upsertImage`       | `id`, complete `image` definition                    |
-| `assets.upsertPart`        | `id`, complete `part` definition                     |
-| `assets.upsertComposition` | `id`, complete `composition` definition              |
-| `assets.remove`            | `kind` (`images`, `parts`, or `compositions`), `id`  |
-| `scene.upsertGraphic`      | `sceneId`, complete graphic `component`              |
-| `scene.removeGraphic`      | `sceneId`, `componentId`                             |
+| Command                    | Fields                                                             |
+| -------------------------- | ------------------------------------------------------------------ |
+| `game.updateMetadata`      | `title`, `description`, `version`                                  |
+| `scene.create`             | A complete `scene` matching the current scene schema               |
+| `scene.updateMetadata`     | `sceneId`, `title`, `description`                                  |
+| `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`                   |
+| `assets.upsertImage`       | `id`, complete `image` definition                                  |
+| `assets.upsertPart`        | `id`, complete `part` definition                                   |
+| `assets.upsertComposition` | `id`, complete `composition` definition                            |
+| `assets.remove`            | `kind` (`images`, `parts`, or `compositions`), `id`                |
+| `scene.upsertGraphic`      | `sceneId`, complete graphic `component`                            |
+| `scene.removeGraphic`      | `sceneId`, `componentId`                                           |
+| `scene.setActionBar`       | `sceneId`, complete action-bar `component`, or `null` to remove it |
+| `game.updateInput`         | `inputId`, complete input `input` definition                       |
 
 Scene creation updates both the scene document and the manifest reference.
-Existing IDs cannot be changed. Scenes support text, buttons, language selectors,
+Game and scene IDs cannot be changed. Scenes support text, buttons, language selectors,
 and graphics; the focused graphic commands edit only graphic components.
-Input definitions are loaded and validated but cannot be edited through commands.
+Inspection includes the referenced input definition as `input`. Input edits update
+that file. Creating the first input configuration publishes `input/<inputId>.json`
+before adding its manifest reference, with the same guarded rollback used for
+other newly referenced files. Existing unlisted files are protected.
 
 Graphic components can be created, edited, and removed without changing other
 component types. The first asset operation initializes `assets/catalogue.json` and its
@@ -169,8 +174,8 @@ startup scene are labeled. Shared assets appear once in the asset library.
 Select an entry to open its editing controls. Scene branches include Add graphic;
 Scenes includes Add scene; Assets includes image import and definition creation.
 Asset groups display filtered thumbnail galleries. Selecting a thumbnail also
-selects and reveals the corresponding tree entry. Components other than graphics
-currently display read-only definitions. Engine preview is collapsible and has an
+selects and reveals the corresponding tree entry. Action-bar components open their
+slot editor. Other component types display their definitions. Engine preview is collapsible and has an
 independent selection and lifetime; project navigation never starts a playthrough
 or changes its active scene.
 
@@ -185,6 +190,29 @@ Save pending scene edits before selecting a different scene, and asset/graphic
 edits before selecting another asset/graphic target. Blocked navigation preserves
 the current selection and form entries and explains which action is needed.
 Unrelated panels can be visited without discarding drafts.
+
+### Action bars and input bindings
+
+Open **Action bar & input** in the explorer, or select an action-bar component in
+a scene. **Scene action bar** provides a five-column, three-row slot grid, bar
+placement, and component ID. Choose a slot to edit its label, translation key,
+requested action or scene navigation, boolean enable condition, and context/input
+binding. Choose **Empty slot** to clear a position. Bars can be added to game
+scenes and removed using the panel's controls.
+
+**Game input bindings** edits the existing physical-key → virtual-key →
+context-specific input pipeline. Configure virtual keys, physical keyboard codes,
+context mappings, and the initial context. Multiple physical keys can map to the
+same virtual key. Duplicate physical codes or virtual-key mappings within a
+context produce an error and retain the draft. Changes that would invalidate a
+saved bar's input references are rejected.
+
+Games without input can create a configuration. Its editable starting layout is
+`QWERT / ASDFG / ZXCVB`, mapped to inputs `slot-1` through `slot-15`. Save input
+changes before assigning newly created inputs to slots. The slot editor shows all
+saved physical shortcuts for each binding. Both forms use revision-checked saves,
+keep their drafts on conflicts, and preserve drafts in the other form after a save.
+Restart the preview to load the saved configuration.
 
 ### Extending the project explorer
 
@@ -244,8 +272,8 @@ Tests are in `tests/editor-core.test.ts`,
 Run `pnpm lint`, `pnpm test`,
 `pnpm typecheck`, and `pnpm build`.
 
-V1 does not include new-project creation, deletion, ID changes, input editing,
-commands to edit existing non-graphic components, scripts, batches, undo history, real-time
+V1 does not include new-project creation, scene deletion or scene ID changes,
+commands for arbitrary component editing, scripts, batches, undo history, real-time
 collaboration, live preview updates, or embedded chat. New scenes can include
 text components using the engine's shared scene schema; existing components and
 bindings are preserved by metadata and layout edits. The visual panel creates

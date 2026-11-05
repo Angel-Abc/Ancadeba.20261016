@@ -11,6 +11,8 @@ import {
   gameBindingSchema,
   buttonComponentSchema,
   requestActionSchema,
+  actionBarComponentSchema,
+  inputSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -84,6 +86,16 @@ export const commandSchema = z.discriminatedUnion('type', [
     itemType: gameIdSchema,
     inspection: z.strictObject({ action: gameIdSchema, details: gameBindingSchema }).nullable(),
   }),
+  z.strictObject({
+    type: z.literal('scene.setActionBar'),
+    sceneId: gameIdSchema,
+    component: actionBarComponentSchema.nullable(),
+  }),
+  z.strictObject({
+    type: z.literal('game.updateInput'),
+    inputId: gameIdSchema,
+    input: inputSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -118,6 +130,33 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'scene.setActionBar',
+      example: {
+        type: 'scene.setActionBar',
+        sceneId: 'shop',
+        component: {
+          id: 'actions',
+          type: 'action-bar',
+          placement: { row: 1, column: 1 },
+          slots: {},
+        },
+      },
+    },
+    {
+      type: 'game.updateInput',
+      example: {
+        type: 'game.updateInput',
+        inputId: 'controls',
+        input: {
+          'schema-version': '1.0.0',
+          'virtual-keys': ['primary'],
+          keyboard: { KeyQ: 'primary' },
+          contexts: { gameplay: { primary: 'slot-1' } },
+          'initial-context': 'gameplay',
+        },
+      },
+    },
     {
       type: 'game.updateRules',
       example: {

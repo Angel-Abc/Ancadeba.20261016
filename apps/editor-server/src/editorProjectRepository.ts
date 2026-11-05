@@ -213,6 +213,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
           const references = [
             manifest.assets && assetCatalogFile(manifest.assets),
+            manifest.input && inputFile(manifest.input),
             ...(manifest.rules ?? []).map(ruleFile),
           ]
 
@@ -227,7 +228,11 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
         } catch {
           throw new EditorError(
             500,
-            createsRules ? 'rules_publication_failed' : 'asset_publication_failed',
+            createsRules
+              ? 'rules_publication_failed'
+              : newScene.startsWith('input/')
+                ? 'input_publication_failed'
+                : 'asset_publication_failed',
             `Could not confirm rollback of ${newScene}. Reload the project before retrying.`,
           )
         }

@@ -117,5 +117,7 @@
   "tree.empty": "Load a project to explore its content.",
   "tree.saveFirst": "Save pending edits before selecting another object. Your entries are preserved.",
   "tree.readOnly": "This component is available for inspection. Editing is not yet supported.",
-  "rules.heading": "Rules"
+  "rules.heading": "Rules",
+  "controls.heading": "Action bar & input",
+  "tree.action-bar": "Action bar"
 }

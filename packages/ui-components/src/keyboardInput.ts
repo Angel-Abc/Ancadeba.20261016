@@ -1,5 +1,8 @@
 /** Structural contract implemented by the runtime without a browser dependency. */
 export interface KeyboardInputSink {
+  readonly context?: string
+  getKeyboardCodes?(context: string, input: string): readonly string[]
+  subscribeContextChanges?(listener: (context: string) => void): () => void
   isKeyMapped(code: string): boolean
   pressKey(code: string): boolean
   releaseKey(code: string): boolean
@@ -7,6 +10,12 @@ export interface KeyboardInputSink {
 }
 
 function usesNativeKeyboard(element: Element | null): boolean {
+  if (element && 'isContentEditable' in element && element.isContentEditable === true) return true
+  const button = element?.closest('button')
+
+  // SAFETY: the button selector identifies an HTML button with an HTMLElement dataset.
+  if (button && 'dataset' in button && (button as HTMLElement).dataset.actionBarSlot) return false
+
   return Boolean(
     element &&
     (element.closest('input, textarea, select, button') ||
@@ -15,7 +24,11 @@ function usesNativeKeyboard(element: Element | null): boolean {
 }
 
 /** Attach to a mounted, focusable game surface. Does not focus it or flush messages. */
-export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink): () => void {
+export function bindKeyboardInput(
+  surface: HTMLElement,
+  input: KeyboardInputSink,
+  capturesKey?: (code: string) => boolean,
+): () => void {
   const document = surface.ownerDocument
   const window = document.defaultView
   const tracked = new Set<string>()
@@ -36,6 +49,13 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
 
     if (!hasFocus() || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return
 
+    // Native button activation owns Enter and Space, even when a game maps those codes.
+    if (
+      document.activeElement?.closest('button') &&
+      ['Enter', 'NumpadEnter', 'Space'].includes(event.code)
+    )
+      return
+
     if (event.repeat) {
       if (tracked.has(event.code) && input.isKeyMapped(event.code)) event.preventDefault()
 
@@ -52,6 +72,11 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     if (!tracked.delete(event.code)) return
 
     if (input.releaseKey(event.code)) event.preventDefault()
+  }
+
+  // Claimed slots run before interactive descendants such as map views.
+  const onCapturedKeyDown = (event: KeyboardEvent) => {
+    if (capturesKey?.(event.code)) onKeyDown(event)
   }
 
   const onFocusIn = () => {
@@ -78,6 +103,7 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
   }
 
   surface.addEventListener('keydown', onKeyDown)
+  surface.addEventListener('keydown', onCapturedKeyDown, true)
   surface.addEventListener('keyup', onKeyUp)
   surface.addEventListener('focusin', onFocusIn)
   surface.addEventListener('focusout', onFocusOut)
@@ -88,6 +114,7 @@ export function bindKeyboardInput(surface: HTMLElement, input: KeyboardInputSink
     if (disposed) return
     disposed = true
     surface.removeEventListener('keydown', onKeyDown)
+    surface.removeEventListener('keydown', onCapturedKeyDown, true)
     surface.removeEventListener('keyup', onKeyUp)
     surface.removeEventListener('focusin', onFocusIn)
     surface.removeEventListener('focusout', onFocusOut)

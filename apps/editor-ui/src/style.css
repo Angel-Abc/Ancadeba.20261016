@@ -204,6 +204,62 @@ textarea:focus-visible {
 #rules-panel button[aria-pressed='true'] {
   border-color: #93c5fd;
 }
+
+#action-bar-panel .error {
+  white-space: pre-wrap;
+}
+#action-bar-panel .error:empty {
+  display: none;
+}
+#action-bar-panel fieldset {
+  margin-block: 0.75rem;
+}
+#action-bar-panel button {
+  margin: 0.25rem 0.25rem 0.25rem 0;
+}
+#action-bar-panel button[aria-pressed='true'] {
+  border-color: #93c5fd;
+}
+.action-bar-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+#action-bar-panel .action-bar-slot-grid button {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  min-width: 0;
+  min-height: 5rem;
+  margin: 0;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.action-bar-slot-heading {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+.action-bar-slot-label {
+  max-height: 3.75em;
+  overflow: hidden;
+}
+.control-mapping-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+}
+.control-mapping-row > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+@media (max-width: 650px) {
+  .control-mapping-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 /* Asset authoring uses the same renderer and resources as game preview. */
 #assets-panel {
   border-top: 1px solid var(--border-color, #52606b);

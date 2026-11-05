@@ -273,6 +273,13 @@ describe('standalone game export', () => {
         status: 'resolved',
         value: expect.stringContaining('north cliffs'),
       })
+      engine.input!.pressKey('KeyQ')
+      engine.input!.releaseKey('KeyQ')
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+
+      expect(lifecycle.activeScene?.data.id).toBe('old-harbour')
+      expect(engine.input!.getKeyboardCodes('gameplay', 'slot-1')).toEqual(['KeyQ'])
     } finally {
       engine?.stop()
       await server.close()

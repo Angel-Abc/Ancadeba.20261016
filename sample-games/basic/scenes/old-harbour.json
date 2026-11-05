@@ -34,7 +34,7 @@
       "placement": {
         "row": 3,
         "column": 3,
-        "rowSpan": 8,
+        "rowSpan": 6,
         "columnSpan": 8
       },
       "textKey": "scenes.old-harbour.narrative"
@@ -150,36 +150,40 @@
       }
     },
     {
-      "id": "walk-to-museum",
-      "type": "button",
+      "id": "action-bar",
+      "type": "action-bar",
       "placement": {
-        "row": 11,
+        "row": 10,
         "column": 3,
-        "rowSpan": 1,
-        "columnSpan": 4
+        "rowSpan": 3,
+        "columnSpan": 8
       },
-      "labelKey": "harbour.walk-to-museum",
-      "action": {
-        "type": "request-action",
-        "action": "walk-to-museum"
-      }
-    },
-    {
-      "id": "follow-chart-to-buoy",
-      "type": "button",
-      "placement": {
-        "row": 11,
-        "column": 7,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "harbour.follow-chart-to-buoy",
-      "action": {
-        "type": "request-action",
-        "action": "follow-chart-to-buoy",
-        "enabledWhen": {
-          "source": "game.state",
-          "path": ["chartRead"]
+      "slots": {
+        "1": {
+          "labelKey": "harbour.walk-to-museum",
+          "action": {
+            "type": "request-action",
+            "action": "walk-to-museum"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "labelKey": "harbour.follow-chart-to-buoy",
+          "action": {
+            "type": "request-action",
+            "action": "follow-chart-to-buoy",
+            "enabledWhen": {
+              "source": "game.state",
+              "path": ["chartRead"]
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
         }
       }
     }

@@ -8,6 +8,7 @@ import {
   type InventorySource,
   type GameRulesDefinition,
   type RuleSource,
+  type InputDefinition,
 } from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
@@ -26,6 +27,7 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  input?: InputDefinition | undefined
   rules?: GameRulesDefinition | undefined
   ruleFiles?: Record<string, GameRulesDefinition> | undefined
   assets?: AssetCatalog | undefined

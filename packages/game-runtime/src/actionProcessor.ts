@@ -115,6 +115,10 @@ export class ActionProcessor implements IGameActions {
     clock: IMonotonicClock,
     private readonly logger: ILogger,
     private readonly isRunning: () => boolean,
+    private readonly routeSceneInput?: (
+      event: VirtualInput,
+      request: (action: string) => void,
+    ) => boolean,
   ) {
     this.handlers = new Map(rules.handlers)
 
@@ -286,6 +290,20 @@ export class ActionProcessor implements IGameActions {
 
   private onInput(event: VirtualInput): void {
     if (this.disposed || !this.isRunning()) return
+
+    if (
+      this.routeSceneInput?.(event, (action) => {
+        this.enqueue(
+          action,
+          undefined,
+          Object.freeze({
+            type: 'input',
+            event: Object.freeze({ ...event }),
+          }),
+        )
+      })
+    )
+      return
     const binding = this.bindings.get(bindingKey(event.context, event.input, event.phase))
 
     if (binding === undefined) return

@@ -50,7 +50,7 @@
       "placement": {
         "row": 3,
         "column": 3,
-        "rowSpan": 7,
+        "rowSpan": 6,
         "columnSpan": 8
       },
       "textKey": "scenes.standard.components.narrative.text"
@@ -77,7 +77,7 @@
       "id": "footer",
       "type": "text",
       "placement": {
-        "row": 12,
+        "row": 9,
         "column": 3,
         "rowSpan": 1,
         "columnSpan": 8
@@ -179,52 +179,52 @@
       }
     },
     {
-      "id": "walk-to-harbour",
-      "type": "button",
+      "id": "action-bar",
+      "type": "action-bar",
       "placement": {
         "row": 10,
         "column": 3,
-        "rowSpan": 1,
+        "rowSpan": 3,
         "columnSpan": 8
       },
-      "labelKey": "harbour.walk-to-harbour",
-      "action": {
-        "type": "request-action",
-        "action": "walk-to-harbour"
-      }
-    },
-    {
-      "id": "take-letter",
-      "type": "button",
-      "placement": {
-        "row": 11,
-        "column": 3,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "museum.take-letter",
-      "action": {
-        "type": "request-action",
-        "action": "take-letter",
-        "enabledWhen": {
-          "source": "game.state",
-          "path": ["canTakeLetter"]
+      "slots": {
+        "1": {
+          "labelKey": "harbour.walk-to-harbour",
+          "action": {
+            "type": "request-action",
+            "action": "walk-to-harbour"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "labelKey": "museum.take-letter",
+          "action": {
+            "type": "request-action",
+            "action": "take-letter",
+            "enabledWhen": {
+              "source": "game.state",
+              "path": ["canTakeLetter"]
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "3": {
+          "labelKey": "museum.walk-east",
+          "action": {
+            "type": "request-action",
+            "action": "walk-east"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
         }
-      }
-    },
-    {
-      "id": "walk-east",
-      "type": "button",
-      "placement": {
-        "row": 11,
-        "column": 7,
-        "rowSpan": 1,
-        "columnSpan": 4
-      },
-      "labelKey": "museum.walk-east",
-      "action": {
-        "type": "request-action",
-        "action": "walk-east"
       }
     }
   ],

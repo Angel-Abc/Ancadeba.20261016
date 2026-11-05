@@ -1,7 +1,8 @@
 import type { ILogger, IMonotonicClock, ITaskScheduler } from '@ancadeba/utilities'
 import { ActionProcessor } from './actionProcessor.js'
 import type { GameRules } from './actions.js'
-import type { GameInstance, IGameRuntime } from './gameLifecycle.js'
+import type { GameInstance, IGameRuntime, IGameLifecycle } from './gameLifecycle.js'
+import { GameActionBar } from './actionBar.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
@@ -10,6 +11,7 @@ import { TimerService, type TimerId } from './timers.js'
 export class GameActionRuntime implements IGameRuntime {
   readonly actions: ActionProcessor
   readonly bindings: GameBindings
+  readonly actionBar: GameActionBar | undefined
   private readonly timers: TimerService
   private started = false
   private disposed = false
@@ -25,16 +27,27 @@ export class GameActionRuntime implements IGameRuntime {
     private readonly onStart: () => void,
     allocateTimerId: () => TimerId,
     private readonly onDispose: () => void,
+    lifecycle?: IGameLifecycle,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
+    this.actionBar = lifecycle ? new GameActionBar(lifecycle) : undefined
 
     try {
-      this.actions = new ActionProcessor(rules, messages, this.timers, clock, logger, isRunning)
+      this.actions = new ActionProcessor(
+        rules,
+        messages,
+        this.timers,
+        clock,
+        logger,
+        isRunning,
+        (event, request) => this.actionBar?.handleInput(event, request) ?? false,
+      )
       this.bindings = new GameBindings(
         { state: () => game.state, progression: () => this.actions.progression },
         messages,
       )
     } catch (error) {
+      this.actionBar?.dispose()
       this.timers.dispose()
       messages.dispose()
       throw error
@@ -51,6 +64,7 @@ export class GameActionRuntime implements IGameRuntime {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.actionBar?.dispose()
     this.bindings.dispose()
 
     try {

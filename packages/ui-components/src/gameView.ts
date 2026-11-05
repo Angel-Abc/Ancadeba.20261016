@@ -138,6 +138,8 @@ export function mountGameView(
 
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
+      input: session.input,
+      onActionBarFocusLost: () => root.focus(),
       assets: game.assets,
       localization,
       onButtonActivate: (action) => {
@@ -153,7 +155,27 @@ export function mountGameView(
 
     cleanups.push(() => renderer.dispose())
 
-    if (session.input) cleanups.push(bindKeyboardInput(root, session.input))
+    if (session.input) {
+      const input = session.input
+
+      const capturesKey = (code: string) => {
+        const bar = session.lifecycle.activeScene?.data.components.find(
+          (component) => component.type === 'action-bar',
+        )
+
+        return Boolean(
+          bar &&
+          Object.values(bar.slots).some(
+            ({ inputBinding: binding }) =>
+              binding &&
+              binding.context === input.context &&
+              input.getKeyboardCodes?.(binding.context, binding.input).includes(code),
+          ),
+        )
+      }
+
+      cleanups.push(bindKeyboardInput(root, input, capturesKey))
+    }
 
     if (!session.lifecycle.activeScene) {
       const first =

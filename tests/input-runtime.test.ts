@@ -33,6 +33,30 @@ function controller() {
 }
 
 describe('game input controller', () => {
+  it('looks up all physical codes in configuration order and observes context changes', () => {
+    const { input } = controller()
+    expect(input.getKeyboardCodes('gameplay', 'moveNorth')).toEqual(['KeyW', 'ArrowUp', 'KeyK'])
+    expect(input.getKeyboardCodes('menu', 'accept')).toEqual(['Enter'])
+    expect(input.getKeyboardCodes('missing', 'moveNorth')).toEqual([])
+    const first = vi.fn()
+    const second = vi.fn()
+    const unsubscribe = input.subscribeContextChanges(first)
+    input.subscribeContextChanges(second)
+    input.setContext('gameplay')
+    expect(first).not.toHaveBeenCalled()
+    input.setContext('menu')
+    expect(first).toHaveBeenCalledExactlyOnceWith('menu')
+    unsubscribe()
+    unsubscribe()
+    input.setContext('gameplay')
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(2)
+    input.dispose()
+    input.setContext('menu')
+    expect(second).toHaveBeenCalledTimes(2)
+    expect(input.getKeyboardCodes('gameplay', 'moveNorth')).toEqual([])
+  })
+
   it('aggregates physical keys and virtual keys into one press and final release', () => {
     const { input, messages, handler } = controller()
     expect(input.pressKey('KeyW')).toBe(true)

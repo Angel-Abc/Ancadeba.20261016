@@ -68,6 +68,8 @@ export {
 
 export { InputController, type IGameInput, type VirtualInput } from './input.js'
 
+export { GameActionBar, type IGameActionBar } from './actionBar.js'
+
 export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from './timers.js'
 
 export { ActionProcessor } from './actionProcessor.js'

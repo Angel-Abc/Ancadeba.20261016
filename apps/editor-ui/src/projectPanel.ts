@@ -6,6 +6,7 @@ import { editorLocalization } from './localization.js'
 import { bindAssetsPanel } from './assetsPanel.js'
 import { bindProjectTree } from './projectTreeView.js'
 import { bindRulesPanel } from './rulesPanel.js'
+import { bindActionBarPanel } from './actionBarPanel.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -152,11 +153,16 @@ export function bindProjectPanel(
   let assetTarget = ''
   const treeElement = root.querySelector<HTMLElement>('#project-tree')
   const rulesElement = treeElement && root.querySelector<HTMLElement>('#rules-panel')
+  const actionBarElement = treeElement && root.querySelector<HTMLElement>('#action-bar-panel')
   let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
+  let actionBarPanel: ReturnType<typeof bindActionBarPanel> | undefined
 
   const sections = [
     ...projectTreeSections,
     ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: () => [] }] : []),
+    ...(actionBarElement
+      ? [{ id: 'controls', labelKey: 'controls.heading', nodes: () => [] }]
+      : []),
     ...additionalSections,
   ]
 
@@ -175,6 +181,8 @@ export function bindProjectPanel(
     const graphic =
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
 
+    const actionBar = Boolean(actionBarElement && component?.type === 'action-bar')
+
     metadata.hidden = node.section !== 'game'
     sceneMetadata.hidden =
       node.kind !== 'scene' || !view?.scenes.some((scene) => scene.id === sceneId)
@@ -184,8 +192,12 @@ export function bindProjectPanel(
     find('assets-panel').hidden = node.section !== 'assets' && !graphic
 
     if (rulesElement) rulesElement.hidden = node.section !== 'rules'
+
+    if (actionBarElement) actionBarElement.hidden = node.section !== 'controls' && !actionBar
+
+    if (actionBar) actionBarPanel?.navigate(sceneId)
     find('component-details').hidden =
-      node.section !== 'scenes' || node.kind !== 'component' || graphic
+      node.section !== 'scenes' || node.kind !== 'component' || graphic || actionBar
     find('component-json').textContent =
       component && !graphic ? JSON.stringify(component, null, 2) : ''
     find('workspace-heading').textContent =
@@ -215,9 +227,21 @@ export function bindProjectPanel(
               (component) => component.id === node.id && component.type === 'graphic',
             )))
 
+    const usesActionBar = Boolean(
+      actionBarElement &&
+      (node.section === 'controls' ||
+        (node.section === 'scenes' &&
+          view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.some(
+              (component) => component.id === node.id && component.type === 'action-bar',
+            ))),
+    )
+
     if (
       (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
+      (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
       additionalSections.find((section) => section.id === node.section)?.canSelect?.(node) === false
     ) {
       find('tree-message').textContent = t('tree.saveFirst')
@@ -267,6 +291,7 @@ export function bindProjectPanel(
   const render: ProjectEditorListener = (state, replaceFields) => {
     assetsPanel?.render(state, replaceFields)
     rulesPanel?.render(state, replaceFields)
+    actionBarPanel?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -276,7 +301,9 @@ export function bindProjectPanel(
       replaceFields &&
       (state.lastCommand === 'game.updateRules' ||
         state.lastCommand === 'scene.upsertRuleButton' ||
-        state.lastCommand === 'inventory.setRuleInspection')
+        state.lastCommand === 'inventory.setRuleInspection' ||
+        state.lastCommand === 'scene.setActionBar' ||
+        state.lastCommand === 'game.updateInput')
 
     if (projectChanged || ruleChange) onProjectChange?.(loadedPath)
 
@@ -324,6 +351,22 @@ export function bindProjectPanel(
 
     const updateTree = () => {
       if (!tree) return
+
+      if (
+        replaceFields &&
+        state.lastCommand === 'scene.setActionBar' &&
+        selection.section === 'scenes' &&
+        selection.kind === 'component' &&
+        !view?.scenes
+          .find((scene) => scene.id === selection.parentId)
+          ?.components.some((component) => component.id === selection.id)
+      )
+        selection = {
+          key: 'controls',
+          section: 'controls',
+          kind: 'section',
+          label: t('controls.heading'),
+        }
 
       const updated =
         view &&
@@ -427,6 +470,11 @@ export function bindProjectPanel(
     rulesPanel = bindRulesPanel(rulesElement, (command) => {
       void controller.save(command)
     })
+
+  if (actionBarElement)
+    actionBarPanel = bindActionBarPanel(actionBarElement, (command) => {
+      void controller.save(command)
+    })
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -486,7 +534,8 @@ export function bindProjectPanel(
   })
 
   const hasDrafts = () =>
-    dirtyForms.size > 0 || Boolean(assetsPanel?.hasDrafts() || rulesPanel?.hasDrafts())
+    dirtyForms.size > 0 ||
+    Boolean(assetsPanel?.hasDrafts() || rulesPanel?.hasDrafts() || actionBarPanel?.hasDrafts())
 
   on(reload, 'click', () => {
     void controller.load(loadedPath, hasDrafts())

@@ -8,6 +8,8 @@ export * from './localization.js'
 
 export * from './input.js'
 
+export * from './actionBar.js'
+
 export * from './scene.js'
 
 export * from './map.js'

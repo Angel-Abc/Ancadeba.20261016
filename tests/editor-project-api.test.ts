@@ -83,6 +83,222 @@ describe('shared editor project API', () => {
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
 
+  it('authors action bars and per-game input through revision-checked saves', async () => {
+    const initial = await inspect()
+
+    const created = await command(initial.revision, {
+      type: 'scene.create',
+      scene: { ...scene, type: 'game' },
+    })
+
+    const withScene = projectViewSchema.parse(await created.json())
+
+    const input = {
+      'schema-version': '1.0.0',
+      'virtual-keys': ['primary'],
+      keyboard: { KeyQ: 'primary' },
+      contexts: { gameplay: { primary: 'slot-1' } },
+      'initial-context': 'gameplay',
+    }
+
+    const response = await command(withScene.revision, {
+      type: 'game.updateInput',
+      inputId: 'controls',
+      input,
+    })
+
+    expect(response.status).toBe(200)
+    const withInput = projectViewSchema.parse(await response.json())
+    expect(withInput.input).toEqual(input)
+    expect(withInput.game?.input).toBe('controls')
+
+    const bar = {
+      id: 'actions',
+      type: 'action-bar',
+      placement: { row: 10, column: 3, rowSpan: 3, columnSpan: 8 },
+      slots: {
+        '1': {
+          label: 'Visit',
+          action: { type: 'enter-scene', scene: 'shop' },
+          inputBinding: { context: 'gameplay', input: 'slot-1' },
+        },
+      },
+    }
+
+    const saved = await command(withInput.revision, {
+      type: 'scene.setActionBar',
+      sceneId: 'shop',
+      component: bar,
+    })
+
+    expect(saved.status).toBe(200)
+    const withBar = projectViewSchema.parse(await saved.json())
+    expect(withBar.scenes[0]!.components).toEqual([bar])
+    expect(
+      (
+        await command(withInput.revision, {
+          type: 'scene.setActionBar',
+          sceneId: 'shop',
+          component: null,
+        })
+      ).status,
+    ).toBe(409)
+    const changedInput = { ...input, keyboard: { KeyJ: 'primary', Digit1: 'primary' } }
+
+    const rebound = await command(withBar.revision, {
+      type: 'game.updateInput',
+      inputId: 'controls',
+      input: changedInput,
+    })
+
+    const afterRebind = projectViewSchema.parse(await rebound.json())
+
+    const orphan = await command(afterRebind.revision, {
+      type: 'game.updateInput',
+      inputId: 'controls',
+      input: { ...changedInput, contexts: { gameplay: { primary: 'other' } } },
+    })
+
+    expect(orphan.status).toBe(422)
+    expect(JSON.parse(await readFile(join(root, 'basic/input/controls.json'), 'utf8'))).toEqual(
+      changedInput,
+    )
+
+    const loader = new GameLoader(
+      new JsonResourceLoader(
+        {
+          readText: (path) => readFile(join(root, 'basic', path), 'utf8'),
+          readBytes: async (path) => new Uint8Array(await readFile(join(root, 'basic', path))),
+        },
+        { debug: () => '', info: () => '', warn: () => '', error: () => '' },
+      ),
+    )
+
+    const loaded = await loader.load()
+    expect(loaded.input?.keyboard).toEqual(changedInput.keyboard)
+    expect(loaded.scenes.get('shop')!.components[0]).toMatchObject(bar)
+
+    const removed = await command(afterRebind.revision, {
+      type: 'scene.setActionBar',
+      sceneId: 'shop',
+      component: null,
+    })
+
+    expect(removed.status).toBe(200)
+    expect(projectViewSchema.parse(await removed.json()).scenes[0]!.components).toEqual([])
+  })
+
+  it('protects an unlisted input file when creating input configuration', async () => {
+    await mkdir(join(root, 'basic/input'))
+    await writeFile(join(root, 'basic/input/controls.json'), 'orphan')
+
+    const response = await command((await inspect()).revision, {
+      type: 'game.updateInput',
+      inputId: 'controls',
+      input: {
+        'schema-version': '1.0.0',
+        'virtual-keys': ['key'],
+        keyboard: {},
+        contexts: { gameplay: { key: 'act' } },
+        'initial-context': 'gameplay',
+      },
+    })
+
+    expect(response.status).toBe(409)
+    expect(await readFile(join(root, 'basic/input/controls.json'), 'utf8')).toBe('orphan')
+    expect((await inspect()).game?.input).toBeUndefined()
+  })
+
+  it.each([false, true])(
+    'keeps input publication consistent when manifest saving fails (committed: %s)',
+    async (committed) => {
+      const failing: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+        write: async (path, bytes) => {
+          if (committed) await workspace.write(path, bytes)
+          throw new Error('Manifest write failed')
+        },
+      }
+
+      const service = new EditorProjectService(
+        new WorkspaceProjectRepository(failing),
+        new EditorCoordinator(),
+      )
+
+      const current = await service.inspect('basic')
+
+      const result = service.apply({
+        path: 'basic',
+        expectedRevision: current.revision,
+        command: {
+          type: 'game.updateInput',
+          inputId: 'controls',
+          input: {
+            'schema-version': '1.0.0',
+            'virtual-keys': ['key'],
+            keyboard: {},
+            contexts: { gameplay: { key: 'act' } },
+            'initial-context': 'gameplay',
+          },
+        },
+      })
+
+      if (committed) {
+        expect((await result).view.game?.input).toBe('controls')
+      } else {
+        await expect(result).rejects.toThrow('Manifest write failed')
+        await expect(readFile(join(root, 'basic/input/controls.json'))).rejects.toHaveProperty(
+          'code',
+          'ENOENT',
+        )
+        expect((await inspect()).game?.input).toBeUndefined()
+      }
+    },
+  )
+
+  it('preserves a new input file when another manifest already references it', async () => {
+    const uncertain: ProjectWorkspace = {
+      list: (path) => workspace.list(path),
+      read: (path) => workspace.read(path),
+      create: (path, bytes) => workspace.create(path, bytes),
+      removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+      write: async (path) => {
+        await workspace.write(
+          path,
+          Buffer.from(JSON.stringify({ ...manifest, title: 'External', input: 'controls' })),
+        )
+        throw new Error('Publication outcome changed')
+      },
+    }
+
+    const service = new EditorProjectService(
+      new WorkspaceProjectRepository(uncertain),
+      new EditorCoordinator(),
+    )
+
+    await expect(
+      service.apply({
+        path: 'basic',
+        expectedRevision: (await service.inspect('basic')).revision,
+        command: {
+          type: 'game.updateInput',
+          inputId: 'controls',
+          input: {
+            'schema-version': '1.0.0',
+            'virtual-keys': ['key'],
+            keyboard: {},
+            contexts: { gameplay: { key: 'act' } },
+            'initial-context': 'gameplay',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'input_publication_failed' })
+    expect((await inspect()).input?.contexts.gameplay).toEqual({ key: 'act' })
+  })
+
   it('saves rules and trigger links, guards deletion, and rejects a stale rules draft', async () => {
     const owners = {
       'schema-version': '1.0.0',
@@ -354,7 +570,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(13)
+    expect((await capabilities.json()).commands).toHaveLength(15)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

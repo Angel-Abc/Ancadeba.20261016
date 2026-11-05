@@ -88,6 +88,14 @@ export function editRules(
 
         if (button.type === 'button' && action.type === 'request-action')
           checkLink(action.action, action.enabledWhen, true)
+
+        if (button.type === 'action-bar')
+          for (const slot of Object.values(object(button.slots))) {
+            const slotAction = object(object(slot).action)
+
+            if (slotAction.type === 'request-action')
+              checkLink(slotAction.action, slotAction.enabledWhen, true)
+          }
       }
     }
 

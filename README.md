@@ -1472,6 +1472,60 @@ context. Player remapping, persistence, chords, repeat policies, additional devi
 and JSON-defined executable rules are not implemented yet. Hosts do not flush the bus on keyboard
 events; the session dispatcher schedules delivery.
 
+## Scene action bars
+
+Game scenes can include one `action-bar` component. It renders five columns and
+three rows, with slots numbered `1` through `15` from left to right, top to bottom.
+Authors choose the component's position and size with the usual scene grid placement.
+
+```json
+{
+  "id": "actions",
+  "type": "action-bar",
+  "placement": { "row": 10, "column": 3, "rowSpan": 3, "columnSpan": 8 },
+  "slots": {
+    "1": {
+      "label": "Take letter",
+      "action": {
+        "type": "request-action",
+        "action": "take-letter",
+        "enabledWhen": { "source": "game.state", "path": ["canTakeLetter"] }
+      },
+      "inputBinding": { "context": "gameplay", "input": "slot-1" }
+    }
+  }
+}
+```
+
+Configure keys in the game's existing input file. For example, declare `slot-1`
+as a virtual key, map `keyboard.KeyQ` to `slot-1`, and map
+`contexts.gameplay["slot-1"]` to the virtual input `slot-1`. Different games can
+choose different physical keys. The basic game's museum and harbour demonstrate
+`QWERT / ASDFG / ZXCVB`. Each scene chooses its slot actions.
+
+Slots use the existing button action types and support `labelKey` translations.
+An omitted `inputBinding` makes a slot available by click and native button
+activation. Bound inputs must exist in their named context, and each pair can
+appear once per bar. Inputs may exist without any physical key mapping.
+
+Key badges show all matching physical codes in configuration order while the
+slot's input context is active. `KeyQ` displays as `Q`, `Digit1` as `1`, and other
+codes display their code name. Bindings use physical keyboard positions.
+`IGameInput.getKeyboardCodes(context, input)` returns these codes, and
+`subscribeContextChanges(listener)` observes committed context changes.
+
+Keyboard activation travels through `InputController` and `input.virtual`.
+Occupied slots claim their matching gesture before general input action bindings,
+including while disabled. They activate once on `pressed` and consume the matching
+`released` or `cancelled` event. Empty slots leave input available to ordinary game
+controls. Captured slot input belongs to its originating scene instance and is
+discarded if that scene is disposed before delivery.
+
+Standalone play and editor preview share this behavior. Shortcuts work while a
+bar button has focus, with Enter and Space retaining native button activation.
+Leaving a focused bar through a scene transition returns focus to the game surface.
+Project diagnostics, startup, and export validate the component and its references.
+
 ## Queued messaging
 
 `@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.

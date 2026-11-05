@@ -5,6 +5,7 @@ import { LanguageSelectComponentRenderer } from './languageSelectComponentRender
 import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
 import { MapViewComponentRenderer } from './mapViewComponentRenderer.js'
 import { InventoryComponentRenderer } from './inventoryComponentRenderer.js'
+import { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -23,12 +24,15 @@ export class ComponentRenderer implements IComponentRenderer {
       'language-select': new LanguageSelectComponentRenderer(),
       'map-view': new MapViewComponentRenderer(),
       inventory: new InventoryComponentRenderer(),
+      'action-bar': new ActionBarComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'action-bar':
+        return this.renderers['action-bar'].render(component, context)
       case 'graphic':
         return this.renderers.graphic.render(component, context)
       case 'text':
