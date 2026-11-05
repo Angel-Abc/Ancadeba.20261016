@@ -4,6 +4,7 @@ import type { GameRules } from './actions.js'
 import type { GameInstance, IGameRuntime, IGameLifecycle } from './gameLifecycle.js'
 import { GameActionBar } from './actionBar.js'
 import { GameMapMovement } from './mapMovement.js'
+import { GameNearbyContext } from './nearbyContext.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
@@ -14,6 +15,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly bindings: GameBindings
   readonly actionBar: GameActionBar | undefined
   readonly mapMovement: GameMapMovement | undefined
+  readonly nearby: GameNearbyContext | undefined
   private readonly timers: TimerService
   private started = false
   private disposed = false
@@ -33,8 +35,13 @@ export class GameActionRuntime implements IGameRuntime {
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
     this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
+    this.bindings = new GameBindings(
+      { state: () => game.state, progression: () => this.actions.progression },
+      messages,
+    )
+    this.nearby = lifecycle ? new GameNearbyContext(lifecycle, this.bindings) : undefined
     this.actionBar = lifecycle
-      ? new GameActionBar(lifecycle, game.inventory, this.mapMovement)
+      ? new GameActionBar(lifecycle, game.inventory, this.mapMovement, this.nearby)
       : undefined
 
     try {
@@ -47,12 +54,10 @@ export class GameActionRuntime implements IGameRuntime {
         isRunning,
         (event, request) => this.actionBar?.handleInput(event, request) ?? false,
       )
-      this.bindings = new GameBindings(
-        { state: () => game.state, progression: () => this.actions.progression },
-        messages,
-      )
     } catch (error) {
       this.actionBar?.dispose()
+      this.nearby?.dispose()
+      this.bindings.dispose()
       this.mapMovement?.dispose()
       this.timers.dispose()
       messages.dispose()
@@ -71,6 +76,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed) return
     this.disposed = true
     this.actionBar?.dispose()
+    this.nearby?.dispose()
     this.mapMovement?.dispose()
     this.bindings.dispose()
 

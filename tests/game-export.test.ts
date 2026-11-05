@@ -315,6 +315,16 @@ describe('standalone game export', () => {
       const game = lifecycle.startGame()
       lifecycle.enterScene('standard')
       const actions = game.actions!
+      game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
+      game.actionBar!.activate(lifecycle.activeScene!, 'action-bar', '6')
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      expect(
+        game.bindings!.read({ source: 'game.state', path: ['inspectionResult'] }),
+      ).toMatchObject({
+        status: 'resolved',
+        value: expect.stringContaining('Read the folded letter'),
+      })
       actions.request('take-letter')
       actions.request('inspect-letter', 'folded-letter')
       actions.request('walk-east')

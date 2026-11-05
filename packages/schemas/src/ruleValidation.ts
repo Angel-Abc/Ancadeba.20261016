@@ -128,6 +128,17 @@ export function validateRuleSources(
 
           if (condition.type === 'state-is') checkField(condition.path, condition.value, source)
 
+          if (
+            condition.type === 'payload-is-target' &&
+            ![...scenes.values()].some((scene) =>
+              scene.components.some(
+                (component) =>
+                  component.type === 'nearby' && Object.hasOwn(component.entries, condition.target),
+              ),
+            )
+          )
+            report([...source, 'target'], 'Unknown nearby target')
+
           if (condition.type === 'scene-is' && !scenes.has(condition.scene))
             report([...source, 'scene'], 'Unknown scene')
 

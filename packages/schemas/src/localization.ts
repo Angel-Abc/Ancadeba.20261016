@@ -46,21 +46,36 @@ export function localizeDefinitions(
           ...scene,
           ...metadata(scene),
           components: scene.components.map((component) =>
-            component.type === 'action-bar'
+            component.type === 'nearby'
               ? {
                   ...component,
-                  slots: Object.fromEntries(
-                    Object.entries(component.slots).map(([id, slot]) => [
+                  label: text(component.labelKey, component.label, true),
+                  entries: Object.fromEntries(
+                    Object.entries(component.entries).map(([id, entry]) => [
                       id,
-                      { ...slot, label: text(slot.labelKey, slot.label, true) },
+                      {
+                        ...entry,
+                        label: text(entry.labelKey, entry.label, true),
+                        description: text(entry.descriptionKey, entry.description),
+                      },
                     ]),
                   ),
                 }
-              : component.type === 'graphic'
-                ? { ...component, alt: text(component.altKey, component.alt) }
-                : component.type === 'text'
-                  ? { ...component, text: text(component.textKey, component.text) }
-                  : { ...component, label: text(component.labelKey, component.label, true) },
+              : component.type === 'action-bar'
+                ? {
+                    ...component,
+                    slots: Object.fromEntries(
+                      Object.entries(component.slots).map(([id, slot]) => [
+                        id,
+                        { ...slot, label: text(slot.labelKey, slot.label, true) },
+                      ]),
+                    ),
+                  }
+                : component.type === 'graphic'
+                  ? { ...component, alt: text(component.altKey, component.alt) }
+                  : component.type === 'text'
+                    ? { ...component, text: text(component.textKey, component.text) }
+                    : { ...component, label: text(component.labelKey, component.label, true) },
           ),
         }),
       ]),
@@ -90,13 +105,18 @@ export function assertGameLanguages(
         scene.titleKey !== undefined ||
         scene.descriptionKey !== undefined ||
         scene.components.some((component) =>
-          component.type === 'action-bar'
-            ? Object.values(component.slots).some((slot) => slot.labelKey !== undefined)
-            : component.type === 'graphic'
-              ? component.altKey !== undefined
-              : component.type === 'text'
-                ? component.textKey !== undefined
-                : component.labelKey !== undefined,
+          component.type === 'nearby'
+            ? component.labelKey !== undefined ||
+              Object.values(component.entries).some(
+                (entry) => entry.labelKey !== undefined || entry.descriptionKey !== undefined,
+              )
+            : component.type === 'action-bar'
+              ? Object.values(component.slots).some((slot) => slot.labelKey !== undefined)
+              : component.type === 'graphic'
+                ? component.altKey !== undefined
+                : component.type === 'text'
+                  ? component.textKey !== undefined
+                  : component.labelKey !== undefined,
         ),
     )
 

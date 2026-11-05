@@ -1581,6 +1581,49 @@ owners. Scene transitions clear selection. Queued and held shortcuts retain thei
 original item selection and are discarded if it changes before activation. The
 basic game's museum and harbour demonstrate Inspect on R and Read on T.
 
+Nearby characters and objects use a `nearby` scene component. Each entry has a
+stable ID, `kind` (`character` or `object`), a label and description, and a map of
+game-defined action IDs to requested actions. Labels and descriptions support
+`labelKey` and `descriptionKey`. A boolean `visibleWhen` binding can hide an entry
+when it is taken, leaves, or otherwise becomes unavailable.
+
+```json
+{
+  "id": "nearby",
+  "type": "nearby",
+  "label": "Nearby",
+  "placement": { "row": 3, "column": 11, "rowSpan": 2, "columnSpan": 2 },
+  "descriptionTarget": "narrative",
+  "entries": {
+    "curator": {
+      "kind": "character",
+      "label": "The curator",
+      "description": "The curator studies an old harbour chart.",
+      "actions": { "talk": { "action": "talk-curator" } }
+    }
+  }
+}
+```
+
+`descriptionTarget` selects a text component in the same game scene. Selecting a
+target appends its name and description to that text; clearing selection restores
+the underlying text. One nearby panel may supply descriptions to a given text
+component. Selection itself does not request an action. Slots reference a panel
+and an action ID with
+`{ "type": "nearby-action", "nearby": "nearby", "action": "talk" }`.
+Only actions supported by the selected target appear. Each action may have a
+boolean `enabledWhen` binding. Requests include the target ID as their payload;
+authored rules can match it with
+`{ "type": "payload-is-target", "target": "curator" }`.
+
+Scene actions, selected inventory actions, and selected nearby actions occupy
+their separately configured slots. Hidden targets and scene transitions clear
+nearby selection. Queued shortcuts retain the original selection and cannot
+activate a newly selected target. Descriptions follow the current game language;
+new authored action text also uses the current language. Existing state and log
+text is retained. The basic sample demonstrates Talk on A, Examine on S, and
+Take on D, using the same configurable input system as other slots.
+
 ## Queued messaging
 
 `@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.

@@ -42,6 +42,7 @@ Each request contains one command. Metadata commands supply all listed fields.
 | `scene.setActionBar`       | `sceneId`, complete action-bar `component`, or `null` to remove it                   |
 | `game.updateInput`         | `inputId`, complete input `input` definition                                         |
 | `inventory.setItemActions` | `itemType`, map of item action IDs to requested actions and optional enable bindings |
+| `scene.upsertNearby`       | `sceneId`, complete nearby `component` with entries and a description text target    |
 
 Scene creation updates both the scene document and the manifest reference.
 Game and scene IDs cannot be changed. Scenes support text, buttons, language selectors,
@@ -243,6 +244,23 @@ the inspection action set that field, and bind it in the scene's main text with 
 alias such as `{{inspection}}`. The basic sample uses `inspectionResult` for this
 purpose. Its rules clear the result after other actions and show it again on
 reinspection, without repeating discovery effects.
+
+Configure nearby entries under **Rules → Trigger links → Nearby characters and
+objects**. Choose the game scene and the **Description text component** that will
+show selected descriptions. Set the panel title and grid placement, then add
+targets using stable IDs. Each target has a character/object kind, a label,
+description, optional translations, and an optional boolean visibility condition.
+Add action IDs such as `talk`, `examine`, or `take`, choose their requested game
+actions, and optionally set enable conditions. Save the nearby panel before
+assigning its action-bar slots. **Discard nearby draft** restores the saved panel;
+unsaved drafts prevent switching scenes.
+
+In **Action bar & input**, choose **Selected nearby target** as the slot action
+type, choose its **Nearby panel**, and enter the **Target action ID**. Configure
+the slot's label and input binding as usual. Unsupported actions leave their
+reserved cells empty. Scene and inventory commands remain in their own slots.
+Use the **Request is for nearby target** rule condition to match a selected target
+ID. Action results can use the same main-text state bindings as item inspection.
 
 ### Extending the project explorer
 

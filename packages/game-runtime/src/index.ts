@@ -72,6 +72,8 @@ export { GameActionBar, type IGameActionBar } from './actionBar.js'
 
 export { GameMapMovement, type IGameMapMovement, type MapDirection } from './mapMovement.js'
 
+export { GameNearbyContext, type IGameNearby, type NearbySelection } from './nearbyContext.js'
+
 export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from './timers.js'
 
 export { ActionProcessor } from './actionProcessor.js'

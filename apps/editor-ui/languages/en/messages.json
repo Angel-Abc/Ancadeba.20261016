@@ -119,5 +119,6 @@
   "tree.readOnly": "This component is available for inspection. Editing is not yet supported.",
   "rules.heading": "Rules",
   "controls.heading": "Action bar & input",
-  "tree.action-bar": "Action bar"
+  "tree.action-bar": "Action bar",
+  "tree.nearby": "Nearby characters and objects"
 }

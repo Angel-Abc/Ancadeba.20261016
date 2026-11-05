@@ -89,6 +89,11 @@ export const actionBarSlotSchema = z
         inventory: gameIdSchema,
         action: gameIdSchema,
       }),
+      z.object({
+        type: z.literal('nearby-action'),
+        nearby: gameIdSchema,
+        action: gameIdSchema,
+      }),
     ]),
     inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
   })
@@ -184,6 +189,37 @@ export const inventoryComponentSchema = z
 
 export type InventoryComponentDefinition = z.infer<typeof inventoryComponentSchema>
 
+export const nearbyEntrySchema = z
+  .object({
+    kind: z.enum(['character', 'object']),
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+    description: z.string().default(''),
+    descriptionKey: translationKeySchema.optional(),
+    visibleWhen: gameBindingSchema.optional(),
+    actions: z.record(gameIdSchema, requestActionSchema.omit({ type: true })).default({}),
+  })
+  .refine((entry) => Boolean(entry.label || entry.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
+export const nearbyComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('nearby'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default('Nearby'),
+    labelKey: translationKeySchema.optional(),
+    descriptionTarget: gameIdSchema,
+    entries: z.record(gameIdSchema, nearbyEntrySchema),
+  })
+  .refine((component) => Boolean(component.label || component.labelKey))
+
+export type NearbyComponentDefinition = z.infer<typeof nearbyComponentSchema>
+
+export type NearbyEntryDefinition = z.infer<typeof nearbyEntrySchema>
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
@@ -192,6 +228,7 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   mapViewComponentSchema,
   inventoryComponentSchema,
   actionBarComponentSchema,
+  nearbyComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -231,7 +268,31 @@ export const sceneSchema = z
       })
     const ids = new Set<string>()
     let hasActionBar = false
+    const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (component.type === 'nearby') {
+        if (scene.type !== 'game')
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index],
+            message: 'Nearby panels require a game scene',
+          })
+
+        if (
+          !scene.components.some(
+            (entry) => entry.id === component.descriptionTarget && entry.type === 'text',
+          ) ||
+          descriptionTargets.has(component.descriptionTarget)
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'descriptionTarget'],
+            message:
+              'Choose a text component in this scene that is not already used by another nearby panel',
+          })
+        descriptionTargets.add(component.descriptionTarget)
+      }
+
       const movementActions =
         component.type === 'action-bar'
           ? Object.entries(component.slots).map(([id, slot]) => ({

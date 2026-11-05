@@ -59,6 +59,11 @@ export function actionBarForm(
       .find((scene) => scene.id === sceneId)
       ?.components.filter((component) => component.type === 'inventory') ?? []
 
+  const nearbyPanels =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter((component) => component.type === 'nearby') ?? []
+
   const mapViews =
     view.scenes
       .find((scene) => scene.id === sceneId)
@@ -78,6 +83,7 @@ export function actionBarForm(
         ['enter-scene', 'Enter scene'],
         ['new-game', 'New game'],
         ['inventory-action', 'Selected inventory item'],
+        ['nearby-action', 'Selected nearby target'],
         ['move-map', 'Move on map'],
       ],
       (type) =>
@@ -93,14 +99,16 @@ export function actionBarForm(
             action:
               type === 'move-map'
                 ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                : type === 'inventory-action'
-                  ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                  : type === 'request-action'
-                    ? { type, action: actions[0] ?? '' }
-                    : {
-                        type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                        scene: gameScenes[0] ?? '',
-                      },
+                : type === 'nearby-action'
+                  ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                  : type === 'inventory-action'
+                    ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                    : type === 'request-action'
+                      ? { type, action: actions[0] ?? '' }
+                      : {
+                          type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                          scene: gameScenes[0] ?? '',
+                        },
           }
         }),
     ),
@@ -123,7 +131,21 @@ export function actionBarForm(
     )
     const action = slot.action
 
-    if (action.type === 'move-map') {
+    if (action.type === 'nearby-action') {
+      detail.append(
+        select(
+          'Nearby panel',
+          action.nearby,
+          nearbyPanels.map(({ id }) => id),
+          (value) => {
+            action.nearby = value
+          },
+        ),
+        input('Target action ID', action.action, (value) => {
+          action.action = value.trim()
+        }),
+      )
+    } else if (action.type === 'move-map') {
       detail.append(
         select(
           'Target map view',

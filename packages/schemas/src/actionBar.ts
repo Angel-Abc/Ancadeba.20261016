@@ -21,6 +21,20 @@ export function actionBarIssues(
 
     const action = slot.action
 
+    if (action.type === 'nearby-action') {
+      if (
+        !scene?.components.some(
+          (component) => component.id === action.nearby && component.type === 'nearby',
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'nearby'],
+          message: `Unknown nearby panel: ${action.nearby}`,
+        })
+
+      continue
+    }
+
     if (action.type === 'inventory-action') {
       if (
         !scene?.components.some(

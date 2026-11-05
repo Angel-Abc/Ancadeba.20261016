@@ -250,6 +250,96 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it.each([
+    { host: 'preview', language: 'en' },
+    { host: 'standalone', language: 'nl' },
+  ])(
+    'selects nearby targets and presents localized descriptions and commands in $host ($language)',
+    async ({ host, language }) => {
+      const game = await new GameLoader(new JsonResourceLoader(source, logger), [language]).load()
+      const { document, target } = setup(game)
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+
+      const catalog = languageCatalogSchema.parse(
+        JSON.parse(await source.readText(`languages/${language}/messages.json`)),
+      )
+
+      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+      const curator = target.find((node) => node.dataset.nearbyEntry === 'curator')!
+      expect(slot('6').hidden).toBe(true)
+      curator.focus()
+      curator.dispatchEvent(new Event('click'))
+      expect(curator.attributes.get('aria-pressed')).toBe('true')
+      expect(component('narrative').textContent).toContain(catalog['nearby.curator.description'])
+      expect(slot('6').hidden).toBe(false)
+      expect(slot('8').hidden).toBe(true)
+      expect(slot('1').hidden).toBe(false)
+      engine.input!.pressKey('KeyA')
+      engine.input!.releaseKey('KeyA')
+      flush(engine)
+      expect(component('narrative').textContent).toContain(catalog['nearby.curator.reply'])
+      const letter = target.find((node) => node.dataset.nearbyEntry === 'folded-letter')!
+      letter.focus()
+      letter.dispatchEvent(new Event('click'))
+      expect(curator.attributes.get('aria-pressed')).toBe('false')
+      expect(slot('6').hidden).toBe(true)
+      expect(slot('8').hidden).toBe(false)
+      expect(component('narrative').textContent).toContain(catalog['nearby.letter.description'])
+      engine.input!.pressKey('KeyD')
+      engine.input!.releaseKey('KeyD')
+      flush(engine)
+      expect(letter.parent!.hidden).toBe(true)
+      expect(slot('8').hidden).toBe(true)
+      expect(component('narrative').textContent).not.toContain(catalog['nearby.letter.description'])
+      const item = target.find((node) => node.dataset.itemId === 'folded-letter')!
+      item.dispatchEvent(new Event('click'))
+      curator.dispatchEvent(new Event('click'))
+      expect(slot('4').hidden).toBe(false)
+      expect(slot('6').hidden).toBe(false)
+
+      const clear = component('nearby').find(
+        (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear nearby selection',
+      )!
+
+      clear.focus()
+      clear.dispatchEvent(new Event('click'))
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      expect(slot('6').hidden).toBe(true)
+      expect(slot('4').hidden).toBe(false)
+      curator.dispatchEvent(new Event('click'))
+      game.localization!.select(language === 'en' ? 'nl' : 'en')
+
+      const translated = languageCatalogSchema.parse(
+        JSON.parse(
+          await source.readText(`languages/${language === 'en' ? 'nl' : 'en'}/messages.json`),
+        ),
+      )
+
+      expect(component('narrative').textContent).toContain(translated['nearby.curator.description'])
+      engine.lifecycle!.enterScene('old-harbour')
+      expect(slot('7').hidden).toBe(true)
+      const boat = target.find((node) => node.dataset.nearbyEntry === 'boat')!
+      boat.dispatchEvent(new Event('click'))
+      slot('7').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(component('narrative').textContent).toContain(translated['nearby.boat.result'])
+    },
+  )
+
   it.each([undefined, true, false])(
     'retains optional inline inspection when inline is %s',
     async (inline) => {
@@ -491,7 +581,7 @@ describe('scene renderer', () => {
       const inspectLetter = () => inspectItem('folded-letter')
       const inspectChart = () => inspectItem('harbour-chart')
 
-      expect(component('nearby').textContent).toContain(message('letter'))
+      expect(component('nearby').textContent).toContain(catalog['nearby.letter.name'])
       expect(component('player-status').textContent).toContain('40 / 40')
       expect(component('items').textContent).toContain('Empty')
       expect(inspectLetter()).toBeUndefined()
@@ -502,7 +592,10 @@ describe('scene renderer', () => {
       click('take-letter')
       flush(engine)
       expect(component('take-letter').disabled).toBe(true)
-      expect(component('nearby').textContent).toContain(message('empty'))
+      expect(
+        component('nearby').find((node) => node.dataset.nearbyEntry === 'folded-letter')!.parent!
+          .hidden,
+      ).toBe(true)
       expect(component('items').textContent).toContain('Folded letter')
       expect(occurrences(component('event-log').textContent, 'pickup')).toBe(1)
       expect(engine.actions?.progression.worldTimeMs).toBe(0)

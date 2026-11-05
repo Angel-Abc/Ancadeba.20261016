@@ -40,7 +40,11 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
 
-  if (command.type === 'scene.setActionBar' || command.type === 'game.updateInput') {
+  if (
+    command.type === 'scene.setActionBar' ||
+    command.type === 'game.updateInput' ||
+    command.type === 'scene.upsertNearby'
+  ) {
     changedFiles.push(...editControls(documents, game, command))
   } else if (
     command.type.startsWith('assets.') ||

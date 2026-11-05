@@ -437,6 +437,52 @@
           }
         ]
       }
+    ],
+    "talk-curator": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "standard"
+          },
+          {
+            "type": "payload-is-target",
+            "target": "curator"
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": {
+              "textKey": "nearby.curator.reply"
+            }
+          }
+        ]
+      }
+    ],
+    "examine-boat": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "old-harbour"
+          },
+          {
+            "type": "payload-is-target",
+            "target": "boat"
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["inspectionResult"],
+            "value": {
+              "textKey": "nearby.boat.result"
+            }
+          }
+        ]
+      }
     ]
   }
 }

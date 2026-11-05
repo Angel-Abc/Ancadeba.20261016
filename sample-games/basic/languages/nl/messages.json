@@ -88,5 +88,17 @@
   "museum.rules.buoy": "Je hebt de rode boei in de ondiepten bereikt.",
   "museum.rules.landing": "Je hebt de aanlegplaats onder de noordelijke kliffen bereikt.",
   "actions.inspect": "Bekijken",
-  "actions.read": "Lezen"
+  "actions.read": "Lezen",
+  "nearby.title": "In de buurt",
+  "nearby.curator.name": "De conservator",
+  "nearby.curator.description": "De conservator bestudeert een oude havenkaart. Naast haar aantekeningen ligt een blauw zegel.",
+  "nearby.curator.reply": "‘Lees de gevouwen brief voordat je de vitrine probeert,’ zegt de conservator. ‘Het wapen is meer dan versiering.’",
+  "nearby.letter.name": "Gevouwen brief",
+  "nearby.letter.description": "Op tafel ligt een gevouwen brief, verzegeld met blauwe was. Je kunt hem meenemen.",
+  "nearby.boat.name": "Roeiboot",
+  "nearby.boat.description": "Een verweerde roeiboot ligt aan de kade vast. De roeispanen liggen dwars over de bankjes.",
+  "nearby.boat.result": "De romp is stevig en beide roeispanen liggen klaar. Je hebt de havenkaart nodig om veilig door het ondiepe water te varen.",
+  "actions.talk": "Praten",
+  "actions.examine": "Bekijken",
+  "actions.take": "Meenemen"
 }

@@ -2,7 +2,10 @@ import { inputFile, type GameDefinition } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
 
-type ControlCommand = Extract<EditorCommand, { type: 'scene.setActionBar' | 'game.updateInput' }>
+type ControlCommand = Extract<
+  EditorCommand,
+  { type: 'scene.setActionBar' | 'game.updateInput' | 'scene.upsertNearby' }
+>
 
 export function editControls(
   documents: Record<string, unknown>,
@@ -30,6 +33,57 @@ export function editControls(
   if (!game.scenes.includes(command.sceneId) || scene.type !== 'game')
     throw new EditorError(422, 'invalid_action_bar_scene', 'Select an existing game scene')
   const components = Array.isArray(scene.components) ? [...scene.components] : []
+
+  if (command.type === 'scene.upsertNearby') {
+    const next = command.component
+    const index = components.findIndex((entry) => object(entry).id === next.id)
+    const previous = object(components[index])
+
+    if (index >= 0 && previous.type !== 'nearby')
+      throw new EditorError(422, 'component_id_in_use', 'This ID belongs to another component')
+    const entries = object(previous.entries)
+
+    const component = {
+      ...previous,
+      ...next,
+      labelKey: next.labelKey,
+      placement: { ...object(previous.placement), ...next.placement },
+      entries: Object.fromEntries(
+        Object.entries(next.entries).map(([id, entry]) => {
+          const old = object(entries[id])
+          const oldActions = object(old.actions)
+
+          return [
+            id,
+            {
+              ...old,
+              ...entry,
+              labelKey: entry.labelKey,
+              descriptionKey: entry.descriptionKey,
+              visibleWhen: entry.visibleWhen,
+              actions: Object.fromEntries(
+                Object.entries(entry.actions).map(([id, action]) => [
+                  id,
+                  {
+                    ...object(oldActions[id]),
+                    ...action,
+                    enabledWhen: action.enabledWhen,
+                  },
+                ]),
+              ),
+            },
+          ]
+        }),
+      ),
+    }
+
+    if (index < 0) components.push(component)
+    else components[index] = component
+    documents[file] = { ...scene, components }
+
+    return [file]
+  }
+
   const index = components.findIndex((component) => object(component).type === 'action-bar')
   const previous = object(components[index])
   const component = command.component
@@ -65,10 +119,13 @@ export function editControls(
                     ? action.scene
                     : undefined,
                 action:
-                  action.type === 'request-action' || action.type === 'inventory-action'
+                  action.type === 'request-action' ||
+                  action.type === 'inventory-action' ||
+                  action.type === 'nearby-action'
                     ? action.action
                     : undefined,
                 inventory: action.type === 'inventory-action' ? action.inventory : undefined,
+                nearby: action.type === 'nearby-action' ? action.nearby : undefined,
                 mapView: action.type === 'move-map' ? action.mapView : undefined,
                 direction: action.type === 'move-map' ? action.direction : undefined,
                 enabledWhen: action.type === 'request-action' ? action.enabledWhen : undefined,

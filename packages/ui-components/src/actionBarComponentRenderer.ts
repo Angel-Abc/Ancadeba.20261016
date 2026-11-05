@@ -35,7 +35,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         const focused = document.activeElement === button
 
         const available =
-          component.slots[id]!.action.type !== 'inventory-action' ||
+          !['inventory-action', 'nearby-action'].includes(component.slots[id]!.action.type) ||
           Boolean(scene && actionBar?.getSlot(scene, component.id, id))
 
         button.disabled = !scene || !actionBar?.isEnabled(scene, component.id, id)
@@ -95,7 +95,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         cleanups.push(() => button.removeEventListener('click', activate))
         let empty: HTMLElement | undefined
 
-        if (slot.action.type === 'inventory-action') {
+        if (slot.action.type === 'inventory-action' || slot.action.type === 'nearby-action') {
           const cell = document.createElement('div')
           cell.className = 'ancadeba-action-bar-cell'
           empty = document.createElement('div')

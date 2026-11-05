@@ -90,6 +90,19 @@ export function editRules(
         const button = object(component)
         const action = object(button.action)
 
+        if (button.type === 'nearby')
+          for (const value of Object.values(object(button.entries))) {
+            const entry = object(value)
+
+            if (entry.visibleWhen)
+              checkBinding(next, gameBindingSchema.parse(entry.visibleWhen), true)
+
+            for (const value of Object.values(object(entry.actions))) {
+              const action = object(value)
+              checkLink(action.action, action.enabledWhen, true)
+            }
+          }
+
         if (button.type === 'button' && action.type === 'request-action')
           checkLink(action.action, action.enabledWhen, true)
 

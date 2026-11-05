@@ -64,19 +64,39 @@
     },
     {
       "id": "nearby",
-      "type": "text",
+      "type": "nearby",
+      "labelKey": "nearby.title",
       "placement": {
         "row": 3,
         "column": 11,
         "rowSpan": 2,
         "columnSpan": 2
       },
-      "textKey": "scenes.standard.components.nearby.text",
-      "bindings": {
-        "items": {
-          "source": "game.state",
-          "path": ["nearby"],
-          "fallback": "Folded letter"
+      "descriptionTarget": "narrative",
+      "entries": {
+        "curator": {
+          "kind": "character",
+          "labelKey": "nearby.curator.name",
+          "descriptionKey": "nearby.curator.description",
+          "actions": {
+            "talk": {
+              "action": "talk-curator"
+            }
+          }
+        },
+        "folded-letter": {
+          "kind": "object",
+          "labelKey": "nearby.letter.name",
+          "descriptionKey": "nearby.letter.description",
+          "visibleWhen": {
+            "source": "game.state",
+            "path": ["canTakeLetter"]
+          },
+          "actions": {
+            "take": {
+              "action": "take-letter"
+            }
+          }
         }
       }
     },
@@ -254,6 +274,42 @@
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-5"
+          }
+        },
+        "6": {
+          "labelKey": "actions.talk",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "talk"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        },
+        "7": {
+          "labelKey": "actions.examine",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "examine"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "8": {
+          "labelKey": "actions.take",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "take"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
           }
         }
       }

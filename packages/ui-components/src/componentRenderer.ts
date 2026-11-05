@@ -6,6 +6,7 @@ import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
 import { MapViewComponentRenderer } from './mapViewComponentRenderer.js'
 import { InventoryComponentRenderer } from './inventoryComponentRenderer.js'
 import { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
+import { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -25,12 +26,15 @@ export class ComponentRenderer implements IComponentRenderer {
       'map-view': new MapViewComponentRenderer(),
       inventory: new InventoryComponentRenderer(),
       'action-bar': new ActionBarComponentRenderer(),
+      nearby: new NearbyComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'nearby':
+        return this.renderers.nearby.render(component, context)
       case 'action-bar':
         return this.renderers['action-bar'].render(component, context)
       case 'graphic':

@@ -14,6 +14,7 @@ import {
   actionBarComponentSchema,
   inputSchema,
   inventoryItemActionSchema,
+  nearbyComponentSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -108,6 +109,11 @@ export const commandSchema = z.discriminatedUnion('type', [
     itemType: gameIdSchema,
     actions: z.record(gameIdSchema, inventoryItemActionSchema),
   }),
+  z.strictObject({
+    type: z.literal('scene.upsertNearby'),
+    sceneId: gameIdSchema,
+    component: nearbyComponentSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -142,6 +148,21 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'scene.upsertNearby',
+      example: {
+        type: 'scene.upsertNearby',
+        sceneId: 'shop',
+        component: {
+          id: 'nearby',
+          type: 'nearby',
+          label: 'Nearby',
+          placement: { row: 1, column: 1 },
+          descriptionTarget: 'narrative',
+          entries: {},
+        },
+      },
+    },
     {
       type: 'inventory.setItemActions',
       example: {

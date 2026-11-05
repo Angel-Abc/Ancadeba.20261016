@@ -119,5 +119,6 @@
   "tree.readOnly": "Je kunt dit component bekijken. Bewerken wordt nog niet ondersteund.",
   "rules.heading": "Spelregels",
   "controls.heading": "Actiebalk en invoer",
-  "tree.action-bar": "Actiebalk"
+  "tree.action-bar": "Actiebalk",
+  "tree.nearby": "Personages en voorwerpen in de buurt"
 }

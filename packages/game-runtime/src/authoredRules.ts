@@ -73,14 +73,11 @@ function completeCommittedEffect<T>(
 export class AuthoredPlaythrough {
   readonly state: State = new Map()
   private readonly entries: string[] = []
-  private readonly translation: GameData['ruleTranslation']
 
   constructor(
     private readonly rules: GameRulesDefinition,
-    data: GameData,
+    private readonly data: GameData,
   ) {
-    this.translation = data.ruleTranslation
-
     for (const { path, value } of rules.state) set(this.state, path, this.resolve(value))
     this.updateClock(0)
 
@@ -96,7 +93,7 @@ export class AuthoredPlaythrough {
   private resolve(value: RuleValue): Scalar {
     if (typeof value !== 'object') return value
     const { textKey } = value
-    const translation = this.translation
+    const translation = this.data.ruleTranslation
 
     if (translation && Object.hasOwn(translation.messages, textKey))
       return translation.messages[textKey]!
@@ -145,6 +142,8 @@ export class AuthoredPlaythrough {
                     return read(this.state, condition.path) === condition.value
                   case 'payload-is-item':
                     return request.payload === condition.item
+                  case 'payload-is-target':
+                    return request.payload === condition.target
                   case 'item-carried-by':
                     return carriedOwner(inventory, condition.item) === condition.owner
                 }

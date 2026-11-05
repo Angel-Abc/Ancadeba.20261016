@@ -20,6 +20,7 @@ import type { ProjectEditorState } from '../apps/editor-ui/src/projectController
 import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm.js'
 import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
+import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -334,6 +335,72 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors selectable nearby targets and links their action-bar provider', () => {
+    const { initial, root, edit, click, submit, commands } = panel()
+    const view = structuredClone(initial.view!)
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'narrative',
+        type: 'text',
+        text: 'A room.',
+        placement: { row: 1, column: 2 },
+      }),
+    )
+    view.rules = { state: [], actions: { talk: [{ when: [], effects: [] }] } }
+    root.replaceChildren()
+    root.asElement().append(
+      nearbyForm(
+        ruleFormControls(root.ownerDocument.asDocument(), () => {}),
+        view,
+        (command) => commands.push(command),
+      ),
+    )
+    edit('New nearby target ID', 'guide')
+    click('Add nearby target')
+    edit('Target kind', 'character')
+    edit('Target label', 'Guide')
+    edit('Target description', 'A helpful guide.')
+    edit('New nearby action ID', 'talk')
+    click('Add nearby action')
+    submit('Save nearby targets')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.upsertNearby',
+      sceneId: 'shop',
+      component: {
+        descriptionTarget: 'narrative',
+        entries: {
+          guide: {
+            kind: 'character',
+            label: 'Guide',
+            description: 'A helpful guide.',
+            actions: { talk: { action: 'talk' } },
+          },
+        },
+      },
+    })
+    const saved = commands[0]!
+
+    if (saved.type !== 'scene.upsertNearby') throw new Error('Expected nearby command')
+    view.scenes[0]!.components.push(saved.component)
+    bindActionBarPanel(root.asElement(), (command) => commands.push(command)).render(
+      { ...initial, view },
+      true,
+    )
+    edit('Action type', 'nearby-action')
+    edit('Slot label', 'Talk')
+    edit('Nearby panel', saved.component.id)
+    edit('Target action ID', 'talk')
+    submit('Save action bar')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': { action: { type: 'nearby-action', nearby: saved.component.id, action: 'talk' } },
+        },
+      },
+    })
+  })
+
   it('authors directional movement for an interactive map in the selected scene', () => {
     const { controls, initial, edit, submit, commands } = panel()
     const view = structuredClone(initial.view!)

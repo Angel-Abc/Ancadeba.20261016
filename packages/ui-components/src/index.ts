@@ -12,6 +12,8 @@ export { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 
 export { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
 
+export { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
+
 export { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
 
 export {

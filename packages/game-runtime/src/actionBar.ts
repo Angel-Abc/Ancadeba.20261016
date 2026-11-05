@@ -3,6 +3,7 @@ import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { VirtualInput } from './input.js'
 import { GameInventoryContext, type InventorySelectionSnapshot } from './inventoryContext.js'
 import type { IGameMapMovement } from './mapMovement.js'
+import type { IGameNearby, NearbySelection } from './nearbyContext.js'
 
 export interface IGameActionBar {
   getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined
@@ -17,7 +18,7 @@ interface CapturedSlot {
   readonly scene: SceneInstance
   readonly bar: string
   readonly slot: string
-  readonly selection?: InventorySelectionSnapshot | undefined
+  readonly selection?: InventorySelectionSnapshot | NearbySelection | undefined
 }
 
 /** Resolves scene-owned slots before general input bindings, independently of the host. */
@@ -31,6 +32,7 @@ export class GameActionBar implements IGameActionBar {
     private readonly lifecycle: IGameLifecycle,
     inventory = lifecycle.currentGame?.inventory,
     private readonly mapMovement: IGameMapMovement | undefined = lifecycle.currentGame?.mapMovement,
+    private readonly nearby: IGameNearby | undefined = lifecycle.currentGame?.nearby,
   ) {
     this.inventoryContext = new GameInventoryContext(lifecycle, inventory)
   }
@@ -46,10 +48,12 @@ export class GameActionBar implements IGameActionBar {
   subscribeChanges(listener: () => void): () => void {
     const inventory = this.inventoryContext.subscribe(listener)
     const maps = this.mapMovement?.subscribeChanges(listener)
+    const nearby = this.nearby?.subscribeChanges(listener)
 
     return () => {
       inventory()
       maps?.()
+      nearby?.()
     }
   }
 
@@ -71,12 +75,27 @@ export class GameActionBar implements IGameActionBar {
     | {
         definition: ActionBarSlotDefinition
         payload?: string
-        selection?: InventorySelectionSnapshot
+        selection?: InventorySelectionSnapshot | NearbySelection
       }
     | undefined {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'nearby-action') {
+      const source = definition.action
+      const selection = this.nearby?.getSelection(scene, source.nearby)
+      const entry = selection && this.nearby?.getEntry(scene, source.nearby, selection.entry)
+      const action = entry && inventoryEntry(entry.actions, source.action)
+
+      if (!selection || !action) return
+
+      return {
+        definition: { ...definition, action: { type: 'request-action', ...action } },
+        payload: selection.entry,
+        selection,
+      }
+    }
 
     if (definition.action.type !== 'inventory-action') return { definition }
 
@@ -164,7 +183,7 @@ export class GameActionBar implements IGameActionBar {
       return
     }
 
-    if (action.type === 'inventory-action') return
+    if (action.type === 'inventory-action' || action.type === 'nearby-action') return
 
     if (action.type === 'new-game') this.lifecycle.startGame()
     this.lifecycle.enterScene(action.scene)

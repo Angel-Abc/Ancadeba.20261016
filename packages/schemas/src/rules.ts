@@ -22,6 +22,7 @@ export const ruleConditionSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('state-is'), path: pathSchema, value: scalar }),
   z.strictObject({ type: z.literal('item-carried-by'), item: id, owner: id }),
   z.strictObject({ type: z.literal('payload-is-item'), item: id }),
+  z.strictObject({ type: z.literal('payload-is-target'), target: id }),
 ])
 
 export const ruleEffectSchema = z.discriminatedUnion('type', [

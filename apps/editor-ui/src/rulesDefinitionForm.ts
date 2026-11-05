@@ -66,6 +66,16 @@ export function rulesDefinitionForm(
         return { type, item: items[0] ?? '', owner: owners[0] ?? '' }
       case 'payload-is-item':
         return { type, item: items[0] ?? '' }
+      case 'payload-is-target':
+        return {
+          type,
+          target:
+            view.scenes.flatMap((scene) =>
+              scene.components.flatMap((component) =>
+                component.type === 'nearby' ? Object.keys(component.entries) : [],
+              ),
+            )[0] ?? '',
+        }
     }
   }
 
@@ -306,6 +316,7 @@ export function rulesDefinitionForm(
               ['state-is', 'State equals'],
               ['item-carried-by', 'Item carried by owner'],
               ['payload-is-item', 'Request is for item'],
+              ['payload-is-target', 'Request is for nearby target'],
             ],
             (next) =>
               change(() => {
@@ -322,6 +333,26 @@ export function rulesDefinitionForm(
           )
 
         if (entry.type === 'state-is') field.append(...stateField(entry))
+
+        if (entry.type === 'payload-is-target')
+          field.append(
+            select(
+              'Target',
+              entry.target,
+              [
+                ...new Set(
+                  view.scenes.flatMap((scene) =>
+                    scene.components.flatMap((component) =>
+                      component.type === 'nearby' ? Object.keys(component.entries) : [],
+                    ),
+                  ),
+                ),
+              ],
+              (next) => {
+                entry.target = next
+              },
+            ),
+          )
 
         if ('item' in entry)
           field.append(

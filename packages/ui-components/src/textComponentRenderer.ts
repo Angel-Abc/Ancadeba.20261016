@@ -22,6 +22,14 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
 
     let active = true
     let unsubscribe: (() => void) | undefined
+    let unsubscribeSelection: (() => void) | undefined
+    let latest: TextResolution = { text: component.text, diagnostics: [] }
+    const scene = context.scene
+    const nearby = scene?.type === 'game' ? scene.game.nearby : undefined
+
+    const panel = scene?.data.components.find(
+      (entry) => entry.type === 'nearby' && entry.descriptionTarget === component.id,
+    )
 
     const rendered: RenderedComponent = {
       element,
@@ -31,6 +39,7 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
 
         try {
           unsubscribe?.()
+          unsubscribeSelection?.()
         } finally {
           element.remove()
         }
@@ -39,7 +48,12 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
 
     const updateText = ({ text, diagnostics }: TextResolution) => {
       if (!active) return
-      element.textContent = text
+      latest = { text, diagnostics }
+      const selected = panel && scene && nearby?.getSelection(scene, panel.id)
+      const entry = selected && panel && scene && nearby?.getEntry(scene, panel.id, selected.entry)
+      element.textContent = entry
+        ? [text, entry.label, entry.description].filter(Boolean).join('\n\n')
+        : text
 
       if (context.bindingMode === 'editor') {
         element.dataset.bindingStatus = diagnostics.length ? 'unresolved' : 'resolved'
@@ -53,7 +67,7 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     }
 
     try {
-      if (component.bindings === undefined) element.textContent = component.text
+      if (component.bindings === undefined) updateText({ text: component.text, diagnostics: [] })
       else {
         const options = { mode: context.bindingMode ?? 'standalone' }
 
@@ -61,6 +75,8 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
           unsubscribe = observeText(component, context.bindings, updateText, options)
         else updateText(resolveText(component, undefined, options))
       }
+
+      if (panel) unsubscribeSelection = nearby?.subscribeChanges(() => updateText(latest))
 
       return rendered
     } catch (error) {

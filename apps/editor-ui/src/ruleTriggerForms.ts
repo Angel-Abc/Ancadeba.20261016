@@ -2,6 +2,7 @@ import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
 import { parseStatePath, statePath, type RuleFormControls } from './ruleFormControls.js'
 import { inventoryActionsForm } from './inventoryActionsForm.js'
+import { nearbyForm } from './nearbyForm.js'
 
 const binding = (path: string): GameBindingDefinition => ({
   source: 'game.state',
@@ -220,5 +221,10 @@ export function ruleTriggerForms(
     render()
   } else inspection.append('Add inventory item types before linking an inspection.')
 
-  return [buttons, inspection, inventoryActionsForm(controls, view, save)]
+  return [
+    buttons,
+    inspection,
+    inventoryActionsForm(controls, view, save),
+    nearbyForm(controls, view, save),
+  ]
 }

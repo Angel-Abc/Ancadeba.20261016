@@ -88,5 +88,17 @@
   "museum.rules.buoy": "Reached the red buoy in the shoals.",
   "museum.rules.landing": "Reached the landing beneath the north cliffs.",
   "actions.inspect": "Inspect",
-  "actions.read": "Read"
+  "actions.read": "Read",
+  "nearby.title": "Nearby",
+  "nearby.curator.name": "The curator",
+  "nearby.curator.description": "The curator studies an old harbour chart. A blue seal rests beside her notes.",
+  "nearby.curator.reply": "“Read the folded letter before trying the display case,” the curator says. “The crest is more than decoration.”",
+  "nearby.letter.name": "Folded letter",
+  "nearby.letter.description": "A folded letter lies on the table, sealed with blue wax. You can take it with you.",
+  "nearby.boat.name": "Rowing boat",
+  "nearby.boat.description": "A weathered rowing boat is tied to the quay. Its oars rest across the seats.",
+  "nearby.boat.result": "The hull is sound and both oars are ready. You will need the harbour chart to navigate the shallows safely.",
+  "actions.talk": "Talk",
+  "actions.examine": "Examine",
+  "actions.take": "Take"
 }

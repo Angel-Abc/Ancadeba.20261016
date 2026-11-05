@@ -48,14 +48,27 @@
     },
     {
       "id": "nearby",
-      "type": "text",
+      "type": "nearby",
+      "labelKey": "nearby.title",
       "placement": {
         "row": 3,
         "column": 11,
         "rowSpan": 2,
         "columnSpan": 2
       },
-      "textKey": "scenes.old-harbour.nearby"
+      "descriptionTarget": "narrative",
+      "entries": {
+        "boat": {
+          "kind": "object",
+          "labelKey": "nearby.boat.name",
+          "descriptionKey": "nearby.boat.description",
+          "actions": {
+            "examine": {
+              "action": "examine-boat"
+            }
+          }
+        }
+      }
     },
     {
       "id": "player-status",
@@ -214,6 +227,42 @@
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-5"
+          }
+        },
+        "6": {
+          "labelKey": "actions.talk",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "talk"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        },
+        "7": {
+          "labelKey": "actions.examine",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "examine"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "8": {
+          "labelKey": "actions.take",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "take"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
           }
         }
       }

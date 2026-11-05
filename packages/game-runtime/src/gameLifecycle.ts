@@ -4,8 +4,10 @@ import type { IGameBindings } from './gameBindings.js'
 import { GameInventory, type IGameInventory } from './inventory.js'
 import type { IGameActionBar } from './actionBar.js'
 import type { IGameMapMovement } from './mapMovement.js'
+import type { IGameNearby } from './nearbyContext.js'
 
 export interface IGameRuntime {
+  readonly nearby?: IGameNearby | undefined
   readonly mapMovement?: IGameMapMovement | undefined
   readonly actionBar?: IGameActionBar | undefined
   readonly actions: IGameActions
@@ -17,6 +19,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly nearby?: IGameNearby | undefined
   readonly mapMovement?: IGameMapMovement | undefined
   readonly actionBar?: IGameActionBar | undefined
   readonly data: GameData
@@ -106,6 +109,10 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+
+  get nearby(): IGameNearby | undefined {
+    return this.runtime?.nearby
+  }
 
   get mapMovement(): IGameMapMovement | undefined {
     return this.runtime?.mapMovement

@@ -14,6 +14,7 @@ import type {
   GameRulesDefinition,
   GameTranslation,
   ActionBarComponentDefinition,
+  NearbyComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -60,6 +61,7 @@ export type SceneComponentData =
   | MapViewComponentData
   | InventoryComponentData
   | ActionBarComponentDefinition
+  | NearbyComponentDefinition
 
 export type GraphicComponentData = GraphicComponentDefinition
 
@@ -193,6 +195,37 @@ export function assembleGameData(
         grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
       },
       components: scene.components.map((component) => {
+        if (component.type === 'nearby')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            entries: Object.fromEntries(
+              Object.entries(component.entries).map(([id, entry]) => [
+                id,
+                {
+                  ...entry,
+                  ...(entry.visibleWhen && {
+                    visibleWhen: { ...entry.visibleWhen, path: [...entry.visibleWhen.path] },
+                  }),
+                  actions: Object.fromEntries(
+                    Object.entries(entry.actions).map(([id, action]) => [
+                      id,
+                      {
+                        ...action,
+                        ...(action.enabledWhen && {
+                          enabledWhen: {
+                            ...action.enabledWhen,
+                            path: [...action.enabledWhen.path],
+                          },
+                        }),
+                      },
+                    ]),
+                  ),
+                },
+              ]),
+            ),
+          }
+
         if (component.type === 'action-bar')
           return {
             ...component,
