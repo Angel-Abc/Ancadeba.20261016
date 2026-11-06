@@ -26,7 +26,8 @@ import {
 } from '@ancadeba/schemas'
 
 const metadata = {
-  title: z.string().trim().min(1),
+  // A blank title is valid when the document has a titleKey; project validation enforces one of them.
+  title: z.string().trim(),
   description: z.string(),
 }
 

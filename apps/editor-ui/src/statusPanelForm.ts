@@ -5,7 +5,7 @@ import {
   type StatusPanelComponentDefinition,
   type StatusValueDefinition,
 } from '@ancadeba/schemas'
-import { statePath, type RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, placementFields, statePath } from './ruleFormControls.js'
 
 function reorder<T>(entries: T[], index: number, delta: number): void {
   const target = index + delta
@@ -278,9 +278,9 @@ export function statusPanelForm(
     ),
     group(
       'Status panel placement',
-      ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+      ...placementFields.map(([key, label]) =>
         input(
-          `Status ${key}`,
+          `Status ${label.toLowerCase()}`,
           String(draft.placement[key]),
           (value) => {
             draft.placement[key] = Number(value)

@@ -203,16 +203,17 @@
               <span id="preview-status" class="status" role="status" data-i18n="preview.stopped"
                 >Stopped</span
               >
-              <span class="spacer"></span>
-              <label for="game-language" data-i18n="game.language">Game language</label>
-              <input
-                id="game-language"
-                placeholder="Saved choice or game default"
-                data-i18n-placeholder="game.automatic"
-                aria-describedby="game-language-help"
-                autocomplete="off"
-                spellcheck="false"
-              />
+              <div class="preview-language">
+                <label for="game-language" data-i18n="game.language">Game language</label>
+                <input
+                  id="game-language"
+                  placeholder="Automatic"
+                  data-i18n-placeholder="game.automatic"
+                  aria-describedby="game-language-help"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
               <p id="game-language-help" class="sr-only" data-i18n="game.languageHelp">
                 Language tag, for example en or nl. Leave empty for the saved choice or game's
                 default. Restart the preview after changing it.

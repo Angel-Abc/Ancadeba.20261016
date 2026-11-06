@@ -7,7 +7,7 @@ import {
   type EquipmentComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { placementFields, ruleFormControls } from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
@@ -249,9 +249,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             render()
           },
         ),
-        ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+        ...placementFields.map(([key, label]) =>
           controls.input(
-            key,
+            label,
             String(draft.placement[key]),
             (value) => {
               draft.placement[key] = Number(value)

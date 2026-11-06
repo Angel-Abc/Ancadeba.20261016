@@ -6,7 +6,7 @@ import {
   type ShopComponentDefinition,
   type InventoryComponentDefinition,
 } from '@ancadeba/schemas'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, humanizeCode, placementFields } from './ruleFormControls.js'
 
 export function shopForm(
   controls: RuleFormControls,
@@ -35,9 +35,9 @@ export function shopForm(
     )
 
   const placement = (component: ShopComponentDefinition | InventoryComponentDefinition) =>
-    (['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+    placementFields.map(([key, label]) =>
       input(
-        key,
+        label,
         String(component.placement[key]),
         (value) => {
           component.placement[key] = Number(value)
@@ -235,11 +235,11 @@ export function shopForm(
   for (const code of shopMessageSchema.options)
     messages.append(
       group(
-        code,
-        input(`${code} feedback`, shop.messages[code], (value) => {
+        humanizeCode(code),
+        input(`${humanizeCode(code)} message`, shop.messages[code], (value) => {
           shop.messages[code] = value
         }),
-        select(`${code} translation`, shop.messageKeys[code] ?? '', keys, (value) => {
+        select(`${humanizeCode(code)} translation`, shop.messageKeys[code] ?? '', keys, (value) => {
           if (value) shop.messageKeys[code] = value
           else delete shop.messageKeys[code]
         }),

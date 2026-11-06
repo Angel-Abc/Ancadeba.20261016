@@ -1,6 +1,11 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, gameIdSchema, type NearbyComponentDefinition } from '@ancadeba/schemas'
-import { ruleFormControls, statePath, type RuleFormControls } from './ruleFormControls.js'
+import {
+  type RuleFormControls,
+  placementFields,
+  ruleFormControls,
+  statePath,
+} from './ruleFormControls.js'
 
 /** Edits scene targets separately from the action-bar slots that display their commands. */
 export function nearbyForm(
@@ -88,9 +93,9 @@ export function nearbyForm(
       ),
       group(
         'Nearby panel placement',
-        ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+        ...placementFields.map(([key, label]) =>
           input(
-            `Nearby ${key}`,
+            `Nearby ${label.toLowerCase()}`,
             String(draft.placement[key]),
             (value) => {
               draft.placement[key] = Number(value)

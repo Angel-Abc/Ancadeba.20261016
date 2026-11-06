@@ -4,7 +4,7 @@ import {
   type ActionBarComponentDefinition,
   type ActionBarSlotDefinition,
 } from '@ancadeba/schemas'
-import { statePath, type RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, placementFields, statePath } from './ruleFormControls.js'
 
 function shortcut(view: ProjectView, binding: ActionBarSlotDefinition['inputBinding']): string {
   if (!binding || !view.input) return ''
@@ -359,9 +359,9 @@ export function actionBarForm(
     input('Component ID', draft.id, (value) => {
       draft.id = value.trim()
     }),
-    ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+    ...placementFields.map(([key, label]) =>
       input(
-        { row: 'Row', column: 'Column', rowSpan: 'Row span', columnSpan: 'Column span' }[key],
+        label,
         String(draft.placement[key]),
         (value) => {
           draft.placement[key] = Number(value)

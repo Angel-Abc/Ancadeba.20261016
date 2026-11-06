@@ -256,10 +256,17 @@ export function bindProjectPanel(
       combatComponent
     find('component-json').textContent =
       component && !graphic ? JSON.stringify(component, null, 2) : ''
-    find('workspace-heading').textContent =
+
+    const sectionLabel = t(
+      sections.find((section) => section.id === node.section)?.labelKey ?? node.label,
+    )
+
+    // The eyebrow names where the selection lives; top-level sections belong to the project.
+    find('editor-heading').textContent =
       node.kind === 'section'
-        ? t(sections.find((section) => section.id === node.section)?.labelKey ?? node.label)
-        : node.label
+        ? t('project.heading')
+        : [sectionLabel, node.parentId].filter(Boolean).join(' › ')
+    find('workspace-heading').textContent = node.kind === 'section' ? sectionLabel : node.label
     rail?.render(view ? node.section : undefined)
 
     for (const section of additionalSections) {
@@ -364,12 +371,21 @@ export function bindProjectPanel(
     return true
   }
 
+  /** A translated title makes the literal title an optional fallback, so an empty field is valid. */
+  const showTitleSource = (id: string, titleKey: string | undefined) => {
+    const input = find<HTMLInputElement>(id)
+    input.required = !titleKey
+    input.placeholder = titleKey ? t('metadata.titleFromKey', { key: titleKey }) : ''
+  }
+
   const fillScene = () => {
     const scene = view?.scenes.find((scene) => scene.id === scenes.value)
     sceneMetadata.hidden = !scene
     layout.hidden = !scene
 
     if (!scene) return
+
+    showTitleSource('scene-title', scene.titleKey)
 
     if (!dirtyForms.has(sceneMetadata.id)) {
       set('scene-title', scene.title)
@@ -434,7 +450,9 @@ export function bindProjectPanel(
           ? t('project.changed')
           : view
             ? t('project.loaded', {
-                title: view.game?.title ?? t('project.withErrors'),
+                title: view.game
+                  ? view.game.title || state.path || t('workspace.root')
+                  : t('project.withErrors'),
                 path: state.path || t('workspace.root'),
               })
             : ''
@@ -452,6 +470,12 @@ export function bindProjectPanel(
     find('project-title').textContent = view
       ? view.game?.title || state.path || t('workspace.root')
       : ''
+
+    if (view?.game) showTitleSource('editor-title', view.game.titleKey)
+
+    const shownScene = view?.scenes.find((scene) => scene.id === scenes.value)
+
+    if (shownScene) showTitleSource('scene-title', shownScene.titleKey)
 
     if (openingProject && !state.busy) {
       openingProject = false

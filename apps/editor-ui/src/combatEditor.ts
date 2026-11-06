@@ -5,7 +5,7 @@ import {
   type CombatDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { placementFields, ruleFormControls } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
 
 export function bindCombatEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -213,9 +213,9 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
             current.lootInventory = value || undefined
           },
         ),
-        ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+        ...placementFields.map(([key, label]) =>
           controls.input(
-            key,
+            label,
             String(current.placement[key]),
             (value) => {
               current.placement[key] = Number(value)

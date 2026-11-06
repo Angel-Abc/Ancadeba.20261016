@@ -178,6 +178,59 @@ describe('editor core', () => {
     ).toContain('input/controls.json')
   })
 
+  it('accepts a blank literal title only when a translation key supplies the title', () => {
+    const source = project()
+
+    const translated: ProjectSnapshot = {
+      ...source,
+      documents: {
+        'game.json': {
+          ...object(source.documents['game.json']),
+          titleKey: 'game.title',
+          languages: { default: 'en', available: ['en'] },
+        },
+        'scenes/start.json': { ...scene, titleKey: 'scenes.start.title' },
+        'languages/en/messages.json': {
+          'game.title': 'Translated game',
+          'scenes.start.title': 'Translated start',
+        },
+      },
+    }
+
+    const game = applyCommand(translated, {
+      type: 'game.updateMetadata',
+      title: '  ',
+      description: '',
+      version: '1',
+    })
+
+    expect(game.project.documents['game.json']).toMatchObject({ title: '', titleKey: 'game.title' })
+    expect(
+      applyCommand(translated, {
+        type: 'scene.updateMetadata',
+        sceneId: 'start',
+        title: '',
+        description: '',
+      }).project.documents['scenes/start.json'],
+    ).toMatchObject({ title: '', titleKey: 'scenes.start.title' })
+    expect(() =>
+      applyCommand(project(), {
+        type: 'game.updateMetadata',
+        title: '',
+        description: '',
+        version: '1',
+      }),
+    ).toThrow('Change produces an invalid project')
+    expect(() =>
+      applyCommand(project(), {
+        type: 'scene.updateMetadata',
+        sceneId: 'start',
+        title: '',
+        description: '',
+      }),
+    ).toThrow('Change produces an invalid project')
+  })
+
   it('normalizes newly created scene metadata and detaches extension data from its input', () => {
     const input = { ...scene, id: 'shop', title: '  Shop  ', extension: { author: 'human' } }
     const result = applyCommand(project(), { type: 'scene.create', scene: input })

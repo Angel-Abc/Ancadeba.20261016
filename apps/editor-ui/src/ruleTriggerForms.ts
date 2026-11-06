@@ -1,6 +1,11 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
-import { parseStatePath, statePath, type RuleFormControls } from './ruleFormControls.js'
+import {
+  type RuleFormControls,
+  parseStatePath,
+  placementFields,
+  statePath,
+} from './ruleFormControls.js'
 import { inventoryActionsForm } from './inventoryActionsForm.js'
 import { nearbyForm } from './nearbyForm.js'
 
@@ -102,9 +107,9 @@ export function ruleTriggerForms(
             labelKey = next
           },
         ),
-        ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+        ...placementFields.map(([key, label]) =>
           input(
-            { row: 'Row', column: 'Column', rowSpan: 'Row span', columnSpan: 'Column span' }[key],
+            label,
             String(placement[key]),
             (next) => {
               placement[key] = Number(next)

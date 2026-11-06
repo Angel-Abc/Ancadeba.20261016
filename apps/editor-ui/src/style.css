@@ -10,7 +10,7 @@
   --ed-selected: #2a2d35;
   --ed-text: #e7e6e2;
   --ed-text-soft: #c9c8c3;
-  --ed-muted: #9a9ca3;
+  --ed-muted: #afb1b8;
   --ed-accent: #f2b544;
   --ed-on-accent: #1a1206;
   --ed-success: #9dd3a8;
@@ -114,26 +114,25 @@ button:hover:where(:not(:disabled, .ancadeba-game *)) {
   background: var(--ed-panel-raised);
 }
 
-button[type='submit']:where(:not(.ancadeba-game *)),
-button.primary:where(:not(.ancadeba-game *)) {
-  border-color: var(--ed-text);
-  color: var(--ed-bg);
-  background: var(--ed-text);
+button[type='submit']:where(:not(.ancadeba-game *)) {
+  color: var(--ed-text);
+  background: var(--ed-panel-raised);
   font-weight: 600;
 }
 
-button[type='submit']:hover:where(:not(:disabled, .ancadeba-game *)),
-button.primary:hover:where(:not(:disabled, .ancadeba-game *)) {
-  background: #ffffff;
+button[type='submit']:hover:where(:not(:disabled, .ancadeba-game *)) {
+  border-color: var(--ed-muted);
+  background: var(--ed-selected);
 }
 
-#preview-start {
+button.primary:where(:not(.ancadeba-game *)) {
   border-color: var(--ed-accent);
   color: var(--ed-on-accent);
   background: var(--ed-accent);
+  font-weight: 600;
 }
 
-#preview-start:hover:not(:disabled) {
+button.primary:hover:where(:not(:disabled, .ancadeba-game *)) {
   background: #f7cb72;
 }
 
@@ -339,13 +338,19 @@ code {
   border: 0;
   border-radius: 0.5rem;
   color: var(--ed-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.1;
 }
 
 .section-rail button[aria-current='true'] {
   color: var(--ed-accent);
   background: var(--ed-selected);
+}
+
+.section-rail button > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .section-rail svg {
@@ -357,7 +362,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  width: 15rem;
+  width: 16.5rem;
   min-width: 12rem;
   max-width: 28rem;
   padding: 0.75rem;
@@ -398,24 +403,35 @@ code {
 }
 
 .project-tree-row {
-  font-size: 0.8125rem;
-  line-height: 1.75rem;
+  display: grid;
+  grid-template-columns: calc(var(--tree-depth) * 0.9rem + 1.5rem) minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 1.875rem;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
   cursor: pointer;
   outline: none;
 }
 
 .project-tree-row > .tree-toggle {
-  display: inline-block;
+  justify-self: end;
   width: 1.25rem;
-  margin-left: calc(var(--tree-depth) * 0.9rem + 0.25rem);
   color: var(--ed-muted);
   text-align: center;
 }
 
 .project-tree-row > .tree-label {
+  min-width: 0;
   padding: 0.15rem 0.35rem;
   border-radius: 0.25rem;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-tree-row > [role='group'] {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 
 .project-tree-row[aria-level='1'] > .tree-label {
@@ -423,11 +439,17 @@ code {
 }
 
 .project-tree-row > small {
-  display: block;
-  margin-left: calc(var(--tree-depth) * 0.9rem + 1.85rem);
-  padding-bottom: 0.25rem;
+  max-width: 6rem;
+  margin-left: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  overflow: hidden;
+  border: 1px solid var(--ed-border);
+  border-radius: 0.25rem;
   color: var(--ed-muted);
-  line-height: 1.2;
+  background: var(--ed-panel);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .project-tree-row:hover > .tree-label {
@@ -529,12 +551,13 @@ code {
   padding-top: 0.35rem;
 }
 
-#project-editor form > h3,
-#project-editor form > button {
+#project-editor form > :is(h3, h4),
+#project-editor form > button,
+#project-editor form > :is(.graphic-placement, .preview-actions, #asset-color-fields) {
   grid-column: 1 / -1;
 }
 
-#project-editor form > h3 {
+#project-editor form > :is(h3, h4) {
   margin: 0;
   font-size: 0.9375rem;
 }
@@ -796,13 +819,23 @@ label[for='graphic-existing'] {
   padding-inline: 0.75rem;
 }
 
+.preview-language {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  margin-inline-start: auto;
+}
+
 .preview-pane-header label {
   color: var(--ed-muted);
   font-size: 0.8125rem;
 }
 
 #game-language {
-  width: 11rem;
+  width: 8rem;
+  max-width: 100%;
   min-height: 1.75rem;
   font-size: 0.8125rem;
 }

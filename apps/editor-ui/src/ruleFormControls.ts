@@ -83,6 +83,21 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>
 
+/** Grid placement fields in form order, with their field labels. */
+export const placementFields = [
+  ['row', 'Row'],
+  ['column', 'Column'],
+  ['rowSpan', 'Row span'],
+  ['columnSpan', 'Column span'],
+] as const
+
+/** Turns a camelCase schema code such as `insufficientPlayerFunds` into a sentence-case label. */
+export const humanizeCode = (code: string) => {
+  const words = code.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 export const statePath = (path: string[]) => path.join('.')
 export const parseStatePath = (path: string) => path.trim().split('.')
 

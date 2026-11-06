@@ -487,7 +487,7 @@ describe('action bar editor controls', () => {
     edit('buy amount', '7')
     edit('sell price source', 'fixed')
     edit('sell amount', '4')
-    edit('bought feedback', 'Acquired {item}.')
+    edit('Bought message', 'Acquired {item}.')
     edit('Shop game scene', 'other')
     expect(field('Shop game scene').value).toBe('shop')
     editor.render(

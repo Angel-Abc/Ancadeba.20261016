@@ -72,11 +72,13 @@ export function bindProjectTree(
         const label = document.createElement('span')
         label.className = 'tree-label'
         label.textContent = node.label
+        label.title = node.label
         row.append(toggle, label)
 
         if (node.detail) {
           const detail = document.createElement('small')
           detail.textContent = node.detail
+          detail.title = node.detail
           row.append(detail)
         }
 

@@ -10,3 +10,4 @@ coverage/
 *.log
 apps/*/config.json
 tests/.tmp-*/
+.claude/
