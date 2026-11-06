@@ -1,7 +1,7 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { ActionBarComponentDefinition, InputDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { actionBarForm } from './actionBarForm.js'
 import {
   createInputDraft,
@@ -146,7 +146,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     saveButton.type = 'submit'
     saveButton.textContent = 'Save action bar'
     form.append(
-      saveButton,
+      saveBar(document, saveButton),
       ...actionBarForm(
         barControls,
         view,
@@ -236,7 +236,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     form.append(
       location,
       help,
-      saveButton,
+      saveBar(document, saveButton),
       ...inputDefinitionForm(
         inputControls,
         inputDraft,

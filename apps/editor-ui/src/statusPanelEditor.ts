@@ -1,7 +1,7 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { StatusPanelComponentDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { statusPanelForm } from './statusPanelForm.js'
 
 /** Owns status-panel drafts independently of scene metadata and other component editors. */
@@ -142,7 +142,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     submitButton.type = 'submit'
     submitButton.textContent = 'Save status panel'
     form.append(
-      submitButton,
+      saveBar(document, submitButton),
       ...statusPanelForm(
         controls,
         view,

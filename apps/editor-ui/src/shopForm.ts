@@ -159,19 +159,24 @@ export function shopForm(
         value === undefined ? 'disabled' : typeof value === 'object' ? 'binding' : 'fixed'
 
       box.append(
-        select(`${operation} price source`, type, ['disabled', 'fixed', 'binding'], (type) => {
-          if (type === 'disabled') delete prices[operation]
-          else
-            prices[operation] =
-              type === 'fixed' ? 1 : { source: 'game.state', path: fields[0]?.path ?? ['price'] }
-          render()
-        }),
+        select(
+          `${humanizeCode(operation)} price source`,
+          type,
+          ['disabled', 'fixed', 'binding'],
+          (type) => {
+            if (type === 'disabled') delete prices[operation]
+            else
+              prices[operation] =
+                type === 'fixed' ? 1 : { source: 'game.state', path: fields[0]?.path ?? ['price'] }
+            render()
+          },
+        ),
       )
 
       if (typeof value === 'number')
         box.append(
           input(
-            `${operation} amount`,
+            `${humanizeCode(operation)} amount`,
             String(value),
             (value) => {
               prices[operation] = Number(value)
@@ -181,9 +186,14 @@ export function shopForm(
         )
       else if (value)
         box.append(
-          select(`${operation} price binding`, JSON.stringify(value), bindings, (value) => {
-            prices[operation] = gameBindingSchema.parse(JSON.parse(value))
-          }),
+          select(
+            `${humanizeCode(operation)} price binding`,
+            JSON.stringify(value),
+            bindings,
+            (value) => {
+              prices[operation] = gameBindingSchema.parse(JSON.parse(value))
+            },
+          ),
         )
     }
 

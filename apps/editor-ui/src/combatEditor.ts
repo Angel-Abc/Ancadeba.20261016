@@ -5,7 +5,7 @@ import {
   type CombatDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { placementFields, ruleFormControls } from './ruleFormControls.js'
+import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
 
 export function bindCombatEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -180,7 +180,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     button.type = 'submit'
     button.textContent = 'Save combat encounter'
     form.append(
-      button,
+      saveBar(document, button),
       ...combatForm(controls, view, draft, render),
       controls.group(
         'Combat view',

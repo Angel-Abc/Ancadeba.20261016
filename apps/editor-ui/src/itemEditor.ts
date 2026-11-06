@@ -7,7 +7,7 @@ import {
   type EquipmentComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { placementFields, ruleFormControls } from './ruleFormControls.js'
+import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
@@ -173,6 +173,10 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           }),
         )
     const form = document.createElement('form')
+    const button = document.createElement('button')
+    button.type = 'submit'
+    button.textContent = 'Save items and equipment'
+    form.append(saveBar(document, button))
 
     if (item) form.append(...itemPresentationForm(controls, view, item, render))
 
@@ -321,10 +325,6 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     }
 
     if (!item && !slots && !component && source?.type !== 'inventory') return
-    const button = document.createElement('button')
-    button.type = 'submit'
-    button.textContent = 'Save items and equipment'
-    form.append(button)
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 

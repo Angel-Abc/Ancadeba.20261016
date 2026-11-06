@@ -6,7 +6,7 @@ import {
   type InventoryComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { shopForm } from './shopForm.js'
 
 export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -140,7 +140,10 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
     saveButton.textContent = 'Save shop'
-    form.append(saveButton, ...shopForm(controls, view, sceneId, draft, panels, render))
+    form.append(
+      saveBar(document, saveButton),
+      ...shopForm(controls, view, sceneId, draft, panels, render),
+    )
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 

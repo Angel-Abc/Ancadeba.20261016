@@ -1,7 +1,7 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { GameRulesDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls } from './ruleFormControls.js'
+import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { rulesDefinitionForm } from './rulesDefinitionForm.js'
 import { ruleTriggerForms } from './ruleTriggerForms.js'
 
@@ -113,12 +113,15 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
     saveButton.type = 'submit'
     saveButton.textContent = 'Save rules'
     form.append(
-      saveButton,
-      rulesControls.button('Discard rule draft', () => {
-        newRuleId = ''
-        resetRules()
-        error.textContent = ''
-      }),
+      saveBar(
+        document,
+        saveButton,
+        rulesControls.button('Discard rule draft', () => {
+          newRuleId = ''
+          resetRules()
+          error.textContent = ''
+        }),
+      ),
       ...rulesDefinitionForm(
         rulesControls,
         view,

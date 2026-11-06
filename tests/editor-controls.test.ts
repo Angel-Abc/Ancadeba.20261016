@@ -310,16 +310,27 @@ function panel(withInput = true) {
     return control
   }
 
-  const field = (title: string) => {
-    const label = root.all().find((node) => node.tagName === 'label' && node.ownText === title)
+  // Grouped fields drop their group's prefix, so a legend can narrow the search.
+  const field = (title: string, group?: string) => {
+    const scope = group
+      ? root
+          .all()
+          .find(
+            (node) =>
+              node.tagName === 'fieldset' &&
+              node.children.some((child) => child.tagName === 'legend' && child.ownText === group),
+          )
+      : root
 
-    if (!label) throw new Error(`Missing field: ${title}`)
+    const label = scope?.all().find((node) => node.tagName === 'label' && node.ownText === title)
+
+    if (!label) throw new Error(`Missing field: ${group ? `${group} › ` : ''}${title}`)
 
     return label.children[0]!
   }
 
-  const edit = (title: string, value: string) => {
-    const control = field(title)
+  const edit = (title: string, value: string, group?: string) => {
+    const control = field(title, group)
     control.value = value
     control.dispatchEvent(new Event(control.tagName === 'select' ? 'change' : 'input'))
   }
@@ -369,12 +380,12 @@ describe('action bar editor controls', () => {
     editor.render({ ...initial, view }, true)
     click('Add encounter')
     edit('Encounter name', '<b>Training</b>')
-    edit('Player AP', '4')
-    edit('Enemy 1 rotation (IDs)', 'guard, attack')
-    edit('Enemy 1 available moves (IDs)', 'attack, guard')
-    edit('Move attack maximum damage', '7')
+    edit('AP', '4', 'Player')
+    edit('Rotation (IDs)', 'guard, attack', 'Enemy 1')
+    edit('Available moves (IDs)', 'attack, guard', 'Enemy 1')
+    edit('Maximum damage', '7', 'Move: attack')
     edit('Allow escape', 'true')
-    edit('victory destination', 'other')
+    edit('Victory destination', 'other')
     edit('Enable victory rewards', 'yes')
     edit('Reward recipient owner', 'player')
     edit('Reward loot owner', 'loot')
@@ -401,7 +412,7 @@ describe('action bar editor controls', () => {
       },
       true,
     )
-    expect(field('Move attack maximum damage').value).toBe('7')
+    expect(field('Maximum damage', 'Move: attack').value).toBe('7')
     expect(field('Reward 1 amount').value).toBe('8')
     submit('Save combat encounter')
     const saved = commands[0]!
@@ -484,9 +495,9 @@ describe('action bar editor controls', () => {
     edit('Merchant funds policy', 'finite')
     edit('Merchant balance field', JSON.stringify({ source: 'game.state', path: ['merchantGold'] }))
     click('Add prices')
-    edit('buy amount', '7')
-    edit('sell price source', 'fixed')
-    edit('sell amount', '4')
+    edit('Buy amount', '7')
+    edit('Sell price source', 'fixed')
+    edit('Sell amount', '4')
     edit('Bought message', 'Acquired {item}.')
     edit('Shop game scene', 'other')
     expect(field('Shop game scene').value).toBe('shop')
@@ -504,7 +515,7 @@ describe('action bar editor controls', () => {
       },
       true,
     )
-    expect(field('buy amount').value).toBe('7')
+    expect(field('Buy amount').value).toBe('7')
     submit('Save shop')
     expect(commands[0]).toMatchObject({
       type: 'scene.upsertShop',

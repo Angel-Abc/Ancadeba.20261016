@@ -7,7 +7,7 @@ import {
   type CombatDefinition,
   type CombatActorDefinition,
 } from '@ancadeba/schemas'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, humanizeCode } from './ruleFormControls.js'
 
 export function combatForm(
   controls: RuleFormControls,
@@ -35,8 +35,12 @@ export function combatForm(
   const number = (label: string, value: number, change: (value: number) => void) =>
     input(label, String(value), (value) => change(Number(value)), 'number')
 
+  // Fields inside a titled group rely on its legend; top-level fields carry their own prefix.
+  const scoped = (prefix: string, text: string) =>
+    prefix ? `${prefix} ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text
+
   const presentation = (
-    title: string,
+    prefix: string,
     value: {
       label: string
       labelKey?: string | undefined
@@ -44,35 +48,35 @@ export function combatForm(
       descriptionKey?: string | undefined
     },
   ) => [
-    input(`${title} name`, value.label, (next) => {
+    input(scoped(prefix, 'Name'), value.label, (next) => {
       value.label = next
     }),
-    select(`${title} name translation`, value.labelKey ?? '', keys, (next) => {
+    select(scoped(prefix, 'Name translation'), value.labelKey ?? '', keys, (next) => {
       value.labelKey = next || undefined
     }),
-    input(`${title} description`, value.description, (next) => {
+    input(scoped(prefix, 'Description'), value.description, (next) => {
       value.description = next
     }),
-    select(`${title} description translation`, value.descriptionKey ?? '', keys, (next) => {
+    select(scoped(prefix, 'Description translation'), value.descriptionKey ?? '', keys, (next) => {
       value.descriptionKey = next || undefined
     }),
   ]
 
-  const actorForm = (actor: CombatActorDefinition, title: string) =>
+  const actorForm = (actor: CombatActorDefinition, title: string, ...actions: HTMLElement[]) =>
     group(
       title,
-      input(`${title} ID`, actor.id, (value) => {
+      input('ID', actor.id, (value) => {
         actor.id = value.trim()
       }),
-      ...presentation(title, actor),
-      select(`${title} portrait`, actor.portrait ?? '', art, (value) => {
+      ...presentation('', actor),
+      select('Portrait', actor.portrait ?? '', art, (value) => {
         actor.portrait = value || undefined
       }),
-      select(`${title} health field`, JSON.stringify(actor.health), fields, (value) => {
+      select('Health field', JSON.stringify(actor.health), fields, (value) => {
         actor.health = combatHealthSchema.parse(JSON.parse(value))
       }),
       select(
-        `${title} maximum source`,
+        'Maximum health source',
         typeof actor.maximumHealth === 'number' ? 'fixed' : 'binding',
         ['fixed', 'binding'],
         (value) => {
@@ -81,16 +85,16 @@ export function combatForm(
         },
       ),
       typeof actor.maximumHealth === 'number'
-        ? number(`${title} maximum health`, actor.maximumHealth, (value) => {
+        ? number('Maximum health', actor.maximumHealth, (value) => {
             actor.maximumHealth = value
           })
-        : select(`${title} maximum field`, JSON.stringify(actor.maximumHealth), fields, (value) => {
+        : select('Maximum health field', JSON.stringify(actor.maximumHealth), fields, (value) => {
             actor.maximumHealth = gameBindingSchema.parse(JSON.parse(value))
           }),
-      number(`${title} AP`, actor.ap, (value) => {
+      number('AP', actor.ap, (value) => {
         actor.ap = value
       }),
-      input(`${title} available moves (IDs)`, actor.moves.join(', '), (value) => {
+      input('Available moves (IDs)', actor.moves.join(', '), (value) => {
         actor.moves = value
           .split(',')
           .map((id) => id.trim())
@@ -99,13 +103,14 @@ export function combatForm(
       ...(actor === draft.player
         ? []
         : [
-            input(`${title} rotation (IDs)`, actor.rotation.join(', '), (value) => {
+            input('Rotation (IDs)', actor.rotation.join(', '), (value) => {
               actor.rotation = value
                 .split(',')
                 .map((id) => id.trim())
                 .filter(Boolean)
             }),
           ]),
+      ...actions,
     )
 
   const result: HTMLElement[] = [
@@ -138,9 +143,9 @@ export function combatForm(
 
   draft.enemies.forEach((actor, index) =>
     result.push(
-      group(
+      actorForm(
+        actor,
         `Enemy ${index + 1}`,
-        actorForm(actor, `Enemy ${index + 1}`),
         button(`Remove enemy ${index + 1}`, () => {
           draft.enemies.splice(index, 1)
           controls.markEdited()
@@ -176,21 +181,21 @@ export function combatForm(
     result.push(
       group(
         `Move: ${id}`,
-        ...presentation(`Move ${id}`, move),
-        number(`Move ${id} AP cost`, move.apCost, (value) => {
+        ...presentation('', move),
+        number('AP cost', move.apCost, (value) => {
           move.apCost = value
         }),
         ...(move.type === 'attack'
           ? [
-              number(`Move ${id} minimum damage`, move.damage.min, (value) => {
+              number('Minimum damage', move.damage.min, (value) => {
                 move.damage.min = value
               }),
-              number(`Move ${id} maximum damage`, move.damage.max, (value) => {
+              number('Maximum damage', move.damage.max, (value) => {
                 move.damage.max = value
               }),
             ]
           : [
-              number(`Move ${id} guard`, move.guard, (value) => {
+              number('Guard points', move.guard, (value) => {
                 move.guard = value
               }),
             ]),
@@ -223,7 +228,7 @@ export function combatForm(
       'Outcome destinations',
       ...(['victory', 'defeat', 'escaped'] as const).map((outcome) =>
         select(
-          `${outcome} destination`,
+          `${humanizeCode(outcome)} destination`,
           draft.outcomes[outcome] ?? '',
           ['', ...view.scenes.map((scene) => scene.id)],
           (value) => {
@@ -242,14 +247,19 @@ export function combatForm(
   for (const code of combatTextSchema.keyof().options)
     messages.append(
       group(
-        code,
-        input(`${code} text`, draft.messages[code], (value) => {
+        humanizeCode(code),
+        input(`${humanizeCode(code)} text`, draft.messages[code], (value) => {
           draft.messages[code] = value
         }),
-        select(`${code} translation`, draft.messageKeys[code] ?? '', keys, (value) => {
-          if (value) draft.messageKeys[code] = value
-          else delete draft.messageKeys[code]
-        }),
+        select(
+          `${humanizeCode(code)} translation`,
+          draft.messageKeys[code] ?? '',
+          keys,
+          (value) => {
+            if (value) draft.messageKeys[code] = value
+            else delete draft.messageKeys[code]
+          },
+        ),
       ),
     )
   result.push(messages)

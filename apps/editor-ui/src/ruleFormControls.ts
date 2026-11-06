@@ -83,6 +83,15 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>
 
+/** Groups a panel form's save action (and optional companions) into a bar that stays in view. */
+export function saveBar(document: Document, ...actions: HTMLElement[]) {
+  const bar = document.createElement('div')
+  bar.className = 'save-bar'
+  bar.append(...actions)
+
+  return bar
+}
+
 /** Grid placement fields in form order, with their field labels. */
 export const placementFields = [
   ['row', 'Row'],

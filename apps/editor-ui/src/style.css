@@ -404,7 +404,11 @@ code {
 
 .project-tree-row {
   display: grid;
-  grid-template-columns: calc(var(--tree-depth) * 0.9rem + 1.5rem) minmax(0, 1fr) auto;
+  /* The name keeps its width first; the badge takes what is left and truncates. */
+  grid-template-columns:
+    calc(var(--tree-depth) * 0.9rem + 1.5rem)
+    fit-content(100%)
+    minmax(2.5rem, 1fr);
   align-items: center;
   min-height: 1.875rem;
   font-size: 0.875rem;
@@ -438,8 +442,10 @@ code {
   font-weight: 600;
 }
 
+/* Badges stay on one line; the full text is in the row's tooltip. */
 .project-tree-row > small {
-  max-width: 6rem;
+  justify-self: end;
+  max-width: min(9rem, 100%);
   margin-left: 0.25rem;
   padding: 0.1rem 0.35rem;
   overflow: hidden;
@@ -449,7 +455,8 @@ code {
   background: var(--ed-panel);
   font-size: 0.75rem;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-tree-row:hover > .tree-label {
@@ -532,14 +539,14 @@ code {
   display: none;
 }
 
-/* Built-in project forms: label column on the left, field on the right. */
+/* Built-in project and asset forms: label column on the left, field on the right. */
 #editor-fields {
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-#project-editor form {
+:is(#editor-fields, #assets-panel) form {
   display: grid;
   grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr);
   gap: 0.6rem 1rem;
@@ -547,22 +554,24 @@ code {
   margin-bottom: 1.5rem;
 }
 
-#project-editor form > label {
+:is(#editor-fields, #assets-panel) form > label {
   padding-top: 0.35rem;
 }
 
-#project-editor form > :is(h3, h4),
-#project-editor form > button,
-#project-editor form > :is(.graphic-placement, .preview-actions, #asset-color-fields) {
+:is(#editor-fields, #assets-panel) form > :is(h3, h4),
+:is(#editor-fields, #assets-panel) form > button,
+:is(#editor-fields, #assets-panel)
+  form
+  > :is(.graphic-placement, .preview-actions, #asset-color-fields) {
   grid-column: 1 / -1;
 }
 
-#project-editor form > :is(h3, h4) {
+:is(#editor-fields, #assets-panel) form > :is(h3, h4) {
   margin: 0;
   font-size: 0.9375rem;
 }
 
-#project-editor form > button {
+:is(#editor-fields, #assets-panel) form > button {
   justify-self: start;
 }
 
@@ -642,10 +651,105 @@ label[for='graphic-existing'] {
   background: var(--ed-sunken);
 }
 
+/*
+ * Section panel forms flow short fields into as many columns as fit the pane.
+ * Groups, slot grids and text take a full row so nested editors never get squeezed.
+ */
+:is(
+    #rules-panel,
+    #action-bar-panel,
+    #status-panel-editor,
+    #item-editor,
+    #shop-editor,
+    #combat-editor
+  )
+  :is(form, fieldset) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 0.75rem;
+}
+
+:is(
+    #rules-panel,
+    #action-bar-panel,
+    #status-panel-editor,
+    #item-editor,
+    #shop-editor,
+    #combat-editor
+  )
+  :is(form, fieldset)
+  > label {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+:is(
+    #rules-panel,
+    #action-bar-panel,
+    #status-panel-editor,
+    #item-editor,
+    #shop-editor,
+    #combat-editor
+  )
+  :is(form, fieldset)
+  > :is(input, select, textarea) {
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin-bottom: 0.6rem;
+}
+
+:is(
+    #rules-panel,
+    #action-bar-panel,
+    #status-panel-editor,
+    #item-editor,
+    #shop-editor,
+    #combat-editor
+  )
+  :is(form, fieldset)
+  > :is(fieldset, form, details, div, p, pre, table, h3, h4) {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+:is(
+    #rules-panel,
+    #action-bar-panel,
+    #status-panel-editor,
+    #item-editor,
+    #shop-editor,
+    #combat-editor
+  )
+  :is(form, fieldset)
+  > button {
+  flex: none;
+}
+
+/* Long editors keep their save action in reach while scrolling the form. */
+.save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  position: sticky;
+  /* Sit flush under the pane header, inside the scroll area's top padding. */
+  top: -1rem;
+  z-index: 2;
+  margin: -0.25rem 0 0.75rem;
+  padding: 0.75rem 0 0.5rem;
+  border-bottom: 1px solid var(--ed-border);
+  background: var(--ed-panel);
+}
+
+.save-bar > button {
+  margin: 0 !important;
+}
+
 .action-bar-slot-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.35rem;
+  margin-bottom: 0.6rem;
 }
 
 #action-bar-panel .action-bar-slot-grid button {
@@ -662,7 +766,7 @@ label[for='graphic-existing'] {
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 #action-bar-panel .action-bar-slot-grid button[aria-pressed='true'] {
@@ -676,8 +780,10 @@ label[for='graphic-existing'] {
 }
 
 .action-bar-slot-label {
-  max-height: 3.75em;
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .control-mapping-row {
@@ -981,7 +1087,7 @@ label[for='graphic-existing'] {
     height: 70vh;
   }
 
-  #project-editor form,
+  :is(#editor-fields, #assets-panel) form,
   .control-mapping-row {
     grid-template-columns: minmax(0, 1fr);
   }
