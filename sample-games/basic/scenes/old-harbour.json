@@ -138,7 +138,8 @@
       },
       "owners": ["player"],
       "readOnly": true,
-      "labelKey": "scenes.inventory.title"
+      "labelKey": "scenes.inventory.title",
+      "descriptionTarget": "narrative"
     },
     {
       "id": "map-key",

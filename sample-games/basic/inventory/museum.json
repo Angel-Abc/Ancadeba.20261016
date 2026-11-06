@@ -15,7 +15,17 @@
         "read": {
           "action": "inspect-letter"
         }
-      }
+      },
+      "labelKey": "items.folded-letter.name",
+      "descriptionKey": "items.folded-letter.description",
+      "properties": [
+        {
+          "id": "category",
+          "labelKey": "items.category",
+          "value": "Document",
+          "valueKey": "items.document"
+        }
+      ]
     }
   },
   "owners": {

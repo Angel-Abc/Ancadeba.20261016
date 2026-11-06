@@ -54,6 +54,8 @@ export {
 
 export type { IGameInventory, InventoryItemSnapshot, InventoryMoveResult } from './inventory.js'
 
+export { GameInventory } from './inventory.js'
+
 export {
   GameLifecycle,
   type IGameLifecycle,
@@ -121,3 +123,9 @@ export type {
 export * from './graphics.js'
 
 export * from './graphicSources.js'
+
+export * from './inventoryContext.js'
+
+export * from './equipment.js'
+
+export * from './itemDetails.js'

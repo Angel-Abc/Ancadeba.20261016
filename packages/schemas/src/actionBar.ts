@@ -21,6 +21,20 @@ export function actionBarIssues(
 
     const action = slot.action
 
+    if (action.type === 'equipment-action') {
+      if (
+        !scene?.components.some(
+          (component) => component.id === action.equipment && component.type === 'equipment',
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'equipment'],
+          message: `Unknown equipment view: ${action.equipment}`,
+        })
+
+      continue
+    }
+
     if (action.type === 'nearby-action') {
       if (
         !scene?.components.some(

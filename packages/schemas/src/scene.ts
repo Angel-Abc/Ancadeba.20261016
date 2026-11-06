@@ -99,6 +99,11 @@ export const actionBarSlotSchema = z
         nearby: gameIdSchema,
         action: gameIdSchema,
       }),
+      z.object({
+        type: z.literal('equipment-action'),
+        equipment: gameIdSchema,
+        operation: z.enum(['equip', 'unequip']),
+      }),
     ]),
     inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
   })
@@ -189,10 +194,42 @@ export const inventoryComponentSchema = z
       .refine((owners) => new Set(owners).size === owners.length),
     previews: z.record(gameIdSchema, inventoryPreviewSchema).default({}),
     readOnly: z.boolean().optional(),
+    descriptionTarget: gameIdSchema.optional(),
   })
   .refine((component) => Boolean(component.label || component.labelKey))
 
 export type InventoryComponentDefinition = z.infer<typeof inventoryComponentSchema>
+
+export const itemDetailsComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('item-details'),
+  placement: gridPlacementSchema,
+  label: z.string().default('Item details'),
+  labelKey: translationKeySchema.optional(),
+  inventory: gameIdSchema,
+  emptyText: z.string().default('Select an item'),
+  emptyTextKey: translationKeySchema.optional(),
+})
+
+export const equipmentComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('equipment'),
+  placement: gridPlacementSchema,
+  label: z.string().default('Equipment'),
+  labelKey: translationKeySchema.optional(),
+  inventory: gameIdSchema,
+  owner: gameIdSchema,
+  columns: z.number().int().min(1).max(12).default(3),
+  order: z
+    .array(gameIdSchema)
+    .default([])
+    .refine((ids) => new Set(ids).size === ids.length, 'Equipment slot order must be unique'),
+  readOnly: z.boolean().default(false),
+})
+
+export type ItemDetailsComponentDefinition = z.infer<typeof itemDetailsComponentSchema>
+
+export type EquipmentComponentDefinition = z.infer<typeof equipmentComponentSchema>
 
 export const nearbyEntrySchema = z
   .object({
@@ -322,6 +359,8 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   actionBarComponentSchema,
   nearbyComponentSchema,
   statusPanelComponentSchema,
+  itemDetailsComponentSchema,
+  equipmentComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -363,6 +402,41 @@ export const sceneSchema = z
     let hasActionBar = false
     const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (component.type === 'item-details' || component.type === 'equipment') {
+        const source = scene.components.find((entry) => entry.id === component.inventory)
+
+        if (scene.type !== 'game' || source?.type !== 'inventory')
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'inventory'],
+            message: 'Select an inventory panel in the same game scene',
+          })
+
+        if (
+          component.type === 'equipment' &&
+          source?.type === 'inventory' &&
+          !source.owners.includes(component.owner)
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'owner'],
+            message: 'Equipment owner must be shown in the source inventory',
+          })
+      }
+
+      if (
+        component.type === 'inventory' &&
+        component.descriptionTarget &&
+        !scene.components.some(
+          (entry) => entry.type === 'text' && entry.id === component.descriptionTarget,
+        )
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index, 'descriptionTarget'],
+          message: 'Select a text component in the same scene',
+        })
+
       if (component.type === 'status-panel' && scene.type !== 'game')
         context.addIssue({
           code: 'custom',

@@ -5,8 +5,12 @@ import { GameInventory, type IGameInventory } from './inventory.js'
 import type { IGameActionBar } from './actionBar.js'
 import type { IGameMapMovement } from './mapMovement.js'
 import type { IGameNearby } from './nearbyContext.js'
+import type { IGameInventorySelection } from './inventoryContext.js'
+import type { IGameEquipment } from './equipment.js'
 
 export interface IGameRuntime {
+  readonly inventorySelection?: IGameInventorySelection | undefined
+  readonly equipment?: IGameEquipment | undefined
   readonly nearby?: IGameNearby | undefined
   readonly mapMovement?: IGameMapMovement | undefined
   readonly actionBar?: IGameActionBar | undefined
@@ -19,6 +23,8 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly inventorySelection?: IGameInventorySelection | undefined
+  readonly equipment?: IGameEquipment | undefined
   readonly nearby?: IGameNearby | undefined
   readonly mapMovement?: IGameMapMovement | undefined
   readonly actionBar?: IGameActionBar | undefined
@@ -109,6 +115,14 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+
+  get inventorySelection(): IGameInventorySelection | undefined {
+    return this.runtime?.inventorySelection
+  }
+
+  get equipment(): IGameEquipment | undefined {
+    return this.runtime?.equipment
+  }
 
   get nearby(): IGameNearby | undefined {
     return this.runtime?.nearby

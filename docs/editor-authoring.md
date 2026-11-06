@@ -354,3 +354,59 @@ text components using the engine's shared scene schema; existing components and
 bindings are preserved by metadata and layout edits. The visual panel creates
 empty scenes. The [MCP adapter](editor-mcp.md) exposes these same HTTP operations
 to an external coding agent.
+
+## Item details and equipment
+
+Choose **Items & equipment** to edit an item type's name, description, large
+artwork, and ordered display properties. Each string can use a language-catalog
+key. Properties accept literal text, finite numbers, or existing scalar state
+bindings; they do not calculate stats or change game state. Artwork accepts an
+image, part, or composition from the game asset catalog. The instance's dyes
+apply to image and part artwork.
+
+Select an inventory panel as the editing target to choose its **Main text details
+target**. The selected item's section is appended to that text alongside nearby
+descriptions and inspection results. Clearing selection removes only the item
+section. Add an **item-details** view for a separate artwork and details panel;
+both presentation styles may be used together. Linked views share the inventory
+panel's selection, even without an action bar, and include nested and worn items.
+
+Add an **equipment** view, choose its source inventory and owner, and set its
+grid columns and optional ordered slot IDs. Unlisted owner slots follow in their
+declared order. The owner must appear in the source inventory. **Owner slots**
+edits their names and declarations; reference checks prevent removing occupied
+or referenced slots. Item compatibility remains declared by `equipmentSlots` on
+item types in the inventory file.
+
+```json
+{
+  "id": "equipment",
+  "type": "equipment",
+  "inventory": "items",
+  "owner": "player",
+  "columns": 2,
+  "order": ["outerwear", "back"],
+  "placement": { "row": 7, "column": 7, "rowSpan": 3, "columnSpan": 6 }
+}
+```
+
+In **Action bar & input**, choose **Equipment command**, select an equipment
+view, and choose **equip** or **unequip**. Bind it through the game's normal input
+configuration, or leave it click-only. Occupied slot item buttons select the worn
+item for inspection; separate named slot buttons select an equip destination.
+An item with exactly one compatible slot selects it automatically. Multiple
+compatible slots require an explicit choice. Incompatible destinations leave
+Equip disabled. A read-only equipment view still allows inspection.
+
+Equip requires the item to belong to that owner, including items inside owned
+containers. Replacement places the displaced item in the same owner's carried
+inventory and commits both placements together. Use existing inventory Move
+controls to transfer ownership first. Unequip returns the item to its owner's
+carried inventory. Neither operation advances turns or game time, and existing
+Move behavior still rejects occupied slots. Queued keyboard gestures retain
+their original scene, item, and destination rather than following later changes.
+
+The basic sample demonstrates localized main-text details. The graphics sample's
+wardrobe demonstrates larger artwork, two dyed cloaks for replacement, paper-doll
+updates, and Q/W equipment commands. Saves use the shared revision checks;
+conflicts and unrelated saves preserve item drafts until saved or discarded.

@@ -181,6 +181,43 @@ describe('standalone game export', () => {
         container: 'travel-pack',
       })
       expect(loaded.scenes.get('wardrobe')?.components[0]?.type).toBe('inventory')
+      expect(
+        loaded.scenes
+          .get('wardrobe')
+          ?.components.some((component) => component.type === 'equipment'),
+      ).toBe(true)
+      expect(loaded.inventory!.itemTypes.cloak!.artwork).toBe('cloak')
+
+      const engine = new Engine(
+        { load: async () => loaded },
+        { mount: () => () => {} },
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        { clock: { now: () => 0 }, scheduler: { schedule: () => () => {} } },
+      )
+
+      try {
+        await engine.start()
+        engine.lifecycle!.startGame()
+        engine.lifecycle!.enterScene('wardrobe')
+        const scene = engine.lifecycle!.activeScene!
+        const game = engine.lifecycle!.currentGame!
+        game.inventorySelection!.select(scene, 'wardrobe-items', 'moss-cloak')
+        engine.input!.pressKey('KeyQ')
+        engine.input!.releaseKey('KeyQ')
+
+        for (let i = 0; i < 4; i++) engine.flushMessages()
+        expect(
+          game.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!.placement,
+        ).toEqual({ type: 'equipped', owner: 'wayfarer', slot: 'outerwear' })
+        game.inventorySelection!.select(scene, 'wardrobe-items', 'amber-cloak')
+        game.actionBar!.activate(scene, 'commands', '1')
+        expect(
+          game.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!.placement,
+        ).toEqual({ type: 'carried', owner: 'wayfarer' })
+      } finally {
+        engine.stop()
+      }
 
       for (const image of Object.values(loaded.assets!.images)) {
         const bytes = await resources.readBytes(image.source)

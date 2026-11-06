@@ -151,6 +151,37 @@ export function editRules(
 
     for (const { itemTypes } of inventories) {
       for (const itemType of Object.values(itemTypes)) {
+        const properties = object(itemType).properties
+
+        for (const property of Array.isArray(properties) ? properties : []) {
+          const value = object(property).value
+
+          if (!value || typeof value !== 'object') continue
+          const binding = gameBindingSchema.parse(value)
+
+          if (binding.source !== 'game.state') continue
+
+          const matches = (path: string[]) =>
+            path.length === binding.path.length &&
+            path.every((part, index) => part === binding.path[index])
+
+          if (
+            !rules.state.some((field) => matches(field.path)) &&
+            !(rules.clock && matches(rules.clock.path)) &&
+            !(rules.log && matches(rules.log.path))
+          )
+            continue
+          checkBinding(next, binding, false)
+          const field = next.state.find((field) => matches(field.path))
+
+          if (field && ruleValueType(field.value) === 'boolean')
+            throw new EditorError(
+              422,
+              'item_binding_in_use',
+              'Item properties require text or numeric state fields',
+            )
+        }
+
         const inspection = object(object(itemType).inspection)
         checkLink(inspection.action, inspection.details, false)
 

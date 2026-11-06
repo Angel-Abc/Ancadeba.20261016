@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { gameBindingSchema } from './bindings.js'
+import { translationKeySchema } from './languages.js'
+import { assertGraphicReference, graphicAppearanceSchema } from './assets.js'
 import {
   assetIdSchema as gameIdSchema,
   colorSchema,
@@ -22,8 +24,54 @@ export const inventoryPlacementSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('inside'), container: gameIdSchema }),
 ])
 
-const itemTypeSchema = z.object({
-  label: labelSchema,
+export const itemPropertySchema = z
+  .object({
+    id: gameIdSchema,
+    label: z.string().default(''),
+    labelKey: translationKeySchema.optional(),
+    value: z.union([z.string(), z.number().finite(), gameBindingSchema]),
+    valueKey: translationKeySchema.optional(),
+  })
+  .refine((property) => Boolean(property.label || property.labelKey), {
+    message: 'A property label or translation is required',
+  })
+
+export const itemPresentationSchema = z
+  .object({
+    label: z.string().trim().default(''),
+    labelKey: translationKeySchema.optional(),
+    description: z.string().default(''),
+    descriptionKey: translationKeySchema.optional(),
+    artwork: gameIdSchema.optional(),
+    properties: z.array(itemPropertySchema).default([]),
+  })
+  .superRefine((item, context) => {
+    if (!item.label && !item.labelKey)
+      context.addIssue({
+        code: 'custom',
+        path: ['label'],
+        message: 'A label or labelKey is required',
+      })
+    const ids = new Set<string>()
+    item.properties.forEach((property, index) => {
+      if (ids.has(property.id))
+        context.addIssue({
+          code: 'custom',
+          path: ['properties', index, 'id'],
+          message: 'Property IDs must be unique',
+        })
+
+      if (property.valueKey && typeof property.value !== 'string')
+        context.addIssue({
+          code: 'custom',
+          path: ['properties', index, 'valueKey'],
+          message: 'Value translations require a literal text value',
+        })
+      ids.add(property.id)
+    })
+  })
+
+const itemTypeSchema = itemPresentationSchema.safeExtend({
   container: z.boolean().default(false),
   equipmentSlots: z.array(gameIdSchema).default([]),
   icon: gameIdSchema.optional(),
@@ -73,6 +121,22 @@ export interface InventoryItem {
   readonly itemType: string
   readonly placement: InventoryPlacement
   readonly colors: Readonly<Record<string, string>>
+}
+
+export function inventoryOwner(
+  items: ReadonlyMap<string, InventoryItem>,
+  id: string,
+): string | undefined {
+  const seen = new Set<string>()
+  let item = items.get(id)
+
+  while (item && !seen.has(id)) {
+    seen.add(id)
+
+    if (item.placement.type !== 'inside') return item.placement.owner
+    id = item.placement.container
+    item = items.get(id)
+  }
 }
 
 /** Look up only IDs declared by the game. */
@@ -242,6 +306,18 @@ export function inventoryIssues(
 
     if (type.icon && !inventoryIcon(assets, type.icon))
       issues.push({ path: [...path, 'icon'], message: `Unknown image or part: ${type.icon}` })
+
+    if (type.artwork) {
+      try {
+        if (!assets) throw new Error('Item artwork requires an asset catalogue')
+        assertGraphicReference(assets, type.artwork, graphicAppearanceSchema.parse({}))
+      } catch (error) {
+        issues.push({
+          path: [...path, 'artwork'],
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
 
     if (type.wornPart && !(assets && inventoryEntry(assets.parts, type.wornPart)))
       issues.push({ path: [...path, 'wornPart'], message: `Unknown part: ${type.wornPart}` })

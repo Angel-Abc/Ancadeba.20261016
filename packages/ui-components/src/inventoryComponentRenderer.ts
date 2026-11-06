@@ -37,16 +37,19 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     const { document, assets, inventory, inventoryDefinition: definition } = context
     const scene = context.scene
     const actionBar = scene?.type === 'game' ? scene.game.actionBar : undefined
+    const selection = scene?.type === 'game' ? scene.game.inventorySelection : undefined
 
     const contextual = Boolean(
-      actionBar &&
-      scene?.data.components.some(
-        (entry) =>
-          entry.type === 'action-bar' &&
-          Object.values(entry.slots).some(
-            ({ action }) => action.type === 'inventory-action' && action.inventory === component.id,
-          ),
-      ),
+      selection ||
+      (actionBar &&
+        scene?.data.components.some(
+          (entry) =>
+            entry.type === 'action-bar' &&
+            Object.values(entry.slots).some(
+              ({ action }) =>
+                action.type === 'inventory-action' && action.inventory === component.id,
+            ),
+        )),
     )
 
     const root = document.createElement('section')
@@ -121,7 +124,10 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     clearSelection.type = 'button'
     clearSelection.textContent = 'Clear selection'
     clearSelection.addEventListener('click', () => {
-      if (scene) actionBar?.selectInventoryItem(scene, component.id)
+      if (scene) {
+        if (selection) selection.select(scene, component.id)
+        else actionBar?.selectInventoryItem(scene, component.id)
+      }
     })
 
     if (contextual) root.append(clearSelection)
@@ -139,7 +145,10 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     }
 
     const syncSelection = (choices: readonly Destination[]) => {
-      if (contextual && scene) selected = actionBar?.getSelectedItem(scene, component.id)
+      if (contextual && scene)
+        selected = selection
+          ? selection.get(scene, component.id)?.item
+          : actionBar?.getSelectedItem(scene, component.id)
       const clearFocused = document.activeElement === clearSelection
       clearSelection.hidden = selected === undefined
 
@@ -222,8 +231,10 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           button.dataset.itemId = item.id
           button.textContent = type.label
           button.addEventListener('click', () => {
-            if (contextual && scene) actionBar?.selectInventoryItem(scene, component.id, item.id)
-            else selected = item.id
+            if (contextual && scene) {
+              if (selection) selection.select(scene, component.id, item.id)
+              else actionBar?.selectInventoryItem(scene, component.id, item.id)
+            } else selected = item.id
             status.textContent = ''
             syncSelection(choices)
           })
@@ -275,7 +286,11 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           inspect.addEventListener('click', () => {
             if (!inspectionDetails.has(details)) return
 
-            if (contextual && scene) actionBar?.selectInventoryItem(scene, component.id, item.id)
+            if (contextual && scene) {
+              if (selection) selection.select(scene, component.id, item.id)
+              else actionBar?.selectInventoryItem(scene, component.id, item.id)
+            }
+
             context.actions?.request(action, item.id)
           })
           const details = document.createElement('p')
@@ -410,7 +425,8 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     const unsubscribe = inventory.subscribeChanges(update)
 
     const unsubscribeContext = contextual
-      ? actionBar?.subscribeChanges(() => syncSelection(selectionChoices))
+      ? (selection?.subscribe(() => syncSelection(selectionChoices)) ??
+        actionBar?.subscribeChanges(() => syncSelection(selectionChoices)))
       : undefined
 
     const unsubscribeInspections = Object.values(definition.itemTypes).some(

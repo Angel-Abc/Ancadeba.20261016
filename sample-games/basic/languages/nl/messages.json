@@ -107,5 +107,11 @@
   "status.health": "Gezondheid",
   "status.gold": "Goud",
   "status.informed": "Geïnformeerd",
-  "status.informed.description": "Je hebt de brief gelezen en weet welk symbool de vitrine in het museum opent."
+  "status.informed.description": "Je hebt de brief gelezen en weet welk symbool de vitrine in het museum opent.",
+  "items.folded-letter.name": "Gevouwen brief",
+  "items.folded-letter.description": "Een zorgvuldig gevouwen brief. Lees hem om te ontdekken waarom je bent uitgenodigd.",
+  "items.harbour-chart.name": "Havenkaart",
+  "items.harbour-chart.description": "Een zeekaart met de route voorbij de haven.",
+  "items.category": "Categorie",
+  "items.document": "Document"
 }

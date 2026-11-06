@@ -64,6 +64,11 @@ export function actionBarForm(
       .find((scene) => scene.id === sceneId)
       ?.components.filter((component) => component.type === 'nearby') ?? []
 
+  const equipmentViews =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter((component) => component.type === 'equipment') ?? []
+
   const mapViews =
     view.scenes
       .find((scene) => scene.id === sceneId)
@@ -85,6 +90,7 @@ export function actionBarForm(
         ['inventory-action', 'Selected inventory item'],
         ['nearby-action', 'Selected nearby target'],
         ['move-map', 'Move on map'],
+        ['equipment-action', 'Equipment command'],
       ],
       (type) =>
         change(() => {
@@ -97,18 +103,20 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'move-map'
-                ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                : type === 'nearby-action'
-                  ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                  : type === 'inventory-action'
-                    ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                    : type === 'request-action'
-                      ? { type, action: actions[0] ?? '' }
-                      : {
-                          type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                          scene: gameScenes[0] ?? '',
-                        },
+              type === 'equipment-action'
+                ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
+                : type === 'move-map'
+                  ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                  : type === 'nearby-action'
+                    ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                    : type === 'inventory-action'
+                      ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                      : type === 'request-action'
+                        ? { type, action: actions[0] ?? '' }
+                        : {
+                            type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                            scene: gameScenes[0] ?? '',
+                          },
           }
         }),
     ),
@@ -131,7 +139,21 @@ export function actionBarForm(
     )
     const action = slot.action
 
-    if (action.type === 'nearby-action') {
+    if (action.type === 'equipment-action') {
+      detail.append(
+        select(
+          'Equipment view',
+          action.equipment,
+          equipmentViews.map((view) => view.id),
+          (value) => {
+            action.equipment = value
+          },
+        ),
+        select('Equipment operation', action.operation, ['equip', 'unequip'], (value) => {
+          action.operation = value
+        }),
+      )
+    } else if (action.type === 'nearby-action') {
       detail.append(
         select(
           'Nearby panel',

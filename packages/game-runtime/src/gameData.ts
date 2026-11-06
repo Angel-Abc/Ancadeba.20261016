@@ -16,6 +16,8 @@ import type {
   ActionBarComponentDefinition,
   NearbyComponentDefinition,
   StatusPanelComponentDefinition,
+  ItemDetailsComponentDefinition,
+  EquipmentComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -29,6 +31,8 @@ import {
   resolveMapView,
   actionBarIssues,
   statusPanelIssues,
+  localizeInventory,
+  equipmentIssues,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
@@ -65,6 +69,8 @@ export type SceneComponentData =
   | ActionBarComponentDefinition
   | NearbyComponentDefinition
   | StatusPanelComponentDefinition
+  | ItemDetailsComponentDefinition
+  | EquipmentComponentDefinition
 
 export type GraphicComponentData = GraphicComponentDefinition
 
@@ -99,7 +105,7 @@ export interface SceneData {
 
 export interface GameData {
   readonly assets?: AssetCatalog
-  readonly inventory?: InventoryDefinition
+  readonly inventory?: InventoryDefinition | undefined
   readonly rules?: GameRulesDefinition
   readonly ruleTranslation?: GameTranslation | undefined
   readonly localization?: IGameLocalization
@@ -135,7 +141,7 @@ export function assembleGameData(
 
     if (!inventory) throw new Error(`Missing inventory definition: ${file}`)
 
-    return { file, inventory }
+    return { file, inventory: localizeInventory(inventory, ruleTranslation) }
   })
 
   const { inventory, issues: inventoryDiagnostics } = validateInventorySources(
@@ -198,6 +204,13 @@ export function assembleGameData(
         grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
       },
       components: scene.components.map((component) => {
+        if (component.type === 'equipment')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            order: [...component.order],
+          }
+
         if (component.type === 'status-panel')
           return {
             ...component,
@@ -337,6 +350,12 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'equipment') {
+        const issue = equipmentIssues(component, inventory)[0]
+
+        if (issue) throw new Error(`Scene ${scene.id}, equipment ${component.id}: ${issue.message}`)
+      }
+
       if (component.type === 'status-panel') {
         const issue = statusPanelIssues(component, assets)[0]
 

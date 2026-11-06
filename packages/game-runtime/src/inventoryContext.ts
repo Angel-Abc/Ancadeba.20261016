@@ -5,8 +5,14 @@ export interface InventorySelectionSnapshot {
   readonly item: string
 }
 
+export interface IGameInventorySelection {
+  get(scene: SceneInstance, panel: string): InventorySelectionSnapshot | undefined
+  select(scene: SceneInstance, panel: string, item?: string): void
+  subscribe(listener: () => void): () => void
+}
+
 /** Scene-local item selection shared by inventory panels and contextual commands. */
-export class GameInventoryContext {
+export class GameInventoryContext implements IGameInventorySelection {
   private scene: SceneInstance | undefined
   private readonly selections = new Map<string, InventorySelectionSnapshot>()
   private readonly subscribers = new Set<() => void>()

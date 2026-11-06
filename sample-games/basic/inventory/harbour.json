@@ -15,7 +15,17 @@
         "read": {
           "action": "inspect-chart"
         }
-      }
+      },
+      "labelKey": "items.harbour-chart.name",
+      "descriptionKey": "items.harbour-chart.description",
+      "properties": [
+        {
+          "id": "category",
+          "labelKey": "items.category",
+          "value": "Document",
+          "valueKey": "items.document"
+        }
+      ]
     }
   },
   "owners": {

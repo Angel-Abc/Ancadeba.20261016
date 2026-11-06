@@ -107,5 +107,11 @@
   "status.health": "Health",
   "status.gold": "Gold",
   "status.informed": "Informed",
-  "status.informed.description": "You read the letter and know which symbol opens the museum display case."
+  "status.informed.description": "You read the letter and know which symbol opens the museum display case.",
+  "items.folded-letter.name": "Folded letter",
+  "items.folded-letter.description": "A carefully folded letter. Read it to learn why you were invited.",
+  "items.harbour-chart.name": "Harbour chart",
+  "items.harbour-chart.description": "A sea chart marked with the route beyond the harbour.",
+  "items.category": "Category",
+  "items.document": "Document"
 }

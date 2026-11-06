@@ -3,7 +3,13 @@
   "id": "wardrobe",
   "title": "Wardrobe inventory",
   "type": "game",
-  "screen": { "type": "grid", "grid": { "rows": 12, "columns": 12 } },
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
   "components": [
     {
       "id": "wardrobe-items",
@@ -11,24 +17,116 @@
       "label": "Wardrobe inventory",
       "owners": ["wayfarer", "ranger"],
       "previews": {
-        "wayfarer": { "composition": "paper-doll", "slots": { "outerwear": "cloak" } },
-        "ranger": { "composition": "paper-doll", "slots": { "outerwear": "cloak" } }
+        "wayfarer": {
+          "composition": "paper-doll",
+          "slots": {
+            "outerwear": "cloak"
+          }
+        },
+        "ranger": {
+          "composition": "paper-doll",
+          "slots": {
+            "outerwear": "cloak"
+          }
+        }
       },
-      "placement": { "row": 1, "column": 1, "rowSpan": 11, "columnSpan": 12 }
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 9,
+        "columnSpan": 6
+      }
     },
     {
       "id": "gallery",
       "type": "button",
       "label": "Back to gallery",
-      "action": { "type": "enter-scene", "scene": "gallery" },
-      "placement": { "row": 12, "column": 1, "columnSpan": 6 }
+      "action": {
+        "type": "enter-scene",
+        "scene": "gallery"
+      },
+      "placement": {
+        "row": 12,
+        "column": 1,
+        "columnSpan": 6
+      }
     },
     {
       "id": "restart",
       "type": "button",
       "label": "New Game",
-      "action": { "type": "new-game", "scene": "wardrobe" },
-      "placement": { "row": 12, "column": 7, "columnSpan": 6 }
+      "action": {
+        "type": "new-game",
+        "scene": "wardrobe"
+      },
+      "placement": {
+        "row": 12,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "item-details",
+      "type": "item-details",
+      "inventory": "wardrobe-items",
+      "label": "Selected item",
+      "placement": {
+        "row": 1,
+        "column": 7,
+        "rowSpan": 6,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "equipment",
+      "type": "equipment",
+      "inventory": "wardrobe-items",
+      "owner": "wayfarer",
+      "label": "Wayfarer equipment",
+      "columns": 2,
+      "order": ["outerwear", "back"],
+      "placement": {
+        "row": 7,
+        "column": 7,
+        "rowSpan": 3,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Equip",
+          "action": {
+            "type": "equipment-action",
+            "equipment": "equipment",
+            "operation": "equip"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "equip"
+          }
+        },
+        "2": {
+          "label": "Unequip",
+          "action": {
+            "type": "equipment-action",
+            "equipment": "equipment",
+            "operation": "unequip"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "unequip"
+          }
+        }
+      }
     }
   ]
 }

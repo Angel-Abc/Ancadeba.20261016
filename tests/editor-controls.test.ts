@@ -22,6 +22,7 @@ import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.js'
+import { bindItemEditor } from '../apps/editor-ui/src/itemEditor.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -336,6 +337,109 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors item properties and linked equipment views while retaining conflicting drafts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { cloak: { label: 'Cloak', equipmentSlots: ['body'] } },
+      owners: { player: { label: 'Player', equipmentSlots: { body: 'Body' } } },
+      items: {},
+    })
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'items',
+        type: 'inventory',
+        label: 'Items',
+        owners: ['player'],
+        placement: { row: 1, column: 1 },
+      }),
+    )
+    const editor = bindItemEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    edit('Item editing target', 'item:cloak')
+    edit('Description', 'A warm cloak')
+    click('Add property')
+    edit('Property label', 'Value')
+    edit('Property value type', 'number')
+    edit('Property value', '12')
+    expect(editor.hasDrafts()).toBe(true)
+    edit('Items game scene', 'other')
+    expect(field('Items game scene').value).toBe('shop')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, conflict: true, preserveDrafts: true },
+      false,
+    )
+    expect(field('Description').value).toBe('A warm cloak')
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'unrelated' },
+        lastCommand: 'game.updateRules',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(field('Property value').value).toBe('12')
+    submit('Save items and equipment')
+    expect(commands[0]).toMatchObject({
+      type: 'inventory.setItemPresentation',
+      itemType: 'cloak',
+      presentation: {
+        description: 'A warm cloak',
+        properties: [{ id: 'property', label: 'Value', value: 12 }],
+      },
+    })
+    click('Discard item draft')
+    click('Add equipment')
+    edit('Equipment owner', 'player')
+    edit('Grid columns', '2')
+    edit('Slot order (comma separated IDs)', 'body')
+    submit('Save items and equipment')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.upsertItemView',
+      component: {
+        type: 'equipment',
+        inventory: 'items',
+        owner: 'player',
+        columns: 2,
+        order: ['body'],
+      },
+    })
+    const saved = commands[1]!
+
+    if (saved.type !== 'scene.upsertItemView') throw new Error('Expected item view')
+    view.scenes[0]!.components.push(saved.component)
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'saved' },
+        lastCommand: 'scene.upsertItemView',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(editor.hasDrafts()).toBe(false)
+    bindActionBarPanel(root.asElement(), (command) => commands.push(command)).render(
+      { ...initial, view },
+      true,
+    )
+    edit('Action type', 'equipment-action')
+    edit('Slot label', 'Wear')
+    edit('Equipment view', saved.component.id)
+    edit('Equipment operation', 'equip')
+    submit('Save action bar')
+    expect(commands[2]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': {
+            action: { type: 'equipment-action', equipment: saved.component.id, operation: 'equip' },
+          },
+        },
+      },
+    })
+  })
   it('authors and reorders status rows and effects while preserving conflicting and unrelated drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)

@@ -1,5 +1,6 @@
 import type { Unsubscribe } from '@ancadeba/utilities'
 import type { SceneData } from './gameData.js'
+import type { InventoryDefinition } from '@ancadeba/schemas'
 
 export interface GameLanguagePreferences {
   read(gameId: string): string | undefined
@@ -11,6 +12,7 @@ export interface LocalizedGameContent {
   readonly title: string
   readonly description: string
   readonly scenes: ReadonlyMap<string, SceneData>
+  readonly inventory?: InventoryDefinition | undefined
 }
 
 export interface GameLanguageOption {

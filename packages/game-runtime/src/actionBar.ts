@@ -1,7 +1,12 @@
 import { inventoryEntry, type ActionBarSlotDefinition } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { VirtualInput } from './input.js'
-import { GameInventoryContext, type InventorySelectionSnapshot } from './inventoryContext.js'
+import {
+  GameInventoryContext,
+  type IGameInventorySelection,
+  type InventorySelectionSnapshot,
+} from './inventoryContext.js'
+import type { EquipmentSelection, IGameEquipment } from './equipment.js'
 import type { IGameMapMovement } from './mapMovement.js'
 import type { IGameNearby, NearbySelection } from './nearbyContext.js'
 
@@ -18,7 +23,7 @@ interface CapturedSlot {
   readonly scene: SceneInstance
   readonly bar: string
   readonly slot: string
-  readonly selection?: InventorySelectionSnapshot | NearbySelection | undefined
+  readonly selection?: InventorySelectionSnapshot | NearbySelection | EquipmentSelection | undefined
 }
 
 /** Resolves scene-owned slots before general input bindings, independently of the host. */
@@ -26,15 +31,19 @@ export class GameActionBar implements IGameActionBar {
   private readonly gestures = new Map<string, CapturedSlot | null>()
   private captured = new WeakMap<VirtualInput, CapturedSlot | null>()
   private disposed = false
-  private readonly inventoryContext: GameInventoryContext
+  private readonly inventoryContext: IGameInventorySelection
+  private readonly ownedContext: GameInventoryContext | undefined
 
   constructor(
     private readonly lifecycle: IGameLifecycle,
     inventory = lifecycle.currentGame?.inventory,
     private readonly mapMovement: IGameMapMovement | undefined = lifecycle.currentGame?.mapMovement,
     private readonly nearby: IGameNearby | undefined = lifecycle.currentGame?.nearby,
+    selection: IGameInventorySelection | undefined = lifecycle.currentGame?.inventorySelection,
+    private readonly equipment: IGameEquipment | undefined = lifecycle.currentGame?.equipment,
   ) {
-    this.inventoryContext = new GameInventoryContext(lifecycle, inventory)
+    this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
+    this.inventoryContext = selection ?? this.ownedContext!
   }
 
   getSelectedItem(scene: SceneInstance, inventory: string): string | undefined {
@@ -49,11 +58,13 @@ export class GameActionBar implements IGameActionBar {
     const inventory = this.inventoryContext.subscribe(listener)
     const maps = this.mapMovement?.subscribeChanges(listener)
     const nearby = this.nearby?.subscribeChanges(listener)
+    const equipment = this.equipment?.subscribe(listener)
 
     return () => {
       inventory()
       maps?.()
       nearby?.()
+      equipment?.()
     }
   }
 
@@ -75,12 +86,18 @@ export class GameActionBar implements IGameActionBar {
     | {
         definition: ActionBarSlotDefinition
         payload?: string
-        selection?: InventorySelectionSnapshot | NearbySelection
+        selection?: InventorySelectionSnapshot | NearbySelection | EquipmentSelection
       }
     | undefined {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'equipment-action') {
+      const selection = this.equipment?.get(scene, definition.action.equipment)
+
+      return selection ? { definition, selection } : { definition }
+    }
 
     if (definition.action.type === 'nearby-action') {
       const source = definition.action
@@ -141,6 +158,9 @@ export class GameActionBar implements IGameActionBar {
 
     if (!action) return false
 
+    if (action.type === 'equipment-action')
+      return this.equipment?.isEnabled(scene, action.equipment, action.operation) ?? false
+
     if (action.type === 'move-map')
       return this.mapMovement?.canMove(scene, action.mapView, action.direction) ?? false
 
@@ -169,6 +189,12 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'equipment-action') {
+      this.equipment?.activate(scene, action.equipment, action.operation)
+
+      return
+    }
 
     if (action.type === 'move-map') {
       this.mapMovement?.move(scene, action.mapView, action.direction)
@@ -235,7 +261,7 @@ export class GameActionBar implements IGameActionBar {
 
   dispose(): void {
     this.disposed = true
-    this.inventoryContext.dispose()
+    this.ownedContext?.dispose()
     this.gestures.clear()
     this.captured = new WeakMap()
   }

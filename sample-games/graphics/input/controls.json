@@ -1,0 +1,15 @@
+{
+  "schema-version": "1.0.0",
+  "virtual-keys": ["equip", "unequip"],
+  "keyboard": {
+    "KeyQ": "equip",
+    "KeyW": "unequip"
+  },
+  "contexts": {
+    "wardrobe": {
+      "equip": "equip",
+      "unequip": "unequip"
+    }
+  },
+  "initial-context": "wardrobe"
+}

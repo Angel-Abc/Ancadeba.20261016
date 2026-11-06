@@ -164,6 +164,9 @@ export class GameLoader implements IGameLoader {
       get scenes() {
         return localization.current.scenes
       },
+      get inventory() {
+        return localization.current.inventory
+      },
       get ruleTranslation() {
         return variants.get(localization.current.language)?.ruleTranslation
       },

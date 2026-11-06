@@ -8,6 +8,7 @@ import { bindProjectTree } from './projectTreeView.js'
 import { bindRulesPanel } from './rulesPanel.js'
 import { bindActionBarPanel } from './actionBarPanel.js'
 import { bindStatusPanelEditor } from './statusPanelEditor.js'
+import { bindItemEditor } from './itemEditor.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -159,6 +160,8 @@ export function bindProjectPanel(
   let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
   let actionBarPanel: ReturnType<typeof bindActionBarPanel> | undefined
   let statusPanel: ReturnType<typeof bindStatusPanelEditor> | undefined
+  const itemElement = treeElement && root.querySelector<HTMLElement>('#item-editor')
+  let itemEditor: ReturnType<typeof bindItemEditor> | undefined
 
   const sections = [
     ...projectTreeSections,
@@ -167,6 +170,7 @@ export function bindProjectPanel(
       ? [{ id: 'controls', labelKey: 'controls.heading', nodes: () => [] }]
       : []),
     ...(statusPanelElement ? [{ id: 'status', labelKey: 'status.heading', nodes: () => [] }] : []),
+    ...(itemElement ? [{ id: 'items', labelKey: 'items.heading', nodes: () => [] }] : []),
     ...additionalSections,
   ]
 
@@ -188,6 +192,12 @@ export function bindProjectPanel(
     const actionBar = Boolean(actionBarElement && component?.type === 'action-bar')
     const statusComponent = Boolean(statusPanelElement && component?.type === 'status-panel')
 
+    const itemComponent = Boolean(
+      itemElement &&
+      component &&
+      ['item-details', 'equipment', 'inventory'].includes(component.type),
+    )
+
     metadata.hidden = node.section !== 'game'
     sceneMetadata.hidden =
       node.kind !== 'scene' || !view?.scenes.some((scene) => scene.id === sceneId)
@@ -202,6 +212,10 @@ export function bindProjectPanel(
 
     if (statusPanelElement)
       statusPanelElement.hidden = node.section !== 'status' && !statusComponent
+
+    if (itemElement) itemElement.hidden = node.section !== 'items' && !itemComponent
+
+    if (itemComponent) itemEditor?.navigate(sceneId, component?.id)
 
     if (actionBar) actionBarPanel?.navigate(sceneId)
 
@@ -265,6 +279,16 @@ export function bindProjectPanel(
 
     if (
       (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
+      ((node.section === 'items' ||
+        (node.section === 'scenes' &&
+          view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.some(
+              (component) =>
+                component.id === node.id &&
+                ['item-details', 'equipment', 'inventory'].includes(component.type),
+            ))) &&
+        !itemEditor?.navigate(sceneId, node.section === 'scenes' ? node.id : undefined)) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
       (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
       (usesStatusPanel &&
@@ -320,6 +344,7 @@ export function bindProjectPanel(
     rulesPanel?.render(state, replaceFields)
     actionBarPanel?.render(state, replaceFields)
     statusPanel?.render(state, replaceFields)
+    itemEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -332,6 +357,11 @@ export function bindProjectPanel(
         state.lastCommand === 'inventory.setRuleInspection' ||
         state.lastCommand === 'inventory.setItemActions' ||
         state.lastCommand === 'scene.upsertNearby' ||
+        state.lastCommand === 'inventory.setItemPresentation' ||
+        state.lastCommand === 'inventory.setEquipmentSlots' ||
+        state.lastCommand === 'scene.setInventoryDetails' ||
+        state.lastCommand === 'scene.upsertItemView' ||
+        state.lastCommand === 'scene.removeItemView' ||
         state.lastCommand === 'scene.upsertStatusPanel' ||
         state.lastCommand === 'scene.removeStatusPanel' ||
         state.lastCommand === 'scene.setActionBar' ||
@@ -512,6 +542,11 @@ export function bindProjectPanel(
     statusPanel = bindStatusPanelEditor(statusPanelElement, (command) => {
       void controller.save(command)
     })
+
+  if (itemElement)
+    itemEditor = bindItemEditor(itemElement, (command) => {
+      void controller.save(command)
+    })
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -576,7 +611,8 @@ export function bindProjectPanel(
       assetsPanel?.hasDrafts() ||
       rulesPanel?.hasDrafts() ||
       actionBarPanel?.hasDrafts() ||
-      statusPanel?.hasDrafts(),
+      statusPanel?.hasDrafts() ||
+      itemEditor?.hasDrafts(),
     )
 
   on(reload, 'click', () => {

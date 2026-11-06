@@ -26,8 +26,12 @@ export * from './assets.js'
 
 export * from './inventory.js'
 
+export * from './inventoryLocalization.js'
+
 export * from './editorExport.js'
 
 export interface HealthResponse {
   status: 'ok'
 }
+
+export * from './equipment.js'

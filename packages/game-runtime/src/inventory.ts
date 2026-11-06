@@ -1,6 +1,7 @@
 import {
   inventoryPlacementIssue,
   inventoryPlacementSchema,
+  inventoryOwner,
   type InventoryDefinition,
   type InventoryItem,
   type InventoryPlacement,
@@ -19,6 +20,8 @@ export interface IGameInventory {
   readonly snapshot: readonly InventoryItemSnapshot[]
   checkMove(itemId: string, destination: InventoryPlacement): string | undefined
   move(itemId: string, destination: InventoryPlacement): InventoryMoveResult
+  checkEquip(itemId: string, owner: string, slot: string): string | undefined
+  equip(itemId: string, owner: string, slot: string): InventoryMoveResult
   subscribeChanges(handler: () => void): Unsubscribe
 }
 
@@ -78,6 +81,70 @@ export class GameInventory implements IGameInventory {
       return { status: 'applied', changed: false }
 
     this.items.set(itemId, Object.freeze({ ...item, placement: Object.freeze(result.destination) }))
+    this.notify()
+
+    return { status: 'applied', changed: true }
+  }
+
+  private prepareEquip(itemId: string, owner: string, slot: string) {
+    if (this.disposed) return { reason: 'Inventory is no longer active' }
+    const parsed = inventoryPlacementSchema.safeParse({ type: 'equipped', owner, slot })
+
+    if (!parsed.success) return { reason: 'Invalid equipment destination' }
+    const item = this.items.get(itemId)
+
+    if (!item) return { reason: `Unknown item: ${itemId}` }
+
+    if (inventoryOwner(this.items, itemId) !== owner)
+      return { reason: 'Item must belong to the equipment owner' }
+    const staged = new Map(this.items)
+    const destination = parsed.data
+
+    const displaced = [...staged.entries()].find(
+      ([id, item]) =>
+        id !== itemId &&
+        item.placement.type === 'equipped' &&
+        item.placement.owner === owner &&
+        item.placement.slot === slot,
+    )
+
+    if (displaced)
+      staged.set(
+        displaced[0],
+        Object.freeze({
+          ...displaced[1],
+          placement: Object.freeze({ type: 'carried' as const, owner }),
+        }),
+      )
+    staged.set(itemId, Object.freeze({ ...item, placement: Object.freeze(destination) }))
+
+    for (const id of [itemId, ...(displaced ? [displaced[0]] : [])]) {
+      const reason = inventoryPlacementIssue(this.definition, staged, id, staged.get(id)!.placement)
+
+      if (reason) return { reason }
+    }
+
+    return { staged, changed: !samePlacement(item.placement, destination) }
+  }
+
+  checkEquip(itemId: string, owner: string, slot: string): string | undefined {
+    return this.prepareEquip(itemId, owner, slot).reason
+  }
+
+  equip(itemId: string, owner: string, slot: string): InventoryMoveResult {
+    const result = this.prepareEquip(itemId, owner, slot)
+
+    if (!result.staged) return { status: 'rejected', reason: result.reason }
+
+    if (!result.changed) return { status: 'applied', changed: false }
+
+    for (const [id, item] of result.staged) this.items.set(id, item)
+    this.notify()
+
+    return { status: 'applied', changed: true }
+  }
+
+  private notify(): void {
     const errors: unknown[] = []
 
     for (const handler of [...this.subscribers]) {
@@ -92,8 +159,6 @@ export class GameInventory implements IGameInventory {
 
     if (errors.length)
       throw new AggregateError(errors, 'Inventory change subscribers failed after move')
-
-    return { status: 'applied', changed: true }
   }
 
   subscribeChanges(handler: () => void): Unsubscribe {

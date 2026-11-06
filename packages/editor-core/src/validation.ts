@@ -20,6 +20,8 @@ import {
   inventoryPanelIssues,
   validateRuleSources,
   statusPanelIssues,
+  localizeInventory,
+  equipmentIssues,
   gameRulesSchema,
   actionBarIssues,
 } from '@ancadeba/schemas'
@@ -100,6 +102,15 @@ export function validateProject(
 
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
+      if (component.type === 'equipment')
+        for (const issue of equipmentIssues(component, inventory))
+          diagnostics.push({
+            code: 'invalid_equipment',
+            file: `scenes/${id}.json`,
+            path: ['components', index, ...issue.path],
+            message: issue.message,
+          })
+
       if (component.type === 'status-panel')
         for (const issue of statusPanelIssues(component, assets?.data))
           diagnostics.push({
@@ -171,6 +182,8 @@ export function validateProject(
       for (const [language, messages] of catalogs) {
         try {
           localizeDefinitions(game.data, scenes, { fallback, messages })
+
+          if (inventory) localizeInventory(inventory, { fallback, messages })
         } catch (error) {
           diagnostics.push({
             code: 'invalid_translation',
@@ -190,6 +203,8 @@ export function validateProject(
 
   try {
     assertGameLanguages(game.data, scenes)
+
+    if (inventory && !game.data.languages) localizeInventory(inventory)
   } catch (error) {
     diagnostics.push({
       code: 'missing_languages',

@@ -36,3 +36,7 @@ export { mountGameView, type GameViewSession, type GameViewOptions } from './gam
 export * from './graphicResources.js'
 
 export * from './graphicComponentRenderer.js'
+
+export * from './itemDetailsComponentRenderer.js'
+
+export * from './equipmentComponentRenderer.js'

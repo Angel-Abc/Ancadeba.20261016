@@ -90,6 +90,19 @@ class TestElement extends EventTarget {
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value)
   }
+  removeAttribute(name: string): void {
+    this.attributes.delete(name)
+  }
+
+  getAttribute(name: string): string | null {
+    if (name.startsWith('data-')) {
+      const key = name.slice(5).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())
+
+      return this.dataset[key] ?? null
+    }
+
+    return this.attributes.get(name) ?? null
+  }
 
   get firstChild(): TestElement | undefined {
     return this.children[0]
@@ -99,8 +112,16 @@ class TestElement extends EventTarget {
   }
   append(...children: TestElement[]): void {
     for (const child of children) {
+      child.remove()
       child.parent = this
       this.children.push(child)
+    }
+  }
+  prepend(...children: TestElement[]): void {
+    for (const child of [...children].reverse()) {
+      child.remove()
+      child.parent = this
+      this.children.unshift(child)
     }
   }
 
@@ -129,6 +150,15 @@ class TestElement extends EventTarget {
     }
 
     return undefined
+  }
+  querySelector(selector: string): TestElement | null {
+    return (
+      this.find((node) =>
+        selector.startsWith('.')
+          ? node.className.split(' ').includes(selector.slice(1))
+          : node.tagName.toLowerCase() === selector,
+      ) ?? null
+    )
   }
   asElement(): HTMLElement {
     // @ts-expect-error -- Deliberately partial DOM fixture supplies only the operations used by these renderers.
@@ -789,7 +819,9 @@ describe('scene renderer', () => {
         component('nearby').find((node) => node.dataset.nearbyEntry === 'folded-letter')!.parent!
           .hidden,
       ).toBe(true)
-      expect(component('items').textContent).toContain('Folded letter')
+      expect(component('items').textContent).toContain(
+        language === 'nl' ? 'Gevouwen brief' : 'Folded letter',
+      )
       expect(occurrences(component('event-log').textContent, 'pickup')).toBe(1)
       expect(engine.actions?.progression.worldTimeMs).toBe(0)
 
@@ -799,7 +831,9 @@ describe('scene renderer', () => {
       expect(engine.lifecycle?.activeScene?.data.id).toBe('gallery')
       expect(mapColumn()).toBe('6')
       expect(component('clock').textContent).toContain('09:01')
-      expect(component('items').textContent).toContain('Folded letter')
+      expect(component('items').textContent).toContain(
+        language === 'nl' ? 'Gevouwen brief' : 'Folded letter',
+      )
       expect(component('event-log').textContent).toContain(message('pickup'))
       expect(component('event-log').textContent).toContain(`09:01  ${message('gallery')}`)
       expect(engine.actions?.progression.worldTimeMs).toBe(60_000)
@@ -847,7 +881,9 @@ describe('scene renderer', () => {
       expect(component('take-chart').disabled).toBe(true)
       expect(component('nearby').textContent).not.toContain(message('caseOpenWithChart'))
       expect(component('narrative').textContent).toContain(message('caseEmpty'))
-      expect(component('items').textContent).toContain('Harbour chart')
+      expect(component('items').textContent).toContain(
+        language === 'nl' ? 'Havenkaart' : 'Harbour chart',
+      )
       expect(component('items').textContent).not.toContain(message('chartDetails'))
       expect(occurrences(component('event-log').textContent, 'chartPickup')).toBe(1)
 
@@ -1805,6 +1841,105 @@ describe.each([
 })
 
 describe('editor scene picker', () => {
+  it.each([false, true])(
+    'synchronizes details, equipment, paper dolls, and keyboard commands in preview=%s',
+    async (preview) => {
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const resource: IResourceSource = {
+        readText: async (path) => {
+          const text = await readFile(
+            new URL(`../sample-games/graphics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path === 'inventory/wardrobe.json') {
+            const inventory = JSON.parse(text)
+            inventory.itemTypes.cloak.description = '<em>Warm cloak</em>'
+            inventory.itemTypes.cloak.properties.push({
+              id: 'missing',
+              label: 'Missing',
+              value: { source: 'game.state', path: ['missing'] },
+            })
+
+            return JSON.stringify(inventory)
+          }
+
+          if (path !== 'game.json') return text
+
+          return JSON.stringify({ ...JSON.parse(text), 'initial-scene': 'wardrobe' })
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/graphics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resource, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+      const details = () => component('item-details')
+      const equipment = () => component('equipment')
+
+      const item = (id: string) =>
+        component('wardrobe-items').find((node) => node.dataset.itemId === id)!
+
+      const slot = (id: string) =>
+        component('commands').find((node) => node.dataset.actionBarSlot === id)!
+
+      expect(details().textContent).toContain('Select an item')
+      item('moss-cloak').focus()
+      item('moss-cloak').dispatchEvent(new Event('click'))
+      expect(details().textContent).toContain('Traveling cloak')
+      expect(details().textContent).toContain('Value45')
+      expect(details().textContent).toContain('<em>Warm cloak</em>')
+      expect(details().dataset.bindingStatus).toBe('unresolved')
+      expect(details().textContent).toContain('Inside Backpack (Wayfarer)')
+      expect(slot('1').disabled).toBe(false)
+      expect(
+        equipment()
+          .find((node) => node.dataset.equipmentSlot === 'outerwear')!
+          .attributes.get('aria-pressed'),
+      ).toBe('true')
+      engine.input!.pressKey('KeyQ')
+      engine.input!.releaseKey('KeyQ')
+      flush(engine)
+      expect(equipment().find((node) => node.dataset.equipmentItem === 'moss-cloak')).toBeDefined()
+      expect(details().textContent).toContain('Wayfarer / Outerwear')
+      expect(slot('2').disabled).toBe(false)
+      item('amber-cloak').dispatchEvent(new Event('click'))
+      slot('1').dispatchEvent(new Event('click'))
+      expect(
+        engine.lifecycle!.currentGame!.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!
+          .placement.type,
+      ).toBe('carried')
+      const worn = equipment().find((node) => node.dataset.equipmentItem === 'amber-cloak')!
+      worn.focus()
+      worn.dispatchEvent(new Event('click'))
+      expect(worn.attributes.get('aria-pressed')).toBe('true')
+      engine.input!.pressKey('KeyW')
+      engine.input!.releaseKey('KeyW')
+      flush(engine)
+      expect(
+        equipment().find((node) => node.dataset.equipmentItem === 'amber-cloak'),
+      ).toBeUndefined()
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('wardrobe')
+      expect(details().textContent).toContain('Select an item')
+      engine.stop()
+      expect(target.children).toHaveLength(0)
+    },
+  )
   it('switches the three scenes and empty selection through the lifecycle, and removes its listener', async () => {
     const game = await textBindingLoader.load()
     const { lifecycle, target } = setup(game)

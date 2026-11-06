@@ -16,6 +16,9 @@ import {
   inventoryItemActionSchema,
   nearbyComponentSchema,
   statusPanelComponentSchema,
+  itemPresentationSchema,
+  itemDetailsComponentSchema,
+  equipmentComponentSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -125,6 +128,32 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
   }),
+  z.strictObject({
+    type: z.literal('inventory.setItemPresentation'),
+    itemType: gameIdSchema,
+    presentation: itemPresentationSchema,
+  }),
+  z.strictObject({
+    type: z.literal('inventory.setEquipmentSlots'),
+    owner: gameIdSchema,
+    slots: z.record(gameIdSchema, z.string().trim().min(1)),
+  }),
+  z.strictObject({
+    type: z.literal('scene.setInventoryDetails'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+    descriptionTarget: gameIdSchema.nullable(),
+  }),
+  z.strictObject({
+    type: z.literal('scene.upsertItemView'),
+    sceneId: gameIdSchema,
+    component: z.discriminatedUnion('type', [itemDetailsComponentSchema, equipmentComponentSchema]),
+  }),
+  z.strictObject({
+    type: z.literal('scene.removeItemView'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -159,6 +188,44 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'inventory.setItemPresentation',
+      example: {
+        type: 'inventory.setItemPresentation',
+        itemType: 'letter',
+        presentation: { label: 'Letter', description: 'A sealed letter', properties: [] },
+      },
+    },
+    {
+      type: 'inventory.setEquipmentSlots',
+      example: { type: 'inventory.setEquipmentSlots', owner: 'player', slots: { head: 'Head' } },
+    },
+    {
+      type: 'scene.setInventoryDetails',
+      example: {
+        type: 'scene.setInventoryDetails',
+        sceneId: 'shop',
+        componentId: 'inventory',
+        descriptionTarget: 'narrative',
+      },
+    },
+    {
+      type: 'scene.upsertItemView',
+      example: {
+        type: 'scene.upsertItemView',
+        sceneId: 'shop',
+        component: {
+          id: 'details',
+          type: 'item-details',
+          inventory: 'inventory',
+          placement: { row: 1, column: 1 },
+        },
+      },
+    },
+    {
+      type: 'scene.removeItemView',
+      example: { type: 'scene.removeItemView', sceneId: 'shop', componentId: 'details' },
+    },
     {
       type: 'scene.upsertStatusPanel',
       example: {
