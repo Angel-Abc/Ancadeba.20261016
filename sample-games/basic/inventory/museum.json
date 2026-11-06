@@ -38,6 +38,10 @@
           "value": ""
         }
       ]
+    },
+    "training-token": {
+      "labelKey": "rewards.token",
+      "descriptionKey": "rewards.token.description"
     }
   },
   "owners": {
@@ -49,6 +53,9 @@
     },
     "museum-kiosk": {
       "label": "Museum kiosk"
+    },
+    "training-loot": {
+      "label": "Training loot"
     }
   },
   "items": {

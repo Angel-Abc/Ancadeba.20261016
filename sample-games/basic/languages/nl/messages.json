@@ -170,5 +170,21 @@
   "combat.message.guarded": "{actor} krijgt {guard} verdediging.",
   "combat.message.skipped": "{actor}: doel {target} is al verslagen.",
   "combat.message.unavailable": "Gevecht niet beschikbaar: controleer gezondheid, staatstoegang of voortgang.",
-  "combat.message.invalid": "Deze opdracht is niet meer beschikbaar."
+  "combat.message.invalid": "Deze opdracht is niet meer beschikbaar.",
+  "rewards.message.rewardsPending": "Beloningen wachten: {reason}",
+  "rewards.message.rewardsDelivered": "Overwinningsbeloningen ontvangen.",
+  "rewards.message.rewardAmount": "{label}: +{amount}",
+  "rewards.message.lootRemaining": "Resterende buit: {count}",
+  "rewards.message.lootTaken": "Verzameld: {items}",
+  "rewards.message.rewardUnavailable": "Beloningen kunnen niet worden uitgereikt.",
+  "rewards.message.rewardInvalidAmount": "Een beloningsveld is ongeldig of zou overlopen.",
+  "rewards.message.rewardInventory": "Buit kon niet worden gemaakt of overgedragen.",
+  "rewards.token": "Trainingsmunt",
+  "rewards.token.description": "Een munt voor het winnen van de training op het hof.",
+  "rewards.xp": "XP",
+  "rewards.loot": "Overwinningsbuit",
+  "rewards.take": "Buit pakken",
+  "rewards.takeAll": "Alles pakken",
+  "rewards.retry": "Beloningen opnieuw proberen",
+  "rewards.details": "Buitdetails"
 }

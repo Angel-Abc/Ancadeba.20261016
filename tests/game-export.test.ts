@@ -257,6 +257,47 @@ describe('standalone game export', () => {
         expect(game.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!.health).toEqual(
           health,
         )
+        const currentFight = engine.lifecycle!.activeScene!
+
+        for (
+          let round = 0;
+          round < 20 && !game.combat!.snapshot(currentFight, 'combat')!.outcome;
+          round++
+        ) {
+          const snapshot = game.combat!.snapshot(currentFight, 'combat')!
+
+          const enemy = loaded
+            .combat!.get('training')!
+            .enemies.find((actor) => snapshot.health[actor.id]! > 0)!
+
+          game.combat!.selectTarget(currentFight, 'combat', enemy.id)
+
+          for (const slot of ['2', '1', '15']) {
+            game.actionBar!.activate(currentFight, 'commands', slot)
+
+            for (let i = 0; i < 6; i++) engine.flushMessages()
+          }
+        }
+
+        expect(game.combat!.snapshot(currentFight, 'combat')!.outcome).toBe('victory')
+        const loot = game.combatRewards!.snapshot(currentFight, 'combat')!
+        const prize = loot.items[0]!
+        const dyed = game.inventory!.snapshot.find((item) => item.id === prize)!
+        expect(dyed.colors).toEqual({ fabric: '#594cad' })
+        expect(game.bindings!.read({ source: 'game.state', path: ['coins'] })).toMatchObject({
+          value: 32,
+        })
+        game.actionBar!.activate(currentFight, 'commands', '10')
+
+        for (let i = 0; i < 6; i++) engine.flushMessages()
+        expect(game.combatRewards!.snapshot(currentFight, 'combat')!.remaining).toEqual([])
+        engine.lifecycle!.enterScene('wardrobe')
+        game.inventorySelection!.select(engine.lifecycle!.activeScene!, 'wardrobe-items', prize)
+        game.actionBar!.activate(engine.lifecycle!.activeScene!, 'commands', '1')
+        expect(game.inventory!.snapshot.find((item) => item.id === prize)).toEqual({
+          ...dyed,
+          placement: { type: 'equipped', owner: 'wayfarer', slot: 'outerwear' },
+        })
       } finally {
         engine.stop()
       }

@@ -1,3 +1,4 @@
+import { combatLootViewIssues } from '@ancadeba/schemas'
 import type { z } from 'zod'
 import {
   gameSchema,
@@ -230,9 +231,29 @@ export function validateProject(
       mergedRules,
       new Set(game.data.scenes),
       assets?.data,
+      inventory,
     ))
       diagnostics.push({ code: 'invalid_combat', file: combatFile(id), ...issue })
   }
+
+  for (const [id, encounter] of combats)
+    if (
+      encounter.rewards?.lootOwner &&
+      [...combats.values()].some(
+        (other) =>
+          other.id !== encounter.id && other.rewards?.lootOwner === encounter.rewards?.lootOwner,
+      )
+    )
+      diagnostics.push({
+        code: 'invalid_combat',
+        file: combatFile(id),
+        path: ['rewards', 'lootOwner'],
+        message: 'Each encounter requires a distinct loot owner',
+      })
+
+  for (const [id, scene] of scenes)
+    for (const issue of combatLootViewIssues(scene, combats))
+      diagnostics.push({ code: 'invalid_combat', file: `scenes/${id}.json`, ...issue })
 
   for (const [id, scene] of scenes)
     scene.components.forEach((component, index) => {

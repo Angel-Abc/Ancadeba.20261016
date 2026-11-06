@@ -178,6 +178,9 @@ export function actionBarForm(
             'end-turn',
             'escape',
             'continue',
+            'take-loot',
+            'take-all-loot',
+            'retry-rewards',
           ],
           (value) =>
             change(() => {

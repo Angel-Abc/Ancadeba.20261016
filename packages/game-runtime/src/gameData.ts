@@ -1,3 +1,4 @@
+import { combatLootViewIssues } from '@ancadeba/schemas'
 import type {
   GameDefinition,
   InputDefinition,
@@ -182,9 +183,24 @@ export function assembleGameData(
 
     if (!encounter || encounter.id !== id)
       throw new Error(`Missing or mismatched combat definition: ${id}`)
-    const problem = combatIssues(encounter, validated?.rules, new Set(definition.scenes), assets)[0]
+
+    const problem = combatIssues(
+      encounter,
+      validated?.rules,
+      new Set(definition.scenes),
+      assets,
+      inventory,
+    )[0]
 
     if (problem) throw new Error(`Combat ${id}: ${problem.message}`)
+
+    if (
+      encounter.rewards?.lootOwner &&
+      [...combat.values()].some(
+        (other) => other.rewards?.lootOwner === encounter.rewards?.lootOwner,
+      )
+    )
+      throw new Error('Each encounter requires a distinct loot owner')
     combat.set(id, localizeCombat(encounter, ruleTranslation))
   }
 
@@ -214,6 +230,9 @@ export function assembleGameData(
       throw new Error(`Scene scenes/${id}.json has ID ${scene.id}; expected ${id}`)
     }
 
+    const lootIssue = combatLootViewIssues(scene, combat)[0]
+
+    if (lootIssue) throw new Error(lootIssue.message)
     const { rows, columns, compactColumns } = scene.screen.grid
 
     scenes.set(id, {

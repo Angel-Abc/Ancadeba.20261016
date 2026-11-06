@@ -1,3 +1,4 @@
+import { combatRewardsForm } from './combatRewardsForm.js'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   combatHealthSchema,
@@ -232,6 +233,7 @@ export function combatForm(
       ),
     ),
   )
+  result.push(combatRewardsForm(controls, view, draft, render))
   const messages = create('details')
   const summary = create('summary')
   summary.textContent = 'Combat text and translations'

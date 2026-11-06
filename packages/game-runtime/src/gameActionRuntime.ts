@@ -1,3 +1,4 @@
+import { GameCombatRewards } from './combatRewards.js'
 import type { ILogger, IMonotonicClock, ITaskScheduler } from '@ancadeba/utilities'
 import { ActionProcessor } from './actionProcessor.js'
 import type { GameRules } from './actions.js'
@@ -25,6 +26,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly inventorySelection: GameInventoryContext | undefined
   readonly equipment: GameEquipment | undefined
   readonly trading: GameTrading | undefined
+  readonly combatRewards: GameCombatRewards | undefined
   readonly combat: GameCombat | undefined
   private readonly timers: TimerService
   private started = false
@@ -71,6 +73,17 @@ export class GameActionRuntime implements IGameRuntime {
             () => this.bindings.invalidate(),
           )
         : undefined
+    this.combatRewards = lifecycle
+      ? new GameCombatRewards(
+          game,
+          lifecycle,
+          this.bindings,
+          stateTransactions,
+          game.inventory,
+          this.inventorySelection,
+          () => this.bindings.invalidate(),
+        )
+      : undefined
     this.actionBar = lifecycle
       ? new GameActionBar(
           lifecycle,
@@ -113,11 +126,13 @@ export class GameActionRuntime implements IGameRuntime {
               }
             },
             () => this.bindings.invalidate(),
+            this.combatRewards,
           )
         : undefined
     } catch (error) {
       this.actionBar?.dispose()
       this.combat?.dispose()
+      this.combatRewards?.dispose()
       this.trading?.dispose()
       this.equipment?.dispose()
       this.inventorySelection?.dispose()
@@ -142,6 +157,7 @@ export class GameActionRuntime implements IGameRuntime {
     this.disposed = true
     this.actionBar?.dispose()
     this.combat?.dispose()
+    this.combatRewards?.dispose()
     this.trading?.dispose()
     this.equipment?.dispose()
     this.inventorySelection?.dispose()

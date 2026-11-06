@@ -2,6 +2,7 @@ import {
   inventoryPlacementIssue,
   inventoryPlacementSchema,
   inventoryOwner,
+  inventorySchema,
   type InventoryDefinition,
   type InventoryItem,
   type InventoryPlacement,
@@ -17,6 +18,12 @@ export type InventoryMoveResult =
   | { readonly status: 'rejected'; readonly reason: string }
 
 export interface IGameInventory {
+  /** Stage new finite item instances without publishing or invoking observers. */
+  prepareCreate?(items: readonly InventoryItemSnapshot[]): PreparedInventoryTransfer | undefined
+  /** Validate and stage the entire transfer batch against one candidate inventory. */
+  prepareTransfers?(
+    transfers: readonly { readonly item: string; readonly destination: InventoryPlacement }[],
+  ): PreparedInventoryTransfer | undefined
   /** Stage a transfer for an atomic transaction. Commit invokes no observers. */
   prepareTransfer?(
     itemId: string,
@@ -193,6 +200,90 @@ export class GameInventory implements IGameInventory {
       commit: () => {
         if (this.disposed || committed || this.revision !== revision) return
         this.items.set(itemId, next)
+        this.revision++
+        committed = true
+      },
+      notify: () => {
+        if (!committed || notified) return
+        notified = true
+        this.notify()
+      },
+    }
+  }
+
+  prepareCreate(items: readonly InventoryItemSnapshot[]): PreparedInventoryTransfer | undefined {
+    if (
+      this.disposed ||
+      new Set(items.map((item) => item.id)).size !== items.length ||
+      items.some((item) => this.items.has(item.id))
+    )
+      return
+
+    const parsed = inventorySchema.shape.items.safeParse(
+      Object.fromEntries(items.map((item) => [item.id, item])),
+    )
+
+    if (!parsed.success) return
+    const staged = new Map(this.items)
+
+    for (const [id, item] of Object.entries(parsed.data))
+      staged.set(
+        id,
+        Object.freeze({
+          id,
+          ...item,
+          placement: Object.freeze({ ...item.placement }),
+          colors: Object.freeze({ ...item.colors }),
+        }),
+      )
+
+    for (const source of items) {
+      const item = staged.get(source.id)
+
+      if (!item || inventoryPlacementIssue(this.definition, staged, source.id, item.placement))
+        return
+    }
+
+    return this.prepareBatch(staged)
+  }
+
+  prepareTransfers(
+    transfers: readonly { readonly item: string; readonly destination: InventoryPlacement }[],
+  ): PreparedInventoryTransfer | undefined {
+    if (
+      this.disposed ||
+      new Set(transfers.map((transfer) => transfer.item)).size !== transfers.length
+    )
+      return
+    const staged = new Map(this.items)
+
+    for (const transfer of transfers) {
+      const item = staged.get(transfer.item)
+      const placement = inventoryPlacementSchema.safeParse(transfer.destination)
+
+      if (!item || !placement.success) return
+      staged.set(item.id, Object.freeze({ ...item, placement: Object.freeze(placement.data) }))
+    }
+
+    for (const [id, item] of staged)
+      if (inventoryPlacementIssue(this.definition, staged, id, item.placement)) return
+
+    return this.prepareBatch(staged)
+  }
+
+  private prepareBatch(
+    staged: ReadonlyMap<string, InventoryItemSnapshot>,
+  ): PreparedInventoryTransfer {
+    const revision = this.revision
+    let committed = false
+    let notified = false
+
+    return {
+      isCurrent: () => !this.disposed && !committed && this.revision === revision,
+      commit: () => {
+        if (this.disposed || committed || this.revision !== revision) return
+
+        for (const [id, item] of staged) this.items.set(id, item)
         this.revision++
         committed = true
       },

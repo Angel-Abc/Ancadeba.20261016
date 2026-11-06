@@ -29,7 +29,7 @@
         "path": ["combat", "sentinel"]
       },
       "maximumHealth": 18,
-      "ap": 3,
+      "ap": 2,
       "moves": ["attack", "guard"],
       "rotation": ["guard", "attack"]
     },
@@ -41,7 +41,7 @@
         "path": ["combat", "keeper"]
       },
       "maximumHealth": 22,
-      "ap": 3,
+      "ap": 2,
       "moves": ["attack", "guard"],
       "rotation": ["guard", "attack"]
     }
@@ -94,6 +94,49 @@
     "unavailable": "combat.message.unavailable",
     "invalid": "combat.message.invalid",
     "guard": "combat.guard",
-    "escape": "combat.escape"
+    "escape": "combat.escape",
+    "rewardsPending": "rewards.message.rewardsPending",
+    "rewardsDelivered": "rewards.message.rewardsDelivered",
+    "rewardAmount": "rewards.message.rewardAmount",
+    "lootRemaining": "rewards.message.lootRemaining",
+    "lootTaken": "rewards.message.lootTaken",
+    "rewardUnavailable": "rewards.message.rewardUnavailable",
+    "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
+    "rewardInventory": "rewards.message.rewardInventory"
+  },
+  "rewards": {
+    "recipient": "player",
+    "lootOwner": "training-loot",
+    "numeric": [
+      {
+        "id": "gold",
+        "labelKey": "shop.gold",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "gold"]
+        },
+        "amount": 8
+      },
+      {
+        "id": "experience",
+        "labelKey": "rewards.xp",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "experience"]
+        },
+        "amount": 5
+      }
+    ],
+    "drops": [
+      {
+        "id": "prize",
+        "itemType": "training-token"
+      },
+      {
+        "id": "bonus",
+        "itemType": "postcard",
+        "chance": 5000
+      }
+    ]
   }
 }

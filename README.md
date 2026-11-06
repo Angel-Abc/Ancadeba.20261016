@@ -1764,6 +1764,80 @@ Use **Controls → Action bar** for combat commands and their input bindings.
 AP and move costs support 1–100, with up to 32 enemies. V1 has no healing, spells,
 accuracy rolls, critical hits, rewards, equipment calculations or party members.
 
+### Victory rewards and loot
+
+Encounters may define `rewards.numeric` and `rewards.drops`. Numeric grants add
+fixed nonnegative safe integers to declared `game.state` fields; gold, XP and
+other counters use the same transaction adapter as combat and shops. Multiple
+grants to one field are summed safely. The encounter’s health fields cannot be reward targets.
+XP has no automatic leveling behavior.
+
+```json
+{
+  "rewards": {
+    "recipient": "player",
+    "lootOwner": "training-loot",
+    "numeric": [
+      {
+        "id": "gold",
+        "label": "Gold",
+        "field": { "source": "game.state", "path": ["player", "gold"] },
+        "amount": 8
+      }
+    ],
+    "drops": [
+      { "id": "token", "itemType": "training-token" },
+      { "id": "cloak", "itemType": "cloak", "colors": { "fabric": "#594cad" }, "chance": 5000 }
+    ]
+  }
+}
+```
+
+Each drop creates one finite ordinary inventory instance. Chance is an integer
+from 0 to 10000: zero never drops, 5000 means 50%, and the default 10000 is
+guaranteed. A separate seed stream derived from the encounter seed rolls once
+on a committed victory, independently of combat damage draws. The resolved
+bundle persists through delivery retries, scene changes and language changes.
+Generated IDs use a reserved encounter/entry namespace and cannot overwrite
+authored instances. Drops preserve their dyes through collection, equipment and
+trading. Each encounter needs its own initially empty, declared loot owner,
+distinct from its recipient. Numeric-only rewards need neither inventory owner.
+There are at most 100 numeric grants and 100 drop entries per encounter.
+
+Victory remains final if balances are invalid, overflow, or a required adapter
+is unavailable. Numeric grants, all rolled item creations and the delivery flag
+commit together before observers run. The receipt shows a pending reason until
+**Retry Rewards** succeeds. Neither retries nor observer failures grant a bundle
+twice. Escape, defeat and externally zeroed enemy health grant no rewards.
+
+Set `lootInventory` on the combat scene component to an existing read-only
+inventory panel showing exactly the encounter's loot owner. It cannot also be a
+shop participant. Link normal item-details or main-text descriptions to that
+panel. Its selected item enables the action-bar combat command `take-loot`;
+`take-all-loot` collects all remaining generated items atomically, and
+`retry-rewards` retries pending delivery. Use the existing slot input bindings
+for keys, native activation or click-only commands. Queued requests capture the
+bundle, source inventory and selection; stale requests cannot take another item.
+Collection clears selection and restores surface focus when its control disappears.
+
+Continue may leave with unclaimed loot; it stays available on return. Collection
+and delivery cost no AP, turns or time. New Game resets balances, generated items
+and reward receipts. `game.combatRewards` exposes immutable snapshots, localized
+receipt text and subscriptions. The built-in inventory adds staged `prepareCreate`
+and `prepareTransfers` batch operations; custom inventory implementations must
+support them to deliver and collect item loot. Prepared commits are synchronous
+and invoke no observers, followed by one notification after the complete result.
+
+Use **Combat → Victory rewards** in the editor to configure grants, drop chances,
+recipient and loot owners, translations and dyes. Link the loot panel in Combat
+view controls and configure its commands under Action bar & input. Revision
+checks preserve conflicting drafts; validation protects referenced owners, item
+types, dyes, translations, numeric fields and panels. The basic courtyard awards
+gold, XP and a training token; the graphics courtyard awards coins, XP and a dyed
+cloak. F takes selected loot, G takes all, and Z retries delivery in both samples.
+Enemy equipment transfers, stacks, automatic leveling, loot choices, shared loot
+tables and repeatable encounter farming are deferred.
+
 ## Queued messaging
 
 `@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.

@@ -51,6 +51,9 @@
         "back": "Back",
         "outerwear": "Outerwear"
       }
+    },
+    "training-loot": {
+      "label": "Training loot"
     }
   },
   "items": {

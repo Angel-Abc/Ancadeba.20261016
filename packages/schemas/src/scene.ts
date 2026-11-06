@@ -30,6 +30,7 @@ export const combatComponentSchema = z.object({
   placement: gridPlacementSchema,
   encounter: gameIdSchema,
   textTarget: gameIdSchema.optional(),
+  lootInventory: gameIdSchema.optional(),
 })
 
 export const textComponentSchema = z

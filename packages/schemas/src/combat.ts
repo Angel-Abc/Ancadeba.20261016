@@ -4,6 +4,8 @@ import { translationKeySchema } from './languages.js'
 import { assertGraphicReference, graphicAppearanceSchema, type AssetCatalog } from './assets.js'
 import type { GameRulesDefinition } from './rules.js'
 import type { GameTranslation } from './localization.js'
+import { victoryRewardsSchema, combatRewardIssues } from './combatRewards.js'
+import type { InventoryDefinition } from './inventory.js'
 
 const id = bindingAliasSchema.refine(
   (value) => !['__proto__', 'constructor', 'prototype'].includes(value),
@@ -83,6 +85,14 @@ export const combatTextSchema = z.object({
     .string()
     .default('Combat is unavailable: check health, state access, or progression.'),
   invalid: z.string().default('The command is no longer available.'),
+  rewardsPending: z.string().default('Rewards pending: {reason}'),
+  rewardsDelivered: z.string().default('Victory rewards received.'),
+  rewardAmount: z.string().default('{label}: +{amount}'),
+  lootRemaining: z.string().default('Loot remaining: {count}'),
+  lootTaken: z.string().default('Collected: {items}'),
+  rewardUnavailable: z.string().default('Reward delivery is unavailable.'),
+  rewardInvalidAmount: z.string().default('A reward field is invalid or would overflow.'),
+  rewardInventory: z.string().default('Loot could not be created or transferred.'),
 })
 
 export const combatDefinitionSchema = z
@@ -96,6 +106,7 @@ export const combatDefinitionSchema = z
     seed: z.number().int().min(1).max(0xffffffff).default(1),
     allowEscape: z.boolean().default(false),
     roundTimeMs: amount.default(0),
+    rewards: victoryRewardsSchema.optional(),
     logCapacity: z.number().int().positive().max(1000).default(100),
     outcomes: z
       .object({ victory: id.optional(), defeat: id.optional(), escaped: id.optional() })
@@ -158,7 +169,18 @@ export type CombatMoveDefinition = z.infer<typeof combatMoveSchema>
 export const combatCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('queue-move'), move: id }),
   ...(
-    ['previous-target', 'next-target', 'undo', 'clear', 'end-turn', 'escape', 'continue'] as const
+    [
+      'previous-target',
+      'next-target',
+      'undo',
+      'clear',
+      'end-turn',
+      'escape',
+      'continue',
+      'take-loot',
+      'take-all-loot',
+      'retry-rewards',
+    ] as const
   ).map((type) => z.object({ type: z.literal(type) })),
 ])
 
@@ -173,6 +195,7 @@ export function combatIssues(
   rules: GameRulesDefinition | undefined,
   scenes: ReadonlySet<string>,
   assets?: AssetCatalog,
+  inventory?: InventoryDefinition,
 ): { path: (string | number)[]; message: string }[] {
   const issues: ReturnType<typeof combatIssues> = []
 
@@ -211,7 +234,7 @@ export function combatIssues(
     if (destination && !scenes.has(destination))
       issues.push({ path: ['outcomes'], message: `Unknown combat destination: ${destination}` })
 
-  return issues
+  return [...issues, ...combatRewardIssues(combat, rules, inventory, assets)]
 }
 
 export function localizeCombat(
@@ -236,6 +259,15 @@ export function localizeCombat(
   return combatDefinitionSchema.parse({
     ...combat,
     ...presentation(combat),
+    ...(combat.rewards && {
+      rewards: {
+        ...combat.rewards,
+        numeric: combat.rewards.numeric.map((entry) => ({
+          ...entry,
+          label: text(entry.labelKey, entry.label),
+        })),
+      },
+    }),
     player: { ...combat.player, ...presentation(combat.player) },
     enemies: combat.enemies.map((actor) => ({ ...actor, ...presentation(actor) })),
     moves: Object.fromEntries(

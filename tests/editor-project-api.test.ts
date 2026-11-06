@@ -1,6 +1,6 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
@@ -83,6 +83,61 @@ describe('shared editor project API', () => {
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
 
+  it('saves reward configuration with revision checks and protects referenced fields', async () => {
+    await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'rewards'), {
+      recursive: true,
+    })
+
+    const service = new EditorProjectService(
+      new WorkspaceProjectRepository(workspace),
+      new EditorCoordinator(),
+    )
+
+    const current = await service.inspect('rewards')
+    expect(current.diagnostics).toEqual([])
+    const encounter = current.combat!.training!
+
+    const updated = await service.apply({
+      path: 'rewards',
+      expectedRevision: current.revision,
+      command: {
+        type: 'game.upsertCombat',
+        encounter: {
+          ...encounter,
+          rewards: {
+            ...encounter.rewards!,
+            numeric: encounter.rewards!.numeric.map((entry) => ({ ...entry, amount: 12 })),
+          },
+        },
+      },
+    })
+
+    expect(updated.view.combat!.training!.rewards!.numeric[0]!.amount).toBe(12)
+    await expect(
+      service.apply({
+        path: 'rewards',
+        expectedRevision: current.revision,
+        command: { type: 'game.upsertCombat', encounter },
+      }),
+    ).rejects.toMatchObject({ status: 409 })
+    const rules = JSON.parse(await readFile(join(root, 'rewards/rules/combat.json'), 'utf8'))
+    await expect(
+      service.apply({
+        path: 'rewards',
+        expectedRevision: updated.view.revision,
+        command: {
+          type: 'game.updateRules',
+          ruleId: 'combat',
+          rules: {
+            ...rules,
+            state: rules.state.filter(
+              (field: { path: string[] }) => field.path.at(-1) !== 'experience',
+            ),
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ status: 422 })
+  })
   it.each(['success', 'before-scene', 'after-scene', 'concurrent'] as const)(
     'publishes encounter, manifest, and view consistently: %s',
     async (failure) => {

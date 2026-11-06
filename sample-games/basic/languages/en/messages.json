@@ -170,5 +170,21 @@
   "combat.message.guarded": "{actor} gains {guard} guard.",
   "combat.message.skipped": "{actor}: target {target} is already defeated.",
   "combat.message.unavailable": "Combat is unavailable: check health, state access, or progression.",
-  "combat.message.invalid": "This command is no longer available."
+  "combat.message.invalid": "This command is no longer available.",
+  "rewards.message.rewardsPending": "Rewards pending: {reason}",
+  "rewards.message.rewardsDelivered": "Victory rewards received.",
+  "rewards.message.rewardAmount": "{label}: +{amount}",
+  "rewards.message.lootRemaining": "Loot remaining: {count}",
+  "rewards.message.lootTaken": "Collected: {items}",
+  "rewards.message.rewardUnavailable": "Reward delivery is unavailable.",
+  "rewards.message.rewardInvalidAmount": "A reward field is invalid or would overflow.",
+  "rewards.message.rewardInventory": "Loot could not be created or transferred.",
+  "rewards.token": "Training token",
+  "rewards.token.description": "A token awarded for winning courtyard training.",
+  "rewards.xp": "XP",
+  "rewards.loot": "Victory loot",
+  "rewards.take": "Take Loot",
+  "rewards.takeAll": "Take All",
+  "rewards.retry": "Retry Rewards",
+  "rewards.details": "Loot details"
 }

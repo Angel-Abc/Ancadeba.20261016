@@ -200,6 +200,19 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
             current.textTarget = value || undefined
           },
         ),
+        controls.select(
+          'Combat loot inventory',
+          current.lootInventory ?? '',
+          [
+            '',
+            ...scene.components
+              .filter((component) => component.type === 'inventory')
+              .map((component) => component.id),
+          ],
+          (value) => {
+            current.lootInventory = value || undefined
+          },
+        ),
         ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
           controls.input(
             key,

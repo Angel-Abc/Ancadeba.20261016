@@ -49,6 +49,8 @@ export function editCombat(
           : actor.maximumHealth,
     })
 
+    const oldRewardNumeric = object(previous.rewards).numeric
+    const oldRewardDrops = object(previous.rewards).drops
     documents[file] = {
       ...previous,
       ...definition,
@@ -76,6 +78,34 @@ export function editCombat(
           ]
         }),
       ),
+      rewards: definition.rewards
+        ? {
+            ...object(previous.rewards),
+            ...definition.rewards,
+            lootOwner: definition.rewards.lootOwner,
+            numeric: definition.rewards.numeric.map((entry) => {
+              const old =
+                (Array.isArray(oldRewardNumeric) ? oldRewardNumeric : [])
+                  .map(object)
+                  .find((value) => value.id === entry.id) ?? {}
+
+              return {
+                ...old,
+                ...entry,
+                labelKey: entry.labelKey,
+                field: { ...object(old.field), ...entry.field, fallback: entry.field.fallback },
+              }
+            }),
+            drops: definition.rewards.drops.map((entry) => {
+              const old =
+                (Array.isArray(oldRewardDrops) ? oldRewardDrops : [])
+                  .map(object)
+                  .find((value) => value.id === entry.id) ?? {}
+
+              return { ...old, ...entry, colors: { ...entry.colors } }
+            }),
+          }
+        : undefined,
       messages: { ...object(previous.messages), ...definition.messages },
       messageKeys: { ...definition.messageKeys },
       outcomes: {
@@ -126,6 +156,7 @@ export function editCombat(
         ...old,
         ...component,
         textTarget: component.textTarget,
+        lootInventory: component.lootInventory,
         placement: { ...object(old.placement), ...component.placement },
       }
 

@@ -20,8 +20,9 @@
         "row": 1,
         "column": 1,
         "rowSpan": 7,
-        "columnSpan": 12
-      }
+        "columnSpan": 9
+      },
+      "lootInventory": "loot"
     },
     {
       "id": "narrative",
@@ -31,7 +32,7 @@
         "row": 8,
         "column": 1,
         "rowSpan": 2,
-        "columnSpan": 10
+        "columnSpan": 7
       }
     },
     {
@@ -44,7 +45,7 @@
       },
       "placement": {
         "row": 8,
-        "column": 11,
+        "column": 8,
         "rowSpan": 2,
         "columnSpan": 2
       }
@@ -201,7 +202,75 @@
             "context": "wardrobe",
             "input": "slot-15"
           }
+        },
+        "9": {
+          "label": "Take Loot",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "take-loot"
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-9"
+          }
+        },
+        "10": {
+          "label": "Take All",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "take-all-loot"
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-10"
+          }
+        },
+        "11": {
+          "label": "Retry Rewards",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "retry-rewards"
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-11"
+          }
         }
+      }
+    },
+    {
+      "id": "loot",
+      "type": "inventory",
+      "label": "Victory loot",
+      "owners": ["training-loot"],
+      "readOnly": true,
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 4,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "loot-details",
+      "type": "item-details",
+      "inventory": "loot",
+      "label": "Loot details",
+      "placement": {
+        "row": 5,
+        "column": 10,
+        "rowSpan": 5,
+        "columnSpan": 3
       }
     }
   ]

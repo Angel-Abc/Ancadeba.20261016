@@ -11,6 +11,10 @@
     {
       "path": ["combat", "player"],
       "value": 40
+    },
+    {
+      "path": ["experience"],
+      "value": 0
     }
   ],
   "actions": {}

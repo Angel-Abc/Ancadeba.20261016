@@ -1,3 +1,5 @@
+import { isRewardOperation } from '@ancadeba/schemas'
+import type { GameCombatRewards } from './combatRewards.js'
 import type { CombatDefinition, CombatCommand } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { IGameBindings } from './gameBindings.js'
@@ -96,9 +98,17 @@ export class GameCombat implements IGameCombat {
     private readonly messages: IMessageBus<EngineMessages>,
     private readonly prepareProgression: (cost: number) => PreparedProgression,
     private readonly invalidate: () => void,
+    private readonly rewards?: GameCombatRewards,
   ) {
     this.cleanups = [
       messages.subscribe('combat.command', (request) => this.execute(request)),
+      ...(rewards
+        ? [
+            rewards.subscribeChanges(() => {
+              if (!this.publishing) this.notify()
+            }),
+          ]
+        : []),
       bindings.subscribeChanges(() => {
         if (!this.publishing) this.notify()
       }),
@@ -253,6 +263,8 @@ export class GameCombat implements IGameCombat {
     if (!definition) return
     const session = this.session(definition)
 
+    if (isRewardOperation(command.type)) return this.rewards?.capture(scene, id, command.type)
+
     const targeted =
       command.type === 'queue-move' && definition.moves[command.move]?.type === 'attack'
 
@@ -289,6 +301,9 @@ export class GameCombat implements IGameCombat {
     const snapshot = this.snapshot(scene, id)
 
     if (!definition || !snapshot) return false
+
+    if (isRewardOperation(command.type))
+      return this.rewards?.canCommand(scene, id, command.type) ?? false
 
     if (command.type === 'continue')
       return Boolean(snapshot.outcome && definition.outcomes[snapshot.outcome])
@@ -352,6 +367,13 @@ export class GameCombat implements IGameCombat {
       !this.canCommand(scene, component, command)
     )
       return
+
+    if (isRewardOperation(command.type)) {
+      this.rewards?.execute(scene, component, command.type)
+
+      return
+    }
+
     const session = this.session(definition)
     session.issue = undefined
 
@@ -410,6 +432,7 @@ export class GameCombat implements IGameCombat {
 
     if (!values) return
     let notifyProgression: (() => void) | undefined
+    let notifyRewards: (() => void) | undefined
 
     try {
       const candidate = resolveCombatRound(definition, {
@@ -459,6 +482,8 @@ export class GameCombat implements IGameCombat {
       session.escape = false
       session.token = {}
       notifyProgression = () => progression.notify()
+
+      if (candidate.outcome === 'victory') notifyRewards = this.rewards?.complete(definition)
     } catch {
       session.issue = definition.messages.unavailable
       this.notify()
@@ -470,9 +495,9 @@ export class GameCombat implements IGameCombat {
     this.publishing = true
 
     try {
-      for (const notify of [notifyProgression, this.invalidate])
+      for (const notify of [notifyProgression, notifyRewards, this.invalidate])
         try {
-          notify()
+          notify?.()
         } catch (error) {
           errors.push(error)
         }
@@ -515,7 +540,7 @@ export class GameCombat implements IGameCombat {
       ),
     )
 
-    return [...lines, snapshot.issue].filter(Boolean).join('\n')
+    return [...lines, snapshot.issue, this.rewards?.text(scene, id)].filter(Boolean).join('\n')
   }
   subscribeChanges(listener: () => void): () => void {
     if (this.disposed) return () => {}

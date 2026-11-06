@@ -1842,6 +1842,112 @@ describe.each([
 
 describe('editor scene picker', () => {
   it.each([false, true])(
+    'renders localized victory rewards and selectable loot in preview=%s',
+    async (preview) => {
+      const resources = {
+        ...source,
+        readText: async (path: string) => {
+          const text = await source.readText(path)
+
+          if (path === 'combat/training.json') {
+            const combat = JSON.parse(text)
+            combat.moves.attack.damage = { min: 30, max: 30 }
+
+            return JSON.stringify(combat)
+          }
+
+          if (path === 'languages/en/messages.json') {
+            const catalog = JSON.parse(text)
+            catalog['rewards.token'] = '<b>Training token</b>'
+
+            return JSON.stringify(catalog)
+          }
+
+          return text
+        },
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.lifecycle!.enterScene('training')
+      const scene = engine.lifecycle!.activeScene!
+      const game = engine.lifecycle!.currentGame!
+      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+
+      const slot = (id: string) =>
+        component('commands').find((node) => node.dataset.actionBarSlot === id)!
+
+      for (const id of ['sentinel', 'keeper']) {
+        game.combat!.selectTarget(scene, 'combat', id)
+        engine.input!.pressKey('KeyQ')
+        engine.input!.releaseKey('KeyQ')
+        flush(engine)
+      }
+
+      engine.input!.pressKey('KeyB')
+      engine.input!.releaseKey('KeyB')
+      flush(engine)
+      expect(component('narrative').textContent).toContain('Victory rewards received.')
+      expect(component('narrative').textContent).toContain('Gold: +8')
+      expect(game.bindings!.read({ source: 'game.state', path: ['player', 'gold'] })).toMatchObject(
+        { value: 20 },
+      )
+      expect(slot('9').disabled).toBe(true)
+      const prize = game.combatRewards!.snapshot(scene, 'combat')!.items[0]!
+      const lootItem = () => component('loot').find((node) => node.dataset.itemId === prize)!
+      expect(lootItem().textContent).toContain('<b>Training token</b>')
+      lootItem().dispatchEvent(new Event('click'))
+      expect(component('loot-details').textContent).toContain('A token awarded')
+      expect(component('narrative').textContent).toContain('A token awarded')
+      engine.game!.localization!.select('nl')
+      expect(component('narrative').textContent).toContain('Overwinningsbeloningen ontvangen.')
+      expect(component('loot-details').textContent).toContain('Trainingsmunt')
+      expect(slot('9').disabled).toBe(false)
+      lootItem().focus()
+      engine.input!.pressKey('KeyF')
+      engine.input!.releaseKey('KeyF')
+      flush(engine)
+      expect(game.inventorySelection!.get(scene, 'loot')).toBeUndefined()
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+
+      if (!slot('10').disabled) {
+        slot('10').dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      expect(game.combatRewards!.snapshot(scene, 'combat')!.remaining).toEqual([])
+      expect(game.actions!.progression.turn).toBe(1)
+      expect(component('loot').textContent).not.toContain('Trainingsmunt')
+      slot('14').dispatchEvent(new Event('click'))
+      flush(engine)
+      engine.lifecycle!.enterScene('training')
+      expect(
+        game.combatRewards!.snapshot(engine.lifecycle!.activeScene!, 'combat')!.remaining,
+      ).toEqual([])
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('training')
+      expect(
+        engine.lifecycle!.currentGame!.combatRewards!.snapshot(
+          engine.lifecycle!.activeScene!,
+          'combat',
+        ),
+      ).toBeUndefined()
+      expect(slot('10').disabled).toBe(true)
+    },
+  )
+  it.each([false, true])(
     'plans and resolves localized combat with focus recovery in preview=%s',
     async (preview) => {
       const document = new TestDocument()

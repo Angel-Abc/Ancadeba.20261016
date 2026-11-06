@@ -346,9 +346,25 @@ describe('action bar editor controls', () => {
       state: [
         { path: ['health'], value: 40 },
         { path: ['enemyHealth'], value: 20 },
+        { path: ['gold'], value: 0 },
       ],
       actions: {},
     }
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { token: { label: 'Token' } },
+      owners: { player: { label: 'Player' }, loot: { label: 'Loot' } },
+      items: {},
+    })
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'loot',
+        type: 'inventory',
+        owners: ['loot'],
+        readOnly: true,
+        placement: { row: 1, column: 2 },
+      }),
+    )
     const editor = bindCombatEditor(root.asElement(), (command) => commands.push(command))
     editor.render({ ...initial, view }, true)
     click('Add encounter')
@@ -359,6 +375,15 @@ describe('action bar editor controls', () => {
     edit('Move attack maximum damage', '7')
     edit('Allow escape', 'true')
     edit('victory destination', 'other')
+    edit('Enable victory rewards', 'yes')
+    edit('Reward recipient owner', 'player')
+    edit('Reward loot owner', 'loot')
+    click('Add numeric reward')
+    edit('Reward 1 field', JSON.stringify({ source: 'game.state', path: ['gold'] }))
+    edit('Reward 1 amount', '8')
+    click('Add loot drop')
+    edit('Drop 1 chance (0–10000)', '5000')
+    edit('Combat loot inventory', 'loot')
     expect(editor.hasDrafts()).toBe(true)
     edit('Combat game scene', 'other')
     expect(field('Combat game scene').value).toBe('shop')
@@ -377,6 +402,7 @@ describe('action bar editor controls', () => {
       true,
     )
     expect(field('Move attack maximum damage').value).toBe('7')
+    expect(field('Reward 1 amount').value).toBe('8')
     submit('Save combat encounter')
     const saved = commands[0]!
     expect(saved).toMatchObject({
@@ -388,6 +414,12 @@ describe('action bar editor controls', () => {
         moves: { attack: { damage: { max: 7 } } },
         allowEscape: true,
         outcomes: { victory: 'other' },
+        rewards: {
+          recipient: 'player',
+          lootOwner: 'loot',
+          numeric: [{ amount: 8, field: { path: ['gold'] } }],
+          drops: [{ itemType: 'token', chance: 5000 }],
+        },
       },
     })
 
@@ -411,8 +443,7 @@ describe('action bar editor controls', () => {
     edit('Action type', 'combat-action')
     edit('Slot label', 'Strike')
     edit('Combat view', saved.scene.component.id)
-    edit('Combat command', 'queue-move')
-    edit('Combat move', 'attack')
+    edit('Combat command', 'take-loot')
     submit('Save action bar')
     expect(commands[1]).toMatchObject({
       type: 'scene.setActionBar',
@@ -422,7 +453,7 @@ describe('action bar editor controls', () => {
             action: {
               type: 'combat-action',
               combat: saved.scene.component.id,
-              command: { type: 'queue-move', move: 'attack' },
+              command: { type: 'take-loot' },
             },
             inputBinding: { context: 'gameplay', input: 'slot-1' },
           },
