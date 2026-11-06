@@ -8,6 +8,7 @@ import { ContainerBuilder } from './ioc/containerBuilder'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import type { ExportState } from './exportController.js'
+import { bindWorkspaceLayout } from './workspaceLayout.js'
 
 let localization = editorLocalization()
 const t: Translate = (key, values) => localization.t(key, values)
@@ -53,7 +54,7 @@ editorLanguage.value = localization.language
 
 const start = element<HTMLButtonElement>('#preview-start')
 const stop = element<HTMLButtonElement>('#preview-stop')
-const panel = element<HTMLDetailsElement>('.preview-disclosure')
+const panel = element<HTMLElement>('#preview-pane')
 const status = element<HTMLElement>('#preview-status')
 const error = element<HTMLElement>('#preview-error')
 const content = element<HTMLElement>('#preview-content')
@@ -62,6 +63,17 @@ const exportButton = element<HTMLButtonElement>('#game-export')
 const exportStatus = element<HTMLElement>('#export-status')
 const exportError = element<HTMLElement>('#export-error')
 const exportDownload = element<HTMLAnchorElement>('#export-download')
+
+const layout = bindWorkspaceLayout(
+  {
+    shell: element('#app'),
+    modes: element('#layout-modes'),
+    workspace: element('#editor-workspace'),
+    splitter: element('#preview-splitter'),
+    preview: panel,
+  },
+  () => window.localStorage,
+)
 
 let projectPath: string | undefined
 let previewState: EngineState = 'stopped'
@@ -149,7 +161,10 @@ const exportController = container.resolve('exportController')
 function onStart(event: SubmitEvent): void {
   event.preventDefault()
 
-  if (projectPath !== undefined) void controller.start(projectPath)
+  if (projectPath === undefined) return
+
+  layout.revealPreview()
+  void controller.start(projectPath)
 }
 
 const onStop = () => controller.stop()
@@ -196,6 +211,7 @@ editorLanguage.addEventListener('change', onLanguageChange)
 
 import.meta.hot?.dispose(() => {
   disposeProjectPanel()
+  layout.dispose()
   editorLanguage.removeEventListener('change', onLanguageChange)
   form.removeEventListener('submit', onStart)
   stop.removeEventListener('click', onStop)

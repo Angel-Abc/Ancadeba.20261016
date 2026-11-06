@@ -11,6 +11,7 @@ import { bindStatusPanelEditor } from './statusPanelEditor.js'
 import { bindItemEditor } from './itemEditor.js'
 import { bindShopEditor } from './shopEditor.js'
 import { bindCombatEditor } from './combatEditor.js'
+import { bindSectionRail } from './sectionRail.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -168,6 +169,8 @@ export function bindProjectPanel(
   let shopEditor: ReturnType<typeof bindShopEditor> | undefined
   const combatElement = treeElement && root.querySelector<HTMLElement>('#combat-editor')
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
+  const railElement = treeElement && root.querySelector<HTMLElement>('#section-rail')
+  let rail: ReturnType<typeof bindSectionRail> | undefined
 
   const sections = [
     ...projectTreeSections,
@@ -257,6 +260,7 @@ export function bindProjectPanel(
       node.kind === 'section'
         ? t(sections.find((section) => section.id === node.section)?.labelKey ?? node.label)
         : node.label
+    rail?.render(view ? node.section : undefined)
 
     for (const section of additionalSections) {
       if (section.id === node.section) section.show(node, view)
@@ -445,6 +449,9 @@ export function bindProjectPanel(
     error.hidden = !error.textContent
     header.hidden = !view
     workspace.hidden = !view
+    find('project-title').textContent = view
+      ? view.game?.title || state.path || t('workspace.root')
+      : ''
 
     if (openingProject && !state.busy) {
       openingProject = false
@@ -624,6 +631,9 @@ export function bindProjectPanel(
       t,
       sections,
     )
+
+    if (railElement)
+      rail = bindSectionRail(railElement, sections, t, (sectionId) => tree?.select(sectionId))
     tree.render(undefined, false)
     showSelection()
   }
@@ -751,6 +761,7 @@ export function bindProjectPanel(
     controller.dispose()
     assetsPanel?.dispose()
     tree?.dispose()
+    rail?.dispose()
     unsubscribeLanguage?.()
 
     for (const remove of listeners) remove()
