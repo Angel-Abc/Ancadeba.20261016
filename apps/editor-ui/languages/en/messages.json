@@ -120,5 +120,7 @@
   "rules.heading": "Rules",
   "controls.heading": "Action bar & input",
   "tree.action-bar": "Action bar",
-  "tree.nearby": "Nearby characters and objects"
+  "tree.nearby": "Nearby characters and objects",
+  "status.heading": "Status panels",
+  "tree.status-panel": "Status panel"
 }

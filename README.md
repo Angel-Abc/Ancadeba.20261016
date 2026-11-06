@@ -438,6 +438,63 @@ target ID. New-game targets must be game scenes. Buttons without an action are
 disabled. Labels are rendered as literal text in native HTML buttons, with
 keyboard activation and focus styling.
 
+Status panels use `type: "status-panel"` in game scenes and read existing
+`game.state` and `game.progression` bindings. They have a title, an optional
+character name and catalog portrait, ordered value/resource rows, and conditional
+effects. Names, titles, row labels, effect labels, and effect descriptions support
+translation keys. For example:
+
+```json
+{
+  "id": "player-status",
+  "type": "status-panel",
+  "label": "Player status",
+  "name": "Player",
+  "placement": { "row": 3, "column": 1, "rowSpan": 3, "columnSpan": 2 },
+  "rows": [
+    { "id": "gold", "type": "value", "label": "Gold", "value": 12 },
+    {
+      "id": "health",
+      "type": "bar",
+      "label": "Health",
+      "value": { "source": "game.state", "path": ["player", "health"] },
+      "maximum": 40,
+      "color": "#e64b6a"
+    }
+  ],
+  "effects": [
+    {
+      "id": "informed",
+      "label": "Informed",
+      "description": "You know which symbol opens the case.",
+      "visibleWhen": { "source": "game.state", "path": ["letterRead"] }
+    }
+  ]
+}
+```
+
+Value rows accept constant strings/numbers or bindings. Bars accept constant
+numbers or bindings for both current and maximum values. Their fill is clamped
+to 0–100%, while the numeric label preserves actual values. Missing or invalid
+numeric values and nonpositive maximums display an unavailable bar. Numeric
+bindings never coerce strings or use textual fallbacks; ordinary value rows may
+display a binding's fallback. Editor preview reports unresolved bindings.
+
+Portraits (`portrait`) and effect icons (`icon`) reference existing catalog
+images, parts, or compositions. Effects are visible when their optional boolean
+`visibleWhen` resolves to true; without a condition they are always visible.
+Descriptions appear on hover or keyboard focus and close with Escape. Status
+panels do not change game state or create effect timers. Their subscriptions and
+artwork leases are released when the scene is removed.
+
+The editor's **Status panels** workspace configures panels, bindings, colors,
+artwork, ordering, and placement. Theme defaults are `--ge-status-color`,
+`--ge-status-track-color`, `--ge-status-meter-height`, and
+`--ge-status-portrait-size`, plus `--ge-status-line-height` for compact spacing.
+A row's explicit color overrides the theme color.
+The basic sample uses a health bar, level and gold values, and an Informed effect
+that appears after reading the letter. Existing text-based displays remain valid.
+
 ### Geometry and appearance
 
 The renderer supplies only data values through element-local CSS custom

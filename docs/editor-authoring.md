@@ -43,6 +43,8 @@ Each request contains one command. Metadata commands supply all listed fields.
 | `game.updateInput`         | `inputId`, complete input `input` definition                                         |
 | `inventory.setItemActions` | `itemType`, map of item action IDs to requested actions and optional enable bindings |
 | `scene.upsertNearby`       | `sceneId`, complete nearby `component` with entries and a description text target    |
+| `scene.upsertStatusPanel`  | `sceneId`, complete status-panel `component`                                         |
+| `scene.removeStatusPanel`  | `sceneId`, status `componentId`                                                      |
 
 Scene creation updates both the scene document and the manifest reference.
 Game and scene IDs cannot be changed. Scenes support text, buttons, language selectors,
@@ -192,6 +194,31 @@ Save pending scene edits before selecting a different scene, and asset/graphic
 edits before selecting another asset/graphic target. Blocked navigation preserves
 the current selection and form entries and explains which action is needed.
 Unrelated panels can be visited without discarding drafts.
+
+### Status panels
+
+Open **Status panels** in the explorer, or select a status-panel component in a
+scene. Choose the game scene and panel, or use **Add status panel**. Configure its
+title, character name, optional portrait, translations, and grid placement.
+Add **value rows** for text or numbers and **resource bars** for current/maximum
+numeric values. Each value can be a constant or an existing game-state or
+progression binding. State choices are filtered by compatible types. Bars can
+have a six-digit hex color; an empty color uses the game's theme.
+
+Add status effects with labels, descriptions, optional catalog icons, and boolean
+visibility bindings. Descriptions appear on pointer hover or keyboard focus;
+Escape dismisses them. Use the move and remove controls to order rows and effects.
+**Save status panel** uses the current project revision. Conflicts preserve the
+draft, and unsaved drafts block switching scenes or panels. **Discard status-panel
+draft** restores the saved configuration. **Remove status panel** removes the
+selected saved panel. Other panels' unsaved edits remain available.
+
+Missing or invalid bindings produce an unavailable display, with diagnostics in
+editor preview. Resource bars require actual finite numeric values and a positive
+maximum; they never substitute a string fallback as a resource amount. Rule edits
+cannot remove or change the types of declared fields used by a saved status panel
+until those bindings are updated. Status panels display values; game rules own
+resource changes and effect timing.
 
 ### Action bars and input bindings
 

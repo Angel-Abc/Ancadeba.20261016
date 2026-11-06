@@ -159,6 +159,41 @@ const source: IResourceSource = {
 
 const loader = new GameLoader(new JsonResourceLoader(source, logger))
 
+// Keep text-binding regressions independent of the sample's optional status presentation.
+const textBindingLoader = new GameLoader(
+  new JsonResourceLoader(
+    {
+      ...source,
+      readText: async (path) => {
+        const text = await source.readText(path)
+
+        if (!path.startsWith('scenes/')) return text
+        const scene = JSON.parse(text)
+        scene.components = scene.components.map(
+          (component: { id: string; type: string; placement: unknown }) =>
+            component.id === 'player-status' && component.type === 'status-panel'
+              ? {
+                  id: component.id,
+                  type: 'text',
+                  placement: component.placement,
+                  textKey:
+                    scene.id === 'gallery'
+                      ? 'scenes.gallery.components.player-status.text'
+                      : 'scenes.standard.components.player-status.text',
+                  bindings: {
+                    health: { source: 'game.state', path: ['player', 'health'], fallback: '40' },
+                  },
+                }
+              : component,
+        )
+
+        return JSON.stringify(scene)
+      },
+    },
+    logger,
+  ),
+)
+
 function setup(game: GameData) {
   const lifecycle = new GameLifecycle(game, {
     createGameState: () => ({ score: 0 }),
@@ -173,6 +208,11 @@ function setup(game: GameData) {
 
 interface BindingDemoState {
   player: { health?: unknown }
+}
+
+interface StatusDemoState {
+  player: { health?: unknown; maximumHealth: number; level: number; gold: string | number }
+  letterRead: boolean
 }
 
 function bindingEngine(
@@ -250,6 +290,159 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it.each(['preview', 'standalone'])(
+    'updates status resources and keyboard-accessible effects in %s',
+    async (host) => {
+      const game = await loader.load()
+      const { document, target } = setup(game)
+
+      let state: StatusDemoState
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          createGameLifecycle: (data) =>
+            new GameLifecycle(data, {
+              createGameState: () => {
+                state = {
+                  player: { health: 40, maximumHealth: 40, level: 1, gold: 12 },
+                  letterRead: true,
+                }
+
+                return state
+              },
+              createSceneState: () => undefined,
+            }),
+          createGameRules: () => ({
+            handlers: new Map<string, GameActionHandler>([
+              [
+                'overheal',
+                () => {
+                  state.player.health = 60
+
+                  return { status: 'applied' }
+                },
+              ],
+              [
+                'maximum',
+                () => {
+                  state.player.maximumHealth = 100
+
+                  return { status: 'applied' }
+                },
+              ],
+              [
+                'invalid',
+                () => {
+                  state.player.maximumHealth = 0
+
+                  return { status: 'applied' }
+                },
+              ],
+              [
+                'missing',
+                () => {
+                  delete state.player.health
+                  state.player.maximumHealth = 40
+
+                  return { status: 'applied' }
+                },
+              ],
+              [
+                'markup',
+                () => {
+                  state.player.gold = '<b>{{gold}}</b>'
+
+                  return { status: 'applied' }
+                },
+              ],
+              [
+                'hide',
+                () => {
+                  state.letterRead = false
+
+                  return { status: 'applied' }
+                },
+              ],
+            ]),
+          }),
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      const panel = () => target.find((node) => node.dataset.componentId === 'player-status')!
+      const row = (id: string) => panel().find((node) => node.dataset.statusRow === id)!
+      const fill = () => row('health').find((node) => node.className === 'ancadeba-status-fill')!
+
+      const request = (id: string) => {
+        engine.actions!.request(id)
+        flush(engine)
+      }
+
+      expect(row('health').textContent).toBe('Health 40 / 40')
+      expect(fill().style.getPropertyValue('--ge-status-fill')).toBe('100%')
+      const meter = row('health').find((node) => node.attributes.get('role') === 'meter')!
+      expect(meter.attributes.get('aria-valuemax')).toBe('40')
+      request('overheal')
+      expect(row('health').textContent).toBe('Health 60 / 40')
+      expect(fill().style.getPropertyValue('--ge-status-fill')).toBe('100%')
+      request('maximum')
+      expect(fill().style.getPropertyValue('--ge-status-fill')).toBe('60%')
+      expect(meter.attributes.get('aria-valuemax')).toBe('100')
+      request('invalid')
+      expect(meter.hidden).toBe(true)
+      expect(panel().dataset.bindingStatus).toBe('unresolved')
+      request('missing')
+      expect(row('health').textContent).toBe('Health — / 40')
+
+      if (host === 'preview') expect(panel().title).toContain('missing-path')
+      else expect(panel().title).toBe('')
+      request('markup')
+      const gold = row('gold').find((node) => node.className === 'ancadeba-status-value')!
+      expect(gold.textContent).toBe('<b>{{gold}}</b>')
+      expect(gold.children).toEqual([])
+      const effect = panel().find((node) => node.dataset.statusEffect === 'informed')!
+      expect(effect.hidden).toBe(false)
+      const button = effect.find((node) => node.tagName === 'BUTTON')!
+      const tooltip = effect.find((node) => node.attributes.get('role') === 'tooltip')!
+      expect(tooltip.hidden).toBe(true)
+      button.focus()
+      button.dispatchEvent(new Event('focus'))
+      expect(tooltip.hidden).toBe(false)
+      const escape = new Event('keydown', { cancelable: true })
+      Object.defineProperty(escape, 'key', { value: 'Escape' })
+      button.dispatchEvent(escape)
+      expect(tooltip.hidden).toBe(true)
+      expect(escape.defaultPrevented).toBe(true)
+      button.dispatchEvent(new Event('mouseenter'))
+      expect(tooltip.hidden).toBe(true)
+      button.dispatchEvent(new Event('blur'))
+      button.dispatchEvent(new Event('mouseleave'))
+      button.dispatchEvent(new Event('mouseenter'))
+      expect(tooltip.hidden).toBe(false)
+      request('hide')
+      expect(effect.hidden).toBe(true)
+      expect(tooltip.hidden).toBe(true)
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      game.localization!.select('nl')
+      expect(row('health').textContent).toBe('Gezondheid — / 40')
+      const old = panel()
+      engine.stop()
+      await engine.start()
+      startSampleGame(target)
+      expect(row('health').textContent).toBe('Gezondheid 40 / 40')
+      expect(panel()).not.toBe(old)
+    },
+  )
+
   it.each([
     { host: 'preview', language: 'en' },
     { host: 'standalone', language: 'nl' },
@@ -1246,7 +1439,7 @@ describe('scene renderer', () => {
   })
 
   it('unsubscribes on renderer disposal and cleans partially mounted bound components after a failure', async () => {
-    const content = await loader.load()
+    const content = await textBindingLoader.load()
     const { target, document } = setup(content)
     const engine = bindingEngine(content, { mount: () => () => {} })
     await engine.start()
@@ -1337,7 +1530,7 @@ describe.each([
   ['editor preview', (element: HTMLElement): IEngineHost => new EditorPreviewHost(element)],
 ] as const)('%s rendering integration', (_name, createHost) => {
   it('switches settings language immediately while preserving playthrough state and releasing listeners', async () => {
-    const content = await loader.load()
+    const content = await textBindingLoader.load()
     const { target } = setup(content)
     const engine = bindingEngine(content, createHost(target.asElement()))
     await engine.start()
@@ -1389,10 +1582,10 @@ describe.each([
   })
 
   it('opens the menu without a playthrough and routes buttons with listener cleanup', async () => {
-    const { target } = setup(await loader.load())
+    const { target } = setup(await textBindingLoader.load())
 
     const engine = new Engine(
-      loader,
+      textBindingLoader,
       createHost(target.asElement()),
       logger,
       () => new MessageBus<EngineMessages>(),
@@ -1433,7 +1626,7 @@ describe.each([
   })
 
   it('updates bound text in place, diagnoses missing values, and follows all three scenes', async () => {
-    const content = await loader.load()
+    const content = await textBindingLoader.load()
     const { target } = setup(content)
     const engine = bindingEngine(content, createHost(target.asElement()))
     await engine.start()
@@ -1510,7 +1703,7 @@ describe.each([
   })
 
   it('renders bound values as literal text and rebinds after game replacement and engine restart', async () => {
-    const content = await loader.load()
+    const content = await textBindingLoader.load()
     const { target } = setup(content)
     const engine = bindingEngine(content, createHost(target.asElement()))
     await engine.start()
@@ -1548,7 +1741,7 @@ describe.each([
   })
 
   it('shows editor diagnostics or standalone fallbacks without an application-state factory', async () => {
-    const { rules: _rules, ...game } = await loader.load()
+    const { rules: _rules, ...game } = await textBindingLoader.load()
     const { target } = setup(game)
 
     const engine = new Engine(
@@ -1571,10 +1764,10 @@ describe.each([
   })
 
   it('selects the configured initial scene, follows changes, and remounts with the engine', async () => {
-    const { target } = setup(await loader.load())
+    const { target } = setup(await textBindingLoader.load())
 
     const engine = new Engine(
-      loader,
+      textBindingLoader,
       createHost(target.asElement()),
       logger,
       () => new MessageBus<EngineMessages>(),
@@ -1613,7 +1806,7 @@ describe.each([
 
 describe('editor scene picker', () => {
   it('switches the three scenes and empty selection through the lifecycle, and removes its listener', async () => {
-    const game = await loader.load()
+    const game = await textBindingLoader.load()
     const { lifecycle, target } = setup(game)
 
     const cleanup = mountGameView(
@@ -1649,7 +1842,7 @@ describe('editor scene picker', () => {
   })
 
   it('cleans up a failed mount after selecting an initial scene', async () => {
-    const game = await loader.load()
+    const game = await textBindingLoader.load()
     const { lifecycle, target } = setup(game)
     vi.spyOn(lifecycle, 'enterScene').mockImplementationOnce(() => {
       throw new Error('Cannot enter scene')

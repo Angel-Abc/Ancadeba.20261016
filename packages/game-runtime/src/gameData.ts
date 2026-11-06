@@ -15,6 +15,7 @@ import type {
   GameTranslation,
   ActionBarComponentDefinition,
   NearbyComponentDefinition,
+  StatusPanelComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -27,6 +28,7 @@ import {
   validateRuleSources,
   resolveMapView,
   actionBarIssues,
+  statusPanelIssues,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
@@ -62,6 +64,7 @@ export type SceneComponentData =
   | InventoryComponentData
   | ActionBarComponentDefinition
   | NearbyComponentDefinition
+  | StatusPanelComponentDefinition
 
 export type GraphicComponentData = GraphicComponentDefinition
 
@@ -195,6 +198,39 @@ export function assembleGameData(
         grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
       },
       components: scene.components.map((component) => {
+        if (component.type === 'status-panel')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            rows: component.rows.map((row) =>
+              row.type === 'bar'
+                ? {
+                    ...row,
+                    value:
+                      typeof row.value === 'object'
+                        ? { ...row.value, path: [...row.value.path] }
+                        : row.value,
+                    maximum:
+                      typeof row.maximum === 'object'
+                        ? { ...row.maximum, path: [...row.maximum.path] }
+                        : row.maximum,
+                  }
+                : {
+                    ...row,
+                    value:
+                      typeof row.value === 'object'
+                        ? { ...row.value, path: [...row.value.path] }
+                        : row.value,
+                  },
+            ),
+            effects: component.effects.map((effect) => ({
+              ...effect,
+              ...(effect.visibleWhen && {
+                visibleWhen: { ...effect.visibleWhen, path: [...effect.visibleWhen.path] },
+              }),
+            })),
+          }
+
         if (component.type === 'nearby')
           return {
             ...component,
@@ -301,6 +337,13 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'status-panel') {
+        const issue = statusPanelIssues(component, assets)[0]
+
+        if (issue)
+          throw new Error(`Scene ${scene.id}, status panel ${component.id}: ${issue.message}`)
+      }
+
       if (component.type === 'action-bar') {
         const issue = actionBarIssues(
           component,

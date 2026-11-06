@@ -28,21 +28,60 @@
     },
     {
       "id": "player-status",
-      "type": "text",
+      "type": "status-panel",
+      "labelKey": "status.title",
+      "nameKey": "status.player",
       "placement": {
         "row": 3,
         "column": 1,
         "rowSpan": 3,
         "columnSpan": 2
       },
-      "bindings": {
-        "health": {
-          "source": "game.state",
-          "path": ["player", "health"],
-          "fallback": "40"
+      "rows": [
+        {
+          "id": "level",
+          "type": "value",
+          "labelKey": "status.level",
+          "value": {
+            "source": "game.state",
+            "path": ["player", "level"]
+          }
+        },
+        {
+          "id": "health",
+          "type": "bar",
+          "labelKey": "status.health",
+          "value": {
+            "source": "game.state",
+            "path": ["player", "health"]
+          },
+          "maximum": {
+            "source": "game.state",
+            "path": ["player", "maximumHealth"]
+          },
+          "color": "#e64b6a"
+        },
+        {
+          "id": "gold",
+          "type": "value",
+          "labelKey": "status.gold",
+          "value": {
+            "source": "game.state",
+            "path": ["player", "gold"]
+          }
         }
-      },
-      "textKey": "scenes.standard.components.player-status.text"
+      ],
+      "effects": [
+        {
+          "id": "informed",
+          "labelKey": "status.informed",
+          "descriptionKey": "status.informed.description",
+          "visibleWhen": {
+            "source": "game.state",
+            "path": ["letterRead"]
+          }
+        }
+      ]
     },
     {
       "id": "narrative",

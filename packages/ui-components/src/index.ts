@@ -14,6 +14,8 @@ export { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
 
 export { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
 
+export { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
+
 export { LanguageSelectComponentRenderer } from './languageSelectComponentRenderer.js'
 
 export {

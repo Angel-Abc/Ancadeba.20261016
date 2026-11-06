@@ -21,6 +21,7 @@ import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm
 import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
+import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -335,6 +336,94 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors and reorders status rows and effects while preserving conflicting and unrelated drafts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [
+        { path: ['health'], value: 40 },
+        { path: ['active'], value: true },
+      ],
+      actions: {},
+    }
+    const controls = bindStatusPanelEditor(root.asElement(), (command) => commands.push(command))
+    controls.render({ ...initial, view }, true)
+    click('Add status panel')
+    edit('Status panel title', 'Player')
+    click('Add resource bar')
+    edit('Row 1 label', 'Health')
+    edit('Row 1 value source', JSON.stringify({ source: 'game.state', path: ['health'] }))
+    edit('Row 1 maximum', '40')
+    click('Add value row')
+    edit('Row 2 label', 'Currency')
+    edit('Row 2 value', '12')
+    click('Move row 2 up')
+    click('Add status effect')
+    edit('Effect 1 label', 'Ready')
+    edit('Effect 1 description', 'Ready to act.')
+    edit('Effect 1 visibility', JSON.stringify({ source: 'game.state', path: ['active'] }))
+    expect(controls.hasDrafts()).toBe(true)
+    edit('Status game scene', 'other')
+    expect(field('Status game scene').value).toBe('shop')
+    controls.render({ ...initial, view, conflict: true, preserveDrafts: true }, false)
+    expect(field('Status panel title').value).toBe('Player')
+    controls.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'new' },
+        lastCommand: 'game.updateRules',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(field('Row 1 label').value).toBe('Currency')
+    submit('Save status panel')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.upsertStatusPanel',
+      sceneId: 'shop',
+      component: {
+        label: 'Player',
+        rows: [
+          { id: 'value-1', type: 'value', label: 'Currency', value: '12' },
+          {
+            id: 'bar-1',
+            type: 'bar',
+            label: 'Health',
+            value: { source: 'game.state', path: ['health'] },
+            maximum: 40,
+          },
+        ],
+        effects: [
+          {
+            label: 'Ready',
+            description: 'Ready to act.',
+            visibleWhen: { source: 'game.state', path: ['active'] },
+          },
+        ],
+      },
+    })
+    const saved = commands[0]!
+
+    if (saved.type !== 'scene.upsertStatusPanel') throw new Error('Expected status command')
+    view.scenes[0]!.components.push(saved.component)
+    controls.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'saved' },
+        lastCommand: 'scene.upsertStatusPanel',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(controls.hasDrafts()).toBe(false)
+    click('Remove status panel')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.removeStatusPanel',
+      sceneId: 'shop',
+      componentId: saved.component.id,
+    })
+  })
+
   it('authors selectable nearby targets and links their action-bar provider', () => {
     const { initial, root, edit, click, submit, commands } = panel()
     const view = structuredClone(initial.view!)

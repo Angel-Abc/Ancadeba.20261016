@@ -19,6 +19,7 @@ import {
   validateInventorySources,
   inventoryPanelIssues,
   validateRuleSources,
+  statusPanelIssues,
   gameRulesSchema,
   actionBarIssues,
 } from '@ancadeba/schemas'
@@ -99,6 +100,15 @@ export function validateProject(
 
   for (const [id, scene] of scenes) {
     scene.components.forEach((component, index) => {
+      if (component.type === 'status-panel')
+        for (const issue of statusPanelIssues(component, assets?.data))
+          diagnostics.push({
+            code: 'invalid_status_panel',
+            file: `scenes/${id}.json`,
+            path: ['components', index, ...issue.path],
+            message: issue.message,
+          })
+
       if (component.type === 'action-bar')
         for (const issue of actionBarIssues(component, input, scenes, scene))
           diagnostics.push({

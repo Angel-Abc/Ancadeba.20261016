@@ -357,3 +357,73 @@
 .ancadeba-nearby-entry {
   margin-block: 0.3em;
 }
+.ancadeba-status-panel {
+  padding: var(--ge-scene-text-padding);
+  overflow: auto;
+  line-height: var(--ge-status-line-height);
+  color: var(--ge-scene-text-color);
+  background: var(--ge-scene-text-background);
+}
+.ancadeba-status-panel h2 {
+  margin: 0 0 0.2em;
+  font-size: inherit;
+}
+.ancadeba-status-name {
+  margin-block: 0 0.2em;
+  font-weight: bold;
+}
+.ancadeba-status-row {
+  margin-block: 0.2em;
+}
+.ancadeba-status-row-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5em;
+  overflow-wrap: anywhere;
+}
+.ancadeba-status-meter {
+  height: var(--ge-status-meter-height);
+  background: var(--ge-status-track-color);
+  border-radius: 0.2em;
+  overflow: hidden;
+}
+.ancadeba-status-fill {
+  width: var(--ge-status-fill);
+  height: 100%;
+  background: var(--ge-status-color);
+}
+.ancadeba-status-portrait {
+  width: var(--ge-status-portrait-size);
+  height: var(--ge-status-portrait-size);
+  max-width: 100%;
+}
+.ancadeba-status-effect {
+  margin-block: 0.25em;
+}
+.ancadeba-status-effect-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  max-width: 100%;
+  padding: 0.2em 0.4em;
+  font: inherit;
+  color: inherit;
+  background: var(--ge-scene-text-background);
+  border: 1px solid currentColor;
+  border-radius: 0.25em;
+}
+.ancadeba-status-effect-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.ancadeba-status-effect-icon {
+  width: 1.4em;
+  height: 1.4em;
+}
+.ancadeba-status-effect-description {
+  display: block;
+  font-size: 0.9em;
+}
+.ancadeba-status-panel [hidden] {
+  display: none;
+}

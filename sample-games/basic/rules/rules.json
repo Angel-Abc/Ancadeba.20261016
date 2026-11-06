@@ -3,6 +3,18 @@
     {
       "path": ["player", "health"],
       "value": 40
+    },
+    {
+      "path": ["player", "maximumHealth"],
+      "value": 40
+    },
+    {
+      "path": ["player", "level"],
+      "value": 1
+    },
+    {
+      "path": ["player", "gold"],
+      "value": 12
     }
   ],
   "clock": {

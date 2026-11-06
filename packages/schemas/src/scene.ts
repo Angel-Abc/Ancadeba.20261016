@@ -7,7 +7,12 @@ import {
   textBindingsSchema,
   textPlaceholders,
 } from './bindings.js'
-import { graphicAppearanceSchema, graphicHasBindings, assetIdSchema } from './assets.js'
+import {
+  graphicAppearanceSchema,
+  graphicHasBindings,
+  assetIdSchema,
+  colorSchema,
+} from './assets.js'
 import { mapPositionSchema, mapViewportSchema } from './map.js'
 import { inventoryPreviewSchema } from './inventory.js'
 
@@ -220,6 +225,93 @@ export type NearbyComponentDefinition = z.infer<typeof nearbyComponentSchema>
 
 export type NearbyEntryDefinition = z.infer<typeof nearbyEntrySchema>
 
+export const statusNumberSchema = z.union([z.number().finite(), gameBindingSchema])
+export const statusValueSchema = z.union([z.string(), z.number().finite(), gameBindingSchema])
+
+const statusLabel = {
+  label: z.string().trim().default(''),
+  labelKey: translationKeySchema.optional(),
+}
+
+export const statusRowSchema = z
+  .discriminatedUnion('type', [
+    z.object({
+      id: gameIdSchema,
+      type: z.literal('value'),
+      ...statusLabel,
+      value: statusValueSchema,
+    }),
+    z.object({
+      id: gameIdSchema,
+      type: z.literal('bar'),
+      ...statusLabel,
+      value: statusNumberSchema,
+      maximum: statusNumberSchema,
+      color: colorSchema.optional(),
+    }),
+  ])
+  .refine((row) => Boolean(row.label || row.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
+export const statusEffectSchema = z
+  .object({
+    id: gameIdSchema,
+    ...statusLabel,
+    description: z.string().default(''),
+    descriptionKey: translationKeySchema.optional(),
+    icon: assetIdSchema.optional(),
+    visibleWhen: gameBindingSchema.optional(),
+  })
+  .refine((effect) => Boolean(effect.label || effect.labelKey), {
+    path: ['label'],
+    message: 'A label or labelKey is required',
+  })
+
+export const statusPanelComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('status-panel'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default('Status'),
+    labelKey: translationKeySchema.optional(),
+    name: z.string().default(''),
+    nameKey: translationKeySchema.optional(),
+    portrait: assetIdSchema.optional(),
+    rows: z.array(statusRowSchema).default([]),
+    effects: z.array(statusEffectSchema).default([]),
+  })
+  .superRefine((panel, context) => {
+    if (!panel.label && !panel.labelKey)
+      context.addIssue({
+        code: 'custom',
+        path: ['label'],
+        message: 'A label or labelKey is required',
+      })
+
+    for (const section of ['rows', 'effects'] as const) {
+      const ids = new Set<string>()
+      panel[section].forEach((entry, index) => {
+        if (ids.has(entry.id))
+          context.addIssue({
+            code: 'custom',
+            path: [section, index, 'id'],
+            message: 'IDs must be unique within each status section',
+          })
+        ids.add(entry.id)
+      })
+    }
+  })
+
+export type StatusPanelComponentDefinition = z.infer<typeof statusPanelComponentSchema>
+
+export type StatusRowDefinition = z.infer<typeof statusRowSchema>
+
+export type StatusEffectDefinition = z.infer<typeof statusEffectSchema>
+
+export type StatusValueDefinition = z.infer<typeof statusValueSchema>
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   textComponentSchema,
   buttonComponentSchema,
@@ -229,6 +321,7 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   inventoryComponentSchema,
   actionBarComponentSchema,
   nearbyComponentSchema,
+  statusPanelComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -270,6 +363,13 @@ export const sceneSchema = z
     let hasActionBar = false
     const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (component.type === 'status-panel' && scene.type !== 'game')
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index],
+          message: 'Status panels require a game scene',
+        })
+
       if (component.type === 'nearby') {
         if (scene.type !== 'game')
           context.addIssue({

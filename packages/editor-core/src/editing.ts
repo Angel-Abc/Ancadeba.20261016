@@ -5,6 +5,7 @@ import { validateProject } from './validation.js'
 import { editAssets } from './assetEditing.js'
 import { editRules } from './ruleEditing.js'
 import { editControls } from './controlEditing.js'
+import { editStatusPanel } from './statusPanelEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -40,7 +41,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
 
-  if (
+  if (command.type === 'scene.upsertStatusPanel' || command.type === 'scene.removeStatusPanel') {
+    changedFiles.push(...editStatusPanel(documents, game, command))
+  } else if (
     command.type === 'scene.setActionBar' ||
     command.type === 'game.updateInput' ||
     command.type === 'scene.upsertNearby'

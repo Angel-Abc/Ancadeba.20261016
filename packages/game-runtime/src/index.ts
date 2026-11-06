@@ -74,6 +74,8 @@ export { GameMapMovement, type IGameMapMovement, type MapDirection } from './map
 
 export { GameNearbyContext, type IGameNearby, type NearbySelection } from './nearbyContext.js'
 
+export { resolveStatusValue, statusBarFill, type StatusValueResolution } from './statusValues.js'
+
 export { TimerService, type ITimerService, type TimerId, type TimerWakeup } from './timers.js'
 
 export { ActionProcessor } from './actionProcessor.js'

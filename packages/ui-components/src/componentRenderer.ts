@@ -7,6 +7,7 @@ import { MapViewComponentRenderer } from './mapViewComponentRenderer.js'
 import { InventoryComponentRenderer } from './inventoryComponentRenderer.js'
 import { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
 import { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
+import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -27,12 +28,15 @@ export class ComponentRenderer implements IComponentRenderer {
       inventory: new InventoryComponentRenderer(),
       'action-bar': new ActionBarComponentRenderer(),
       nearby: new NearbyComponentRenderer(),
+      'status-panel': new StatusPanelComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'status-panel':
+        return this.renderers['status-panel'].render(component, context)
       case 'nearby':
         return this.renderers.nearby.render(component, context)
       case 'action-bar':

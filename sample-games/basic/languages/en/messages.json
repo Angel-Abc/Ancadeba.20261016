@@ -100,5 +100,12 @@
   "nearby.boat.result": "The hull is sound and both oars are ready. You will need the harbour chart to navigate the shallows safely.",
   "actions.talk": "Talk",
   "actions.examine": "Examine",
-  "actions.take": "Take"
+  "actions.take": "Take",
+  "status.title": "Player status",
+  "status.player": "Player",
+  "status.level": "Level",
+  "status.health": "Health",
+  "status.gold": "Gold",
+  "status.informed": "Informed",
+  "status.informed.description": "You read the letter and know which symbol opens the museum display case."
 }

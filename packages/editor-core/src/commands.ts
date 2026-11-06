@@ -15,6 +15,7 @@ import {
   inputSchema,
   inventoryItemActionSchema,
   nearbyComponentSchema,
+  statusPanelComponentSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -114,6 +115,16 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     component: nearbyComponentSchema,
   }),
+  z.strictObject({
+    type: z.literal('scene.upsertStatusPanel'),
+    sceneId: gameIdSchema,
+    component: statusPanelComponentSchema,
+  }),
+  z.strictObject({
+    type: z.literal('scene.removeStatusPanel'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -148,6 +159,25 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'scene.upsertStatusPanel',
+      example: {
+        type: 'scene.upsertStatusPanel',
+        sceneId: 'shop',
+        component: {
+          id: 'status',
+          type: 'status-panel',
+          label: 'Status',
+          placement: { row: 1, column: 1 },
+          rows: [],
+          effects: [],
+        },
+      },
+    },
+    {
+      type: 'scene.removeStatusPanel',
+      example: { type: 'scene.removeStatusPanel', sceneId: 'shop', componentId: 'status' },
+    },
     {
       type: 'scene.upsertNearby',
       example: {

@@ -100,5 +100,12 @@
   "nearby.boat.result": "De romp is stevig en beide roeispanen liggen klaar. Je hebt de havenkaart nodig om veilig door het ondiepe water te varen.",
   "actions.talk": "Praten",
   "actions.examine": "Bekijken",
-  "actions.take": "Meenemen"
+  "actions.take": "Meenemen",
+  "status.title": "Spelerstatus",
+  "status.player": "Speler",
+  "status.level": "Niveau",
+  "status.health": "Gezondheid",
+  "status.gold": "Goud",
+  "status.informed": "Geïnformeerd",
+  "status.informed.description": "Je hebt de brief gelezen en weet welk symbool de vitrine in het museum opent."
 }

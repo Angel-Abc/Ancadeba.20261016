@@ -28,6 +28,11 @@
   --ge-scene-heading-weight: 600;
 
   --ge-inventory-item-min-width: max(7.5em, 5rem);
+  --ge-status-color: currentColor;
+  --ge-status-track-color: #333333;
+  --ge-status-meter-height: 0.55em;
+  --ge-status-portrait-size: 4em;
+  --ge-status-line-height: 1.3;
 
   --ge-scene-picker-gap: calc(15 * var(--ge-unit-size));
   --ge-scene-picker-margin: 0 0 calc(15 * var(--ge-unit-size));

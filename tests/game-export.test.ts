@@ -315,6 +315,23 @@ describe('standalone game export', () => {
       const game = lifecycle.startGame()
       lifecycle.enterScene('standard')
       const actions = game.actions!
+
+      const status = lifecycle.activeScene!.data.components.find(
+        (component) => component.id === 'player-status',
+      )
+
+      expect(status).toMatchObject({
+        type: 'status-panel',
+        rows: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'bar',
+            value: { source: 'game.state', path: ['player', 'health'] },
+          }),
+        ]),
+      })
+      expect(
+        game.bindings!.read({ source: 'game.state', path: ['player', 'maximumHealth'] }),
+      ).toMatchObject({ status: 'resolved', value: 40 })
       game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
       game.actionBar!.activate(lifecycle.activeScene!, 'action-bar', '6')
 

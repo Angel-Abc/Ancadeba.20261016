@@ -7,6 +7,7 @@ import { bindAssetsPanel } from './assetsPanel.js'
 import { bindProjectTree } from './projectTreeView.js'
 import { bindRulesPanel } from './rulesPanel.js'
 import { bindActionBarPanel } from './actionBarPanel.js'
+import { bindStatusPanelEditor } from './statusPanelEditor.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -154,8 +155,10 @@ export function bindProjectPanel(
   const treeElement = root.querySelector<HTMLElement>('#project-tree')
   const rulesElement = treeElement && root.querySelector<HTMLElement>('#rules-panel')
   const actionBarElement = treeElement && root.querySelector<HTMLElement>('#action-bar-panel')
+  const statusPanelElement = treeElement && root.querySelector<HTMLElement>('#status-panel-editor')
   let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
   let actionBarPanel: ReturnType<typeof bindActionBarPanel> | undefined
+  let statusPanel: ReturnType<typeof bindStatusPanelEditor> | undefined
 
   const sections = [
     ...projectTreeSections,
@@ -163,6 +166,7 @@ export function bindProjectPanel(
     ...(actionBarElement
       ? [{ id: 'controls', labelKey: 'controls.heading', nodes: () => [] }]
       : []),
+    ...(statusPanelElement ? [{ id: 'status', labelKey: 'status.heading', nodes: () => [] }] : []),
     ...additionalSections,
   ]
 
@@ -182,6 +186,7 @@ export function bindProjectPanel(
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
 
     const actionBar = Boolean(actionBarElement && component?.type === 'action-bar')
+    const statusComponent = Boolean(statusPanelElement && component?.type === 'status-panel')
 
     metadata.hidden = node.section !== 'game'
     sceneMetadata.hidden =
@@ -195,9 +200,18 @@ export function bindProjectPanel(
 
     if (actionBarElement) actionBarElement.hidden = node.section !== 'controls' && !actionBar
 
+    if (statusPanelElement)
+      statusPanelElement.hidden = node.section !== 'status' && !statusComponent
+
     if (actionBar) actionBarPanel?.navigate(sceneId)
+
+    if (statusComponent) statusPanel?.navigate(sceneId, component?.id)
     find('component-details').hidden =
-      node.section !== 'scenes' || node.kind !== 'component' || graphic || actionBar
+      node.section !== 'scenes' ||
+      node.kind !== 'component' ||
+      graphic ||
+      actionBar ||
+      statusComponent
     find('component-json').textContent =
       component && !graphic ? JSON.stringify(component, null, 2) : ''
     find('workspace-heading').textContent =
@@ -238,10 +252,23 @@ export function bindProjectPanel(
             ))),
     )
 
+    const usesStatusPanel = Boolean(
+      statusPanelElement &&
+      (node.section === 'status' ||
+        (node.section === 'scenes' &&
+          view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.some(
+              (component) => component.id === node.id && component.type === 'status-panel',
+            ))),
+    )
+
     if (
       (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
       (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
+      (usesStatusPanel &&
+        !statusPanel?.navigate(sceneId, node.section === 'scenes' ? node.id : undefined)) ||
       additionalSections.find((section) => section.id === node.section)?.canSelect?.(node) === false
     ) {
       find('tree-message').textContent = t('tree.saveFirst')
@@ -292,6 +319,7 @@ export function bindProjectPanel(
     assetsPanel?.render(state, replaceFields)
     rulesPanel?.render(state, replaceFields)
     actionBarPanel?.render(state, replaceFields)
+    statusPanel?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -304,6 +332,8 @@ export function bindProjectPanel(
         state.lastCommand === 'inventory.setRuleInspection' ||
         state.lastCommand === 'inventory.setItemActions' ||
         state.lastCommand === 'scene.upsertNearby' ||
+        state.lastCommand === 'scene.upsertStatusPanel' ||
+        state.lastCommand === 'scene.removeStatusPanel' ||
         state.lastCommand === 'scene.setActionBar' ||
         state.lastCommand === 'game.updateInput')
 
@@ -477,6 +507,11 @@ export function bindProjectPanel(
     actionBarPanel = bindActionBarPanel(actionBarElement, (command) => {
       void controller.save(command)
     })
+
+  if (statusPanelElement)
+    statusPanel = bindStatusPanelEditor(statusPanelElement, (command) => {
+      void controller.save(command)
+    })
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -537,7 +572,12 @@ export function bindProjectPanel(
 
   const hasDrafts = () =>
     dirtyForms.size > 0 ||
-    Boolean(assetsPanel?.hasDrafts() || rulesPanel?.hasDrafts() || actionBarPanel?.hasDrafts())
+    Boolean(
+      assetsPanel?.hasDrafts() ||
+      rulesPanel?.hasDrafts() ||
+      actionBarPanel?.hasDrafts() ||
+      statusPanel?.hasDrafts(),
+    )
 
   on(reload, 'click', () => {
     void controller.load(loadedPath, hasDrafts())

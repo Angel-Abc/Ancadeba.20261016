@@ -8,6 +8,8 @@ import {
   type GameRulesDefinition,
   type GameBindingDefinition,
   ruleValueType,
+  statusPanelBindings,
+  statusPanelComponentSchema,
 } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object, projectRuleSources } from './project.js'
@@ -89,6 +91,37 @@ export function editRules(
       for (const component of sceneComponents(`scenes/${id}.json`)) {
         const button = object(component)
         const action = object(button.action)
+
+        if (button.type === 'status-panel')
+          for (const { binding, expected } of statusPanelBindings(
+            statusPanelComponentSchema.parse(button),
+          )) {
+            if (binding.source !== 'game.state') continue
+
+            const matches = (path: string[]) =>
+              path.length === binding.path.length &&
+              path.every((part, index) => part === binding.path[index])
+
+            const declared = rules.state.find((field) => matches(field.path))
+
+            const oldDerived =
+              (rules.clock && matches(rules.clock.path)) || (rules.log && matches(rules.log.path))
+
+            if (!declared && !oldDerived) continue
+            const field = next.state.find((field) => matches(field.path))
+
+            const nextDerived =
+              (next.clock && matches(next.clock.path)) || (next.log && matches(next.log.path))
+
+            const type = field ? ruleValueType(field.value) : nextDerived ? 'string' : undefined
+
+            if (!type || (expected === 'value' ? type === 'boolean' : type !== expected))
+              throw new EditorError(
+                422,
+                'status_binding_in_use',
+                'Update status panel bindings before removing or changing their state fields',
+              )
+          }
 
         if (button.type === 'nearby')
           for (const value of Object.values(object(button.entries))) {
