@@ -132,12 +132,14 @@ describe('game data pipeline', () => {
       'old-harbour',
       'shoals',
       'north-cliff-landing',
+      'shop',
     ])
     expect([...game.scenes.values()].map(({ type }) => type)).toEqual([
       'game',
       'game',
       'stand-alone',
       'stand-alone',
+      'game',
       'game',
       'game',
       'game',

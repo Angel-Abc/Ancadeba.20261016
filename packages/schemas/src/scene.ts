@@ -104,6 +104,11 @@ export const actionBarSlotSchema = z
         equipment: gameIdSchema,
         operation: z.enum(['equip', 'unequip']),
       }),
+      z.object({
+        type: z.literal('shop-action'),
+        shop: gameIdSchema,
+        operation: z.enum(['buy', 'sell']),
+      }),
     ]),
     inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
   })
@@ -230,6 +235,105 @@ export const equipmentComponentSchema = z.object({
 export type ItemDetailsComponentDefinition = z.infer<typeof itemDetailsComponentSchema>
 
 export type EquipmentComponentDefinition = z.infer<typeof equipmentComponentSchema>
+
+export const shopMessageSchema = z.enum([
+  'bought',
+  'sold',
+  'selectItem',
+  'unavailable',
+  'invalidAmount',
+  'insufficientPlayerFunds',
+  'insufficientMerchantFunds',
+  'equipped',
+  'containerNotEmpty',
+  'wrongOwner',
+  'unsupportedState',
+  'stale',
+])
+
+export type ShopMessage = z.infer<typeof shopMessageSchema>
+
+export const shopBalanceSchema = gameBindingSchema.safeExtend({
+  source: z.literal('game.state'),
+  path: z
+    .array(gameIdSchema.refine((id) => !['__proto__', 'constructor', 'prototype'].includes(id)))
+    .min(1),
+})
+
+export const shopPriceSchema = z.union([z.number().int().nonnegative().safe(), gameBindingSchema])
+
+export const shopComponentSchema = z
+  .object({
+    id: gameIdSchema,
+    type: z.literal('shop'),
+    placement: gridPlacementSchema,
+    label: z.string().trim().default('Shop'),
+    labelKey: translationKeySchema.optional(),
+    playerInventory: gameIdSchema,
+    merchantInventory: gameIdSchema,
+    currency: z.string().trim().default('Gold'),
+    currencyKey: translationKeySchema.optional(),
+    playerBalance: shopBalanceSchema,
+    merchantFunds: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('unlimited') }),
+      z.object({ type: z.literal('finite'), balance: shopBalanceSchema }),
+    ]),
+    prices: z.record(
+      gameIdSchema,
+      z.object({ buy: shopPriceSchema.optional(), sell: shopPriceSchema.optional() }),
+    ),
+    feedbackTarget: gameIdSchema.optional(),
+    messages: z
+      .object({
+        bought: z.string().default('Bought {item} for {price} {currency}.'),
+        sold: z.string().default('Sold {item} for {price} {currency}.'),
+        selectItem: z.string().default('Select an item to trade.'),
+        unavailable: z.string().default('This item is not available for this trade.'),
+        invalidAmount: z
+          .string()
+          .default(
+            'Prices and balances must be nonnegative whole numbers within the supported range.',
+          ),
+        insufficientPlayerFunds: z.string().default('You do not have enough currency.'),
+        insufficientMerchantFunds: z
+          .string()
+          .default('The merchant does not have enough currency.'),
+        equipped: z.string().default('Unequip this item first.'),
+        containerNotEmpty: z.string().default('Empty this container first.'),
+        wrongOwner: z.string().default('The item no longer belongs to this participant.'),
+        unsupportedState: z.string().default('Trading is unavailable for this game state.'),
+        stale: z.string().default('The trade changed. Select the item again.'),
+      })
+      .prefault({}),
+    messageKeys: z.partialRecord(shopMessageSchema, translationKeySchema).default({}),
+  })
+  .superRefine((shop, context) => {
+    if (!shop.label && !shop.labelKey)
+      context.addIssue({
+        code: 'custom',
+        path: ['label'],
+        message: 'A shop label or translation is required',
+      })
+
+    if (!shop.currency && !shop.currencyKey)
+      context.addIssue({
+        code: 'custom',
+        path: ['currency'],
+        message: 'A currency label or translation is required',
+      })
+
+    if (
+      shop.merchantFunds.type === 'finite' &&
+      JSON.stringify(shop.playerBalance.path) === JSON.stringify(shop.merchantFunds.balance.path)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['merchantFunds'],
+        message: 'Player and merchant balance fields must be distinct',
+      })
+  })
+
+export type ShopComponentDefinition = z.infer<typeof shopComponentSchema>
 
 export const nearbyEntrySchema = z
   .object({
@@ -361,6 +465,7 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   statusPanelComponentSchema,
   itemDetailsComponentSchema,
   equipmentComponentSchema,
+  shopComponentSchema,
 ])
 
 export const sceneSchema = z
@@ -400,8 +505,48 @@ export const sceneSchema = z
       })
     const ids = new Set<string>()
     let hasActionBar = false
+    let hasShop = false
     const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (component.type === 'shop') {
+        if (hasShop || scene.type !== 'game')
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index],
+            message: 'Allow one shop per game scene',
+          })
+        hasShop = true
+        const player = scene.components.find((entry) => entry.id === component.playerInventory)
+        const merchant = scene.components.find((entry) => entry.id === component.merchantInventory)
+
+        if (
+          player?.type !== 'inventory' ||
+          merchant?.type !== 'inventory' ||
+          player.readOnly !== true ||
+          merchant.readOnly !== true ||
+          player.owners.length !== 1 ||
+          merchant.owners.length !== 1 ||
+          player.owners[0] === merchant.owners[0]
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index],
+            message: 'Shops require read-only inventory panels with one distinct owner each',
+          })
+
+        if (
+          component.feedbackTarget &&
+          !scene.components.some(
+            (entry) => entry.type === 'text' && entry.id === component.feedbackTarget,
+          )
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'feedbackTarget'],
+            message: 'Select a text component in the same scene',
+          })
+      }
+
       if (component.type === 'item-details' || component.type === 'equipment') {
         const source = scene.components.find((entry) => entry.id === component.inventory)
 

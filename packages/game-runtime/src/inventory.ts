@@ -17,12 +17,23 @@ export type InventoryMoveResult =
   | { readonly status: 'rejected'; readonly reason: string }
 
 export interface IGameInventory {
+  /** Stage a transfer for an atomic transaction. Commit invokes no observers. */
+  prepareTransfer?(
+    itemId: string,
+    destination: InventoryPlacement,
+  ): PreparedInventoryTransfer | undefined
   readonly snapshot: readonly InventoryItemSnapshot[]
   checkMove(itemId: string, destination: InventoryPlacement): string | undefined
   move(itemId: string, destination: InventoryPlacement): InventoryMoveResult
   checkEquip(itemId: string, owner: string, slot: string): string | undefined
   equip(itemId: string, owner: string, slot: string): InventoryMoveResult
   subscribeChanges(handler: () => void): Unsubscribe
+}
+
+export interface PreparedInventoryTransfer {
+  isCurrent(): boolean
+  commit(): void
+  notify(): void
 }
 
 function samePlacement(from: InventoryPlacement, to: InventoryPlacement): boolean {
@@ -38,6 +49,7 @@ export class GameInventory implements IGameInventory {
   private readonly items = new Map<string, InventoryItemSnapshot>()
   private readonly subscribers = new Set<() => void>()
   private disposed = false
+  private revision = 0
 
   constructor(private readonly definition: InventoryDefinition) {
     for (const [id, item] of Object.entries(definition.items)) {
@@ -81,6 +93,7 @@ export class GameInventory implements IGameInventory {
       return { status: 'applied', changed: false }
 
     this.items.set(itemId, Object.freeze({ ...item, placement: Object.freeze(result.destination) }))
+    this.revision++
     this.notify()
 
     return { status: 'applied', changed: true }
@@ -139,6 +152,7 @@ export class GameInventory implements IGameInventory {
     if (!result.changed) return { status: 'applied', changed: false }
 
     for (const [id, item] of result.staged) this.items.set(id, item)
+    this.revision++
     this.notify()
 
     return { status: 'applied', changed: true }
@@ -159,6 +173,35 @@ export class GameInventory implements IGameInventory {
 
     if (errors.length)
       throw new AggregateError(errors, 'Inventory change subscribers failed after move')
+  }
+
+  prepareTransfer(
+    itemId: string,
+    destination: InventoryPlacement,
+  ): PreparedInventoryTransfer | undefined {
+    const result = this.validate(itemId, destination)
+
+    if (!result.destination) return
+    const item = this.items.get(itemId)!
+    const next = Object.freeze({ ...item, placement: Object.freeze(result.destination) })
+    const revision = this.revision
+    let committed = false
+    let notified = false
+
+    return {
+      isCurrent: () => !this.disposed && !committed && this.revision === revision,
+      commit: () => {
+        if (this.disposed || committed || this.revision !== revision) return
+        this.items.set(itemId, next)
+        this.revision++
+        committed = true
+      },
+      notify: () => {
+        if (!committed || notified) return
+        notified = true
+        this.notify()
+      },
+    }
   }
 
   subscribeChanges(handler: () => void): Unsubscribe {

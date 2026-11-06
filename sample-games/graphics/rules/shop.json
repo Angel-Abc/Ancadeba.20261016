@@ -1,0 +1,9 @@
+{
+  "state": [
+    {
+      "path": ["coins"],
+      "value": 30
+    }
+  ],
+  "actions": {}
+}

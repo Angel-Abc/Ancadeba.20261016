@@ -136,6 +136,16 @@
               "action": "take-letter"
             }
           }
+        },
+        "kiosk": {
+          "kind": "object",
+          "labelKey": "shop.kiosk",
+          "descriptionKey": "shop.kiosk.description",
+          "actions": {
+            "visit": {
+              "action": "visit-shop"
+            }
+          }
         }
       }
     },
@@ -350,6 +360,18 @@
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-8"
+          }
+        },
+        "9": {
+          "labelKey": "shop.visit",
+          "action": {
+            "type": "nearby-action",
+            "nearby": "nearby",
+            "action": "visit"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-9"
           }
         }
       }

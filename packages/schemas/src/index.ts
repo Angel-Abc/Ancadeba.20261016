@@ -35,3 +35,5 @@ export interface HealthResponse {
 }
 
 export * from './equipment.js'
+
+export * from './shop.js'

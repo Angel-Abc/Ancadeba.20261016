@@ -21,6 +21,19 @@ export function actionBarIssues(
 
     const action = slot.action
 
+    if (action.type === 'shop-action') {
+      if (
+        !scene?.components.some(
+          (component) => component.type === 'shop' && component.id === action.shop,
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'shop'],
+          message: `Unknown shop: ${action.shop}`,
+        })
+      continue
+    }
+
     if (action.type === 'equipment-action') {
       if (
         !scene?.components.some(

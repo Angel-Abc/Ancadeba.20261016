@@ -19,6 +19,8 @@ import {
   itemPresentationSchema,
   itemDetailsComponentSchema,
   equipmentComponentSchema,
+  shopComponentSchema,
+  inventoryComponentSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -154,6 +156,17 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
   }),
+  z.strictObject({
+    type: z.literal('scene.upsertShop'),
+    sceneId: gameIdSchema,
+    component: shopComponentSchema,
+    panels: z.array(inventoryComponentSchema).max(2).optional(),
+  }),
+  z.strictObject({
+    type: z.literal('scene.removeShop'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -188,6 +201,27 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'scene.upsertShop',
+      example: {
+        type: 'scene.upsertShop',
+        sceneId: 'shop',
+        component: {
+          id: 'trading',
+          type: 'shop',
+          placement: { row: 1, column: 1 },
+          playerInventory: 'player-items',
+          merchantInventory: 'merchant-items',
+          playerBalance: { source: 'game.state', path: ['gold'] },
+          merchantFunds: { type: 'unlimited' },
+          prices: {},
+        },
+      },
+    },
+    {
+      type: 'scene.removeShop',
+      example: { type: 'scene.removeShop', sceneId: 'shop', componentId: 'trading' },
+    },
     {
       type: 'inventory.setItemPresentation',
       example: {

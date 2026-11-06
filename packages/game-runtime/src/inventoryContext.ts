@@ -80,6 +80,19 @@ export class GameInventoryContext implements IGameInventorySelection {
 
     if (this.selections.get(panel)?.item === item) return
 
+    if (item !== undefined) {
+      const shop = scene.data.components.find(
+        (component) =>
+          component.type === 'shop' &&
+          [component.playerInventory, component.merchantInventory].includes(panel),
+      )
+
+      if (shop?.type === 'shop')
+        this.selections.delete(
+          panel === shop.playerInventory ? shop.merchantInventory : shop.playerInventory,
+        )
+    }
+
     if (item === undefined) this.selections.delete(panel)
     else this.selections.set(panel, Object.freeze({ item }))
     this.notify()

@@ -22,6 +22,7 @@ import {
   statusPanelIssues,
   localizeInventory,
   equipmentIssues,
+  shopIssues,
   gameRulesSchema,
   actionBarIssues,
 } from '@ancadeba/schemas'
@@ -198,8 +199,22 @@ export function validateProject(
 
   const sources = projectRuleSources(game.data.rules, (file) => check(file, gameRulesSchema).data)
 
-  for (const issue of validateRuleSources(sources, scenes, maps, inventory, defaultMessages).issues)
-    diagnostics.push({ ...issue, code: 'invalid_rules' })
+  const validatedRules = validateRuleSources(sources, scenes, maps, inventory, defaultMessages)
+  const mergedRules = validatedRules.rules
+
+  for (const [id, scene] of scenes)
+    scene.components.forEach((component, index) => {
+      if (component.type === 'shop')
+        for (const issue of shopIssues(component, inventory, mergedRules))
+          diagnostics.push({
+            code: 'invalid_shop',
+            file: `scenes/${id}.json`,
+            path: ['components', index, ...issue.path],
+            message: issue.message,
+          })
+    })
+
+  for (const issue of validatedRules.issues) diagnostics.push({ ...issue, code: 'invalid_rules' })
 
   try {
     assertGameLanguages(game.data, scenes)

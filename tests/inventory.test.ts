@@ -18,6 +18,8 @@ const bag: InventoryPlacement = { type: 'inside', container: 'travel-pack' }
 
 const paths = [
   'game.json',
+  'rules/shop.json',
+  'scenes/shop.json',
   'input/controls.json',
   'assets/wardrobe.json',
   'inventory/wardrobe.json',

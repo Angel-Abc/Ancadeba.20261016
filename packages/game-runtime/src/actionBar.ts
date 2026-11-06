@@ -9,6 +9,7 @@ import {
 import type { EquipmentSelection, IGameEquipment } from './equipment.js'
 import type { IGameMapMovement } from './mapMovement.js'
 import type { IGameNearby, NearbySelection } from './nearbyContext.js'
+import type { IGameTrading, TradeSelection } from './trading.js'
 
 export interface IGameActionBar {
   getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined
@@ -23,7 +24,12 @@ interface CapturedSlot {
   readonly scene: SceneInstance
   readonly bar: string
   readonly slot: string
-  readonly selection?: InventorySelectionSnapshot | NearbySelection | EquipmentSelection | undefined
+  readonly selection?:
+    | InventorySelectionSnapshot
+    | NearbySelection
+    | EquipmentSelection
+    | TradeSelection
+    | undefined
 }
 
 /** Resolves scene-owned slots before general input bindings, independently of the host. */
@@ -41,6 +47,7 @@ export class GameActionBar implements IGameActionBar {
     private readonly nearby: IGameNearby | undefined = lifecycle.currentGame?.nearby,
     selection: IGameInventorySelection | undefined = lifecycle.currentGame?.inventorySelection,
     private readonly equipment: IGameEquipment | undefined = lifecycle.currentGame?.equipment,
+    private readonly trading: IGameTrading | undefined = lifecycle.currentGame?.trading,
   ) {
     this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
     this.inventoryContext = selection ?? this.ownedContext!
@@ -59,12 +66,14 @@ export class GameActionBar implements IGameActionBar {
     const maps = this.mapMovement?.subscribeChanges(listener)
     const nearby = this.nearby?.subscribeChanges(listener)
     const equipment = this.equipment?.subscribe(listener)
+    const trading = this.trading?.subscribeChanges(listener)
 
     return () => {
       inventory()
       maps?.()
       nearby?.()
       equipment?.()
+      trading?.()
     }
   }
 
@@ -86,12 +95,22 @@ export class GameActionBar implements IGameActionBar {
     | {
         definition: ActionBarSlotDefinition
         payload?: string
-        selection?: InventorySelectionSnapshot | NearbySelection | EquipmentSelection
+        selection?:
+          | InventorySelectionSnapshot
+          | NearbySelection
+          | EquipmentSelection
+          | TradeSelection
       }
     | undefined {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'shop-action') {
+      const selection = this.trading?.getSelection(scene, definition.action.shop)
+
+      return selection ? { definition, selection } : { definition }
+    }
 
     if (definition.action.type === 'equipment-action') {
       const selection = this.equipment?.get(scene, definition.action.equipment)
@@ -158,6 +177,11 @@ export class GameActionBar implements IGameActionBar {
 
     if (!action) return false
 
+    if (action.type === 'shop-action')
+      return Boolean(
+        this.trading && this.trading.checkTrade(scene, action.shop, action.operation) === undefined,
+      )
+
     if (action.type === 'equipment-action')
       return this.equipment?.isEnabled(scene, action.equipment, action.operation) ?? false
 
@@ -189,6 +213,12 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'shop-action') {
+      this.trading?.trade(scene, action.shop, action.operation)
+
+      return
+    }
 
     if (action.type === 'equipment-action') {
       this.equipment?.activate(scene, action.equipment, action.operation)

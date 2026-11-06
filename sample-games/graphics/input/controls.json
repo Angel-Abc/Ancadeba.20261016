@@ -1,14 +1,18 @@
 {
   "schema-version": "1.0.0",
-  "virtual-keys": ["equip", "unequip"],
+  "virtual-keys": ["equip", "unequip", "buy", "sell"],
   "keyboard": {
     "KeyQ": "equip",
-    "KeyW": "unequip"
+    "KeyW": "unequip",
+    "KeyE": "buy",
+    "KeyR": "sell"
   },
   "contexts": {
     "wardrobe": {
       "equip": "equip",
-      "unequip": "unequip"
+      "unequip": "unequip",
+      "buy": "buy",
+      "sell": "sell"
     }
   },
   "initial-context": "wardrobe"

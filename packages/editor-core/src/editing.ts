@@ -7,6 +7,7 @@ import { editRules } from './ruleEditing.js'
 import { editControls } from './controlEditing.js'
 import { editStatusPanel } from './statusPanelEditing.js'
 import { editItems } from './itemEditing.js'
+import { editShop } from './shopEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -42,7 +43,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
 
-  if (
+  if (command.type === 'scene.upsertShop' || command.type === 'scene.removeShop') {
+    changedFiles.push(...editShop(documents, game, command))
+  } else if (
     command.type === 'inventory.setItemPresentation' ||
     command.type === 'inventory.setEquipmentSlots' ||
     command.type === 'scene.setInventoryDetails' ||

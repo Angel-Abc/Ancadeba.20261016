@@ -1,0 +1,155 @@
+{
+  "schema-version": "1.0.0",
+  "id": "shop",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "narrative",
+      "type": "text",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "textKey": "shop.introduction"
+    },
+    {
+      "id": "player-items",
+      "type": "inventory",
+      "owners": ["player"],
+      "readOnly": true,
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 5,
+        "columnSpan": 6
+      },
+      "labelKey": "shop.player.items"
+    },
+    {
+      "id": "merchant-items",
+      "type": "inventory",
+      "owners": ["museum-kiosk"],
+      "readOnly": true,
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 3,
+        "column": 7,
+        "rowSpan": 5,
+        "columnSpan": 6
+      },
+      "labelKey": "shop.merchant.items"
+    },
+    {
+      "id": "shop",
+      "type": "shop",
+      "playerInventory": "player-items",
+      "merchantInventory": "merchant-items",
+      "currency": "Gold",
+      "playerBalance": {
+        "source": "game.state",
+        "path": ["player", "gold"]
+      },
+      "merchantFunds": {
+        "type": "finite",
+        "balance": {
+          "source": "game.state",
+          "path": ["merchantGold"]
+        }
+      },
+      "prices": {
+        "postcard": {
+          "buy": {
+            "source": "game.state",
+            "path": ["postcardPrice"]
+          },
+          "sell": 3
+        }
+      },
+      "feedbackTarget": "narrative",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "labelKey": "shop.kiosk",
+      "currencyKey": "shop.gold",
+      "messageKeys": {
+        "bought": "shop.feedback.bought",
+        "sold": "shop.feedback.sold",
+        "selectItem": "shop.feedback.selectItem",
+        "unavailable": "shop.feedback.unavailable",
+        "invalidAmount": "shop.feedback.invalidAmount",
+        "insufficientPlayerFunds": "shop.feedback.insufficientPlayerFunds",
+        "insufficientMerchantFunds": "shop.feedback.insufficientMerchantFunds",
+        "equipped": "shop.feedback.equipped",
+        "containerNotEmpty": "shop.feedback.containerNotEmpty",
+        "wrongOwner": "shop.feedback.wrongOwner",
+        "unsupportedState": "shop.feedback.unsupportedState",
+        "stale": "shop.feedback.stale"
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "action": {
+            "type": "shop-action",
+            "shop": "shop",
+            "operation": "buy"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          },
+          "labelKey": "shop.buy"
+        },
+        "2": {
+          "action": {
+            "type": "shop-action",
+            "shop": "shop",
+            "operation": "sell"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          },
+          "labelKey": "shop.sell"
+        }
+      }
+    },
+    {
+      "id": "return",
+      "type": "button",
+      "action": {
+        "type": "enter-scene",
+        "scene": "standard"
+      },
+      "placement": {
+        "row": 12,
+        "column": 1,
+        "rowSpan": 1,
+        "columnSpan": 12
+      },
+      "labelKey": "shop.leave"
+    }
+  ],
+  "titleKey": "shop.title"
+}

@@ -18,6 +18,7 @@ import type {
   StatusPanelComponentDefinition,
   ItemDetailsComponentDefinition,
   EquipmentComponentDefinition,
+  ShopComponentDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -33,6 +34,7 @@ import {
   statusPanelIssues,
   localizeInventory,
   equipmentIssues,
+  shopIssues,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
@@ -71,6 +73,7 @@ export type SceneComponentData =
   | StatusPanelComponentDefinition
   | ItemDetailsComponentDefinition
   | EquipmentComponentDefinition
+  | ShopComponentDefinition
 
 export type GraphicComponentData = GraphicComponentDefinition
 
@@ -204,6 +207,36 @@ export function assembleGameData(
         grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
       },
       components: scene.components.map((component) => {
+        if (component.type === 'shop')
+          return {
+            ...component,
+            placement: { ...component.placement },
+            messages: { ...component.messages },
+            messageKeys: { ...component.messageKeys },
+            playerBalance: { ...component.playerBalance, path: [...component.playerBalance.path] },
+            merchantFunds:
+              component.merchantFunds.type === 'finite'
+                ? {
+                    ...component.merchantFunds,
+                    balance: {
+                      ...component.merchantFunds.balance,
+                      path: [...component.merchantFunds.balance.path],
+                    },
+                  }
+                : { ...component.merchantFunds },
+            prices: Object.fromEntries(
+              Object.entries(component.prices).map(([type, prices]) => [
+                type,
+                Object.fromEntries(
+                  Object.entries(prices).map(([operation, value]) => [
+                    operation,
+                    typeof value === 'object' ? { ...value, path: [...value.path] } : value,
+                  ]),
+                ),
+              ]),
+            ),
+          }
+
         if (component.type === 'equipment')
           return {
             ...component,
@@ -350,6 +383,12 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'shop') {
+        const issue = shopIssues(component, inventory, validated?.rules)[0]
+
+        if (issue) throw new Error(`Scene ${scene.id}, shop ${component.id}: ${issue.message}`)
+      }
+
       if (component.type === 'equipment') {
         const issue = equipmentIssues(component, inventory)[0]
 

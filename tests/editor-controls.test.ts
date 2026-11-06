@@ -23,6 +23,7 @@ import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.js'
 import { bindItemEditor } from '../apps/editor-ui/src/itemEditor.js'
+import { bindShopEditor } from '../apps/editor-ui/src/shopEditor.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -337,6 +338,96 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors shop participants and prices, preserves conflicting drafts, and binds trade shortcuts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [
+        { path: ['gold'], value: 20 },
+        { path: ['merchantGold'], value: 10 },
+      ],
+      actions: {},
+    }
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { coat: { label: 'Coat' } },
+      owners: { player: { label: 'Player' }, merchant: { label: 'Merchant' } },
+      items: {},
+    })
+    const editor = bindShopEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    click('Add shop')
+    edit('Shop title', 'A shop draft')
+    edit('Merchant funds policy', 'finite')
+    edit('Merchant balance field', JSON.stringify({ source: 'game.state', path: ['merchantGold'] }))
+    click('Add prices')
+    edit('buy amount', '7')
+    edit('sell price source', 'fixed')
+    edit('sell amount', '4')
+    edit('bought feedback', 'Acquired {item}.')
+    edit('Shop game scene', 'other')
+    expect(field('Shop game scene').value).toBe('shop')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, conflict: true, preserveDrafts: true },
+      false,
+    )
+    expect(field('Shop title').value).toBe('A shop draft')
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'unrelated' },
+        lastCommand: 'game.updateRules',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(field('buy amount').value).toBe('7')
+    submit('Save shop')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.upsertShop',
+      component: {
+        label: 'A shop draft',
+        merchantFunds: { type: 'finite' },
+        prices: { coat: { buy: 7, sell: 4 } },
+        messages: { bought: 'Acquired {item}.' },
+      },
+      panels: [
+        expect.objectContaining({ owners: ['player'], readOnly: true }),
+        expect.objectContaining({ owners: ['merchant'], readOnly: true }),
+      ],
+    })
+    const saved = commands[0]!
+
+    if (saved.type !== 'scene.upsertShop') throw new Error('Expected shop')
+    view.scenes[0]!.components.push(saved.component, ...(saved.panels ?? []))
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'saved' },
+        lastCommand: 'scene.upsertShop',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(editor.hasDrafts()).toBe(false)
+    bindActionBarPanel(root.asElement(), (command) => commands.push(command)).render(
+      { ...initial, view },
+      true,
+    )
+    edit('Action type', 'shop-action')
+    edit('Slot label', 'Buy')
+    edit('Shop', saved.component.id)
+    edit('Trade operation', 'buy')
+    submit('Save action bar')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': { action: { type: 'shop-action', shop: saved.component.id, operation: 'buy' } },
+        },
+      },
+    })
+  })
   it('authors item properties and linked equipment views while retaining conflicting drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)

@@ -127,7 +127,11 @@ export function editControls(
                 inventory: action.type === 'inventory-action' ? action.inventory : undefined,
                 nearby: action.type === 'nearby-action' ? action.nearby : undefined,
                 equipment: action.type === 'equipment-action' ? action.equipment : undefined,
-                operation: action.type === 'equipment-action' ? action.operation : undefined,
+                operation:
+                  action.type === 'equipment-action' || action.type === 'shop-action'
+                    ? action.operation
+                    : undefined,
+                shop: action.type === 'shop-action' ? action.shop : undefined,
                 mapView: action.type === 'move-map' ? action.mapView : undefined,
                 direction: action.type === 'move-map' ? action.direction : undefined,
                 enabledWhen: action.type === 'request-action' ? action.enabledWhen : undefined,

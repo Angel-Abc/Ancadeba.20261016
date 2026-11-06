@@ -112,6 +112,11 @@ export class GameBindings implements IGameBindings {
     }
   }
 
+  /** Runtime-owned transactions invalidate readers only after every write is committed. */
+  invalidate(): void {
+    this.notify()
+  }
+
   dispose(): void {
     this.roots = undefined
     this.subscribers.clear()

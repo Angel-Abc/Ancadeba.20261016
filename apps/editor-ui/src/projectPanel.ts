@@ -9,6 +9,7 @@ import { bindRulesPanel } from './rulesPanel.js'
 import { bindActionBarPanel } from './actionBarPanel.js'
 import { bindStatusPanelEditor } from './statusPanelEditor.js'
 import { bindItemEditor } from './itemEditor.js'
+import { bindShopEditor } from './shopEditor.js'
 import {
   buildProjectTree,
   flattenProjectTree,
@@ -162,6 +163,8 @@ export function bindProjectPanel(
   let statusPanel: ReturnType<typeof bindStatusPanelEditor> | undefined
   const itemElement = treeElement && root.querySelector<HTMLElement>('#item-editor')
   let itemEditor: ReturnType<typeof bindItemEditor> | undefined
+  const shopElement = treeElement && root.querySelector<HTMLElement>('#shop-editor')
+  let shopEditor: ReturnType<typeof bindShopEditor> | undefined
 
   const sections = [
     ...projectTreeSections,
@@ -171,6 +174,7 @@ export function bindProjectPanel(
       : []),
     ...(statusPanelElement ? [{ id: 'status', labelKey: 'status.heading', nodes: () => [] }] : []),
     ...(itemElement ? [{ id: 'items', labelKey: 'items.heading', nodes: () => [] }] : []),
+    ...(shopElement ? [{ id: 'shops', labelKey: 'shops.heading', nodes: () => [] }] : []),
     ...additionalSections,
   ]
 
@@ -190,6 +194,7 @@ export function bindProjectPanel(
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
 
     const actionBar = Boolean(actionBarElement && component?.type === 'action-bar')
+    const shopComponent = Boolean(shopElement && component?.type === 'shop')
     const statusComponent = Boolean(statusPanelElement && component?.type === 'status-panel')
 
     const itemComponent = Boolean(
@@ -213,6 +218,10 @@ export function bindProjectPanel(
     if (statusPanelElement)
       statusPanelElement.hidden = node.section !== 'status' && !statusComponent
 
+    if (shopElement) shopElement.hidden = node.section !== 'shops' && !shopComponent
+
+    if (shopComponent) shopEditor?.navigate(sceneId)
+
     if (itemElement) itemElement.hidden = node.section !== 'items' && !itemComponent
 
     if (itemComponent) itemEditor?.navigate(sceneId, component?.id)
@@ -225,7 +234,9 @@ export function bindProjectPanel(
       node.kind !== 'component' ||
       graphic ||
       actionBar ||
-      statusComponent
+      statusComponent ||
+      itemComponent ||
+      shopComponent
     find('component-json').textContent =
       component && !graphic ? JSON.stringify(component, null, 2) : ''
     find('workspace-heading').textContent =
@@ -289,6 +300,14 @@ export function bindProjectPanel(
                 ['item-details', 'equipment', 'inventory'].includes(component.type),
             ))) &&
         !itemEditor?.navigate(sceneId, node.section === 'scenes' ? node.id : undefined)) ||
+      ((node.section === 'shops' ||
+        (node.section === 'scenes' &&
+          view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.some(
+              (component) => component.id === node.id && component.type === 'shop',
+            ))) &&
+        !shopEditor?.navigate(sceneId)) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
       (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
       (usesStatusPanel &&
@@ -345,6 +364,7 @@ export function bindProjectPanel(
     actionBarPanel?.render(state, replaceFields)
     statusPanel?.render(state, replaceFields)
     itemEditor?.render(state, replaceFields)
+    shopEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -357,6 +377,8 @@ export function bindProjectPanel(
         state.lastCommand === 'inventory.setRuleInspection' ||
         state.lastCommand === 'inventory.setItemActions' ||
         state.lastCommand === 'scene.upsertNearby' ||
+        state.lastCommand === 'scene.upsertShop' ||
+        state.lastCommand === 'scene.removeShop' ||
         state.lastCommand === 'inventory.setItemPresentation' ||
         state.lastCommand === 'inventory.setEquipmentSlots' ||
         state.lastCommand === 'scene.setInventoryDetails' ||
@@ -543,6 +565,11 @@ export function bindProjectPanel(
       void controller.save(command)
     })
 
+  if (shopElement)
+    shopEditor = bindShopEditor(shopElement, (command) => {
+      void controller.save(command)
+    })
+
   if (itemElement)
     itemEditor = bindItemEditor(itemElement, (command) => {
       void controller.save(command)
@@ -612,7 +639,8 @@ export function bindProjectPanel(
       rulesPanel?.hasDrafts() ||
       actionBarPanel?.hasDrafts() ||
       statusPanel?.hasDrafts() ||
-      itemEditor?.hasDrafts(),
+      itemEditor?.hasDrafts() ||
+      shopEditor?.hasDrafts(),
     )
 
   on(reload, 'click', () => {

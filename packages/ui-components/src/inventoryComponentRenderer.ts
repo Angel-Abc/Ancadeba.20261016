@@ -38,6 +38,13 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     const scene = context.scene
     const actionBar = scene?.type === 'game' ? scene.game.actionBar : undefined
     const selection = scene?.type === 'game' ? scene.game.inventorySelection : undefined
+    const trading = scene?.type === 'game' ? scene.game.trading : undefined
+
+    const shop = scene?.data.components.find(
+      (entry) =>
+        entry.type === 'shop' &&
+        [entry.playerInventory, entry.merchantInventory].includes(component.id),
+    )
 
     const contextual = Boolean(
       selection ||
@@ -134,6 +141,29 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     let destinations: Destination[] = []
     const buttons = new Map<string, HTMLButtonElement>()
     const inspectionDetails = new Map<HTMLElement, GameBindingDefinition>()
+    const priceBadges = new Map<HTMLElement, string>()
+
+    const updatePrices = () => {
+      if (!scene || shop?.type !== 'shop') return
+
+      for (const [badge, item] of priceBadges) {
+        const quote = trading?.quoteItem(
+          scene,
+          shop.id,
+          item,
+          shop.playerInventory === component.id ? 'sell' : 'buy',
+        )
+
+        const label =
+          quote?.amount === undefined
+            ? shop.messages[quote?.reason ?? 'unavailable']
+            : `${quote.amount} ${shop.currency}`
+
+        badge.textContent = quote?.amount === undefined ? '—' : label
+        badge.title = label
+        badge.setAttribute('aria-label', label)
+      }
+    }
 
     const updateInspections = () => {
       for (const [details, binding] of inspectionDetails) {
@@ -210,6 +240,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
       buttons.clear()
       inspectionDetails.clear()
+      priceBadges.clear()
 
       const itemRow = (item: InventoryItemSnapshot, path: string): HTMLLIElement => {
         const type = definition.itemTypes[item.itemType]!
@@ -243,6 +274,13 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         }
 
         const icon = type.icon && inventoryIcon(assets, type.icon)
+
+        if (shop) {
+          const badge = document.createElement('span')
+          badge.className = 'ancadeba-shop-price'
+          priceBadges.set(badge, item.id)
+          line.append(badge)
+        }
 
         if (icon && type.icon) {
           let graphic = icons.get(item.id)
@@ -396,6 +434,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
       owners.replaceChildren(...sections)
       updateInspections()
+      updatePrices()
       selectionChoices = choices
 
       if (selected !== undefined && !buttons.has(selected)) selected = undefined
@@ -423,6 +462,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
     update()
     const unsubscribe = inventory.subscribeChanges(update)
+    const unsubscribePrices = shop ? trading?.subscribeChanges(updatePrices) : undefined
 
     const unsubscribeContext = contextual
       ? (selection?.subscribe(() => syncSelection(selectionChoices)) ??
@@ -439,6 +479,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
       element: root,
       dispose() {
         unsubscribe()
+        unsubscribePrices?.()
         unsubscribeContext?.()
         unsubscribeInspections?.()
         inspectionDetails.clear()

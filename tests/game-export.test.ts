@@ -215,6 +215,29 @@ describe('standalone game export', () => {
         expect(
           game.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!.placement,
         ).toEqual({ type: 'carried', owner: 'wayfarer' })
+        engine.lifecycle!.enterScene('shop')
+        const shop = engine.lifecycle!.activeScene!
+        const before = game.inventory!.snapshot.find((item) => item.id === 'royal-cloak')!
+        game.inventorySelection!.select(shop, 'merchant-items', 'royal-cloak')
+        engine.input!.pressKey('KeyE')
+        engine.input!.releaseKey('KeyE')
+
+        for (let i = 0; i < 4; i++) engine.flushMessages()
+        expect(game.inventory!.snapshot.find((item) => item.id === 'royal-cloak')).toEqual({
+          ...before,
+          placement: { type: 'carried', owner: 'wayfarer' },
+        })
+        expect(game.bindings!.read({ source: 'game.state', path: ['coins'] })).toMatchObject({
+          value: 15,
+        })
+        game.inventorySelection!.select(shop, 'player-items', 'royal-cloak')
+        game.actionBar!.activate(shop, 'commands', '2')
+        expect(game.inventory!.snapshot.find((item) => item.id === 'royal-cloak')!.colors).toEqual(
+          before.colors,
+        )
+        expect(game.bindings!.read({ source: 'game.state', path: ['coins'] })).toMatchObject({
+          value: 24,
+        })
       } finally {
         engine.stop()
       }

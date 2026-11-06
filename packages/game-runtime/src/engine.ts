@@ -15,10 +15,12 @@ import { GameLifecycle, type GameInstance, type IGameLifecycle } from './gameLif
 import { GameActionRuntime } from './gameActionRuntime.js'
 import { GameMessageScopes } from './gameMessageScope.js'
 import { AuthoredPlaythrough } from './authoredRules.js'
+import type { ITradeState } from './tradeState.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
 export interface EngineRuntimeServices {
+  readonly createTradeState?: (game: GameInstance) => ITradeState | undefined
   readonly createGameRules?: GameRulesFactory
   /** Return a fresh lifecycle for each loaded engine session. */
   readonly createGameLifecycle?: (game: GameData) => IGameLifecycle | undefined
@@ -245,6 +247,7 @@ export class Engine implements IEngine {
           () => ++session.nextTimerId,
           () => session.gameRuntimes.delete(instance),
           lifecycle,
+          playthrough?.tradeState ?? this.runtime.createTradeState?.(instance),
         )
 
         session.gameRuntimes.set(instance, runtime)

@@ -1,0 +1,25 @@
+{
+  "state": [
+    {
+      "path": ["merchantGold"],
+      "value": 20
+    },
+    {
+      "path": ["postcardPrice"],
+      "value": 5
+    }
+  ],
+  "actions": {
+    "visit-shop": [
+      {
+        "when": [],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "shop"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -10,6 +10,7 @@ import { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
 import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import { ItemDetailsComponentRenderer } from './itemDetailsComponentRenderer.js'
 import { EquipmentComponentRenderer } from './equipmentComponentRenderer.js'
+import { ShopComponentRenderer } from './shopComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -33,12 +34,15 @@ export class ComponentRenderer implements IComponentRenderer {
       'status-panel': new StatusPanelComponentRenderer(),
       'item-details': new ItemDetailsComponentRenderer(),
       equipment: new EquipmentComponentRenderer(),
+      shop: new ShopComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'shop':
+        return this.renderers.shop.render(component, context)
       case 'item-details':
         return this.renderers['item-details'].render(component, context)
       case 'equipment':

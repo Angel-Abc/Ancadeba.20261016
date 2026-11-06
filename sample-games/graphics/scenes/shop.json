@@ -1,0 +1,157 @@
+{
+  "schema-version": "1.0.0",
+  "id": "shop",
+  "title": "Shop",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "narrative",
+      "type": "text",
+      "text": "Select an item to see its details and price. Purchases and sales are immediate.",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "player-items",
+      "type": "inventory",
+      "label": "Your items",
+      "owners": ["wayfarer"],
+      "readOnly": true,
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 5,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "merchant-items",
+      "type": "inventory",
+      "label": "Merchant stock",
+      "owners": ["ranger"],
+      "readOnly": true,
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 3,
+        "column": 4,
+        "rowSpan": 5,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "shop",
+      "type": "shop",
+      "label": "Ranger shop",
+      "playerInventory": "player-items",
+      "merchantInventory": "merchant-items",
+      "currency": "Coins",
+      "playerBalance": {
+        "source": "game.state",
+        "path": ["coins"]
+      },
+      "merchantFunds": {
+        "type": "unlimited"
+      },
+      "prices": {
+        "cloak": {
+          "buy": 15,
+          "sell": 9
+        }
+      },
+      "feedbackTarget": "narrative",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Buy",
+          "action": {
+            "type": "shop-action",
+            "shop": "shop",
+            "operation": "buy"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "buy"
+          }
+        },
+        "2": {
+          "label": "Sell",
+          "action": {
+            "type": "shop-action",
+            "shop": "shop",
+            "operation": "sell"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "sell"
+          }
+        }
+      }
+    },
+    {
+      "id": "return",
+      "type": "button",
+      "label": "Leave shop",
+      "action": {
+        "type": "enter-scene",
+        "scene": "wardrobe"
+      },
+      "placement": {
+        "row": 12,
+        "column": 1,
+        "rowSpan": 1,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "player-details",
+      "type": "item-details",
+      "label": "Your selected item",
+      "inventory": "player-items",
+      "placement": {
+        "row": 1,
+        "column": 7,
+        "rowSpan": 7,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "merchant-details",
+      "type": "item-details",
+      "label": "Stock details",
+      "inventory": "merchant-items",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 7,
+        "columnSpan": 3
+      }
+    }
+  ]
+}

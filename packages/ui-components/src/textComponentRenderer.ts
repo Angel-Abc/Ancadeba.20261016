@@ -29,6 +29,11 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     let latest: TextResolution = { text: component.text, diagnostics: [] }
     const scene = context.scene
     const nearby = scene?.type === 'game' ? scene.game.nearby : undefined
+    const trading = scene?.type === 'game' ? scene.game.trading : undefined
+
+    const shop = scene?.data.components.find(
+      (entry) => entry.type === 'shop' && entry.feedbackTarget === component.id,
+    )
 
     const panel = scene?.data.components.find(
       (entry) => entry.type === 'nearby' && entry.descriptionTarget === component.id,
@@ -66,7 +71,13 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
         ? inventoryPanels.map((panel) => itemDetailsText(selectedItemDetails(scene, panel.id)))
         : []
 
-      element.textContent = [text, entry?.label, entry?.description, ...items]
+      element.textContent = [
+        text,
+        entry?.label,
+        entry?.description,
+        ...items,
+        shop && scene ? trading?.feedback(scene, shop.id) : '',
+      ]
         .filter(Boolean)
         .join('\n\n')
 
@@ -92,6 +103,12 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
       }
 
       if (panel) unsubscribeSelection = nearby?.subscribeChanges(() => updateText(latest))
+
+      if (shop) {
+        const unsubscribe = trading?.subscribeChanges(() => updateText(latest))
+
+        if (unsubscribe) cleanups.push(unsubscribe)
+      }
 
       if (inventoryPanels.length && scene?.type === 'game') {
         const selection = scene.game.inventorySelection?.subscribe(() => updateText(latest))

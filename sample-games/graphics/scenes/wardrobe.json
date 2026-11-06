@@ -125,6 +125,13 @@
             "context": "wardrobe",
             "input": "unequip"
           }
+        },
+        "3": {
+          "label": "Visit the ranger shop",
+          "action": {
+            "type": "enter-scene",
+            "scene": "shop"
+          }
         }
       }
     }

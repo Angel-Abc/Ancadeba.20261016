@@ -76,13 +76,15 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         button.className = 'ancadeba-button ancadeba-action-bar-button'
         button.dataset.actionBarSlot = id
         button.dataset.slotAction =
-          slot.action.type === 'equipment-action'
-            ? `${slot.action.equipment}:${slot.action.operation}`
-            : slot.action.type === 'move-map'
-              ? `${slot.action.mapView}:${slot.action.direction}`
-              : 'action' in slot.action
-                ? slot.action.action
-                : slot.action.scene
+          slot.action.type === 'shop-action'
+            ? `${slot.action.shop}:${slot.action.operation}`
+            : slot.action.type === 'equipment-action'
+              ? `${slot.action.equipment}:${slot.action.operation}`
+              : slot.action.type === 'move-map'
+                ? `${slot.action.mapView}:${slot.action.direction}`
+                : 'action' in slot.action
+                  ? slot.action.action
+                  : slot.action.scene
         const label = document.createElement('span')
         label.textContent = slot.label
         const badge = document.createElement('kbd')

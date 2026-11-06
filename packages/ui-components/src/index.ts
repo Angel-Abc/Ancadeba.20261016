@@ -40,3 +40,5 @@ export * from './graphicComponentRenderer.js'
 export * from './itemDetailsComponentRenderer.js'
 
 export * from './equipmentComponentRenderer.js'
+
+export * from './shopComponentRenderer.js'

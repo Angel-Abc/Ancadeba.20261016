@@ -1842,6 +1842,63 @@ describe.each([
 
 describe('editor scene picker', () => {
   it.each([false, true])(
+    'trades with synchronized quotes, details and localized feedback in preview=%s',
+    async (preview) => {
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        loader,
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.lifecycle!.enterScene('shop')
+      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+
+      const item = (panel: string, id: string) =>
+        component(panel).find((node) => node.dataset.itemId === id)!
+
+      const slot = (id: string) =>
+        component('commands').find((node) => node.dataset.actionBarSlot === id)!
+
+      expect(component('shop').textContent).toContain('12 Gold')
+      expect(component('merchant-items').textContent).toContain('5 Gold')
+      expect(slot('1').disabled).toBe(true)
+      const stock = item('merchant-items', 'postcard-one')
+      stock.focus()
+      stock.dispatchEvent(new Event('click'))
+      expect(component('narrative').textContent).toContain('A small postcard')
+      expect(slot('1').disabled).toBe(false)
+      engine.input!.pressKey('KeyQ')
+      engine.input!.releaseKey('KeyQ')
+      flush(engine)
+      expect(component('shop').textContent).toContain('7 Gold')
+      expect(component('narrative').textContent).toContain('Bought Museum postcard for 5 Gold.')
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      expect(slot('1').disabled).toBe(true)
+      item('player-items', 'postcard-one').dispatchEvent(new Event('click'))
+      expect(slot('2').disabled).toBe(false)
+      engine.game!.localization!.select('nl')
+      expect(component('shop').textContent).toContain('7 Goud')
+      expect(component('narrative').textContent).toContain('Museumkaart gekocht voor 5 Goud.')
+      slot('2').dispatchEvent(new Event('click'))
+      expect(component('shop').textContent).toContain('10 Goud')
+      expect(component('narrative').textContent).toContain('Museumkaart verkocht voor 3 Goud.')
+      expect(item('merchant-items', 'postcard-one')).toBeDefined()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('shop')
+      expect(component('shop').textContent).toContain('12 Goud')
+      engine.stop()
+      expect(target.children).toHaveLength(0)
+    },
+  )
+  it.each([false, true])(
     'synchronizes details, equipment, paper dolls, and keyboard commands in preview=%s',
     async (preview) => {
       const document = new TestDocument()

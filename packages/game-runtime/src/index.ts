@@ -54,6 +54,8 @@ export {
 
 export type { IGameInventory, InventoryItemSnapshot, InventoryMoveResult } from './inventory.js'
 
+export type { PreparedInventoryTransfer } from './inventory.js'
+
 export { GameInventory } from './inventory.js'
 
 export {
@@ -129,3 +131,7 @@ export * from './inventoryContext.js'
 export * from './equipment.js'
 
 export * from './itemDetails.js'
+
+export * from './tradeState.js'
+
+export * from './trading.js'

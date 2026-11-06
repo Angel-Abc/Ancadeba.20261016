@@ -7,6 +7,8 @@ import { GameMapMovement } from './mapMovement.js'
 import { GameNearbyContext } from './nearbyContext.js'
 import { GameInventoryContext } from './inventoryContext.js'
 import { GameEquipment } from './equipment.js'
+import { GameTrading } from './trading.js'
+import type { ITradeState } from './tradeState.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
@@ -20,6 +22,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly nearby: GameNearbyContext | undefined
   readonly inventorySelection: GameInventoryContext | undefined
   readonly equipment: GameEquipment | undefined
+  readonly trading: GameTrading | undefined
   private readonly timers: TimerService
   private started = false
   private disposed = false
@@ -36,6 +39,7 @@ export class GameActionRuntime implements IGameRuntime {
     allocateTimerId: () => TimerId,
     private readonly onDispose: () => void,
     lifecycle?: IGameLifecycle,
+    tradeState?: ITradeState,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
     this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
@@ -51,6 +55,17 @@ export class GameActionRuntime implements IGameRuntime {
       lifecycle && this.inventorySelection
         ? new GameEquipment(lifecycle, this.inventorySelection, game.inventory)
         : undefined
+    this.trading =
+      lifecycle && this.inventorySelection
+        ? new GameTrading(
+            lifecycle,
+            this.inventorySelection,
+            game.inventory,
+            this.bindings,
+            tradeState,
+            () => this.bindings.invalidate(),
+          )
+        : undefined
     this.actionBar = lifecycle
       ? new GameActionBar(
           lifecycle,
@@ -59,6 +74,7 @@ export class GameActionRuntime implements IGameRuntime {
           this.nearby,
           this.inventorySelection,
           this.equipment,
+          this.trading,
         )
       : undefined
 
@@ -74,6 +90,7 @@ export class GameActionRuntime implements IGameRuntime {
       )
     } catch (error) {
       this.actionBar?.dispose()
+      this.trading?.dispose()
       this.equipment?.dispose()
       this.inventorySelection?.dispose()
       this.nearby?.dispose()
@@ -96,6 +113,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed) return
     this.disposed = true
     this.actionBar?.dispose()
+    this.trading?.dispose()
     this.equipment?.dispose()
     this.inventorySelection?.dispose()
     this.nearby?.dispose()

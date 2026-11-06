@@ -410,3 +410,90 @@ The basic sample demonstrates localized main-text details. The graphics sample's
 wardrobe demonstrates larger artwork, two dyed cloaks for replacement, paper-doll
 updates, and Q/W equipment commands. Saves use the shared revision checks;
 conflicts and unrelated saves preserve item drafts until saved or discarded.
+
+## Shops and trading
+
+Choose **Shops & trading**, select a game scene, and add a shop. Choose the player
+and merchant inventory owners and their panel IDs, labels, and placements. Saving
+also saves these two panels as read-only, single-owner inventories. They retain
+item selection and custom item actions, but do not expose free Move controls.
+Each scene supports one shop, with distinct participant owners.
+
+Choose a declared numeric **Player balance field** such as `player.gold`, a
+currency label or translation, and either finite merchant funds with a different
+balance field or unlimited funds. Each shop uses one currency; other shops may
+use different currencies and balance fields. Balances and prices use nonnegative
+safe integers, including zero. Missing or invalid amounts never fall back to a
+binding's text fallback.
+
+Add explicit buy and/or sell prices per item type. Each direction can be disabled,
+fixed, or bound to an existing numeric field. Display properties such as Value do
+not set prices. An item without a price for its direction remains inspectable and
+shows an unavailable price badge. The quote explains affordability and eligibility.
+Existing catalog artwork and instance dyes remain available in item-details views.
+
+```json
+{
+  "id": "shop",
+  "type": "shop",
+  "placement": { "row": 8, "column": 1, "rowSpan": 2, "columnSpan": 12 },
+  "playerInventory": "player-items",
+  "merchantInventory": "merchant-items",
+  "currency": "Gold",
+  "playerBalance": { "source": "game.state", "path": ["player", "gold"] },
+  "merchantFunds": {
+    "type": "finite",
+    "balance": { "source": "game.state", "path": ["merchantGold"] }
+  },
+  "prices": { "postcard": { "buy": 5, "sell": 3 } },
+  "feedbackTarget": "narrative"
+}
+```
+
+In **Action bar & input**, choose **Shop command**, its shop, and Buy or Sell.
+Use the game's existing input mappings or leave commands click-only. Selecting
+an item clears the other shop panel's selection, giving one active quote. Each
+successful command trades one existing instance, clears the selection, and does
+not advance turns or game time. Stock is finite. Sold items become merchant stock
+and can be bought again if their item type has a buy price.
+
+Items inside owned containers can be traded individually. Equipped items must
+first be unequipped, and containers must be empty. Ownership and all payments
+commit together; rejected trades change neither. Unlimited merchants change only
+the player's balance. Observer failures occur after the complete commit and do
+not cause a retry. Queued shortcuts retain their original scene, selected item,
+ownership, and price rather than following later changes.
+
+Shop messages can be customized and translated in **Trade feedback and
+translations**, using `{item}`, `{price}`, and `{currency}` tokens. Templates and
+item labels render as literal text. The shop always shows feedback and can append
+its latest result to an existing main-text component without replacing item,
+nearby, or inspection sections. Shop feedback resets on scene changes; ownership
+and balances persist until New Game. Revision conflicts and unrelated saves
+preserve dirty shop drafts. Removing referenced shops, owners, item types, or
+numeric fields produces validation errors.
+
+The basic sample's museum kiosk uses the same `player.gold` field as its status
+panel, a finite merchant wallet, and Q/W trade commands. Select the kiosk in the
+museum's Nearby panel and use Visit shop. The graphics wardrobe links to a ranger
+shop with unlimited merchant funds, E/R commands, dyed stock, and larger artwork.
+
+### Code-hosted games
+
+`game.trading` exposes selection snapshots, quotes, eligibility checks, trades,
+feedback, and change subscriptions. Authored rule games automatically receive a
+transaction adapter for their declared numeric Map fields. Bindings remain
+read-only. A custom host supplies `EngineRuntimeServices.createTradeState(game)`
+returning `ITradeState`; `MapTradeState` is available for Map-backed hosts. The
+shop's numeric fields must still be declared in its rule data for validation.
+
+Adapter `prepare(writes)` must validate the whole batch without mutation or
+notifications, returning `undefined` when unsupported. A prepared batch exposes
+`isCurrent()` and a synchronous, infallible `commit()` that invokes no observers.
+The runtime revalidates before committing both prepared state writes and the
+prepared inventory transfer, then invalidates bindings and notifies views. Custom
+inventory implementations may supply `prepareTransfer` with the same preparation
+and commit guarantees. Without supported adapters, trade commands are disabled.
+
+V1 excludes baskets, barter, quantities, generated or replenishing stock, pricing
+formulas, haggling, currency conversion, buyback history, and trade time costs.

@@ -64,6 +64,11 @@ export function actionBarForm(
       .find((scene) => scene.id === sceneId)
       ?.components.filter((component) => component.type === 'nearby') ?? []
 
+  const shops =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter((component) => component.type === 'shop') ?? []
+
   const equipmentViews =
     view.scenes
       .find((scene) => scene.id === sceneId)
@@ -91,6 +96,7 @@ export function actionBarForm(
         ['nearby-action', 'Selected nearby target'],
         ['move-map', 'Move on map'],
         ['equipment-action', 'Equipment command'],
+        ['shop-action', 'Shop command'],
       ],
       (type) =>
         change(() => {
@@ -103,20 +109,22 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'equipment-action'
-                ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
-                : type === 'move-map'
-                  ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                  : type === 'nearby-action'
-                    ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                    : type === 'inventory-action'
-                      ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                      : type === 'request-action'
-                        ? { type, action: actions[0] ?? '' }
-                        : {
-                            type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                            scene: gameScenes[0] ?? '',
-                          },
+              type === 'shop-action'
+                ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
+                : type === 'equipment-action'
+                  ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
+                  : type === 'move-map'
+                    ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                    : type === 'nearby-action'
+                      ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                      : type === 'inventory-action'
+                        ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                        : type === 'request-action'
+                          ? { type, action: actions[0] ?? '' }
+                          : {
+                              type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                              scene: gameScenes[0] ?? '',
+                            },
           }
         }),
     ),
@@ -139,7 +147,21 @@ export function actionBarForm(
     )
     const action = slot.action
 
-    if (action.type === 'equipment-action') {
+    if (action.type === 'shop-action') {
+      detail.append(
+        select(
+          'Shop',
+          action.shop,
+          shops.map((shop) => shop.id),
+          (value) => {
+            action.shop = value
+          },
+        ),
+        select('Trade operation', action.operation, ['buy', 'sell'], (value) => {
+          action.operation = value
+        }),
+      )
+    } else if (action.type === 'equipment-action') {
       detail.append(
         select(
           'Equipment view',

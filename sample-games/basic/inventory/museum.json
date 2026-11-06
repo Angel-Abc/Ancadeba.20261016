@@ -26,6 +26,18 @@
           "valueKey": "items.document"
         }
       ]
+    },
+    "postcard": {
+      "labelKey": "shop.postcard",
+      "descriptionKey": "shop.postcard.description",
+      "properties": [
+        {
+          "id": "category",
+          "labelKey": "items.category",
+          "valueKey": "shop.souvenir",
+          "value": ""
+        }
+      ]
     }
   },
   "owners": {
@@ -34,6 +46,9 @@
     },
     "lobby": {
       "label": "Museum lobby"
+    },
+    "museum-kiosk": {
+      "label": "Museum kiosk"
     }
   },
   "items": {
@@ -42,6 +57,20 @@
       "placement": {
         "type": "carried",
         "owner": "lobby"
+      }
+    },
+    "postcard-one": {
+      "itemType": "postcard",
+      "placement": {
+        "type": "carried",
+        "owner": "museum-kiosk"
+      }
+    },
+    "postcard-two": {
+      "itemType": "postcard",
+      "placement": {
+        "type": "carried",
+        "owner": "museum-kiosk"
       }
     }
   }

@@ -327,6 +327,7 @@
 }
 
 .ancadeba-item-details,
+.ancadeba-shop,
 .ancadeba-equipment {
   overflow: auto;
   overflow-wrap: anywhere;
@@ -354,6 +355,21 @@
 
 .ancadeba-item-location {
   opacity: 0.75;
+}
+
+.ancadeba-shop-price {
+  display: inline-block;
+  margin-inline-start: 0.5em;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.ancadeba-shop-reason {
+  font-style: italic;
+}
+
+.ancadeba-shop :is(h2, p) {
+  margin-block: 0 0.4em;
 }
 
 .ancadeba-equipment-grid {

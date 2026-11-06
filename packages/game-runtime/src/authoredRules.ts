@@ -9,6 +9,7 @@ import type { ActionOutcome, GameRules } from './actions.js'
 import type { GameData } from './gameData.js'
 import type { GameInstance, IGameLifecycle } from './gameLifecycle.js'
 import type { IGameInventory } from './inventory.js'
+import { MapTradeState } from './tradeState.js'
 
 type Scalar = string | number | boolean
 
@@ -73,6 +74,15 @@ function completeCommittedEffect<T>(
 export class AuthoredPlaythrough {
   readonly state: State = new Map()
   private readonly entries: string[] = []
+
+  get tradeState(): MapTradeState {
+    return new MapTradeState(
+      this.state,
+      this.rules.state
+        .filter((field) => typeof field.value === 'number')
+        .map((field) => field.path),
+    )
+  }
 
   constructor(
     private readonly rules: GameRulesDefinition,
