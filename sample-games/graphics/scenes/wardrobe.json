@@ -132,6 +132,17 @@
             "type": "enter-scene",
             "scene": "shop"
           }
+        },
+        "4": {
+          "label": "Enter training courtyard",
+          "action": {
+            "type": "enter-scene",
+            "scene": "training"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "sell"
+          }
         }
       }
     }

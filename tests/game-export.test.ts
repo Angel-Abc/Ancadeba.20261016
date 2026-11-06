@@ -238,6 +238,25 @@ describe('standalone game export', () => {
         expect(game.bindings!.read({ source: 'game.state', path: ['coins'] })).toMatchObject({
           value: 24,
         })
+        expect(loaded.combat!.get('training')!.seed).toBe(1024)
+        engine.lifecycle!.enterScene('training')
+        const fight = engine.lifecycle!.activeScene!
+        game.combat!.selectTarget(fight, 'combat', 'sentinel')
+
+        for (const code of ['KeyQ', 'KeyW', 'KeyB']) {
+          engine.input!.pressKey(code)
+          engine.input!.releaseKey(code)
+        }
+
+        for (let i = 0; i < 6; i++) engine.flushMessages()
+        expect(game.combat!.snapshot(fight, 'combat')).toMatchObject({ round: 2, remainingAp: 3 })
+        expect(game.combat!.text(fight, 'combat')).toContain('Wayfarer attacks Practice sentinel')
+        const health = game.combat!.snapshot(fight, 'combat')!.health
+        engine.lifecycle!.enterScene('wardrobe')
+        engine.lifecycle!.enterScene('training')
+        expect(game.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!.health).toEqual(
+          health,
+        )
       } finally {
         engine.stop()
       }

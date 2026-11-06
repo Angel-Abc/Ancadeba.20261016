@@ -9,6 +9,7 @@ import {
   type GameRulesDefinition,
   type RuleSource,
   type InputDefinition,
+  type CombatDefinition,
 } from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
@@ -27,6 +28,7 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  combat?: Record<string, CombatDefinition> | undefined
   input?: InputDefinition | undefined
   rules?: GameRulesDefinition | undefined
   ruleFiles?: Record<string, GameRulesDefinition> | undefined

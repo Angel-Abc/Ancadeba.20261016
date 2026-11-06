@@ -1681,6 +1681,89 @@ new authored action text also uses the current language. Existing state and log
 text is retained. The basic sample demonstrates Talk on A, Examine on S, and
 Take on D, using the same configurable input system as other slots.
 
+## Combat encounters
+
+List encounter IDs in `game.json`, for example `"combat": ["training"]`.
+Each resolves to `combat/<id>.json`. Existing projects need no combat files or migration.
+The [basic training encounter](sample-games/basic/combat/training.json) includes
+translated names and combat messages; the graphics sample adds catalog portraits.
+Enter the courtyard from the museum with G, or from the graphics wardrobe with R.
+Both demonstrate QWERT / ASDFG / ZXCVB through their existing input configuration.
+
+An encounter defines `player`, ordered `enemies`, and a `moves` record. Each actor
+has an ID, label or translation key, a declared numeric `game.state` health binding,
+a positive `maximumHealth` (fixed or bound), an AP budget, and available move IDs.
+Enemy `rotation` arrays repeat across rounds, skipping moves that do not fit the
+remaining AP. Actor health fields must be distinct; health must be a safe integer
+between zero and its maximum. Move examples:
+
+```json
+{
+  "attack": { "type": "attack", "label": "Attack", "apCost": 1, "damage": { "min": 3, "max": 6 } },
+  "heavy": {
+    "type": "attack",
+    "label": "Heavy strike",
+    "apCost": 2,
+    "damage": { "min": 8, "max": 12 }
+  },
+  "guard": { "type": "guard", "label": "Guard", "apCost": 1, "guard": 5 }
+}
+```
+
+Add one scene component `{ "id": "combat", "type": "combat", "encounter": "training",
+"placement": { "row": 1, "column": 1 }, "textTarget": "narrative" }`. `textTarget` is
+optional and appends the combat log to that text component alongside other sections.
+The combat view reuses status health bars and catalog portraits, displays each
+actor's AP, guard and plan, and provides native target-selection buttons.
+
+Action-bar slots use `{ "type": "combat-action", "combat": "combat", "command":
+{ "type": "queue-move", "move": "attack" } }`. Other commands are `previous-target`,
+`next-target`, `undo`, `clear`, `escape`, `end-turn`, and `continue`. Configure the
+slot's existing `{ context, input }` binding to choose its keyboard shortcuts;
+click-only slots also work. No combat-specific keyboard listener is added.
+
+Planning reserves AP without advancing time. Repeated moves are allowed, and
+changing targets affects subsequent moves only. End Turn resolves the player
+queue first, followed by surviving enemies in authored order. Attacks always hit;
+inclusive integer damage ranges use the encounter's nonzero 32-bit `seed` and
+roll only during committed resolution. Defeated targets are skipped without a
+roll or retarget. Guard absorbs damage and expires when its owner's next
+resolution turn begins, so enemy guard can protect against the next player plan.
+Resolution stops immediately on victory or defeat.
+
+`allowEscape` enables a whole-plan escape that succeeds on End Turn. Optional
+`outcomes` map `victory`, `defeat`, and `escaped` to scenes; Continue enters that
+destination. Each committed round advances one game turn and applies
+`roundTimeMs` (default zero) through the existing world-time policy. Equipment
+modifiers and game actor-turn coordination remain separate from explicit combat
+move damage. Health, guard, plans, enemy rotation, RNG and bounded logs persist
+through scene changes for the current playthrough. Returning resumes an unfinished
+fight; completed fights stay completed. New Game resets encounters and health.
+
+The shared `game.combat` service provides definitions, immutable snapshots,
+target selection, command eligibility, queued requests, localized log text, and
+change subscriptions. Rapid move inputs followed by End Turn retain their order;
+commands captured for an old target, scene or round are discarded. Occupied slots
+consume all phases even while disabled. Round state, health and progression are
+prepared together and committed before observers run. Rejection consumes no plan
+or RNG, and observer failures retain the committed round without retries.
+
+Authored games receive a numeric state transaction adapter automatically.
+Code-hosted games can supply `EngineRuntimeServices.createStateTransactions`, using
+`MapStateTransactions` or implementing `IStateTransactions`. Preparation must be
+pure; prepared commits must be synchronous, infallible, and invoke no observers.
+Without an adapter, inspection works and combat mutations show an unavailable
+reason. The previous `createTradeState` hook remains compatible.
+
+The editor's **Combat** section configures encounters, actors, health declarations,
+portraits, moves, rotations, seed, time cost, localized messages, outcome scenes,
+and view placement. Declare numeric fields in Rules before linking them. Save
+uses the inspected revision and preserves conflicting or unrelated drafts;
+reference checks protect health declarations, moves, artwork and target scenes.
+Use **Controls → Action bar** for combat commands and their input bindings.
+AP and move costs support 1–100, with up to 32 enemies. V1 has no healing, spells,
+accuracy rolls, critical hits, rewards, equipment calculations or party members.
+
 ## Queued messaging
 
 `@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.

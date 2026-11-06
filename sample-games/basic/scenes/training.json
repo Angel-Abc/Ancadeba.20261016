@@ -1,0 +1,208 @@
+{
+  "schema-version": "1.0.0",
+  "id": "training",
+  "type": "game",
+  "titleKey": "combat.title",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "training",
+      "textTarget": "narrative",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 7,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "narrative",
+      "type": "text",
+      "textKey": "combat.description",
+      "placement": {
+        "row": 8,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 10
+      }
+    },
+    {
+      "id": "pause",
+      "type": "button",
+      "labelKey": "combat.leave",
+      "action": {
+        "type": "enter-scene",
+        "scene": "standard"
+      },
+      "placement": {
+        "row": 8,
+        "column": 11,
+        "rowSpan": 2,
+        "columnSpan": 2
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "labelKey": "combat.attack",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "attack"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "labelKey": "combat.heavy-strike",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "heavy"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "3": {
+          "labelKey": "combat.guard",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "guard"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "4": {
+          "labelKey": "combat.undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "labelKey": "combat.clear-plan",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "6": {
+          "labelKey": "combat.next-target",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "next-target"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        },
+        "7": {
+          "labelKey": "combat.previous-target",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "previous-target"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "8": {
+          "labelKey": "combat.escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "labelKey": "combat.continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "labelKey": "combat.end-turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        }
+      }
+    }
+  ]
+}

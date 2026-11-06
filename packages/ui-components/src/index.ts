@@ -42,3 +42,5 @@ export * from './itemDetailsComponentRenderer.js'
 export * from './equipmentComponentRenderer.js'
 
 export * from './shopComponentRenderer.js'
+
+export * from './combatComponentRenderer.js'

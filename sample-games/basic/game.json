@@ -12,7 +12,8 @@
     "old-harbour",
     "shoals",
     "north-cliff-landing",
-    "shop"
+    "shop",
+    "training"
   ],
   "input": "controls",
   "stylesheet": "museum.css",
@@ -24,5 +25,6 @@
   },
   "maps": ["museum", "harbour"],
   "inventory": ["museum", "harbour"],
-  "rules": ["rules", "museum-puzzle", "harbour-route", "shop"]
+  "rules": ["rules", "museum-puzzle", "harbour-route", "shop", "combat"],
+  "combat": ["training"]
 }

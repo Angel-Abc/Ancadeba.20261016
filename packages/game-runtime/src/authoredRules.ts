@@ -113,7 +113,7 @@ export class AuthoredPlaythrough {
     throw new Error(`Missing default translation: ${textKey}`)
   }
 
-  private updateClock(worldTimeMs: number): void {
+  updateClock(worldTimeMs: number): void {
     const clock = this.rules.clock
 
     if (clock) set(this.state, clock.path, clockText(clock.startMinute, worldTimeMs))

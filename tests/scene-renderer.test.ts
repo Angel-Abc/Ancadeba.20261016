@@ -1842,6 +1842,85 @@ describe.each([
 
 describe('editor scene picker', () => {
   it.each([false, true])(
+    'plans and resolves localized combat with focus recovery in preview=%s',
+    async (preview) => {
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        loader,
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.lifecycle!.enterScene('training')
+      const game = engine.lifecycle!.currentGame!
+      const component = (id: string) => target.find((node) => node.dataset.componentId === id)!
+
+      const slot = (id: string) =>
+        component('commands').find((node) => node.dataset.actionBarSlot === id)!
+
+      const enemy = () =>
+        component('combat').find((node) => node.dataset.combatTarget === 'sentinel')!
+
+      expect(slot('1').disabled).toBe(true)
+      expect(component('combat').textContent).toContain('3–6')
+      expect(component('combat').textContent).toContain('Practice keeper')
+      enemy().dispatchEvent(new Event('click'))
+      expect(slot('1').disabled).toBe(false)
+      slot('1').focus()
+
+      for (const code of ['KeyQ', 'KeyW', 'KeyB']) {
+        engine.input!.pressKey(code)
+        engine.input!.releaseKey(code)
+      }
+
+      flush(engine)
+      const scene = engine.lifecycle!.activeScene!
+      expect(game.combat!.snapshot(scene, 'combat')).toMatchObject({ round: 2, remainingAp: 3 })
+      expect(game.actions!.progression).toEqual({ turn: 1, worldTimeMs: 60000 })
+      expect(game.bindings!.read({ source: 'game.state', path: ['clock'] })).toMatchObject({
+        value: '09:01',
+      })
+      expect(component('narrative').textContent).toContain('Wayfarer attacks Practice sentinel')
+      const saved = game.combat!.snapshot(scene, 'combat')!
+      engine.game!.localization!.select('nl')
+      expect(component('combat').textContent).toContain('Ronde 2')
+      expect(component('narrative').textContent).toContain('Reiziger valt Oefenwachter aan')
+      expect(game.combat!.snapshot(scene, 'combat')!.health).toEqual(saved.health)
+      const oldButton = enemy()
+      slot('8').dispatchEvent(new Event('click'))
+      oldButton.focus()
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(component('combat').textContent).toContain('Gevlucht')
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      slot('14').focus()
+      slot('14').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('standard')
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      engine.lifecycle!.enterScene('training')
+      expect(component('combat').textContent).toContain('Gevlucht')
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('training')
+      expect(game.disposed).toBe(true)
+      expect(component('combat').textContent).toContain('Ronde 1')
+      oldButton.dispatchEvent(new Event('click'))
+      expect(
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+          .target,
+      ).toBeUndefined()
+      engine.stop()
+      expect(target.children).toHaveLength(0)
+    },
+  )
+  it.each([false, true])(
     'trades with synchronized quotes, details and localized feedback in preview=%s',
     async (preview) => {
       const document = new TestDocument()

@@ -21,6 +21,8 @@ import {
   equipmentComponentSchema,
   shopComponentSchema,
   inventoryComponentSchema,
+  combatDefinitionSchema,
+  combatComponentSchema,
 } from '@ancadeba/schemas'
 
 const metadata = {
@@ -167,6 +169,17 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
   }),
+  z.strictObject({
+    type: z.literal('game.upsertCombat'),
+    encounter: combatDefinitionSchema,
+    scene: z.object({ id: gameIdSchema, component: combatComponentSchema }).optional(),
+  }),
+  z.strictObject({ type: z.literal('game.removeCombat'), encounterId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('scene.setCombat'),
+    sceneId: gameIdSchema,
+    component: combatComponentSchema.nullable(),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -201,6 +214,42 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.upsertCombat',
+      example: {
+        type: 'game.upsertCombat',
+        encounter: {
+          'schema-version': '1.0.0',
+          id: 'training',
+          label: 'Training',
+          player: {
+            id: 'player',
+            label: 'Player',
+            health: { source: 'game.state', path: ['health'] },
+            maximumHealth: 40,
+            moves: ['attack'],
+          },
+          enemies: [
+            {
+              id: 'enemy',
+              label: 'Opponent',
+              health: { source: 'game.state', path: ['enemyHealth'] },
+              maximumHealth: 20,
+              moves: ['attack'],
+              rotation: ['attack'],
+            },
+          ],
+          moves: {
+            attack: { type: 'attack', label: 'Attack', apCost: 1, damage: { min: 2, max: 4 } },
+          },
+        },
+      },
+    },
+    { type: 'game.removeCombat', example: { type: 'game.removeCombat', encounterId: 'training' } },
+    {
+      type: 'scene.setCombat',
+      example: { type: 'scene.setCombat', sceneId: 'shop', component: null },
+    },
     {
       type: 'scene.upsertShop',
       example: {

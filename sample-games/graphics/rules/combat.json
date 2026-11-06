@@ -1,0 +1,17 @@
+{
+  "state": [
+    {
+      "path": ["combat", "sentinel"],
+      "value": 18
+    },
+    {
+      "path": ["combat", "keeper"],
+      "value": 22
+    },
+    {
+      "path": ["combat", "player"],
+      "value": 40
+    }
+  ],
+  "actions": {}
+}

@@ -1,6 +1,7 @@
 import type { GameData } from './gameData.js'
 import type { VirtualInput } from './input.js'
 import type { TimerWakeup } from './timers.js'
+import type { CombatCommandRequest } from './combat.js'
 import type {
   ActionRequest,
   ActionApplied,
@@ -17,6 +18,7 @@ import type {
 } from './turns.js'
 
 export interface EngineMessages {
+  'combat.command': CombatCommandRequest
   'turn.started': TurnStarted
   'turn.ended': TurnEnded
   'turn.idle': TurnIdle

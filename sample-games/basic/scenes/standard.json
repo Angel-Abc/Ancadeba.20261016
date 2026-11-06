@@ -373,6 +373,17 @@
             "context": "gameplay",
             "input": "slot-9"
           }
+        },
+        "10": {
+          "labelKey": "combat.visit",
+          "action": {
+            "type": "enter-scene",
+            "scene": "training"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-10"
+          }
         }
       }
     }

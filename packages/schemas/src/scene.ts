@@ -15,12 +15,21 @@ import {
 } from './assets.js'
 import { mapPositionSchema, mapViewportSchema } from './map.js'
 import { inventoryPreviewSchema } from './inventory.js'
+import { combatCommandSchema } from './combat.js'
 
 export const gridPlacementSchema = z.object({
   row: z.number().int().positive(),
   column: z.number().int().positive(),
   rowSpan: z.number().int().positive().default(1),
   columnSpan: z.number().int().positive().default(1),
+})
+
+export const combatComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('combat'),
+  placement: gridPlacementSchema,
+  encounter: gameIdSchema,
+  textTarget: gameIdSchema.optional(),
 })
 
 export const textComponentSchema = z
@@ -108,6 +117,11 @@ export const actionBarSlotSchema = z
         type: z.literal('shop-action'),
         shop: gameIdSchema,
         operation: z.enum(['buy', 'sell']),
+      }),
+      z.object({
+        type: z.literal('combat-action'),
+        combat: gameIdSchema,
+        command: combatCommandSchema,
       }),
     ]),
     inputBinding: z.object({ context: gameIdSchema, input: gameIdSchema }).optional(),
@@ -454,6 +468,7 @@ export type StatusEffectDefinition = z.infer<typeof statusEffectSchema>
 export type StatusValueDefinition = z.infer<typeof statusValueSchema>
 
 export const sceneComponentSchema = z.discriminatedUnion('type', [
+  combatComponentSchema,
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
@@ -506,8 +521,31 @@ export const sceneSchema = z
     const ids = new Set<string>()
     let hasActionBar = false
     let hasShop = false
+    let hasCombat = false
     const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (component.type === 'combat') {
+        if (hasCombat || scene.type !== 'game')
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index],
+            message: 'Allow one combat component per game scene',
+          })
+        hasCombat = true
+
+        if (
+          component.textTarget &&
+          !scene.components.some(
+            (entry) => entry.type === 'text' && entry.id === component.textTarget,
+          )
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'textTarget'],
+            message: 'Select a text component in the same scene',
+          })
+      }
+
       if (component.type === 'shop') {
         if (hasShop || scene.type !== 'game')
           context.addIssue({

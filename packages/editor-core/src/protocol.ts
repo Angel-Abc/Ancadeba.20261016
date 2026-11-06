@@ -7,6 +7,7 @@ import {
   gameRulesSchema,
   gameIdSchema,
   inputSchema,
+  combatDefinitionSchema,
 } from '@ancadeba/schemas'
 
 export const diagnosticSchema = z.object({
@@ -17,6 +18,7 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  combat: z.record(gameIdSchema, combatDefinitionSchema).optional(),
   input: inputSchema.optional(),
   rules: gameRulesSchema.optional(),
   ruleFiles: z.record(gameIdSchema, gameRulesSchema).optional(),

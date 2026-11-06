@@ -10,6 +10,8 @@ import type { EquipmentSelection, IGameEquipment } from './equipment.js'
 import type { IGameMapMovement } from './mapMovement.js'
 import type { IGameNearby, NearbySelection } from './nearbyContext.js'
 import type { IGameTrading, TradeSelection } from './trading.js'
+import type { IGameCombat, CombatCapture } from './combat.js'
+import type { ActionOrigin } from './actions.js'
 
 export interface IGameActionBar {
   getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined
@@ -21,6 +23,7 @@ export interface IGameActionBar {
 }
 
 interface CapturedSlot {
+  readonly combatCapture?: CombatCapture | undefined
   readonly scene: SceneInstance
   readonly bar: string
   readonly slot: string
@@ -48,6 +51,7 @@ export class GameActionBar implements IGameActionBar {
     selection: IGameInventorySelection | undefined = lifecycle.currentGame?.inventorySelection,
     private readonly equipment: IGameEquipment | undefined = lifecycle.currentGame?.equipment,
     private readonly trading: IGameTrading | undefined = lifecycle.currentGame?.trading,
+    private readonly combat: () => IGameCombat | undefined = () => lifecycle.currentGame?.combat,
   ) {
     this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
     this.inventoryContext = selection ?? this.ownedContext!
@@ -67,6 +71,7 @@ export class GameActionBar implements IGameActionBar {
     const nearby = this.nearby?.subscribeChanges(listener)
     const equipment = this.equipment?.subscribe(listener)
     const trading = this.trading?.subscribeChanges(listener)
+    const combat = this.combat()?.subscribeChanges(listener)
 
     return () => {
       inventory()
@@ -74,6 +79,7 @@ export class GameActionBar implements IGameActionBar {
       nearby?.()
       equipment?.()
       trading?.()
+      combat?.()
     }
   }
 
@@ -94,6 +100,7 @@ export class GameActionBar implements IGameActionBar {
   ):
     | {
         definition: ActionBarSlotDefinition
+        combatCapture?: CombatCapture | undefined
         payload?: string
         selection?:
           | InventorySelectionSnapshot
@@ -105,6 +112,16 @@ export class GameActionBar implements IGameActionBar {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'combat-action')
+      return {
+        definition,
+        combatCapture: this.combat()?.capture(
+          scene,
+          definition.action.combat,
+          definition.action.command,
+        ),
+      }
 
     if (definition.action.type === 'shop-action') {
       const selection = this.trading?.getSelection(scene, definition.action.shop)
@@ -177,6 +194,9 @@ export class GameActionBar implements IGameActionBar {
 
     if (!action) return false
 
+    if (action.type === 'combat-action')
+      return this.combat()?.canCommand(scene, action.combat, action.command) ?? false
+
     if (action.type === 'shop-action')
       return Boolean(
         this.trading && this.trading.checkTrade(scene, action.shop, action.operation) === undefined,
@@ -199,12 +219,20 @@ export class GameActionBar implements IGameActionBar {
   }
 
   activate(scene: SceneInstance, bar: string, slot: string): void {
-    this.activateSlot({ scene, bar, slot, selection: this.resolve(scene, bar, slot)?.selection })
+    const resolved = this.resolve(scene, bar, slot)
+    this.activateSlot({
+      scene,
+      bar,
+      slot,
+      selection: resolved?.selection,
+      combatCapture: resolved?.combatCapture,
+    })
   }
 
   private activateSlot(
     target: CapturedSlot,
     request?: (action: string, payload?: unknown) => void,
+    origin: ActionOrigin = { type: 'direct' },
   ): void {
     const { scene, bar, slot } = target
 
@@ -213,6 +241,13 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'combat-action') {
+      if (resolved.combatCapture !== target.combatCapture) return
+      this.combat()?.request(scene, action.combat, action.command, target.combatCapture, origin)
+
+      return
+    }
 
     if (action.type === 'shop-action') {
       this.trading?.trade(scene, action.shop, action.operation)
@@ -269,7 +304,13 @@ export class GameActionBar implements IGameActionBar {
         const resolved = bar && slot && this.resolve(scene, bar.id, slot[0])
 
         if (bar && slot && resolved)
-          target = { scene, bar: bar.id, slot: slot[0], selection: resolved.selection }
+          target = {
+            scene,
+            bar: bar.id,
+            slot: slot[0],
+            selection: resolved.selection,
+            combatCapture: resolved.combatCapture,
+          }
       }
 
       this.gestures.set(key, target)
@@ -284,7 +325,7 @@ export class GameActionBar implements IGameActionBar {
 
     if (!target) return false
 
-    if (event.phase === 'pressed') this.activateSlot(target, request)
+    if (event.phase === 'pressed') this.activateSlot(target, request, { type: 'input', event })
 
     return true
   }

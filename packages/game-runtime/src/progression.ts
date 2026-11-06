@@ -3,6 +3,13 @@ import type { ProgressionSnapshot, WorldTimePolicy } from './actions.js'
 import type { EngineMessages } from './messages.js'
 import type { ITimerService, TimerId } from './timers.js'
 
+export interface PreparedProgression {
+  readonly progression: ProgressionSnapshot
+  isCurrent(): boolean
+  commit(): void
+  notify(): void
+}
+
 /** Owns progression only; it neither executes actions nor owns game-specific state. */
 export class GameProgression {
   private snapshot: ProgressionSnapshot = Object.freeze({ turn: 0, worldTimeMs: 0 })
@@ -69,10 +76,46 @@ export class GameProgression {
 
   apply(advanceTurn: boolean, worldTimeCostMs: number): void {
     if (this.disposed) return
-    this.update(
-      this.snapshot.turn + (advanceTurn ? 1 : 0),
-      this.snapshot.worldTimeMs + (this.mode === 'elapsed' ? 0 : worldTimeCostMs),
+    const prepared = this.prepare(advanceTurn, worldTimeCostMs)
+    prepared.commit()
+    prepared.notify()
+  }
+
+  prepare(advanceTurn: boolean, worldTimeCostMs: number): PreparedProgression {
+    if (this.disposed || !Number.isFinite(worldTimeCostMs) || worldTimeCostMs < 0)
+      throw new RangeError('Invalid progression transaction')
+    const previous = this.snapshot
+    const turn = previous.turn + (advanceTurn ? 1 : 0)
+    const worldTimeMs = previous.worldTimeMs + (this.mode === 'elapsed' ? 0 : worldTimeCostMs)
+
+    if (
+      !Number.isSafeInteger(turn) ||
+      !Number.isFinite(worldTimeMs) ||
+      worldTimeMs < previous.worldTimeMs
     )
+      throw new RangeError('Progression exceeds the supported range')
+    const next = Object.freeze({ turn, worldTimeMs })
+    let committed = false
+    let notified = false
+
+    return {
+      progression: next,
+      isCurrent: () => !this.disposed && !committed && this.snapshot === previous,
+      commit: () => {
+        this.snapshot = next
+        committed = true
+      },
+      notify: () => {
+        if (!committed || notified) return
+        notified = true
+        const event = Object.freeze({ previous, progression: next })
+
+        if (turn !== previous.turn) this.messages.publish('turn.advanced', event)
+
+        if (worldTimeMs !== previous.worldTimeMs)
+          this.messages.publish('world-time.advanced', event)
+      },
+    }
   }
 
   /** Project a world deadline using the same elapsed anchor without mutating progression. */

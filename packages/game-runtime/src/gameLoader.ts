@@ -13,6 +13,8 @@ import {
   inventoryFile,
   gameRulesSchema,
   ruleFile,
+  combatFile,
+  combatDefinitionSchema,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -83,6 +85,15 @@ export class GameLoader implements IGameLoader {
       ),
     )
 
+    const combat = new Map(
+      await Promise.all(
+        (definition.combat ?? []).map(
+          async (id) =>
+            [id, await this.resources.load(combatFile(id), combatDefinitionSchema)] as const,
+        ),
+      ),
+    )
+
     if (!definition.languages)
       return {
         ...assembleGameData(
@@ -94,6 +105,7 @@ export class GameLoader implements IGameLoader {
           inventory,
           undefined,
           rules,
+          combat,
         ),
         ...styling,
       }
@@ -136,6 +148,7 @@ export class GameLoader implements IGameLoader {
             messages,
           },
           rules,
+          combat,
         ),
         ...styling,
         language: tag,
@@ -166,6 +179,9 @@ export class GameLoader implements IGameLoader {
       },
       get inventory() {
         return localization.current.inventory
+      },
+      get combat() {
+        return variants.get(localization.current.language)?.combat
       },
       get ruleTranslation() {
         return variants.get(localization.current.language)?.ruleTranslation

@@ -46,72 +46,74 @@ export function localizeDefinitions(
           ...scene,
           ...metadata(scene),
           components: scene.components.map((component) =>
-            component.type === 'shop'
-              ? {
-                  ...component,
-                  label: text(component.labelKey, component.label, true),
-                  currency: text(component.currencyKey, component.currency, true),
-                  messages: Object.fromEntries(
-                    shopMessageSchema.options.map((id) => [
-                      id,
-                      text(component.messageKeys[id], component.messages[id]),
-                    ]),
-                  ),
-                }
-              : component.type === 'item-details'
+            component.type === 'combat'
+              ? component
+              : component.type === 'shop'
                 ? {
                     ...component,
                     label: text(component.labelKey, component.label, true),
-                    emptyText: text(component.emptyTextKey, component.emptyText),
+                    currency: text(component.currencyKey, component.currency, true),
+                    messages: Object.fromEntries(
+                      shopMessageSchema.options.map((id) => [
+                        id,
+                        text(component.messageKeys[id], component.messages[id]),
+                      ]),
+                    ),
                   }
-                : component.type === 'status-panel'
+                : component.type === 'item-details'
                   ? {
                       ...component,
                       label: text(component.labelKey, component.label, true),
-                      name: text(component.nameKey, component.name),
-                      rows: component.rows.map((row) => ({
-                        ...row,
-                        label: text(row.labelKey, row.label, true),
-                      })),
-                      effects: component.effects.map((effect) => ({
-                        ...effect,
-                        label: text(effect.labelKey, effect.label, true),
-                        description: text(effect.descriptionKey, effect.description),
-                      })),
+                      emptyText: text(component.emptyTextKey, component.emptyText),
                     }
-                  : component.type === 'nearby'
+                  : component.type === 'status-panel'
                     ? {
                         ...component,
                         label: text(component.labelKey, component.label, true),
-                        entries: Object.fromEntries(
-                          Object.entries(component.entries).map(([id, entry]) => [
-                            id,
-                            {
-                              ...entry,
-                              label: text(entry.labelKey, entry.label, true),
-                              description: text(entry.descriptionKey, entry.description),
-                            },
-                          ]),
-                        ),
+                        name: text(component.nameKey, component.name),
+                        rows: component.rows.map((row) => ({
+                          ...row,
+                          label: text(row.labelKey, row.label, true),
+                        })),
+                        effects: component.effects.map((effect) => ({
+                          ...effect,
+                          label: text(effect.labelKey, effect.label, true),
+                          description: text(effect.descriptionKey, effect.description),
+                        })),
                       }
-                    : component.type === 'action-bar'
+                    : component.type === 'nearby'
                       ? {
                           ...component,
-                          slots: Object.fromEntries(
-                            Object.entries(component.slots).map(([id, slot]) => [
+                          label: text(component.labelKey, component.label, true),
+                          entries: Object.fromEntries(
+                            Object.entries(component.entries).map(([id, entry]) => [
                               id,
-                              { ...slot, label: text(slot.labelKey, slot.label, true) },
+                              {
+                                ...entry,
+                                label: text(entry.labelKey, entry.label, true),
+                                description: text(entry.descriptionKey, entry.description),
+                              },
                             ]),
                           ),
                         }
-                      : component.type === 'graphic'
-                        ? { ...component, alt: text(component.altKey, component.alt) }
-                        : component.type === 'text'
-                          ? { ...component, text: text(component.textKey, component.text) }
-                          : {
-                              ...component,
-                              label: text(component.labelKey, component.label, true),
-                            },
+                      : component.type === 'action-bar'
+                        ? {
+                            ...component,
+                            slots: Object.fromEntries(
+                              Object.entries(component.slots).map(([id, slot]) => [
+                                id,
+                                { ...slot, label: text(slot.labelKey, slot.label, true) },
+                              ]),
+                            ),
+                          }
+                        : component.type === 'graphic'
+                          ? { ...component, alt: text(component.altKey, component.alt) }
+                          : component.type === 'text'
+                            ? { ...component, text: text(component.textKey, component.text) }
+                            : {
+                                ...component,
+                                label: text(component.labelKey, component.label, true),
+                              },
           ),
         }),
       ]),
@@ -141,32 +143,35 @@ export function assertGameLanguages(
         scene.titleKey !== undefined ||
         scene.descriptionKey !== undefined ||
         scene.components.some((component) =>
-          component.type === 'shop'
-            ? component.labelKey !== undefined ||
-              component.currencyKey !== undefined ||
-              Object.keys(component.messageKeys).length > 0
-            : component.type === 'item-details'
-              ? component.labelKey !== undefined || component.emptyTextKey !== undefined
-              : component.type === 'status-panel'
-                ? component.labelKey !== undefined ||
-                  component.nameKey !== undefined ||
-                  component.rows.some((row) => row.labelKey !== undefined) ||
-                  component.effects.some(
-                    (effect) =>
-                      effect.labelKey !== undefined || effect.descriptionKey !== undefined,
-                  )
-                : component.type === 'nearby'
+          component.type === 'combat'
+            ? false
+            : component.type === 'shop'
+              ? component.labelKey !== undefined ||
+                component.currencyKey !== undefined ||
+                Object.keys(component.messageKeys).length > 0
+              : component.type === 'item-details'
+                ? component.labelKey !== undefined || component.emptyTextKey !== undefined
+                : component.type === 'status-panel'
                   ? component.labelKey !== undefined ||
-                    Object.values(component.entries).some(
-                      (entry) => entry.labelKey !== undefined || entry.descriptionKey !== undefined,
+                    component.nameKey !== undefined ||
+                    component.rows.some((row) => row.labelKey !== undefined) ||
+                    component.effects.some(
+                      (effect) =>
+                        effect.labelKey !== undefined || effect.descriptionKey !== undefined,
                     )
-                  : component.type === 'action-bar'
-                    ? Object.values(component.slots).some((slot) => slot.labelKey !== undefined)
-                    : component.type === 'graphic'
-                      ? component.altKey !== undefined
-                      : component.type === 'text'
-                        ? component.textKey !== undefined
-                        : component.labelKey !== undefined,
+                  : component.type === 'nearby'
+                    ? component.labelKey !== undefined ||
+                      Object.values(component.entries).some(
+                        (entry) =>
+                          entry.labelKey !== undefined || entry.descriptionKey !== undefined,
+                      )
+                    : component.type === 'action-bar'
+                      ? Object.values(component.slots).some((slot) => slot.labelKey !== undefined)
+                      : component.type === 'graphic'
+                        ? component.altKey !== undefined
+                        : component.type === 'text'
+                          ? component.textKey !== undefined
+                          : component.labelKey !== undefined,
         ),
     )
 

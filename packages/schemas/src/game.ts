@@ -32,6 +32,10 @@ export const gameSchema = z
       .refine(uniqueFileIds, { message: 'Inventory references must be unique' })
       .optional(),
     input: gameIdSchema.optional(),
+    combat: z
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Combat references must be unique' })
+      .optional(),
     maps: z
       .array(gameIdSchema)
       .refine((ids) => new Set(ids).size === ids.length, {

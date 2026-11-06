@@ -30,6 +30,11 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     const scene = context.scene
     const nearby = scene?.type === 'game' ? scene.game.nearby : undefined
     const trading = scene?.type === 'game' ? scene.game.trading : undefined
+    const combat = scene?.type === 'game' ? scene.game.combat : undefined
+
+    const encounter = scene?.data.components.find(
+      (entry) => entry.type === 'combat' && entry.textTarget === component.id,
+    )
 
     const shop = scene?.data.components.find(
       (entry) => entry.type === 'shop' && entry.feedbackTarget === component.id,
@@ -77,6 +82,7 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
         entry?.description,
         ...items,
         shop && scene ? trading?.feedback(scene, shop.id) : '',
+        encounter && scene ? combat?.text(scene, encounter.id) : '',
       ]
         .filter(Boolean)
         .join('\n\n')
@@ -103,6 +109,12 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
       }
 
       if (panel) unsubscribeSelection = nearby?.subscribeChanges(() => updateText(latest))
+
+      if (encounter) {
+        const unsubscribe = combat?.subscribeChanges(() => updateText(latest))
+
+        if (unsubscribe) cleanups.push(unsubscribe)
+      }
 
       if (shop) {
         const unsubscribe = trading?.subscribeChanges(() => updateText(latest))

@@ -25,6 +25,10 @@ import {
   shopIssues,
   gameRulesSchema,
   actionBarIssues,
+  combatFile,
+  combatDefinitionSchema,
+  combatIssues,
+  localizeCombat,
 } from '@ancadeba/schemas'
 import {
   projectInventorySources,
@@ -79,6 +83,14 @@ export function validateProject(
   }
 
   const input = game.data.input ? check(inputFile(game.data.input), inputSchema).data : undefined
+
+  const combats = new Map(
+    (game.data.combat ?? []).flatMap((id) => {
+      const result = check(combatFile(id), combatDefinitionSchema)
+
+      return result.success ? [[id, result.data] as const] : []
+    }),
+  )
 
   const maps = new Map<string, MapDefinition>()
 
@@ -185,6 +197,8 @@ export function validateProject(
           localizeDefinitions(game.data, scenes, { fallback, messages })
 
           if (inventory) localizeInventory(inventory, { fallback, messages })
+
+          for (const combat of combats.values()) localizeCombat(combat, { fallback, messages })
         } catch (error) {
           diagnostics.push({
             code: 'invalid_translation',
@@ -202,8 +216,56 @@ export function validateProject(
   const validatedRules = validateRuleSources(sources, scenes, maps, inventory, defaultMessages)
   const mergedRules = validatedRules.rules
 
+  for (const [id, encounter] of combats) {
+    if (encounter.id !== id)
+      diagnostics.push({
+        code: 'invalid_combat',
+        file: combatFile(id),
+        path: ['id'],
+        message: 'Combat file ID must match its manifest reference',
+      })
+
+    for (const issue of combatIssues(
+      encounter,
+      mergedRules,
+      new Set(game.data.scenes),
+      assets?.data,
+    ))
+      diagnostics.push({ code: 'invalid_combat', file: combatFile(id), ...issue })
+  }
+
   for (const [id, scene] of scenes)
     scene.components.forEach((component, index) => {
+      if (component.type === 'combat' && !combats.has(component.encounter))
+        diagnostics.push({
+          code: 'invalid_combat',
+          file: `scenes/${id}.json`,
+          path: ['components', index, 'encounter'],
+          message: 'Unknown combat encounter',
+        })
+
+      if (component.type === 'action-bar')
+        for (const [slotId, slot] of Object.entries(component.slots)) {
+          const action = slot.action
+
+          if (action.type !== 'combat-action' || action.command.type !== 'queue-move') continue
+
+          const view = scene.components.find(
+            (component) => component.type === 'combat' && component.id === action.combat,
+          )
+
+          if (
+            view?.type !== 'combat' ||
+            !combats.get(view.encounter)?.player.moves.includes(action.command.move)
+          )
+            diagnostics.push({
+              code: 'invalid_combat',
+              file: `scenes/${id}.json`,
+              path: ['components', index, 'slots', slotId],
+              message: 'Unknown player combat move',
+            })
+        }
+
       if (component.type === 'shop')
         for (const issue of shopIssues(component, inventory, mergedRules))
           diagnostics.push({
@@ -220,6 +282,8 @@ export function validateProject(
     assertGameLanguages(game.data, scenes)
 
     if (inventory && !game.data.languages) localizeInventory(inventory)
+
+    if (!game.data.languages) for (const combat of combats.values()) localizeCombat(combat)
   } catch (error) {
     diagnostics.push({
       code: 'missing_languages',

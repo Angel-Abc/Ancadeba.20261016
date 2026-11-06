@@ -64,6 +64,11 @@ export function actionBarForm(
       .find((scene) => scene.id === sceneId)
       ?.components.filter((component) => component.type === 'nearby') ?? []
 
+  const combats =
+    view.scenes
+      .find((scene) => scene.id === sceneId)
+      ?.components.filter((component) => component.type === 'combat') ?? []
+
   const shops =
     view.scenes
       .find((scene) => scene.id === sceneId)
@@ -97,6 +102,7 @@ export function actionBarForm(
         ['move-map', 'Move on map'],
         ['equipment-action', 'Equipment command'],
         ['shop-action', 'Shop command'],
+        ['combat-action', 'Combat command'],
       ],
       (type) =>
         change(() => {
@@ -109,22 +115,24 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'shop-action'
-                ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
-                : type === 'equipment-action'
-                  ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
-                  : type === 'move-map'
-                    ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                    : type === 'nearby-action'
-                      ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                      : type === 'inventory-action'
-                        ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                        : type === 'request-action'
-                          ? { type, action: actions[0] ?? '' }
-                          : {
-                              type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                              scene: gameScenes[0] ?? '',
-                            },
+              type === 'combat-action'
+                ? { type, combat: combats[0]?.id ?? '', command: { type: 'end-turn' } }
+                : type === 'shop-action'
+                  ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
+                  : type === 'equipment-action'
+                    ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
+                    : type === 'move-map'
+                      ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                      : type === 'nearby-action'
+                        ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                        : type === 'inventory-action'
+                          ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                          : type === 'request-action'
+                            ? { type, action: actions[0] ?? '' }
+                            : {
+                                type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                                scene: gameScenes[0] ?? '',
+                              },
           }
         }),
     ),
@@ -147,7 +155,52 @@ export function actionBarForm(
     )
     const action = slot.action
 
-    if (action.type === 'shop-action') {
+    if (action.type === 'combat-action') {
+      detail.append(
+        select(
+          'Combat view',
+          action.combat,
+          combats.map((component) => component.id),
+          (value) =>
+            change(() => {
+              action.combat = value
+            }),
+        ),
+        select(
+          'Combat command',
+          action.command.type,
+          [
+            'queue-move',
+            'previous-target',
+            'next-target',
+            'undo',
+            'clear',
+            'end-turn',
+            'escape',
+            'continue',
+          ],
+          (value) =>
+            change(() => {
+              action.command = value === 'queue-move' ? { type: value, move: '' } : { type: value }
+            }),
+        ),
+      )
+
+      if (action.command.type === 'queue-move') {
+        const command = action.command
+        const component = combats.find((component) => component.id === action.combat)
+        detail.append(
+          select(
+            'Combat move',
+            command.move,
+            component ? (view.combat?.[component.encounter]?.player.moves ?? []) : [],
+            (value) => {
+              command.move = value
+            },
+          ),
+        )
+      }
+    } else if (action.type === 'shop-action') {
       detail.append(
         select(
           'Shop',

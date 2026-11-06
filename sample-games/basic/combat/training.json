@@ -1,0 +1,99 @@
+{
+  "schema-version": "1.0.0",
+  "id": "training",
+  "labelKey": "combat.title",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 60000,
+  "logCapacity": 30,
+  "player": {
+    "id": "player",
+    "labelKey": "combat.player",
+    "health": {
+      "source": "game.state",
+      "path": ["player", "health"]
+    },
+    "maximumHealth": {
+      "source": "game.state",
+      "path": ["player", "maximumHealth"]
+    },
+    "ap": 3,
+    "moves": ["attack", "heavy", "guard"]
+  },
+  "enemies": [
+    {
+      "id": "sentinel",
+      "labelKey": "combat.first",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "sentinel"]
+      },
+      "maximumHealth": 18,
+      "ap": 3,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"]
+    },
+    {
+      "id": "keeper",
+      "labelKey": "combat.second",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "keeper"]
+      },
+      "maximumHealth": 22,
+      "ap": 3,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"]
+    }
+  ],
+  "moves": {
+    "attack": {
+      "type": "attack",
+      "labelKey": "combat.attack",
+      "apCost": 1,
+      "damage": {
+        "min": 3,
+        "max": 6
+      }
+    },
+    "heavy": {
+      "type": "attack",
+      "labelKey": "combat.heavy-strike",
+      "apCost": 2,
+      "damage": {
+        "min": 8,
+        "max": 12
+      }
+    },
+    "guard": {
+      "type": "guard",
+      "labelKey": "combat.guard",
+      "apCost": 1,
+      "guard": 5
+    }
+  },
+  "outcomes": {
+    "victory": "standard",
+    "defeat": "standard",
+    "escaped": "standard"
+  },
+  "descriptionKey": "combat.description",
+  "messageKeys": {
+    "planning": "combat.message.planning",
+    "target": "combat.message.target",
+    "round": "combat.message.round",
+    "health": "combat.message.health",
+    "ap": "combat.message.ap",
+    "empty": "combat.message.empty",
+    "victory": "combat.message.victory",
+    "defeat": "combat.message.defeat",
+    "escaped": "combat.message.escaped",
+    "attack": "combat.message.attack",
+    "guarded": "combat.message.guarded",
+    "skipped": "combat.message.skipped",
+    "unavailable": "combat.message.unavailable",
+    "invalid": "combat.message.invalid",
+    "guard": "combat.guard",
+    "escape": "combat.escape"
+  }
+}

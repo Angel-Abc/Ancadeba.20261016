@@ -7,7 +7,8 @@
   "assets": "wardrobe",
   "inventory": ["wardrobe"],
   "initial-scene": "gallery",
-  "scenes": ["gallery", "ember", "wardrobe", "shop"],
+  "scenes": ["gallery", "ember", "wardrobe", "shop", "training"],
   "input": "controls",
-  "rules": ["shop"]
+  "rules": ["shop", "combat"],
+  "combat": ["training"]
 }

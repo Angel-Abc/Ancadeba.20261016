@@ -83,6 +83,130 @@ describe('shared editor project API', () => {
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
 
+  it.each(['success', 'before-scene', 'after-scene', 'concurrent'] as const)(
+    'publishes encounter, manifest, and view consistently: %s',
+    async (failure) => {
+      await command((await inspect()).revision, {
+        type: 'scene.create',
+        scene: { ...scene, type: 'game' },
+      })
+      await command((await inspect()).revision, {
+        type: 'game.updateRules',
+        ruleId: 'health',
+        rules: {
+          state: [
+            { path: ['health'], value: 40 },
+            { path: ['enemyHealth'], value: 20 },
+          ],
+          actions: {},
+        },
+      })
+      const before = await inspect()
+      const sceneBefore = await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')
+      const manifestBefore = await readFile(join(root, 'basic/game.json'), 'utf8')
+      let failed = false
+
+      const failing: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+        write: async (path, bytes) => {
+          if (!failed && path.endsWith('scenes/shop.json') && failure !== 'success') {
+            failed = true
+
+            if (failure === 'after-scene') await workspace.write(path, bytes)
+
+            if (failure === 'concurrent') await workspace.write(path, Buffer.from('external edit'))
+            throw new Error('Scene publication failed')
+          }
+
+          return workspace.write(path, bytes)
+        },
+      }
+
+      const service = new EditorProjectService(
+        new WorkspaceProjectRepository(failing),
+        new EditorCoordinator(),
+      )
+
+      const encounter = {
+        'schema-version': '1.0.0',
+        id: 'practice',
+        label: 'Practice',
+        player: {
+          id: 'player',
+          label: 'Player',
+          health: { source: 'game.state', path: ['health'] },
+          maximumHealth: 40,
+          moves: ['attack'],
+        },
+        enemies: [
+          {
+            id: 'enemy',
+            label: 'Enemy',
+            health: { source: 'game.state', path: ['enemyHealth'] },
+            maximumHealth: 20,
+            moves: ['attack'],
+            rotation: ['attack'],
+          },
+        ],
+        moves: {
+          attack: { type: 'attack', label: 'Attack', apCost: 1, damage: { min: 2, max: 4 } },
+        },
+      }
+
+      const operation = {
+        type: 'game.upsertCombat',
+        encounter,
+        scene: {
+          id: 'shop',
+          component: {
+            type: 'combat',
+            id: 'combat',
+            encounter: 'practice',
+            placement: { row: 1, column: 1 },
+          },
+        },
+      }
+
+      const save = service.apply({
+        path: 'basic',
+        expectedRevision: before.revision,
+        command: operation,
+      })
+
+      if (failure === 'success' || failure === 'after-scene') {
+        const result = await save
+        expect(result.view.game!.combat).toEqual(['practice'])
+        expect(result.view.combat!.practice!.player.ap).toBe(3)
+        expect(result.view.scenes[0]!.components[0]!.type).toBe('combat')
+        await expect(
+          service.apply({ path: 'basic', expectedRevision: before.revision, command: operation }),
+        ).rejects.toMatchObject({ status: 409 })
+
+        const protectedField = await command(result.view.revision, {
+          type: 'game.updateRules',
+          ruleId: 'health',
+          rules: { state: [{ path: ['enemyHealth'], value: 20 }], actions: {} },
+        })
+
+        expect(protectedField.status).toBe(422)
+      } else if (failure === 'before-scene') {
+        await expect(save).rejects.toThrow('Scene publication failed')
+        expect(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')).toBe(sceneBefore)
+        expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(manifestBefore)
+        await expect(readFile(join(root, 'basic/combat/practice.json'))).rejects.toHaveProperty(
+          'code',
+          'ENOENT',
+        )
+        expect((await inspect()).revision).toBe(before.revision)
+      } else {
+        await expect(save).rejects.toMatchObject({ code: 'combat_publication_failed' })
+        expect(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')).toBe('external edit')
+      }
+    },
+  )
   it('authors action bars and per-game input through revision-checked saves', async () => {
     const initial = await inspect()
 
@@ -572,7 +696,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(26)
+    expect((await capabilities.json()).commands).toHaveLength(29)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

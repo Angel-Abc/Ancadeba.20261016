@@ -11,6 +11,7 @@ import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import { ItemDetailsComponentRenderer } from './itemDetailsComponentRenderer.js'
 import { EquipmentComponentRenderer } from './equipmentComponentRenderer.js'
 import { ShopComponentRenderer } from './shopComponentRenderer.js'
+import { CombatComponentRenderer } from './combatComponentRenderer.js'
 import type {
   ComponentRenderContext,
   ComponentRenderers,
@@ -35,12 +36,15 @@ export class ComponentRenderer implements IComponentRenderer {
       'item-details': new ItemDetailsComponentRenderer(),
       equipment: new EquipmentComponentRenderer(),
       shop: new ShopComponentRenderer(),
+      combat: new CombatComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'combat':
+        return this.renderers.combat.render(component, context)
       case 'shop':
         return this.renderers.shop.render(component, context)
       case 'item-details':

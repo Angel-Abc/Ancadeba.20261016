@@ -8,8 +8,10 @@ import type { IGameNearby } from './nearbyContext.js'
 import type { IGameInventorySelection } from './inventoryContext.js'
 import type { IGameEquipment } from './equipment.js'
 import type { IGameTrading } from './trading.js'
+import type { IGameCombat } from './combat.js'
 
 export interface IGameRuntime {
+  readonly combat?: IGameCombat | undefined
   readonly trading?: IGameTrading | undefined
   readonly inventorySelection?: IGameInventorySelection | undefined
   readonly equipment?: IGameEquipment | undefined
@@ -25,6 +27,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly combat?: IGameCombat | undefined
   readonly trading?: IGameTrading | undefined
   readonly inventorySelection?: IGameInventorySelection | undefined
   readonly equipment?: IGameEquipment | undefined
@@ -118,6 +121,10 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+
+  get combat(): IGameCombat | undefined {
+    return this.runtime?.combat
+  }
 
   get trading(): IGameTrading | undefined {
     return this.runtime?.trading

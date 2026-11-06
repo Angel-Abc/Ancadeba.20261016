@@ -23,6 +23,7 @@ import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.js'
 import { bindItemEditor } from '../apps/editor-ui/src/itemEditor.js'
+import { bindCombatEditor } from '../apps/editor-ui/src/combatEditor.js'
 import { bindShopEditor } from '../apps/editor-ui/src/shopEditor.js'
 
 const input = inputSchema.parse({
@@ -338,6 +339,97 @@ function panel(withInput = true) {
 }
 
 describe('action bar editor controls', () => {
+  it('authors combat definitions and input commands while retaining conflicting and unrelated drafts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [
+        { path: ['health'], value: 40 },
+        { path: ['enemyHealth'], value: 20 },
+      ],
+      actions: {},
+    }
+    const editor = bindCombatEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    click('Add encounter')
+    edit('Encounter name', '<b>Training</b>')
+    edit('Player AP', '4')
+    edit('Enemy 1 rotation (IDs)', 'guard, attack')
+    edit('Enemy 1 available moves (IDs)', 'attack, guard')
+    edit('Move attack maximum damage', '7')
+    edit('Allow escape', 'true')
+    edit('victory destination', 'other')
+    expect(editor.hasDrafts()).toBe(true)
+    edit('Combat game scene', 'other')
+    expect(field('Combat game scene').value).toBe('shop')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, conflict: true, preserveDrafts: true },
+      false,
+    )
+    expect(field('Encounter name').value).toBe('<b>Training</b>')
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'unrelated' },
+        lastCommand: 'game.updateRules',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(field('Move attack maximum damage').value).toBe('7')
+    submit('Save combat encounter')
+    const saved = commands[0]!
+    expect(saved).toMatchObject({
+      type: 'game.upsertCombat',
+      encounter: {
+        label: '<b>Training</b>',
+        player: { ap: 4 },
+        enemies: [{ rotation: ['guard', 'attack'] }],
+        moves: { attack: { damage: { max: 7 } } },
+        allowEscape: true,
+        outcomes: { victory: 'other' },
+      },
+    })
+
+    if (saved.type !== 'game.upsertCombat' || !saved.scene) throw new Error('Expected encounter')
+    view.combat = { [saved.encounter.id]: saved.encounter }
+    view.scenes[0]!.components.push(saved.scene.component)
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'saved' },
+        lastCommand: saved.type,
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(editor.hasDrafts()).toBe(false)
+    bindActionBarPanel(root.asElement(), (command) => commands.push(command)).render(
+      { ...initial, view },
+      true,
+    )
+    edit('Action type', 'combat-action')
+    edit('Slot label', 'Strike')
+    edit('Combat view', saved.scene.component.id)
+    edit('Combat command', 'queue-move')
+    edit('Combat move', 'attack')
+    submit('Save action bar')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': {
+            action: {
+              type: 'combat-action',
+              combat: saved.scene.component.id,
+              command: { type: 'queue-move', move: 'attack' },
+            },
+            inputBinding: { context: 'gameplay', input: 'slot-1' },
+          },
+        },
+      },
+    })
+  })
   it('authors shop participants and prices, preserves conflicting drafts, and binds trade shortcuts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)

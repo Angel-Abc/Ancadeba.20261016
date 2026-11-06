@@ -10,6 +10,8 @@ import {
   mergeInventorySources,
   inputSchema,
   inputFile,
+  combatFile,
+  combatDefinitionSchema,
 } from '@ancadeba/schemas'
 import { validateProject } from './validation.js'
 import {
@@ -51,6 +53,17 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     languageCatalogSchema.safeParse(project.documents[`languages/${language}/messages.json`])
 
   return {
+    ...(game.data?.combat?.length
+      ? {
+          combat: Object.fromEntries(
+            game.data.combat.flatMap((id) => {
+              const result = combatDefinitionSchema.safeParse(project.documents[combatFile(id)])
+
+              return result.success ? [[id, result.data]] : []
+            }),
+          ),
+        }
+      : {}),
     ...(input?.success ? { input: input.data } : {}),
     ...(sources.length ? { rules: mergeRuleSources(sources).rules, ruleFiles } : {}),
     ...(assets?.success ? { assets: assets.data } : {}),

@@ -19,6 +19,7 @@ import type {
   ItemDetailsComponentDefinition,
   EquipmentComponentDefinition,
   ShopComponentDefinition,
+  CombatDefinition,
 } from '@ancadeba/schemas'
 import type { TextTemplate } from './textBindings.js'
 import {
@@ -35,6 +36,8 @@ import {
   localizeInventory,
   equipmentIssues,
   shopIssues,
+  combatIssues,
+  localizeCombat,
 } from '@ancadeba/schemas'
 import type { IGameLocalization } from './gameLocalization.js'
 
@@ -62,6 +65,7 @@ export interface LanguageSelectComponentData {
 }
 
 export type SceneComponentData =
+  | Extract<SceneDefinition['components'][number], { type: 'combat' }>
   | TextComponentData
   | ButtonComponentData
   | LanguageSelectComponentData
@@ -107,6 +111,7 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly combat?: ReadonlyMap<string, CombatDefinition> | undefined
   readonly assets?: AssetCatalog
   readonly inventory?: InventoryDefinition | undefined
   readonly rules?: GameRulesDefinition
@@ -135,6 +140,7 @@ export function assembleGameData(
   inventoryDefinitions: ReadonlyMap<string, InventoryDefinition> = new Map(),
   ruleTranslation?: GameTranslation,
   ruleDefinitions: ReadonlyMap<string, GameRulesDefinition> = new Map(),
+  combatDefinitions: ReadonlyMap<string, CombatDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -168,6 +174,19 @@ export function assembleGameData(
   const issue = validated?.issues[0]
 
   if (issue) throw new Error(`${issue.file} (${issue.path.join('.')}): ${issue.message}`)
+
+  const combat = new Map<string, CombatDefinition>()
+
+  for (const id of definition.combat ?? []) {
+    const encounter = combatDefinitions.get(id)
+
+    if (!encounter || encounter.id !== id)
+      throw new Error(`Missing or mismatched combat definition: ${id}`)
+    const problem = combatIssues(encounter, validated?.rules, new Set(definition.scenes), assets)[0]
+
+    if (problem) throw new Error(`Combat ${id}: ${problem.message}`)
+    combat.set(id, localizeCombat(encounter, ruleTranslation))
+  }
 
   if (Boolean(definition.assets) !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')
@@ -383,6 +402,25 @@ export function assembleGameData(
 
   for (const scene of scenes.values()) {
     for (const component of scene.components) {
+      if (component.type === 'combat' && !combat.has(component.encounter))
+        throw new Error(`Unknown combat encounter: ${component.encounter}`)
+
+      if (component.type === 'action-bar')
+        for (const slot of Object.values(component.slots)) {
+          if (slot.action.type !== 'combat-action' || slot.action.command.type !== 'queue-move')
+            continue
+          const action = slot.action
+
+          const view = scene.components.find(
+            (component) => component.type === 'combat' && component.id === action.combat,
+          )
+
+          const definition = view?.type === 'combat' ? combat.get(view.encounter) : undefined
+
+          if (!definition?.player.moves.includes(slot.action.command.move))
+            throw new Error('Unknown player combat move')
+        }
+
       if (component.type === 'shop') {
         const issue = shopIssues(component, inventory, validated?.rules)[0]
 
@@ -447,6 +485,7 @@ export function assembleGameData(
   }
 
   return {
+    ...(combat.size ? { combat } : {}),
     ...(assets ? { assets } : {}),
     ...(inventory ? { inventory } : {}),
     ...(validated ? { rules: validated.rules, ruleTranslation } : {}),

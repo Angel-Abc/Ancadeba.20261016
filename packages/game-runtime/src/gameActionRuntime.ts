@@ -9,6 +9,8 @@ import { GameInventoryContext } from './inventoryContext.js'
 import { GameEquipment } from './equipment.js'
 import { GameTrading } from './trading.js'
 import type { ITradeState } from './tradeState.js'
+import type { IStateTransactions } from './stateTransactions.js'
+import { GameCombat } from './combat.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
@@ -23,6 +25,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly inventorySelection: GameInventoryContext | undefined
   readonly equipment: GameEquipment | undefined
   readonly trading: GameTrading | undefined
+  readonly combat: GameCombat | undefined
   private readonly timers: TimerService
   private started = false
   private disposed = false
@@ -40,6 +43,8 @@ export class GameActionRuntime implements IGameRuntime {
     private readonly onDispose: () => void,
     lifecycle?: IGameLifecycle,
     tradeState?: ITradeState,
+    stateTransactions: IStateTransactions | undefined = tradeState,
+    updateAuthoredClock?: (worldTimeMs: number) => void,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
     this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
@@ -75,6 +80,7 @@ export class GameActionRuntime implements IGameRuntime {
           this.inventorySelection,
           this.equipment,
           this.trading,
+          () => this.combat,
         )
       : undefined
 
@@ -88,8 +94,30 @@ export class GameActionRuntime implements IGameRuntime {
         isRunning,
         (event, request) => this.actionBar?.handleInput(event, request) ?? false,
       )
+      this.combat = lifecycle
+        ? new GameCombat(
+            lifecycle,
+            this.bindings,
+            stateTransactions,
+            messages,
+            (cost) => {
+              const prepared = this.actions.prepareProgression(cost)
+
+              return {
+                ...prepared,
+                commit: () => {
+                  prepared.commit()
+                  // This internal projection only writes the authored clock field; it never notifies observers.
+                  updateAuthoredClock?.(prepared.progression.worldTimeMs)
+                },
+              }
+            },
+            () => this.bindings.invalidate(),
+          )
+        : undefined
     } catch (error) {
       this.actionBar?.dispose()
+      this.combat?.dispose()
       this.trading?.dispose()
       this.equipment?.dispose()
       this.inventorySelection?.dispose()
@@ -113,6 +141,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed) return
     this.disposed = true
     this.actionBar?.dispose()
+    this.combat?.dispose()
     this.trading?.dispose()
     this.equipment?.dispose()
     this.inventorySelection?.dispose()

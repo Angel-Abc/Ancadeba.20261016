@@ -151,6 +151,13 @@ export class ActionProcessor implements IGameActions {
     return this.progressionState.current
   }
 
+  /** Encounter transactions advance the game counter without replacing game actor turns. */
+  prepareProgression(worldTimeCostMs: number) {
+    this.progressionState.synchronize()
+
+    return this.progressionState.prepare(true, worldTimeCostMs)
+  }
+
   get turnState(): TurnSnapshot | undefined {
     return this.turns?.current
   }

@@ -7,6 +7,7 @@ import {
   inputFile,
   ruleFile,
   inventoryFile,
+  combatFile,
 } from '@ancadeba/schemas'
 import { validateImageSource } from '@ancadeba/game-runtime'
 import {
@@ -96,6 +97,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const id of game.data.rules ?? []) await read(ruleFile(id))
 
+      for (const id of game.data.combat ?? []) await read(combatFile(id))
+
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
       if (game.data.assets) {
@@ -140,6 +143,12 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   }
 
   async save(folder: string, change: CommandResult): Promise<void> {
+    if (change.changedFiles.some((file) => file.startsWith('combat/'))) {
+      await this.saveCombat(folder, change)
+
+      return
+    }
+
     const encode = (file: string) =>
       Buffer.from(`${JSON.stringify(change.project.documents[file], null, 2)}\n`)
 
@@ -243,6 +252,98 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       const file = change.changedFiles[0]
 
       if (file) await this.workspace.write(projectPath(folder, file), encode(file))
+    }
+  }
+
+  private async saveCombat(folder: string, change: CommandResult): Promise<void> {
+    const records: { file: string; before: Uint8Array | undefined; after: Uint8Array }[] = []
+
+    for (const file of change.changedFiles) {
+      let before: Uint8Array | undefined
+
+      try {
+        before = await this.workspace.read(projectPath(folder, file))
+      } catch (error) {
+        if (workspaceError(error).status !== 404) throw error
+      }
+
+      records.push({
+        file,
+        before,
+        after: Buffer.from(`${JSON.stringify(change.project.documents[file], null, 2)}\n`),
+      })
+    }
+
+    const manifest = records.find((record) => record.file === 'game.json')
+
+    if (manifest?.before) {
+      const previous = gameSchema.parse(JSON.parse(Buffer.from(manifest.before).toString('utf8')))
+
+      for (const record of records)
+        if (
+          record.file.startsWith('combat/') &&
+          record.before &&
+          !(previous.combat ?? []).some((id) => combatFile(id) === record.file)
+        )
+          throw new EditorError(
+            409,
+            'combat_exists',
+            'An unreferenced encounter file already exists',
+          )
+    }
+
+    try {
+      for (const record of records) {
+        if (record.before)
+          await this.workspace.write(projectPath(folder, record.file), record.after)
+        else await this.workspace.create(projectPath(folder, record.file), record.after)
+      }
+    } catch (error) {
+      const current: (Uint8Array | undefined)[] = []
+
+      try {
+        for (const record of records) {
+          try {
+            current.push(await this.workspace.read(projectPath(folder, record.file)))
+          } catch (readError) {
+            if (workspaceError(readError).status !== 404) throw readError
+            current.push(undefined)
+          }
+        }
+
+        if (
+          records.every(
+            (record, index) => current[index] && Buffer.from(current[index]!).equals(record.after),
+          )
+        )
+          return
+
+        if (
+          records.some(
+            (record, index) =>
+              current[index] &&
+              !Buffer.from(current[index]!).equals(record.after) &&
+              !(record.before && Buffer.from(current[index]!).equals(record.before)),
+          )
+        )
+          throw new Error('Files changed concurrently')
+
+        for (const [index, record] of [...records.entries()].reverse()) {
+          if (!current[index] || !Buffer.from(current[index]!).equals(record.after)) continue
+
+          if (record.before)
+            await this.workspace.write(projectPath(folder, record.file), record.before)
+          else await this.workspace.removeCreated(projectPath(folder, record.file), record.after)
+        }
+      } catch {
+        throw new EditorError(
+          500,
+          'combat_publication_failed',
+          'Could not confirm encounter rollback. Reload the project before retrying.',
+        )
+      }
+
+      throw error
     }
   }
 

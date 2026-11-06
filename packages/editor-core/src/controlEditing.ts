@@ -132,6 +132,8 @@ export function editControls(
                     ? action.operation
                     : undefined,
                 shop: action.type === 'shop-action' ? action.shop : undefined,
+                combat: action.type === 'combat-action' ? action.combat : undefined,
+                command: action.type === 'combat-action' ? action.command : undefined,
                 mapView: action.type === 'move-map' ? action.mapView : undefined,
                 direction: action.type === 'move-map' ? action.direction : undefined,
                 enabledWhen: action.type === 'request-action' ? action.enabledWhen : undefined,
