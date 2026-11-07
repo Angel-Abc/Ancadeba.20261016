@@ -107,6 +107,32 @@
     },
     "advanced-loot": {
       "label": "Advanced training loot"
+    },
+    "advanced-sentinel": {
+      "label": "Practice sentinel",
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["combat", "advanced-sentinel"]
+        },
+        "maximumHealth": 26,
+        "attack": 2,
+        "defense": 1,
+        "guard": 1
+      }
+    },
+    "advanced-keeper": {
+      "label": "Practice keeper",
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["combat", "advanced-keeper"]
+        },
+        "maximumHealth": 26,
+        "attack": 2,
+        "defense": 1,
+        "guard": 1
+      }
     }
   },
   "items": {

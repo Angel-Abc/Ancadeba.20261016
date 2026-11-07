@@ -54,6 +54,21 @@ export function equipmentStatsView(
     if (value.textContent) list.append(label, value)
   }
 
+  for (const contribution of snapshot.temporary) {
+    const label = document.createElement('dt'),
+      value = document.createElement('dd')
+
+    label.textContent = `${profile.messages.temporary}: ${contribution.label}`
+    value.textContent = (['attack', 'defense', 'guard'] as const)
+      .filter((stat) => contribution.modifiers[stat])
+      .map(
+        (stat) =>
+          `${profile.messages[stat]} ${(contribution.modifiers[stat] ?? 0) >= 0 ? '+' : ''}${contribution.modifiers[stat]}`,
+      )
+      .join(' · ')
+    list.append(label, value)
+  }
+
   root.append(list)
   const selection = scene.game.equipment?.get(scene, component.id)
 

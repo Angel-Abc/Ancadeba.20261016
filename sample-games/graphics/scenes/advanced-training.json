@@ -76,34 +76,34 @@
           }
         },
         "2": {
-          "label": "Heavy strike",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
               "type": "queue-move",
-              "move": "heavy"
+              "move": "poison-strike"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "unequip"
-          }
+          },
+          "label": "Poison Strike"
         },
         "3": {
-          "label": "Guard",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
               "type": "queue-move",
-              "move": "guard"
+              "move": "stunning-blow"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "buy"
-          }
+          },
+          "label": "Stunning Blow"
         },
         "4": {
           "label": "Undo",
@@ -148,18 +148,19 @@
           }
         },
         "7": {
-          "label": "Previous target",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "previous-target"
+              "type": "queue-move",
+              "move": "weaken"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "slot-7"
-          }
+          },
+          "label": "Weaken"
         },
         "8": {
           "label": "Escape",
@@ -176,18 +177,19 @@
           }
         },
         "14": {
-          "label": "Continue",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "continue"
+              "type": "queue-move",
+              "move": "battle-focus"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "slot-14"
-          }
+          },
+          "label": "Battle Focus"
         },
         "15": {
           "label": "End Turn",
@@ -204,18 +206,19 @@
           }
         },
         "9": {
-          "label": "Take Loot",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "take-loot"
+              "type": "queue-move",
+              "move": "regenerate"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "slot-9"
-          }
+          },
+          "label": "Regenerate"
         },
         "10": {
           "label": "Take All",
@@ -232,18 +235,19 @@
           }
         },
         "11": {
-          "label": "Retry Rewards",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "retry-rewards"
+              "type": "queue-move",
+              "move": "recover"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "slot-11"
-          }
+          },
+          "label": "Recover"
         },
         "12": {
           "label": "Power strike",

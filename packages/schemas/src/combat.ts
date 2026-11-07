@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { abilityEffectSchema, combatStatusSchema } from './combatAbilities.js'
 import { gameBindingSchema, bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
 import { assertGraphicReference, graphicAppearanceSchema, type AssetCatalog } from './assets.js'
@@ -34,6 +35,7 @@ export const combatMoveSchema = z
       type: z.literal('attack'),
       ...label,
       apCost: z.number().int().positive().max(100),
+      cooldown: amount.optional(),
       damage: z
         .object({ min: amount, max: amount })
         .refine((range) => range.min <= range.max, 'Minimum damage must not exceed maximum damage'),
@@ -43,6 +45,22 @@ export const combatMoveSchema = z
       ...label,
       apCost: z.number().int().positive().max(100),
       guard: amount,
+      cooldown: amount.optional(),
+    }),
+    z.object({
+      type: z.literal('ability'),
+      ...label,
+      apCost: z.number().int().positive().max(100),
+      cooldown: amount.optional(),
+      target: z.enum(['self', 'enemy']),
+      effects: z
+        .array(abilityEffectSchema)
+        .min(1)
+        .max(20)
+        .refine(
+          (effects) => new Set(effects.map((effect) => effect.id)).size === effects.length,
+          'Effect IDs must be unique',
+        ),
     }),
   ])
   .refine((move) => Boolean(move.label || move.labelKey), 'A move label or translation is required')
@@ -77,6 +95,24 @@ export const combatActorSchema = z
   )
 
 export const combatTextSchema = z.object({
+  statAttack: z.string().default('Attack bonus'),
+  statDefense: z.string().default('Defense'),
+  statGuard: z.string().default('Guard bonus'),
+  healed: z.string().default('{actor} restores {amount} health to {target}.'),
+  statusApplied: z.string().default('{target}: {status} applied ({duration} turns).'),
+  statusRefreshed: z.string().default('{target}: {status} refreshed ({duration} turns).'),
+  statusRemoved: z.string().default('{target}: {status} removed.'),
+  statusExpired: z.string().default('{target}: {status} expired.'),
+  periodicDamage: z.string().default('{target}: {status} deals {amount} damage.'),
+  regenerated: z.string().default('{target}: {status} restores {amount} health.'),
+  stunned: z.string().default('{actor} is stunned and skips this turn.'),
+  cooldown: z.string().default('Cooldown: {rounds} rounds'),
+  reserved: z.string().default('Already queued'),
+  conditional: z
+    .string()
+    .default('Previews use current effects; earlier moves may change the result.'),
+  turnsRemaining: z.string().default('{turns} turns remaining'),
+  healing: z.string().default('Heal {amount}'),
   mitigated: z
     .string()
     .default(
@@ -119,6 +155,13 @@ export const combatDefinitionSchema = z
     player: combatActorSchema,
     enemies: z.array(combatActorSchema).min(1).max(32),
     moves: z.record(id, combatMoveSchema),
+    statuses: z
+      .record(id, combatStatusSchema)
+      .refine(
+        (statuses) => Object.keys(statuses).length <= 100,
+        'At most 100 statuses are supported',
+      )
+      .optional(),
     seed: z.number().int().min(1).max(0xffffffff).default(1),
     allowEscape: z.boolean().default(false),
     roundTimeMs: amount.default(0),
@@ -140,6 +183,20 @@ export const combatDefinitionSchema = z
         message: 'An encounter label or translation is required',
       })
     const actors = [combat.player, ...combat.enemies]
+
+    for (const [moveId, move] of Object.entries(combat.moves))
+      if (move.type === 'ability')
+        for (const [index, effect] of move.effects.entries()) {
+          if (
+            (effect.type === 'apply-status' || effect.type === 'remove-status') &&
+            !Object.hasOwn(combat.statuses ?? {}, effect.status)
+          )
+            context.addIssue({
+              code: 'custom',
+              path: ['moves', moveId, 'effects', index, 'status'],
+              message: 'Unknown combat status',
+            })
+        }
 
     if (new Set(actors.map((actor) => actor.id)).size !== actors.length)
       context.addIssue({
@@ -215,6 +272,18 @@ export function combatIssues(
 ): { path: (string | number)[]; message: string }[] {
   const issues: ReturnType<typeof combatIssues> = []
 
+  for (const [id, status] of Object.entries(combat.statuses ?? {}))
+    if (status.icon)
+      try {
+        if (!assets) throw new Error('Status icons require an asset catalogue')
+        assertGraphicReference(assets, status.icon, graphicAppearanceSchema.parse({}))
+      } catch (error) {
+        issues.push({
+          path: ['statuses', id, 'icon'],
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+
   for (const actor of [combat.player, ...combat.enemies]) {
     for (const binding of [
       actor.health,
@@ -275,6 +344,18 @@ export function localizeCombat(
   return combatDefinitionSchema.parse({
     ...combat,
     ...presentation(combat),
+    ...(combat.statuses && {
+      statuses: Object.fromEntries(
+        Object.entries(combat.statuses).map(([id, status]) => [
+          id,
+          {
+            ...status,
+            label: text(status.labelKey, status.label),
+            description: text(status.descriptionKey, status.description),
+          },
+        ]),
+      ),
+    }),
     ...(combat.rewards && {
       rewards: {
         ...combat.rewards,

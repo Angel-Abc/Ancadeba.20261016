@@ -1766,8 +1766,8 @@ and view placement. Declare numeric fields in Rules before linking them. Save
 uses the inspected revision and preserves conflicting or unrelated drafts;
 reference checks protect health declarations, moves, artwork and target scenes.
 Use **Controls → Action bar** for combat commands and their input bindings.
-AP and move costs support 1–100, with up to 32 enemies. V1 has no healing, spells,
-accuracy rolls, critical hits or party members. Rewards and equipment profiles
+AP and move costs support 1–100, with up to 32 enemies. V1 has no mana resources,
+accuracy rolls, critical hits or party members. Abilities, rewards and equipment profiles
 are optional extensions described below.
 
 ### Victory rewards and loot
@@ -1843,6 +1843,122 @@ gold, XP and a training token; the graphics courtyard awards coins, XP and a dye
 cloak. F takes selected loot, G takes all, and Z retries delivery in both samples.
 Enemy equipment transfers, stacks, automatic leveling, loot choices, shared loot
 tables and repeatable encounter farming are deferred.
+
+## Abilities and combat status effects
+
+Existing `attack` and `guard` moves remain compatible. An optional `ability` move
+uses the same actor move lists, level requirements, action-bar `queue-move`
+command, AP budget, keyboard bindings, and queued input ownership. For example:
+
+```json
+{
+  "moves": {
+    "poison-strike": {
+      "type": "ability",
+      "label": "Poison Strike",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        { "id": "hit", "type": "damage", "damage": { "min": 2, "max": 4 } },
+        { "id": "poison", "type": "apply-status", "status": "poison" }
+      ]
+    },
+    "recover": {
+      "type": "ability",
+      "label": "Recover",
+      "apCost": 1,
+      "target": "self",
+      "effects": [{ "id": "heal", "type": "heal", "amount": 10 }]
+    }
+  },
+  "statuses": {
+    "poison": { "type": "damage", "label": "Poison", "duration": 3, "amount": 3 },
+    "focus": {
+      "type": "modifier",
+      "label": "Battle Focus",
+      "duration": 2,
+      "modifiers": { "attack": 3, "guard": 2 }
+    },
+    "stun": { "type": "stun", "label": "Stunned", "duration": 1 }
+  }
+}
+```
+
+Abilities target the user or one selected enemy. Each ordered effect defaults to
+that ability target; `target: "self"` on an effect instead selects its user.
+Effects support `damage` with a seeded range, `heal` or `guard` with a fixed
+`amount`, and `apply-status` or `remove-status` with a declared status ID. Effect
+IDs must be unique within a move. Damage and Guard use the existing equipment and
+temporary-stat calculations. Healing clamps to effective maximum health and
+never revives. A move whose selected target is already defeated is skipped,
+including its self effects, and starts no cooldown. An executed move can start
+its cooldown even when healing restores zero or a named status is absent.
+
+Status definitions support `damage`, `regeneration`, `modifier`, and `stun`, with
+localized `label`, `description`, their translation keys, and an optional catalog
+`icon`. There are at most 100 definitions, 20 effects per ability, and 1–1000
+affected turns per status. Periodic amounts and cooldowns are nonnegative safe
+integers. Modifiers are signed safe integers for attack bonus, defense, and Guard
+bonus; the resulting bonuses clamp to zero. They do not reduce a move's authored
+base damage. Base fields and equipment remain unchanged.
+
+At the start of each living combatant's turn, periodic damage runs first, then
+regeneration, in definition order within each group. Periodic damage bypasses
+defense and Guard. Check outcomes after each tick; death prevents subsequent
+regeneration and moves. Stun present at turn start skips that actor's entire
+plan, while periodic effects and duration processing still occur. A player-applied
+stun can suppress an enemy's upcoming turn in the same round. Stun applied during
+the recipient's own turn affects their next turn.
+
+Statuses present at turn start last through that turn and then lose one duration
+point. Newly applied or refreshed statuses during that turn retain their full
+duration. Reapplying the same ID refreshes duration without stacking strength;
+different IDs coexist. Turn-start damage still happens before a queued Cleanse
+can remove its status. Earlier ability effects can change later effects and moves
+in the same plan. Previews show current values and are explicitly conditional;
+they never draw RNG.
+
+Any move may have a `cooldown`, defaulting to zero. A cooldown of one, used in
+round 1, blocks round 2 and becomes ready in round 3. Positive-cooldown moves are
+reserved once queued; Undo and Clear release that reservation. Only execution
+starts a cooldown. Cooldowns advance through committed stunned rounds. Enemy
+rotations respect availability, reservations, self targets, and stun.
+
+The pure round simulator returns candidate health, statuses, cooldowns, Guard,
+RNG, logs, and outcome. Rejected transactions retain every previous value;
+observer failures retain committed results. Plans, statuses, and cooldowns pause
+when leaving unfinished combat. Victory, defeat, or escape clears encounter
+effects and cooldowns, retains health changes, releases equipment locks, and keeps
+existing reward delivery semantics. An accepted whole-plan Escape retains its
+existing priority before actor turns, so it causes no periodic ticks. New Game
+resets all encounter state.
+
+Combat snapshots expose immutable `statuses` and cooldown ready-round maps.
+Linked `game.combatStats` snapshots include temporary contribution breakdowns;
+existing derived total bindings include those effects, including while paused.
+The combat view uses status badges with descriptions and remaining affected
+turns. Action-bar slots keep their positions and show accessible reservation,
+stun, and cooldown reasons. Status, stat, target, cooldown, and reservation changes
+participate in the existing captured-input checks; held terminal phases remain
+consumed. Disappearing focused badges restore focus to the game surface.
+
+Use **Combat** in the editor to add statuses, then ability moves and ordered
+effects. Configure their cooldowns, targets, amounts, translations, and icons.
+Existing action-bar and leveling controls can reference those moves. Saves keep
+revision checks, conflicting drafts, extension properties, and reference
+protection. Definitions load and export through existing combat files without
+migration.
+
+Both samples demonstrate abilities in **Advanced training**. Its existing input
+file maps W to Poison Strike, E to Stunning Blow, S to Weaken, F to Regenerate,
+Z to Recover, and V to Battle Focus. Q remains Attack, R Undo, T Clear, A Next
+target, D Escape, G Take All, X the level-unlocked Power strike, C Return, and B
+End Turn. These are scene slot choices, not new hard-coded keyboard behavior.
+
+Mana, charges, area attacks, ally targeting, revival, stacking strength,
+resistances, immunities, probabilistic effects, formulas, temporary maximum-health
+or AP changes, and statuses between completed encounters are deferred.
 
 ## Equipment effects on combat
 

@@ -76,34 +76,34 @@
           }
         },
         "2": {
-          "labelKey": "combat.heavy-strike",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
               "type": "queue-move",
-              "move": "heavy"
+              "move": "poison-strike"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-2"
-          }
+          },
+          "labelKey": "abilities.move.poison-strike"
         },
         "3": {
-          "labelKey": "combat.guard",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
               "type": "queue-move",
-              "move": "guard"
+              "move": "stunning-blow"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-3"
-          }
+          },
+          "labelKey": "abilities.move.stunning-blow"
         },
         "4": {
           "labelKey": "combat.undo",
@@ -148,18 +148,19 @@
           }
         },
         "7": {
-          "labelKey": "combat.previous-target",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "previous-target"
+              "type": "queue-move",
+              "move": "weaken"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-7"
-          }
+          },
+          "labelKey": "abilities.move.weaken"
         },
         "8": {
           "labelKey": "combat.escape",
@@ -176,18 +177,19 @@
           }
         },
         "14": {
-          "labelKey": "combat.continue",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "continue"
+              "type": "queue-move",
+              "move": "battle-focus"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-14"
-          }
+          },
+          "labelKey": "abilities.move.battle-focus"
         },
         "15": {
           "labelKey": "combat.end-turn",
@@ -204,18 +206,19 @@
           }
         },
         "9": {
-          "labelKey": "rewards.take",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "take-loot"
+              "type": "queue-move",
+              "move": "regenerate"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-9"
-          }
+          },
+          "labelKey": "abilities.move.regenerate"
         },
         "10": {
           "labelKey": "rewards.takeAll",
@@ -232,18 +235,19 @@
           }
         },
         "11": {
-          "labelKey": "rewards.retry",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "retry-rewards"
+              "type": "queue-move",
+              "move": "recover"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-11"
-          }
+          },
+          "labelKey": "abilities.move.recover"
         },
         "12": {
           "labelKey": "leveling.powerStrike",

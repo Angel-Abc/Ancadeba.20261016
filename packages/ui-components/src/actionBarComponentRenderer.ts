@@ -1,4 +1,5 @@
 import type { ActionBarComponentDefinition } from '@ancadeba/schemas'
+import { cooldownRemaining } from '@ancadeba/game-runtime'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -67,14 +68,43 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
             ? scene.game.equipment?.reason(scene, action.equipment, action.operation)
             : undefined
 
-        lock.textContent = equipmentIssue
-          ? '🔒'
-          : required && (!leveling?.available || leveling.level < required)
-            ? definition!.messages.requiresLevel.replaceAll('{level}', String(required))
-            : ''
+        const moveIssue =
+          action.type === 'combat-action' &&
+          action.command.type === 'queue-move' &&
+          scene?.type === 'game'
+            ? scene.game.combat?.moveIssue(scene, action.combat, action.command.move)
+            : undefined
+
+        const combatSnapshot =
+          moveIssue && action.type === 'combat-action' && scene?.type === 'game'
+            ? scene.game.combat?.snapshot(scene, action.combat)
+            : undefined
+
+        const cooldown =
+          combatSnapshot &&
+          definition &&
+          action.type === 'combat-action' &&
+          action.command.type === 'queue-move'
+            ? cooldownRemaining(
+                combatSnapshot.cooldowns,
+                definition.player.id,
+                action.command.move,
+                combatSnapshot.round,
+              )
+            : 0
+
+        lock.textContent = moveIssue
+          ? cooldown
+            ? `⏳ ${cooldown}`
+            : '🔒'
+          : equipmentIssue
+            ? '🔒'
+            : required && (!leveling?.available || leveling.level < required)
+              ? definition!.messages.requiresLevel.replaceAll('{level}', String(required))
+              : ''
         lock.hidden = !lock.textContent
-        lock.setAttribute('aria-hidden', String(Boolean(equipmentIssue)))
-        button.title = equipmentIssue ?? lock.textContent
+        lock.setAttribute('aria-hidden', String(Boolean(equipmentIssue || moveIssue)))
+        button.title = moveIssue ?? equipmentIssue ?? lock.textContent
         button.setAttribute('aria-description', button.title)
 
         if (empty) empty.hidden = available

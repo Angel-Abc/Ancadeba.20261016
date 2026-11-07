@@ -508,6 +508,15 @@ describe('action bar editor controls', () => {
     edit('Rotation (IDs)', 'guard, attack', 'Enemy 1')
     edit('Available moves (IDs)', 'attack, guard', 'Enemy 1')
     edit('Maximum damage', '7', 'Move: attack')
+    edit('New status ID', 'poison')
+    click('Add status')
+    edit('Duration (affected turns)', '3', 'Status: poison')
+    edit('Amount', '2', 'Status: poison')
+    click('Add ability move')
+    edit('Cooldown (subsequent rounds)', '2', 'Move: ability')
+    edit('Ability target', 'enemy', 'Move: ability')
+    edit('Effect type', 'apply-status', 'Effect 1')
+    edit('Status', 'poison', 'Effect 1')
     edit('Allow escape', 'true')
     edit('Victory destination', 'other')
     edit('Enable victory rewards', 'yes')
@@ -538,6 +547,7 @@ describe('action bar editor controls', () => {
     )
     expect(field('Maximum damage', 'Move: attack').value).toBe('7')
     expect(field('Reward 1 amount').value).toBe('8')
+    expect(field('Cooldown (subsequent rounds)', 'Move: ability').value).toBe('2')
     submit('Save combat encounter')
     const saved = commands[0]!
     expect(saved).toMatchObject({
@@ -546,7 +556,16 @@ describe('action bar editor controls', () => {
         label: '<b>Training</b>',
         player: { ap: 4 },
         enemies: [{ rotation: ['guard', 'attack'] }],
-        moves: { attack: { damage: { max: 7 } } },
+        moves: {
+          attack: { damage: { max: 7 } },
+          ability: {
+            type: 'ability',
+            cooldown: 2,
+            target: 'enemy',
+            effects: [{ type: 'apply-status', status: 'poison' }],
+          },
+        },
+        statuses: { poison: { type: 'damage', duration: 3, amount: 2 } },
         allowEscape: true,
         outcomes: { victory: 'other' },
         rewards: {

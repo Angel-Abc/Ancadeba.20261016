@@ -320,6 +320,24 @@ describe('standalone game export', () => {
 
         for (let i = 0; i < 6; i++) engine.flushMessages()
         expect(game.combat!.snapshot(advanced, 'combat')!.plan[0]!.move).toBe('power-strike')
+        game.combat!.request(advanced, 'combat', { type: 'clear' })
+
+        for (let i = 0; i < 6; i++) engine.flushMessages()
+
+        for (const slot of ['2', '3', '15']) {
+          game.actionBar!.activate(advanced, 'commands', slot)
+
+          for (let i = 0; i < 6; i++) engine.flushMessages()
+        }
+
+        expect(
+          game.combat!.snapshot(advanced, 'combat')!.statuses['advanced-sentinel'],
+        ).toContainEqual(expect.objectContaining({ id: 'poison', remaining: 2 }))
+        expect(game.combat!.snapshot(advanced, 'combat')!.cooldowns.player).toMatchObject({
+          'poison-strike': 3,
+          'stunning-blow': 4,
+        })
+        expect(game.combat!.text(advanced, 'combat')).toContain('Stunned')
       } finally {
         engine.stop()
       }

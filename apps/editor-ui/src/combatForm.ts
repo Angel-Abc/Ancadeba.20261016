@@ -1,4 +1,5 @@
 import { combatRewardsForm } from './combatRewardsForm.js'
+import { abilityEffectsForm, combatStatusesForm } from './combatAbilitiesForm.js'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   combatHealthSchema,
@@ -230,6 +231,17 @@ export function combatForm(
         number('AP cost', move.apCost, (value) => {
           move.apCost = value
         }),
+        number('Cooldown (subsequent rounds)', move.cooldown ?? 0, (value) => {
+          move.cooldown = value || undefined
+        }),
+        ...(move.type === 'ability'
+          ? [
+              select('Ability target', move.target, ['self', 'enemy'], (value) => {
+                move.target = value
+              }),
+              ...abilityEffectsForm(controls, draft, move.effects, render),
+            ]
+          : []),
         ...(move.type === 'attack'
           ? [
               number('Minimum damage', move.damage.min, (value) => {
@@ -239,11 +251,13 @@ export function combatForm(
                 move.damage.max = value
               }),
             ]
-          : [
-              number('Guard points', move.guard, (value) => {
-                move.guard = value
-              }),
-            ]),
+          : move.type === 'guard'
+            ? [
+                number('Guard points', move.guard, (value) => {
+                  move.guard = value
+                }),
+              ]
+            : []),
         button(`Remove move ${id}`, () => {
           delete draft.moves[id]
           controls.markEdited()
@@ -252,7 +266,7 @@ export function combatForm(
       ),
     )
 
-  for (const type of ['attack', 'guard'] as const)
+  for (const type of ['attack', 'guard', 'ability'] as const)
     result.push(
       button(`Add ${type} move`, () => {
         let id: string = type
@@ -262,7 +276,16 @@ export function combatForm(
         draft.moves[id] =
           type === 'attack'
             ? { type, label: 'Attack', description: '', apCost: 1, damage: { min: 2, max: 4 } }
-            : { type, label: 'Guard', description: '', apCost: 1, guard: 4 }
+            : type === 'guard'
+              ? { type, label: 'Guard', description: '', apCost: 1, guard: 4 }
+              : {
+                  type,
+                  label: 'Recover',
+                  description: '',
+                  apCost: 1,
+                  target: 'self',
+                  effects: [{ id: 'heal', type: 'heal', amount: 5 }],
+                }
         draft.player.moves.push(id)
         controls.markEdited()
         render()
@@ -284,6 +307,7 @@ export function combatForm(
     ),
   )
   result.push(combatRewardsForm(controls, view, draft, render))
+  result.push(combatStatusesForm(controls, view, draft, render))
   const messages = create('details')
   const summary = create('summary')
   summary.textContent = 'Combat text and translations'

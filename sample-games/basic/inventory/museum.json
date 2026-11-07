@@ -73,7 +73,8 @@
           "currentHealth": "equipment.currentHealth",
           "chooseSlot": "equipment.chooseSlot",
           "locked": "equipment.locked",
-          "unavailable": "equipment.unavailable"
+          "unavailable": "equipment.unavailable",
+          "temporary": "equipment.temporary"
         }
       },
       "equipmentSlots": {
@@ -91,6 +92,60 @@
     },
     "advanced-loot": {
       "label": "Advanced training loot"
+    },
+    "advanced-sentinel": {
+      "label": "Advanced opponent",
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["combat", "advanced-sentinel"]
+        },
+        "maximumHealth": 26,
+        "attack": 2,
+        "defense": 1,
+        "guard": 1,
+        "messageKeys": {
+          "attack": "equipment.attack",
+          "defense": "equipment.defense",
+          "guard": "equipment.guard",
+          "maximumHealth": "equipment.maximumHealth",
+          "base": "equipment.base",
+          "equipment": "equipment.equipment",
+          "total": "equipment.total",
+          "comparison": "equipment.comparison",
+          "currentHealth": "equipment.currentHealth",
+          "chooseSlot": "equipment.chooseSlot",
+          "locked": "equipment.locked",
+          "unavailable": "equipment.unavailable"
+        }
+      }
+    },
+    "advanced-keeper": {
+      "label": "Advanced opponent",
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["combat", "advanced-keeper"]
+        },
+        "maximumHealth": 26,
+        "attack": 2,
+        "defense": 1,
+        "guard": 1,
+        "messageKeys": {
+          "attack": "equipment.attack",
+          "defense": "equipment.defense",
+          "guard": "equipment.guard",
+          "maximumHealth": "equipment.maximumHealth",
+          "base": "equipment.base",
+          "equipment": "equipment.equipment",
+          "total": "equipment.total",
+          "comparison": "equipment.comparison",
+          "currentHealth": "equipment.currentHealth",
+          "chooseSlot": "equipment.chooseSlot",
+          "locked": "equipment.locked",
+          "unavailable": "equipment.unavailable"
+        }
+      }
     }
   },
   "items": {

@@ -18,7 +18,18 @@
       "path": ["player", "maximumHealth"]
     },
     "ap": 3,
-    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "moves": [
+      "attack",
+      "heavy",
+      "guard",
+      "power-strike",
+      "poison-strike",
+      "recover",
+      "battle-focus",
+      "weaken",
+      "regenerate",
+      "stunning-blow"
+    ],
     "leveling": "player",
     "moveLevels": {
       "power-strike": 2
@@ -35,8 +46,9 @@
       },
       "maximumHealth": 26,
       "ap": 2,
-      "moves": ["attack", "guard"],
-      "rotation": ["guard", "attack"]
+      "moves": ["attack", "guard", "weaken"],
+      "rotation": ["weaken", "attack"],
+      "equipmentOwner": "advanced-sentinel"
     },
     {
       "id": "advanced-keeper",
@@ -47,8 +59,9 @@
       },
       "maximumHealth": 26,
       "ap": 2,
-      "moves": ["attack", "guard"],
-      "rotation": ["guard", "attack"]
+      "moves": ["attack", "guard", "regenerate", "stunning-blow"],
+      "rotation": ["regenerate", "stunning-blow", "attack"],
+      "equipmentOwner": "advanced-keeper"
     }
   ],
   "moves": {
@@ -84,6 +97,106 @@
         "min": 14,
         "max": 18
       }
+    },
+    "poison-strike": {
+      "type": "ability",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 2,
+            "max": 4
+          }
+        },
+        {
+          "id": "poison",
+          "type": "apply-status",
+          "status": "poison"
+        }
+      ],
+      "labelKey": "abilities.move.poison-strike"
+    },
+    "recover": {
+      "type": "ability",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 10
+        }
+      ],
+      "labelKey": "abilities.move.recover"
+    },
+    "battle-focus": {
+      "type": "ability",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "focus",
+          "type": "apply-status",
+          "status": "focus"
+        }
+      ],
+      "labelKey": "abilities.move.battle-focus"
+    },
+    "weaken": {
+      "type": "ability",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "weakness",
+          "type": "apply-status",
+          "status": "weakness"
+        }
+      ],
+      "labelKey": "abilities.move.weaken"
+    },
+    "regenerate": {
+      "type": "ability",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "regeneration",
+          "type": "apply-status",
+          "status": "regeneration"
+        }
+      ],
+      "labelKey": "abilities.move.regenerate"
+    },
+    "stunning-blow": {
+      "type": "ability",
+      "apCost": 2,
+      "cooldown": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 1,
+            "max": 3
+          }
+        },
+        {
+          "id": "stun",
+          "type": "apply-status",
+          "status": "stun"
+        }
+      ],
+      "labelKey": "abilities.move.stunning-blow"
     }
   },
   "outcomes": {
@@ -118,7 +231,23 @@
     "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
     "rewardInventory": "rewards.message.rewardInventory",
     "requiresLevel": "leveling.requires",
-    "mitigated": "equipment.mitigated"
+    "mitigated": "equipment.mitigated",
+    "statAttack": "abilities.message.statAttack",
+    "statDefense": "abilities.message.statDefense",
+    "statGuard": "abilities.message.statGuard",
+    "healed": "abilities.message.healed",
+    "statusApplied": "abilities.message.statusApplied",
+    "statusRefreshed": "abilities.message.statusRefreshed",
+    "statusRemoved": "abilities.message.statusRemoved",
+    "statusExpired": "abilities.message.statusExpired",
+    "periodicDamage": "abilities.message.periodicDamage",
+    "regenerated": "abilities.message.regenerated",
+    "stunned": "abilities.message.stunned",
+    "cooldown": "abilities.message.cooldown",
+    "reserved": "abilities.message.reserved",
+    "conditional": "abilities.message.conditional",
+    "turnsRemaining": "abilities.message.turnsRemaining",
+    "healing": "abilities.message.healing"
   },
   "rewards": {
     "recipient": "player",
@@ -154,5 +283,47 @@
         "chance": 5000
       }
     ]
+  },
+  "statuses": {
+    "poison": {
+      "type": "damage",
+      "duration": 3,
+      "amount": 3,
+      "labelKey": "abilities.status.poison.name",
+      "descriptionKey": "abilities.status.poison.description"
+    },
+    "regeneration": {
+      "type": "regeneration",
+      "duration": 3,
+      "amount": 4,
+      "labelKey": "abilities.status.regeneration.name",
+      "descriptionKey": "abilities.status.regeneration.description"
+    },
+    "focus": {
+      "type": "modifier",
+      "duration": 2,
+      "modifiers": {
+        "attack": 3,
+        "guard": 2
+      },
+      "labelKey": "abilities.status.focus.name",
+      "descriptionKey": "abilities.status.focus.description"
+    },
+    "weakness": {
+      "type": "modifier",
+      "duration": 2,
+      "modifiers": {
+        "attack": -2,
+        "defense": -1
+      },
+      "labelKey": "abilities.status.weakness.name",
+      "descriptionKey": "abilities.status.weakness.description"
+    },
+    "stun": {
+      "type": "stun",
+      "duration": 1,
+      "labelKey": "abilities.status.stun.name",
+      "descriptionKey": "abilities.status.stun.description"
+    }
   }
 }

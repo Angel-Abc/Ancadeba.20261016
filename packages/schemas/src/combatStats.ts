@@ -28,6 +28,7 @@ export const combatBonusesSchema = z.object({
 })
 
 export const combatStatsTextSchema = z.object({
+  temporary: z.string().default('Temporary'),
   attack: z.string().default('Attack bonus'),
   defense: z.string().default('Defense'),
   guard: z.string().default('Guard bonus'),

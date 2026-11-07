@@ -1858,6 +1858,89 @@ describe.each([
 
 describe('editor scene picker', () => {
   it.each([false, true])(
+    'renders ability statuses, cooldowns and expiry focus recovery in preview=%s',
+    async (preview) => {
+      const resources = {
+        ...source,
+        readText: async (path: string) => {
+          const text = await source.readText(path)
+
+          if (path === 'combat/advanced-training.json') {
+            const combat = JSON.parse(text)
+            combat.statuses.poison.duration = 2
+
+            for (const enemy of combat.enemies) enemy.rotation = ['guard']
+
+            return JSON.stringify(combat)
+          }
+
+          if (path === 'languages/en/messages.json') {
+            const catalog = JSON.parse(text)
+            catalog['abilities.status.poison.name'] = '<Poison>'
+
+            return JSON.stringify(catalog)
+          }
+
+          return text
+        },
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.lifecycle!.enterScene('advanced-training')
+
+      const game = engine.lifecycle!.currentGame!,
+        scene = engine.lifecycle!.activeScene!
+
+      game.combat!.selectTarget(scene, 'combat', 'advanced-sentinel')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+      slot('2').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(slot('2').disabled).toBe(true)
+      expect(slot('2').title).toContain('Already queued')
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(slot('2').title).toContain('Cooldown: 1')
+      expect(slot('2').children[1]!.textContent).toBe('W')
+      const effect = target.find((node) => node.dataset.statusEffect === 'poison')!
+      expect(effect.textContent).toContain('<Poison>')
+      expect(effect.textContent).toContain('3 damage')
+      const button = effect.find((node) => node.tagName === 'BUTTON')!
+      button.focus()
+      button.dispatchEvent(new Event('focus'))
+      expect(effect.find((node) => node.attributes.get('role') === 'tooltip')!.hidden).toBe(false)
+      engine.input!.pressKey('KeyB')
+      engine.input!.releaseKey('KeyB')
+      flush(engine)
+      expect(target.find((node) => node.dataset.statusEffect === 'poison')).toBeUndefined()
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      expect(slot('2').disabled).toBe(false)
+      engine.game!.localization!.select('nl')
+      expect(slot('2').textContent).toContain('Gifslag')
+      slot('2').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.find((node) => node.dataset.statusEffect === 'poison')!.textContent).toContain(
+        'Vergif',
+      )
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('advanced-training')
+      expect(target.find((node) => node.dataset.statusEffect === 'poison')).toBeUndefined()
+    },
+  )
+  it.each([false, true])(
     'renders localized victory rewards and selectable loot in preview=%s',
     async (preview) => {
       const resources = {

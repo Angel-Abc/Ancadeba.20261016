@@ -8,8 +8,10 @@ import type { GameInstance } from './gameLifecycle.js'
 import type { IGameBindings } from './gameBindings.js'
 import type { IStateTransactions, StateWrite } from './stateTransactions.js'
 import type { InventoryItemSnapshot, InventoryEquipmentPreparation } from './inventory.js'
+import { temporaryCombatStats, type TemporaryStatContribution } from './combatEffects.js'
 
 export interface CombatStatsSnapshot {
+  readonly temporary: readonly TemporaryStatContribution[]
   readonly base: Readonly<CombatBonuses>
   readonly equipment: Readonly<CombatBonuses>
   readonly total: Readonly<CombatBonuses>
@@ -38,6 +40,17 @@ export interface IGameCombatStats {
 
 /** Calculates derived values without changing base fields. Enlists health clamps in inventory commits. */
 export class GameCombatStats implements IGameCombatStats {
+  private temporaryEffects: (owner: string) => readonly TemporaryStatContribution[] = () => []
+  setTemporaryEffects(read: (owner: string) => readonly TemporaryStatContribution[]): () => void {
+    this.temporaryEffects = read
+
+    return () => {
+      if (this.temporaryEffects === read) this.temporaryEffects = () => []
+    }
+  }
+  baseSnapshot(owner: string): CombatStatsSnapshot | undefined {
+    return this.calculate(owner, this.game.inventory?.snapshot ?? [], false, false)
+  }
   private readonly locks = new Map<string, { id: string; label: string }>()
   private readonly versions = new Map<string, { signature: string; token: object }>()
   private readonly encounterVersions = new Map<
@@ -125,6 +138,7 @@ export class GameCombatStats implements IGameCombatStats {
     owner: string,
     items: readonly InventoryItemSnapshot[],
     candidateHealth = false,
+    withTemporary = true,
   ): CombatStatsSnapshot | undefined {
     const profile = !this.disposed && this.profile(owner)
 
@@ -165,19 +179,29 @@ export class GameCombatStats implements IGameCombatStats {
 
     if (health === undefined || (!candidateHealth && health > total.maximumHealth)) return
     const lockedBy = this.locks.get(owner)?.id
-    const signature = JSON.stringify([base, contributions, health, lockedBy])
-    let version = candidateHealth ? undefined : this.versions.get(owner)
+    const temporary = withTemporary ? this.temporaryEffects(owner) : []
+    let effective
+
+    try {
+      effective = temporaryCombatStats(total, temporary)
+    } catch {
+      return
+    }
+
+    const signature = JSON.stringify([base, contributions, temporary, health, lockedBy])
+    let version = candidateHealth || !withTemporary ? undefined : this.versions.get(owner)
 
     if (!version || version.signature !== signature) {
       version = { signature, token: Object.freeze({}) }
 
-      if (!candidateHealth) this.versions.set(owner, version)
+      if (!candidateHealth && withTemporary) this.versions.set(owner, version)
     }
 
     return Object.freeze({
       base: Object.freeze(base),
       equipment: Object.freeze(equipment),
-      total: Object.freeze(total),
+      total: effective,
+      temporary,
       contributions: Object.freeze(contributions.map((c) => Object.freeze(c))),
       health: Math.min(health, total.maximumHealth),
       lockedBy,

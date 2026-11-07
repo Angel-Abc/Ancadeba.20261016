@@ -8,6 +8,7 @@ export function renderStatusEffect(
   icon?: RenderedComponent,
 ) {
   const { document } = context
+  let currentDescription = effect.description
   const element = document.createElement('div')
   element.className = 'ancadeba-status-effect'
   element.dataset.statusEffect = effect.id
@@ -36,7 +37,7 @@ export function renderStatusEffect(
   const show = () => {
     const wasHidden = description.hidden
     description.hidden =
-      !active || element.hidden || dismissed || !(hovered || focused) || !effect.description
+      !active || element.hidden || dismissed || !(hovered || focused) || !currentDescription
 
     if (wasHidden && !description.hidden && focused)
       description.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
@@ -81,6 +82,14 @@ export function renderStatusEffect(
 
   return {
     element,
+    setText(name: string, text: string) {
+      label.textContent = name
+      button.setAttribute('aria-label', name)
+      currentDescription = text
+      button.setAttribute('aria-description', text)
+      description.textContent = text
+      show()
+    },
     setVisible(visible: boolean) {
       element.hidden = !visible
 

@@ -18,7 +18,18 @@
       "path": ["combat", "maximumHealth"]
     },
     "ap": 3,
-    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "moves": [
+      "attack",
+      "heavy",
+      "guard",
+      "power-strike",
+      "poison-strike",
+      "recover",
+      "battle-focus",
+      "weaken",
+      "regenerate",
+      "stunning-blow"
+    ],
     "portrait": "paper-doll",
     "leveling": "player",
     "moveLevels": {
@@ -36,9 +47,10 @@
       },
       "maximumHealth": 26,
       "ap": 2,
-      "moves": ["attack", "guard"],
-      "rotation": ["guard", "attack"],
-      "portrait": "paper-doll"
+      "moves": ["attack", "guard", "weaken"],
+      "rotation": ["weaken", "attack"],
+      "portrait": "paper-doll",
+      "equipmentOwner": "advanced-sentinel"
     },
     {
       "id": "advanced-keeper",
@@ -49,9 +61,10 @@
       },
       "maximumHealth": 26,
       "ap": 2,
-      "moves": ["attack", "guard"],
-      "rotation": ["guard", "attack"],
-      "portrait": "paper-doll"
+      "moves": ["attack", "guard", "regenerate", "stunning-blow"],
+      "rotation": ["regenerate", "stunning-blow", "attack"],
+      "portrait": "paper-doll",
+      "equipmentOwner": "advanced-keeper"
     }
   ],
   "moves": {
@@ -87,6 +100,106 @@
         "min": 14,
         "max": 18
       }
+    },
+    "poison-strike": {
+      "type": "ability",
+      "label": "Poison Strike",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 2,
+            "max": 4
+          }
+        },
+        {
+          "id": "poison",
+          "type": "apply-status",
+          "status": "poison"
+        }
+      ]
+    },
+    "recover": {
+      "type": "ability",
+      "label": "Recover",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 10
+        }
+      ]
+    },
+    "battle-focus": {
+      "type": "ability",
+      "label": "Battle Focus",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "focus",
+          "type": "apply-status",
+          "status": "focus"
+        }
+      ]
+    },
+    "weaken": {
+      "type": "ability",
+      "label": "Weaken",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "weakness",
+          "type": "apply-status",
+          "status": "weakness"
+        }
+      ]
+    },
+    "regenerate": {
+      "type": "ability",
+      "label": "Regenerate",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "regeneration",
+          "type": "apply-status",
+          "status": "regeneration"
+        }
+      ]
+    },
+    "stunning-blow": {
+      "type": "ability",
+      "label": "Stunning Blow",
+      "apCost": 2,
+      "cooldown": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 1,
+            "max": 3
+          }
+        },
+        {
+          "id": "stun",
+          "type": "apply-status",
+          "status": "stun"
+        }
+      ]
     }
   },
   "outcomes": {
@@ -132,5 +245,47 @@
         "chance": 5000
       }
     ]
+  },
+  "statuses": {
+    "poison": {
+      "type": "damage",
+      "label": "Poison",
+      "description": "Deals damage before the affected combatant acts. Ignores defense and Guard.",
+      "duration": 3,
+      "amount": 3
+    },
+    "regeneration": {
+      "type": "regeneration",
+      "label": "Regeneration",
+      "description": "Restores health at the start of the affected turn. Does not revive.",
+      "duration": 3,
+      "amount": 4
+    },
+    "focus": {
+      "type": "modifier",
+      "label": "Battle Focus",
+      "description": "Adds attack and Guard bonuses for the next two affected turns.",
+      "duration": 2,
+      "modifiers": {
+        "attack": 3,
+        "guard": 2
+      }
+    },
+    "weakness": {
+      "type": "modifier",
+      "label": "Weakened",
+      "description": "Reduces attack and defense bonuses. Bonuses cannot fall below zero.",
+      "duration": 2,
+      "modifiers": {
+        "attack": -2,
+        "defense": -1
+      }
+    },
+    "stun": {
+      "type": "stun",
+      "label": "Stunned",
+      "description": "Skips the next turn. Periodic effects still tick.",
+      "duration": 1
+    }
   }
 }

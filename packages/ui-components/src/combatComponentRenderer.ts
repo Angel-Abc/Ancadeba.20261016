@@ -1,10 +1,14 @@
 import {
   combatMoveValues,
+  combatAbilityEffectValues,
+  combatStunned,
   type SceneComponentData,
   type PlannedMove,
   type CombatSnapshot,
 } from '@ancadeba/game-runtime'
 import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
+import { renderStatusEffect } from './statusEffectRenderer.js'
+import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
 import type {
   IComponentRenderer,
   ComponentRenderContext,
@@ -15,7 +19,10 @@ type CombatComponent = Extract<SceneComponentData, { type: 'combat' }>
 
 /** Presents encounter snapshots; all combat controls route through the shared service. */
 export class CombatComponentRenderer implements IComponentRenderer<CombatComponent> {
-  constructor(private readonly statuses = new StatusPanelComponentRenderer()) {}
+  constructor(
+    private readonly statuses = new StatusPanelComponentRenderer(),
+    private readonly graphics = new GraphicComponentRenderer(),
+  ) {}
   render(component: CombatComponent, context: ComponentRenderContext): RenderedComponent {
     const { document, scene } = context
     const combat = scene?.type === 'game' ? scene.game.combat : undefined
@@ -40,6 +47,13 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
     log.className = 'ancadeba-combat-log'
     log.setAttribute('role', 'log')
     root.append(heading, phase, actors, description, log)
+
+    if (Object.values(definition.moves).some((move) => move.type === 'ability')) {
+      const hint = document.createElement('p')
+      hint.textContent = definition.messages.conditional
+      root.append(hint)
+    }
+
     const cleanups: (() => void)[] = []
 
     try {
@@ -81,14 +95,21 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
         target.addEventListener('click', select)
         cleanups.push(() => target.removeEventListener('click', select))
         const plan = document.createElement('ol')
+        const activeEffects = document.createElement('div')
+        activeEffects.className = 'ancadeba-status-effects'
+        const effectViews = new Map<string, ReturnType<typeof renderStatusEffect>>()
+        cleanups.push(() => {
+          for (const effect of effectViews.values()) effect.dispose()
+          effectViews.clear()
+        })
         plan.className = 'ancadeba-combat-plan'
         box.append(status.element, resources)
 
         if (actor.id !== definition.player.id) box.append(target)
-        box.append(plan)
+        box.append(activeEffects, plan)
         actors.append(box)
 
-        return { actor, resources, target, plan }
+        return { actor, resources, target, plan, activeEffects, effectViews }
       })
 
       const moveText = (queued: PlannedMove, actor: string, snapshot: CombatSnapshot) => {
@@ -97,6 +118,44 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
         const target =
           [definition.player, ...definition.enemies].find((actor) => actor.id === queued.target)
             ?.label ?? queued.target
+
+        if (move.type === 'ability') {
+          const effects = move.effects.map((effect) => {
+            const recipient = effect.target === 'self' ? actor : queued.target
+
+            const name =
+              [definition.player, ...definition.enemies].find((a) => a.id === recipient)?.label ??
+              recipient
+
+            const values = combatAbilityEffectValues(
+              effect,
+              snapshot.stats[actor],
+              snapshot.stats[recipient]?.defense ?? 0,
+            )
+
+            const status =
+              effect.type === 'apply-status' || effect.type === 'remove-status'
+                ? definition.statuses?.[effect.status]
+                : undefined
+
+            const text =
+              effect.type === 'damage'
+                ? `${values.min}–${values.max}`
+                : effect.type === 'heal'
+                  ? definition.messages.healing.replaceAll('{amount}', String(effect.amount))
+                  : effect.type === 'guard'
+                    ? `${definition.messages.guard} +${values.amount}`
+                    : effect.type === 'apply-status'
+                      ? `${status?.label} · ${definition.messages.turnsRemaining.replaceAll('{turns}', String(status?.duration))}`
+                      : definition.messages.statusRemoved
+                          .replaceAll('{target}', name)
+                          .replaceAll('{status}', status?.label ?? '')
+
+            return `${name}: ${text}`
+          })
+
+          return `${move.label} · ${move.apCost} ${definition.messages.ap} · ${effects.join(' · ')}`
+        }
 
         let values
 
@@ -119,7 +178,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
         if (!snapshot) return
         phase.textContent = `${definition.messages.round} ${snapshot.round} · ${snapshot.outcome ? definition.messages[snapshot.outcome] : definition.messages.planning}`
 
-        for (const { actor, target, plan, resources } of views) {
+        for (const { actor, target, plan, resources, activeEffects, effectViews } of views) {
           const queued =
             actor.id === definition.player.id
               ? snapshot.plan
@@ -137,7 +196,87 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
           target.setAttribute('aria-pressed', String(snapshot.target === actor.id))
 
           if (focused && target.disabled) context.onActionBarFocusLost?.()
-          const lines = queued.map((move) => moveText(move, actor.id, snapshot))
+          const active = snapshot.statuses[actor.id] ?? []
+
+          for (const [id, view] of effectViews)
+            if (!active.some((s) => s.id === id)) {
+              if (view.element.contains(document.activeElement)) context.onActionBarFocusLost?.()
+              view.dispose()
+              effectViews.delete(id)
+            }
+
+          for (const status of active) {
+            const data = definition.statuses?.[status.id]
+
+            if (!data) continue
+            let view = effectViews.get(status.id)
+
+            if (!view) {
+              const icon = data.icon
+                ? this.graphics.render(
+                    {
+                      id: status.id,
+                      type: 'graphic',
+                      visual: data.icon,
+                      alt: '',
+                      placement: component.placement,
+                      fit: 'contain',
+                      appearance: { visible: true, slots: {}, colors: {} },
+                    },
+                    context,
+                  )
+                : undefined
+
+              icon?.element.classList.add('ancadeba-status-effect-icon')
+              view = renderStatusEffect(
+                { id: status.id, label: data.label, description: data.description },
+                context,
+                icon,
+              )
+              effectViews.set(status.id, view)
+              activeEffects.append(view.element)
+            }
+
+            const names = {
+              attack: definition.messages.statAttack,
+              defense: definition.messages.statDefense,
+              guard: definition.messages.statGuard,
+            }
+
+            const magnitude =
+              data.type === 'damage' || data.type === 'regeneration'
+                ? (data.type === 'damage'
+                    ? definition.messages.periodicDamage
+                    : definition.messages.regenerated
+                  )
+                    .replaceAll('{target}', actor.label)
+                    .replaceAll('{status}', data.label)
+                    .replaceAll('{amount}', String(data.amount))
+                : data.type === 'modifier'
+                  ? (['attack', 'defense', 'guard'] as const)
+                      .filter((stat) => data.modifiers[stat])
+                      .map(
+                        (stat) =>
+                          `${names[stat]} ${(data.modifiers[stat] ?? 0) >= 0 ? '+' : ''}${data.modifiers[stat]}`,
+                      )
+                      .join(' · ')
+                  : definition.messages.stunned.replaceAll('{actor}', actor.label)
+
+            view.setText(
+              `${data.label} · ${status.remaining}`,
+              [
+                data.description,
+                magnitude,
+                definition.messages.turnsRemaining.replaceAll('{turns}', String(status.remaining)),
+              ]
+                .filter(Boolean)
+                .join('\n'),
+            )
+          }
+
+          const lines = combatStunned(definition, active)
+            ? [definition.messages.stunned.replaceAll('{actor}', actor.label)]
+            : queued.map((move) => moveText(move, actor.id, snapshot))
 
           if (actor.id === definition.player.id && snapshot.escape)
             lines.push(definition.messages.escape)
