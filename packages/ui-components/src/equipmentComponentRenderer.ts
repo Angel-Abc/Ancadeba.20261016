@@ -29,6 +29,7 @@ export class EquipmentComponentRenderer implements IComponentRenderer<EquipmentC
     grid.className = 'ancadeba-equipment-grid'
     grid.style.setProperty('--ge-equipment-columns', String(component.columns))
     root.append(title, grid)
+    let statsView: HTMLElement | undefined
     const owner = inventoryDefinition && inventoryEntry(inventoryDefinition.owners, component.owner)
     const icons = new Map<string, RenderedGraphic>()
 
@@ -44,6 +45,13 @@ export class EquipmentComponentRenderer implements IComponentRenderer<EquipmentC
         : undefined
 
       const token = scene && game?.equipment?.get(scene, component.id)
+      statsView?.remove()
+
+      if (scene && component.showCombatStats) {
+        statsView = equipmentStatsView(document, scene, component)
+        root.append(statsView)
+      }
+
       const selected = inventory?.snapshot.find((item) => item.id === token?.item)
 
       const type =
@@ -183,3 +191,5 @@ export class EquipmentComponentRenderer implements IComponentRenderer<EquipmentC
     }
   }
 }
+
+import { equipmentStatsView } from './equipmentStatsView.js'

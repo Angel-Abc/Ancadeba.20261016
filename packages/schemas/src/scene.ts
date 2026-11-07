@@ -229,6 +229,8 @@ export const inventoryComponentSchema = z
 export type InventoryComponentDefinition = z.infer<typeof inventoryComponentSchema>
 
 export const itemDetailsComponentSchema = z.object({
+  equipment: gameIdSchema.optional(),
+  showCombatStats: z.boolean().optional(),
   id: gameIdSchema,
   type: z.literal('item-details'),
   placement: gridPlacementSchema,
@@ -240,6 +242,7 @@ export const itemDetailsComponentSchema = z.object({
 })
 
 export const equipmentComponentSchema = z.object({
+  showCombatStats: z.boolean().optional(),
   id: gameIdSchema,
   type: z.literal('equipment'),
   placement: gridPlacementSchema,
@@ -602,6 +605,21 @@ export const sceneSchema = z
       }
 
       if (component.type === 'item-details' || component.type === 'equipment') {
+        if (
+          component.type === 'item-details' &&
+          component.equipment &&
+          !scene.components.some(
+            (entry) =>
+              entry.type === 'equipment' &&
+              entry.id === component.equipment &&
+              entry.inventory === component.inventory,
+          )
+        )
+          context.addIssue({
+            code: 'custom',
+            path: ['components', index, 'equipment'],
+            message: 'Comparison equipment must use the same inventory panel',
+          })
         const source = scene.components.find((entry) => entry.id === component.inventory)
 
         if (scene.type !== 'game' || source?.type !== 'inventory')

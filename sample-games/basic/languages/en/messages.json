@@ -200,5 +200,21 @@
   "leveling.powerStrike": "Power strike",
   "leveling.advanced": "Advanced training",
   "leveling.requires": "Requires level {level}",
-  "leveling.returnTraining": "Return to training"
+  "leveling.returnTraining": "Return to training",
+  "equipment.attack": "Attack bonus",
+  "equipment.defense": "Defense",
+  "equipment.guard": "Guard bonus",
+  "equipment.maximumHealth": "Maximum health",
+  "equipment.base": "Base",
+  "equipment.equipment": "Equipment",
+  "equipment.total": "Total",
+  "equipment.comparison": "Equipment comparison",
+  "equipment.currentHealth": "Current health",
+  "equipment.chooseSlot": "Choose a destination slot to compare.",
+  "equipment.locked": "Loadout locked by {encounter}.",
+  "equipment.unavailable": "Equipment stats are unavailable: check values and state access.",
+  "equipment.heading": "Equipment",
+  "equipment.equip": "Equip",
+  "equipment.unequip": "Unequip",
+  "equipment.mitigated": "{actor} attacks {target}: {damage} damage, {defended} prevented by defense, {blocked} absorbed by Guard."
 }

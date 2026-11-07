@@ -1,5 +1,7 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import {
+  combatStatsProfileSchema,
+  type CombatStatsProfile,
   equipmentComponentSchema,
   itemDetailsComponentSchema,
   type InventoryDefinition,
@@ -14,6 +16,7 @@ import {
   translationChoices,
 } from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
+import { combatStatsForm } from './combatStatsForm.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
 export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -31,6 +34,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   let component: ItemDetailsComponentDefinition | EquipmentComponentDefinition | undefined
   let descriptionTarget: string | undefined
   let slots: [string, string][] | undefined
+  let combatStats: CombatStatsProfile | undefined
   let dirty = false
   let busy = false
 
@@ -57,6 +61,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       : undefined
     slots = target.startsWith('owner:')
       ? Object.entries(view?.inventory?.owners[target.slice(6)]?.equipmentSlots ?? {})
+      : undefined
+    combatStats = target.startsWith('owner:')
+      ? structuredClone(view?.inventory?.owners[target.slice(6)]?.combatStats)
       : undefined
 
     const source = view?.scenes
@@ -190,6 +197,28 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if (item) form.append(...itemPresentationForm(controls, view, item, render))
 
     if (slots) {
+      form.append(
+        controls.select(
+          'Combat stat profile',
+          combatStats ? 'enabled' : 'disabled',
+          ['disabled', 'enabled'],
+          (value) => {
+            const fields =
+              view?.rules?.state.filter((field) => typeof field.value === 'number') ?? []
+
+            combatStats =
+              value === 'enabled'
+                ? combatStatsProfileSchema.parse({
+                    health: { source: 'game.state', path: fields[0]?.path ?? ['health'] },
+                    maximumHealth: 40,
+                  })
+                : undefined
+            render()
+          },
+        ),
+      )
+
+      if (combatStats) form.append(...combatStatsForm(controls, view, combatStats, render))
       slots.forEach((slot, index) =>
         form.append(
           controls.group(
@@ -239,6 +268,14 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if (component && scene) {
       const draft = component
       form.append(
+        controls.select(
+          'Show equipment stats',
+          String(draft.showCombatStats ?? false),
+          ['false', 'true'],
+          (value) => {
+            draft.showCombatStats = value === 'true'
+          },
+        ),
         controls.input('View ID', draft.id, (value) => {
           draft.id = value.trim()
         }),
@@ -276,6 +313,21 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
       if (draft.type === 'item-details')
         form.append(
+          controls.select(
+            'Comparison equipment',
+            draft.equipment ?? '',
+            [
+              '',
+              ...scene.components
+                .filter(
+                  (entry) => entry.type === 'equipment' && entry.inventory === draft.inventory,
+                )
+                .map((entry) => entry.id),
+            ],
+            (value) => {
+              draft.equipment = value || undefined
+            },
+          ),
           controls.input('Empty selection text', draft.emptyText, (value) => {
             draft.emptyText = value
           }),
@@ -342,6 +394,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           type: 'inventory.setItemPresentation',
           itemType: target.slice(5),
           presentation: item,
+          combatBonuses: item.combatBonuses ?? null,
         })
       else if (slots) {
         if (new Set(slots.map((slot) => slot[0])).size !== slots.length) {
@@ -354,6 +407,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           type: 'inventory.setEquipmentSlots',
           owner: target.slice(6),
           slots: Object.fromEntries(slots),
+          combatStats: combatStats ?? null,
         })
       } else if (component) submit({ type: 'scene.upsertItemView', sceneId, component })
       else

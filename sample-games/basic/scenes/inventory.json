@@ -44,7 +44,7 @@
       "placement": {
         "row": 3,
         "column": 5,
-        "rowSpan": 6,
+        "rowSpan": 2,
         "columnSpan": 8
       },
       "textKey": "scenes.inventory.components.details.text",
@@ -118,7 +118,45 @@
             "context": "gameplay",
             "input": "slot-5"
           }
+        },
+        "1": {
+          "labelKey": "equipment.equip",
+          "action": {
+            "type": "equipment-action",
+            "equipment": "equipment",
+            "operation": "equip"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "labelKey": "equipment.unequip",
+          "action": {
+            "type": "equipment-action",
+            "equipment": "equipment",
+            "operation": "unequip"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
         }
+      }
+    },
+    {
+      "id": "equipment",
+      "type": "equipment",
+      "inventory": "items",
+      "owner": "player",
+      "labelKey": "equipment.heading",
+      "showCombatStats": true,
+      "placement": {
+        "row": 5,
+        "column": 5,
+        "rowSpan": 4,
+        "columnSpan": 8
       }
     }
   ],

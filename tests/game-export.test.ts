@@ -215,6 +215,12 @@ describe('standalone game export', () => {
         expect(
           game.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!.placement,
         ).toEqual({ type: 'carried', owner: 'wayfarer' })
+        expect(game.combatStats!.snapshot('wayfarer')!.total).toMatchObject({
+          attack: 1,
+          defense: 2,
+          guard: 3,
+          maximumHealth: 52,
+        })
         engine.lifecycle!.enterScene('shop')
         const shop = engine.lifecycle!.activeScene!
         const before = game.inventory!.snapshot.find((item) => item.id === 'royal-cloak')!
@@ -253,6 +259,9 @@ describe('standalone game export', () => {
         expect(game.combat!.text(fight, 'combat')).toContain('Wayfarer attacks Practice sentinel')
         const health = game.combat!.snapshot(fight, 'combat')!.health
         engine.lifecycle!.enterScene('wardrobe')
+        expect(
+          game.inventory!.checkMove('amber-cloak', { type: 'carried', owner: 'wayfarer' }),
+        ).toContain('Training courtyard')
         engine.lifecycle!.enterScene('training')
         expect(game.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!.health).toEqual(
           health,

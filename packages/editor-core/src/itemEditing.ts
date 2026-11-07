@@ -42,6 +42,13 @@ export function editItems(
         ? {
             ...previous,
             ...command.presentation,
+            ...(command.combatBonuses !== undefined
+              ? {
+                  combatBonuses: command.combatBonuses
+                    ? { ...object(previous.combatBonuses), ...command.combatBonuses }
+                    : undefined,
+                }
+              : {}),
             labelKey: command.presentation.labelKey,
             descriptionKey: command.presentation.descriptionKey,
             artwork: command.presentation.artwork,
@@ -64,7 +71,39 @@ export function editItems(
               }
             }),
           }
-        : { ...previous, equipmentSlots: { ...command.slots } }
+        : {
+            ...previous,
+            equipmentSlots: { ...command.slots },
+            ...(command.combatStats !== undefined
+              ? {
+                  combatStats: command.combatStats
+                    ? {
+                        ...object(previous.combatStats),
+                        ...command.combatStats,
+                        ...Object.fromEntries(
+                          (['health', 'maximumHealth', 'attack', 'defense', 'guard'] as const).map(
+                            (key) => {
+                              const value = command.combatStats![key]
+
+                              return [
+                                key,
+                                typeof value === 'object'
+                                  ? { ...object(object(previous.combatStats)[key]), ...value }
+                                  : value,
+                              ]
+                            },
+                          ),
+                        ),
+                        messages: {
+                          ...object(object(previous.combatStats).messages),
+                          ...command.combatStats.messages,
+                        },
+                        messageKeys: { ...command.combatStats.messageKeys },
+                      }
+                    : undefined,
+                }
+              : {}),
+          }
 
     documents[file] = { ...source, [kind]: { ...entries, [id]: next } }
 
@@ -98,6 +137,7 @@ export function editItems(
     const next = {
       ...previous,
       ...component,
+      ...(component.type === 'item-details' ? { equipment: component.equipment } : {}),
       labelKey: component.labelKey,
       placement: { ...object(previous.placement), ...component.placement },
       ...(component.type === 'item-details' ? { emptyTextKey: component.emptyTextKey } : {}),

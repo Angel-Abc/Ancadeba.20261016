@@ -6,6 +6,7 @@ import {
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { IGameInventorySelection, InventorySelectionSnapshot } from './inventoryContext.js'
 import type { IGameInventory } from './inventory.js'
+import type { IGameCombatStats } from './combatStats.js'
 
 export interface EquipmentSelection {
   readonly item: string | undefined
@@ -13,6 +14,11 @@ export interface EquipmentSelection {
 }
 
 export interface IGameEquipment {
+  reason(
+    scene: SceneInstance,
+    equipment: string,
+    operation: 'equip' | 'unequip',
+  ): string | undefined
   get(scene: SceneInstance, equipment: string): EquipmentSelection | undefined
   selectSlot(scene: SceneInstance, equipment: string, slot: string): void
   isEnabled(scene: SceneInstance, equipment: string, operation: 'equip' | 'unequip'): boolean
@@ -21,6 +27,7 @@ export interface IGameEquipment {
 }
 
 interface Target {
+  version?: object | undefined
   selection: InventorySelectionSnapshot | undefined
   owner: string | undefined
   token: EquipmentSelection
@@ -37,6 +44,7 @@ export class GameEquipment implements IGameEquipment {
     private readonly lifecycle: IGameLifecycle,
     private readonly selection: IGameInventorySelection,
     inventory?: IGameInventory,
+    stats?: IGameCombatStats,
   ) {
     this.cleanups = [
       selection.subscribe(() => this.notify()),
@@ -51,6 +59,8 @@ export class GameEquipment implements IGameEquipment {
     ]
 
     if (inventory) this.cleanups.push(inventory.subscribeChanges(() => this.notify()))
+
+    if (stats) this.cleanups.push(stats.subscribeChanges(() => this.notify()))
   }
   private definition(scene: SceneInstance, id: string): EquipmentComponentDefinition | undefined {
     if (
@@ -79,8 +89,14 @@ export class GameEquipment implements IGameEquipment {
     const items = new Map(scene.game.inventory?.snapshot.map((item) => [item.id, item]))
     const item = selection && items.get(selection.item)
     const ownerId = item ? inventoryOwner(items, item.id) : undefined
+    const version = scene.game.combatStats?.snapshot(component.owner)?.version
 
-    if (!target || target.selection !== selection || target.owner !== ownerId) {
+    if (
+      !target ||
+      target.selection !== selection ||
+      target.owner !== ownerId ||
+      target.version !== version
+    ) {
       const inventory = scene.game.data.inventory
       const owner = inventory && inventoryEntry(inventory.owners, component.owner)
       const type = item && inventory && inventoryEntry(inventory.itemTypes, item.itemType)
@@ -95,9 +111,15 @@ export class GameEquipment implements IGameEquipment {
       target = {
         selection,
         owner: ownerId,
+        version,
         token: Object.freeze({
           item: selection?.item,
-          slot: compatible.length === 1 ? compatible[0] : undefined,
+          slot:
+            target && target.selection === selection && target.owner === ownerId
+              ? target.token.slot
+              : compatible.length === 1
+                ? compatible[0]
+                : undefined,
         }),
       }
       this.targets.set(id, target)
@@ -136,7 +158,12 @@ export class GameEquipment implements IGameEquipment {
     if (!item) return false
 
     if (operation === 'unequip')
-      return item.placement.type === 'equipped' && item.placement.owner === component.owner
+      return (
+        item.placement.type === 'equipped' &&
+        item.placement.owner === component.owner &&
+        scene.game.inventory.checkMove(item.id, { type: 'carried', owner: component.owner }) ===
+          undefined
+      )
 
     if (!token.slot) return false
 
@@ -148,6 +175,23 @@ export class GameEquipment implements IGameEquipment {
       return false
 
     return scene.game.inventory.checkEquip(item.id, component.owner, token.slot) === undefined
+  }
+  reason(scene: SceneInstance, id: string, operation: 'equip' | 'unequip'): string | undefined {
+    const component = this.definition(scene, id)
+
+    if (!component || scene.type !== 'game') return
+    const lock = scene.game.combatStats?.reason(component.owner)
+
+    if (lock) return lock
+    const token = this.get(scene, id)
+
+    if (!token?.item || component.readOnly) return
+
+    return operation === 'unequip'
+      ? scene.game.inventory?.checkMove(token.item, { type: 'carried', owner: component.owner })
+      : token.slot
+        ? scene.game.inventory?.checkEquip(token.item, component.owner, token.slot)
+        : undefined
   }
   activate(scene: SceneInstance, id: string, operation: 'equip' | 'unequip'): void {
     if (!this.isEnabled(scene, id, operation) || scene.type !== 'game') return

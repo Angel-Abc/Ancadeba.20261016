@@ -1,4 +1,5 @@
 import {
+  combatStatsIssues,
   levelingFile,
   levelingProfileSchema,
   levelingIssues,
@@ -261,6 +262,13 @@ export function validateProject(
     ))
       diagnostics.push({ code: 'invalid_combat', file: combatFile(id), ...issue })
   }
+
+  for (const issue of combatStatsIssues(inventory, mergedRules, combats, [
+    scenes,
+    assets?.data,
+    mergedRules,
+  ]))
+    diagnostics.push({ code: 'invalid_combat_stats', file: 'game.json', ...issue })
 
   for (const [id, encounter] of combats)
     if (

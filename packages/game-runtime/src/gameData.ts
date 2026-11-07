@@ -1,4 +1,9 @@
-import { levelingIssues, localizeLeveling, type LevelingProfile } from '@ancadeba/schemas'
+import {
+  combatStatsIssues,
+  levelingIssues,
+  localizeLeveling,
+  type LevelingProfile,
+} from '@ancadeba/schemas'
 import { combatLootViewIssues } from '@ancadeba/schemas'
 import type {
   GameDefinition,
@@ -225,6 +230,14 @@ export function assembleGameData(
   )[0]
 
   if (levelingIssue) throw new Error(`${levelingIssue.file}: ${levelingIssue.message}`)
+
+  const statIssue = combatStatsIssues(inventory, validated?.rules, combat, [
+    sceneDefinitions,
+    assets,
+    validated?.rules,
+  ])[0]
+
+  if (statIssue) throw new Error(`Equipment stats: ${statIssue.message}`)
 
   if (Boolean(definition.assets) !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')

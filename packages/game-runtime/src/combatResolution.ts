@@ -1,4 +1,4 @@
-import type { CombatDefinition } from '@ancadeba/schemas'
+import type { CombatDefinition, CombatBonuses } from '@ancadeba/schemas'
 import { TurnCoordinator } from './turnCoordinator.js'
 
 export type CombatOutcome = 'victory' | 'defeat' | 'escaped'
@@ -14,6 +14,7 @@ export interface CombatLogEntry {
   readonly target?: string
   readonly damage?: number
   readonly blocked?: number
+  readonly defended?: number
   readonly guard?: number
 }
 
@@ -82,6 +83,7 @@ export function resolveCombatRound(
     plan: readonly PlannedMove[]
     enemies: Readonly<Record<string, EnemyPlan>>
     escape: boolean
+    stats?: Readonly<Record<string, Readonly<CombatBonuses>>> | undefined
   },
 ) {
   const health = { ...current.health }
@@ -120,12 +122,13 @@ export function resolveCombatRound(
         const move = definition.moves[queued.move]!
 
         if (move.type === 'guard') {
-          const next = (guard[actor.id] ?? 0) + move.guard
+          const strength = combatMoveValues(move, current.stats?.[actor.id]).guard!
+          const next = (guard[actor.id] ?? 0) + strength
 
           if (!Number.isSafeInteger(next))
             throw new RangeError('Combat guard exceeds the supported range')
           guard[actor.id] = next
-          entries.push({ type: 'guarded', actor: actor.id, guard: move.guard })
+          entries.push({ type: 'guarded', actor: actor.id, guard: strength })
         } else if (!health[queued.target])
           entries.push({ type: 'skipped', actor: actor.id, target: queued.target })
         else {
@@ -134,15 +137,24 @@ export function resolveCombatRound(
           seed ^= seed << 5
           seed >>>= 0
 
-          const roll =
-            move.damage.min +
-            Math.floor((seed / 0x100000000) * (move.damage.max - move.damage.min + 1))
+          const values = combatMoveValues(move, current.stats?.[actor.id])
 
-          const blocked = Math.min(roll, guard[queued.target] ?? 0)
+          const roll =
+            values.min! + Math.floor((seed / 0x100000000) * (values.max! - values.min! + 1))
+
+          const defended = Math.min(roll, current.stats?.[queued.target]?.defense ?? 0)
+          const blocked = Math.min(roll - defended, guard[queued.target] ?? 0)
           guard[queued.target] = (guard[queued.target] ?? 0) - blocked
-          const damage = Math.min(health[queued.target]!, roll - blocked)
+          const damage = Math.min(health[queued.target]!, roll - defended - blocked)
           health[queued.target] = health[queued.target]! - damage
-          entries.push({ type: 'attack', actor: actor.id, target: queued.target, damage, blocked })
+          entries.push({
+            type: 'attack',
+            actor: actor.id,
+            target: queued.target,
+            damage,
+            blocked,
+            ...(current.stats ? { defended } : {}),
+          })
         }
 
         outcome = combatOutcome(definition, health)
@@ -159,4 +171,25 @@ export function resolveCombatRound(
   if (outcome) entries.push({ type: outcome })
 
   return { health, guard, seed, entries, outcome }
+}
+
+/** Used by previews and resolution; temporary Guard is intentionally not predicted. */
+export function combatMoveValues(
+  move: CombatDefinition['moves'][string],
+  stats?: Readonly<CombatBonuses>,
+  defense = 0,
+): { min?: number; max?: number; guard?: number } {
+  const safe = (value: number) => {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new RangeError('Combat stat calculation exceeds the supported range')
+
+    return value
+  }
+
+  return move.type === 'guard'
+    ? { guard: safe(move.guard + (stats?.guard ?? 0)) }
+    : {
+        min: Math.max(0, safe(move.damage.min + (stats?.attack ?? 0)) - defense),
+        max: Math.max(0, safe(move.damage.max + (stats?.attack ?? 0)) - defense),
+      }
 }

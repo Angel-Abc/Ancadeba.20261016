@@ -62,12 +62,20 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
             ? scene.game.leveling?.snapshot(definition.player.leveling)
             : undefined
 
-        lock.textContent =
-          required && (!leveling?.available || leveling.level < required)
+        const equipmentIssue =
+          action.type === 'equipment-action' && scene?.type === 'game'
+            ? scene.game.equipment?.reason(scene, action.equipment, action.operation)
+            : undefined
+
+        lock.textContent = equipmentIssue
+          ? '🔒'
+          : required && (!leveling?.available || leveling.level < required)
             ? definition!.messages.requiresLevel.replaceAll('{level}', String(required))
             : ''
         lock.hidden = !lock.textContent
-        button.title = lock.textContent
+        lock.setAttribute('aria-hidden', String(Boolean(equipmentIssue)))
+        button.title = equipmentIssue ?? lock.textContent
+        button.setAttribute('aria-description', button.title)
 
         if (empty) empty.hidden = available
 

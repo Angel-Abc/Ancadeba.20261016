@@ -34,6 +34,7 @@ export interface IGameBindings {
 }
 
 interface BindingRoots {
+  readonly combatStats?: () => unknown
   readonly state: () => unknown
   readonly leveling?: () => unknown
   readonly progression: () => ProgressionSnapshot
@@ -68,7 +69,9 @@ export class GameBindings implements IGameBindings {
           ? this.roots.state()
           : binding.source === 'game.leveling'
             ? this.roots.leveling?.()
-            : this.roots.progression()
+            : binding.source === 'game.combatStats'
+              ? this.roots.combatStats?.()
+              : this.roots.progression()
 
       if (value === undefined) return unresolved('source-unavailable')
 

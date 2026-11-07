@@ -1,6 +1,8 @@
 import { levelingProfileSchema, characterProgressionComponentSchema } from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
+  combatBonusesSchema,
+  combatStatsProfileSchema,
   gameIdSchema,
   sceneSchema,
   imageAssetSchema,
@@ -154,11 +156,13 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('inventory.setItemPresentation'),
     itemType: gameIdSchema,
     presentation: itemPresentationSchema,
+    combatBonuses: combatBonusesSchema.nullable().optional(),
   }),
   z.strictObject({
     type: z.literal('inventory.setEquipmentSlots'),
     owner: gameIdSchema,
     slots: z.record(gameIdSchema, z.string().trim().min(1)),
+    combatStats: combatStatsProfileSchema.nullable().optional(),
   }),
   z.strictObject({
     type: z.literal('scene.setInventoryDetails'),

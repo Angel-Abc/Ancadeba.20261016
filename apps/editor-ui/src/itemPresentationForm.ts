@@ -1,5 +1,10 @@
 import type { ProjectView } from '@ancadeba/editor-core'
-import { gameBindingSchema, type InventoryDefinition } from '@ancadeba/schemas'
+import {
+  combatStatNames,
+  combatBonusesSchema,
+  gameBindingSchema,
+  type InventoryDefinition,
+} from '@ancadeba/schemas'
 import { type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function itemPresentationForm(
@@ -19,6 +24,27 @@ export function itemPresentationForm(
   ]
 
   const fields: HTMLElement[] = [
+    select(
+      'Combat equipment effects',
+      draft.combatBonuses ? 'enabled' : 'disabled',
+      ['disabled', 'enabled'],
+      (value) => {
+        draft.combatBonuses = value === 'enabled' ? combatBonusesSchema.parse({}) : undefined
+        render()
+      },
+    ),
+    ...(draft.combatBonuses
+      ? combatStatNames.map((stat) =>
+          input(
+            `Equipment ${stat} bonus`,
+            String(draft.combatBonuses![stat]),
+            (value) => {
+              draft.combatBonuses![stat] = Number(value)
+            },
+            'number',
+          ),
+        )
+      : []),
     input('Item name', draft.label, (value) => {
       draft.label = value
     }),

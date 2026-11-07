@@ -1739,9 +1739,9 @@ Resolution stops immediately on victory or defeat.
 `allowEscape` enables a whole-plan escape that succeeds on End Turn. Optional
 `outcomes` map `victory`, `defeat`, and `escaped` to scenes; Continue enters that
 destination. Each committed round advances one game turn and applies
-`roundTimeMs` (default zero) through the existing world-time policy. Equipment
-modifiers and game actor-turn coordination remain separate from explicit combat
-move damage. Health, guard, plans, enemy rotation, RNG and bounded logs persist
+`roundTimeMs` (default zero) through the existing world-time policy. Optional
+equipment stat profiles add bonuses to explicit combat move values. Health,
+guard, plans, enemy rotation, RNG and bounded logs persist
 through scene changes for the current playthrough. Returning resumes an unfinished
 fight; completed fights stay completed. New Game resets encounters and health.
 
@@ -1767,7 +1767,8 @@ uses the inspected revision and preserves conflicting or unrelated drafts;
 reference checks protect health declarations, moves, artwork and target scenes.
 Use **Controls → Action bar** for combat commands and their input bindings.
 AP and move costs support 1–100, with up to 32 enemies. V1 has no healing, spells,
-accuracy rolls, critical hits, rewards, equipment calculations or party members.
+accuracy rolls, critical hits or party members. Rewards and equipment profiles
+are optional extensions described below.
 
 ### Victory rewards and loot
 
@@ -1843,6 +1844,103 @@ cloak. F takes selected loot, G takes all, and Z retries delivery in both sample
 Enemy equipment transfers, stacks, automatic leveling, loot choices, shared loot
 tables and repeatable encounter farming are deferred.
 
+## Equipment effects on combat
+
+Inventory owners may have one optional `combatStats` profile. Its owner ID is also
+the profile ID used by combat and bindings. All encounters for that owner share
+the same equipment and health. Item types declare additive `combatBonuses`
+separately from their display properties:
+
+```json
+{
+  "owners": {
+    "player": {
+      "label": "Player",
+      "equipmentSlots": { "hand": "Hand", "body": "Body" },
+      "combatStats": {
+        "health": { "source": "game.state", "path": ["health"] },
+        "maximumHealth": { "source": "game.state", "path": ["maximumHealth"] },
+        "attack": { "source": "game.state", "path": ["attackBonus"] },
+        "defense": 0,
+        "guard": 0
+      }
+    }
+  },
+  "itemTypes": {
+    "sword": {
+      "label": "Sword",
+      "equipmentSlots": ["hand"],
+      "combatBonuses": { "attack": 3 }
+    },
+    "armor": {
+      "label": "Armor",
+      "equipmentSlots": ["body"],
+      "combatBonuses": { "defense": 2, "guard": 1, "maximumHealth": 8 }
+    }
+  }
+}
+```
+
+Set `equipmentOwner: "player"` on a combatant to opt into the profile. The actor's
+current health and base maximum-health configuration must match it. Enemy actors
+can also link an owner; actors within one encounter must use distinct owners.
+Profile base stats accept nonnegative safe integers or declared numeric
+`game.state` bindings. Current health requires a declared state binding. Item
+bonuses are nonnegative safe integers, defaulting to zero. Only directly equipped
+items contribute; items carried inside equipped bags do not.
+
+Attack bonuses shift both ends of the move's authored damage range. Each attack
+still makes one seeded roll. Defense reduces that roll to a minimum of zero,
+then temporary Guard absorbs the remainder. Defense is not consumed. Guard
+bonuses increase the amount granted by each Guard move. AP costs and move unlocks
+remain explicit. Plans and enemy intentions show modified ranges after target
+defense and before temporary Guard. Combat logs distinguish both mitigations;
+the optional `mitigated` combat message supports `{defended}` as well as the
+existing attack placeholders.
+
+Effective maximum health is base maximum plus equipment. Equipping never heals.
+Removing or replacing equipment clamps current health when necessary and never
+revives a defeated character. Inventory placement, displaced equipment, and health
+clamping commit together, before observers run. Without a supported numeric state
+transaction adapter, operations requiring a clamp are unavailable. Level gains
+still update base fields and follow the level-up health policy using the effective
+maximum; equipment bonuses are never copied into base state.
+
+An available encounter locks its combatants' loadouts when entered. Locks survive
+pausing and scene changes. Inspection, comparisons, and carried-item movement
+remain available. All inventory movement and staged transfer paths enforce locks.
+Another encounter cannot start with an already locked owner. Committed victory,
+defeat, or escape releases the lock, even if victory rewards remain pending.
+New Game resets everything.
+
+`game.combatStats` exposes snapshots, item contribution breakdowns, comparisons,
+and subscriptions. Read-only bindings use `source: "game.combatStats"` and
+`path: [owner, field]`, where fields are `attack`, `defense`, `guard`,
+`maximumHealth`, `health`, `available`, and `locked`. Bind status bars to the
+effective maximum to include equipment. Changes to relevant stats invalidate
+queued equipment and combat input without clearing already planned moves.
+
+Set `showCombatStats: true` on an equipment view to show base, equipment, and total
+values plus destination-aware comparisons. Item-details views can also enable
+`showCombatStats` and reference an `equipment` component using the same inventory.
+Choose a destination explicitly when an item fits multiple slots. Selecting a
+worn item previews Unequip, including any health clamp. Text comes from the
+profile's optional `messages` and `messageKeys`, localized with inventory data.
+
+The editor's **Items & equipment** section edits item bonuses and owner profiles,
+including health bindings and localized text. **Combat** links actors to those
+profiles, and **Status panels** offers their derived bindings. Saves use the
+existing revision checks and retain conflicting drafts and extension properties.
+The basic sample's victory token grants attack and Guard bonuses when equipped
+through its inventory action bar. The graphics wardrobe compares cloaks and
+demonstrates damage, defense, Guard, maximum health, dyes, and paper-doll updates.
+Its training encounter retains the loadout lock when paused back to the wardrobe.
+
+Games without profiles keep their existing combat behavior and require no
+migration. Percentage modifiers, penalties, damage types, resistances, critical
+hits, equipment-granted moves, durability, set bonuses, and equipment changes
+during unfinished combat are deferred.
+
 ## Character progression and leveling
 
 Opt in with `"leveling": ["player"]` in `game.json`. Each ID loads
@@ -1908,7 +2006,8 @@ new maximum). A character at zero health stays defeated under every policy.
 Health recovery happens only when a level-up raises the configured maximum.
 Combat players linked to a profile with health configuration must use matching
 current and maximum health bindings. Other stat gains update their declared
-fields; V1 does not add damage formulas, AP scaling or equipment modifiers.
+fields; V1 does not add damage formulas or AP scaling. Equipment profiles can
+read those base fields and apply their own additive bonuses.
 
 Set `leveling` on a combat player to its profile ID, and configure `moveLevels`
 with available move IDs and minimum authored levels. For example,

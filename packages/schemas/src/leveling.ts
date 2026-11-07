@@ -235,6 +235,17 @@ export function levelingIssues(
     if (profile.health) {
       const { current, maximum } = profile.health
 
+      const equipment = Object.values(inventory?.owners ?? {}).find(
+        (owner) => owner.combatStats && key(owner.combatStats.health) === key(current),
+      )?.combatStats
+
+      if (
+        equipment &&
+        (typeof equipment.maximumHealth !== 'object' ||
+          key(equipment.maximumHealth) !== key(maximum))
+      )
+        add('Leveling health must match the equipment profile base maximum')
+
       if (
         key(current) === key(maximum) ||
         controlled.has(key(current)) ||
@@ -244,7 +255,26 @@ export function levelingIssues(
       const hp = rules?.state.find((value) => JSON.stringify(value.path) === key(current))?.value
       const max = rules?.state.find((value) => JSON.stringify(value.path) === key(maximum))?.value
 
-      if (typeof hp === 'number' && typeof max === 'number' && (max <= 0 || hp > max))
+      const owner = Object.entries(inventory?.owners ?? {}).find(
+        ([, owner]) => owner.combatStats && key(owner.combatStats.health) === key(current),
+      )?.[0]
+
+      const bonus = owner
+        ? Object.values(inventory?.items ?? {}).reduce(
+            (sum, item) =>
+              sum +
+              (item.placement.type === 'equipped' && item.placement.owner === owner
+                ? (inventory?.itemTypes[item.itemType]?.combatBonuses?.maximumHealth ?? 0)
+                : 0),
+            0,
+          )
+        : 0
+
+      if (
+        typeof hp === 'number' &&
+        typeof max === 'number' &&
+        (max + bonus <= 0 || hp > max + bonus)
+      )
         add('Starting health must be within its positive maximum')
     }
   }

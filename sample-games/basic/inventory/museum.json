@@ -41,12 +41,44 @@
     },
     "training-token": {
       "labelKey": "rewards.token",
-      "descriptionKey": "rewards.token.description"
+      "descriptionKey": "rewards.token.description",
+      "equipmentSlots": ["charm"],
+      "combatBonuses": {
+        "attack": 1,
+        "guard": 1
+      }
     }
   },
   "owners": {
     "player": {
-      "label": "Player"
+      "label": "Player",
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["player", "health"]
+        },
+        "maximumHealth": {
+          "source": "game.state",
+          "path": ["player", "maximumHealth"]
+        },
+        "messageKeys": {
+          "attack": "equipment.attack",
+          "defense": "equipment.defense",
+          "guard": "equipment.guard",
+          "maximumHealth": "equipment.maximumHealth",
+          "base": "equipment.base",
+          "equipment": "equipment.equipment",
+          "total": "equipment.total",
+          "comparison": "equipment.comparison",
+          "currentHealth": "equipment.currentHealth",
+          "chooseSlot": "equipment.chooseSlot",
+          "locked": "equipment.locked",
+          "unavailable": "equipment.unavailable"
+        }
+      },
+      "equipmentSlots": {
+        "charm": "Charm"
+      }
     },
     "lobby": {
       "label": "Museum lobby"

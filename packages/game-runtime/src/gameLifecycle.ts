@@ -13,6 +13,7 @@ import type { IGameTrading } from './trading.js'
 import type { IGameCombat } from './combat.js'
 
 export interface IGameRuntime {
+  readonly combatStats?: IGameCombatStats | undefined
   readonly combatRewards?: IGameCombatRewards | undefined
   readonly leveling?: IGameLeveling | undefined
   readonly combat?: IGameCombat | undefined
@@ -31,6 +32,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly combatStats?: IGameCombatStats | undefined
   readonly combatRewards?: IGameCombatRewards | undefined
   readonly leveling?: IGameLeveling | undefined
   readonly combat?: IGameCombat | undefined
@@ -134,6 +136,9 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
 
   get leveling(): IGameLeveling | undefined {
     return this.runtime?.leveling
+  }
+  get combatStats(): IGameCombatStats | undefined {
+    return this.runtime?.combatStats
   }
 
   get combat(): IGameCombat | undefined {
@@ -470,3 +475,5 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     return result
   }
 }
+
+import type { IGameCombatStats } from './combatStats.js'

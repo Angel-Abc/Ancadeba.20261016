@@ -1,4 +1,4 @@
-import { levelingBindingFields } from '@ancadeba/schemas'
+import { combatStatNames, levelingBindingFields } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   gameBindingSchema,
@@ -46,6 +46,17 @@ export function statusPanelForm(
   }
 
   const bindings = (expected: 'number' | 'value' | 'boolean') => [
+    ...Object.entries(view.inventory?.owners ?? {})
+      .filter(([, owner]) => owner.combatStats)
+      .flatMap(([id]) =>
+        (expected === 'boolean' ? ['available', 'locked'] : [...combatStatNames, 'health']).map(
+          (stat) =>
+            [
+              JSON.stringify({ source: 'game.combatStats', path: [id, stat] }),
+              `Equipment · ${id} · ${stat}`,
+            ] as const,
+        ),
+      ),
     ...Object.keys(view.leveling ?? {}).flatMap((id) =>
       Object.entries(levelingBindingFields)
         .filter(([, type]) => (expected === 'value' ? type !== 'boolean' : type === expected))

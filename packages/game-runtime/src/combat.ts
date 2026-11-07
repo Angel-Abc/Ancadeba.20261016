@@ -1,7 +1,8 @@
 import type { GameLeveling } from './leveling.js'
+import type { GameCombatStats } from './combatStats.js'
 import { isRewardOperation } from '@ancadeba/schemas'
 import type { GameCombatRewards } from './combatRewards.js'
-import type { CombatDefinition, CombatCommand } from '@ancadeba/schemas'
+import type { CombatDefinition, CombatCommand, CombatBonuses } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { IGameBindings } from './gameBindings.js'
 import type { IMessageBus } from '@ancadeba/utilities'
@@ -11,6 +12,7 @@ import type { IStateTransactions } from './stateTransactions.js'
 import type { PreparedProgression } from './progression.js'
 import {
   combatOutcome,
+  combatMoveValues,
   planEnemies,
   resolveCombatRound,
   type PlannedMove,
@@ -20,6 +22,7 @@ import {
 } from './combatResolution.js'
 
 export interface CombatCapture {
+  readonly stats?: object | undefined
   readonly leveling?: object | undefined
   readonly round: object
   readonly target: object | undefined
@@ -34,6 +37,7 @@ export interface CombatCommandRequest {
 }
 
 export interface CombatSnapshot {
+  readonly stats: Readonly<Record<string, Readonly<CombatBonuses>>>
   readonly round: number
   readonly phase: 'planning' | 'complete'
   readonly outcome: CombatOutcome | undefined
@@ -71,6 +75,7 @@ export interface IGameCombat {
 }
 
 interface Session {
+  started?: boolean
   round: number
   seed: number
   guard: Record<string, number>
@@ -103,8 +108,15 @@ export class GameCombat implements IGameCombat {
     private readonly invalidate: () => void,
     private readonly rewards?: GameCombatRewards,
     private readonly leveling?: GameLeveling,
+    private readonly stats?: GameCombatStats,
   ) {
     this.cleanups = [
+      lifecycle.subscribeSceneChanges(({ current }) => {
+        if (current?.type !== 'game') return
+
+        for (const component of current.data.components)
+          if (component.type === 'combat') this.snapshot(current, component.id)
+      }),
       messages.subscribe('combat.command', (request) => this.execute(request)),
       ...(leveling
         ? [
@@ -154,8 +166,13 @@ export class GameCombat implements IGameCombat {
           ? actor.maximumHealth
           : this.bindings.read(actor.maximumHealth)
 
-      const value =
-        typeof max === 'number' ? max : max.status === 'resolved' ? max.value : undefined
+      const value = actor.equipmentOwner
+        ? this.stats?.snapshot(actor.equipmentOwner)?.total.maximumHealth
+        : typeof max === 'number'
+          ? max
+          : max.status === 'resolved'
+            ? max.value
+            : undefined
 
       if (
         result.status !== 'resolved' ||
@@ -173,6 +190,26 @@ export class GameCombat implements IGameCombat {
     }
 
     return { health, maximum }
+  }
+  private statValues(definition: CombatDefinition) {
+    const values: Record<string, Readonly<CombatBonuses>> = {}
+
+    for (const actor of [definition.player, ...definition.enemies]) {
+      if (!actor.equipmentOwner) continue
+      const snapshot = this.stats?.snapshot(actor.equipmentOwner)
+
+      if (!snapshot) return
+      values[actor.id] = snapshot.total
+    }
+
+    try {
+      for (const actor of [definition.player, ...definition.enemies])
+        for (const move of actor.moves) combatMoveValues(definition.moves[move]!, values[actor.id])
+    } catch {
+      return
+    }
+
+    return Object.freeze(values)
   }
   private session(definition: CombatDefinition): Session {
     let session = this.sessions.get(definition.id)
@@ -196,6 +233,24 @@ export class GameCombat implements IGameCombat {
       this.sessions.set(definition.id, session)
     }
 
+    if (
+      !session.outcome &&
+      !session.started &&
+      values &&
+      this.statValues(definition) &&
+      this.state?.prepare(
+        [definition.player, ...definition.enemies].map((actor) => ({
+          path: actor.health.path,
+          expected: values.health[actor.id]!,
+          value: values.health[actor.id]!,
+        })),
+      )
+    ) {
+      session.started = true
+
+      if (this.stats && !this.stats.acquire(definition)) session.started = false
+    }
+
     if (values) {
       if (!Object.keys(session.enemies).length)
         session.enemies = planEnemies(definition, values.health, {})
@@ -205,6 +260,7 @@ export class GameCombat implements IGameCombat {
 
         if (outcome) {
           session.outcome = outcome
+          this.stats?.release(definition.id)
           session.token = {}
           session.log.push({ type: outcome })
           session.log = session.log.slice(-definition.logCapacity)
@@ -240,6 +296,7 @@ export class GameCombat implements IGameCombat {
       )
 
     return Object.freeze({
+      stats: this.statValues(definition) ?? Object.freeze({}),
       round: session.round,
       phase: session.outcome ? 'complete' : 'planning',
       outcome: session.outcome,
@@ -265,7 +322,10 @@ export class GameCombat implements IGameCombat {
       ),
       escape: session.escape,
       log: Object.freeze(session.log.map((entry) => Object.freeze({ ...entry }))),
-      issue: !values || !writable ? definition.messages.unavailable : session.issue,
+      issue:
+        !values || !writable || !this.statValues(definition)
+          ? definition.messages.unavailable
+          : (this.stats?.encounterIssue(definition) ?? session.issue),
     })
   }
   capture(scene: SceneInstance, id: string, command: CombatCommand): CombatCapture | undefined {
@@ -290,15 +350,18 @@ export class GameCombat implements IGameCombat {
     const leveling =
       command.type === 'queue-move' ? this.leveling?.version(definition.player.leveling) : undefined
 
+    const stats = this.stats?.encounterVersion(definition)
+
     let capture = session[key]
 
     if (
       !capture ||
       capture.round !== session.token ||
       capture.target !== target ||
-      capture.leveling !== leveling
+      capture.leveling !== leveling ||
+      capture.stats !== stats
     ) {
-      capture = Object.freeze({ round: session.token, target, leveling })
+      capture = Object.freeze({ round: session.token, target, leveling, stats })
       session[key] = capture
     }
 
@@ -334,6 +397,13 @@ export class GameCombat implements IGameCombat {
       return Boolean(snapshot.outcome && definition.outcomes[snapshot.outcome])
 
     if (snapshot.phase !== 'planning') return false
+
+    if (
+      !this.session(definition).started ||
+      !this.statValues(definition) ||
+      this.stats?.encounterIssue(definition)
+    )
+      return false
 
     if (command.type === 'previous-target' || command.type === 'next-target')
       return definition.enemies.filter((actor) => (snapshot.health[actor.id] ?? 0) > 0).length > 1
@@ -458,6 +528,10 @@ export class GameCombat implements IGameCombat {
     const values = this.health(definition)
 
     if (!values) return
+    const stats = this.statValues(definition)
+    const version = this.stats?.encounterVersion(definition)
+
+    if (!stats || this.stats?.encounterIssue(definition)) return
     let notifyProgression: (() => void) | undefined
     let notifyRewards: (() => void) | undefined
 
@@ -469,6 +543,7 @@ export class GameCombat implements IGameCombat {
         plan: session.plan,
         enemies: session.enemies,
         escape: session.escape,
+        ...(Object.keys(stats).length ? { stats } : {}),
       })
 
       const round = session.round + 1
@@ -486,7 +561,11 @@ export class GameCombat implements IGameCombat {
 
       const progression = this.prepareProgression(definition.roundTimeMs)
 
-      if (!writes?.isCurrent() || !progression.isCurrent())
+      if (
+        !writes?.isCurrent() ||
+        !progression.isCurrent() ||
+        version !== this.stats?.encounterVersion(definition)
+      )
         throw new Error('Combat transaction is stale')
 
       const cursors = Object.fromEntries(
@@ -502,6 +581,8 @@ export class GameCombat implements IGameCombat {
       session.guard = candidate.guard
       session.seed = candidate.seed
       session.outcome = candidate.outcome
+
+      if (candidate.outcome) this.stats?.release(definition.id)
       session.log = [...session.log, ...candidate.entries].slice(-definition.logCapacity)
       session.round = candidate.outcome ? session.round : round
       session.enemies = enemies
@@ -550,20 +631,23 @@ export class GameCombat implements IGameCombat {
     const name = (id?: string) => actors.find((actor) => actor.id === id)?.label ?? ''
 
     const lines = snapshot.log.map((entry) =>
-      definition.messages[entry.type].replace(
-        /\{(actor|target|damage|blocked|guard)\}/g,
-        (_, key: string) =>
-          key === 'actor'
-            ? name(entry.actor)
-            : key === 'target'
-              ? name(entry.target)
-              : String(
-                  key === 'damage'
-                    ? (entry.damage ?? 0)
+      (entry.type === 'attack' && entry.defended !== undefined
+        ? definition.messages.mitigated
+        : definition.messages[entry.type]
+      ).replace(/\{(actor|target|damage|blocked|guard|defended)\}/g, (_, key: string) =>
+        key === 'actor'
+          ? name(entry.actor)
+          : key === 'target'
+            ? name(entry.target)
+            : String(
+                key === 'damage'
+                  ? (entry.damage ?? 0)
+                  : key === 'defended'
+                    ? (entry.defended ?? 0)
                     : key === 'blocked'
                       ? (entry.blocked ?? 0)
                       : (entry.guard ?? 0),
-                ),
+              ),
       ),
     )
 

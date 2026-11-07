@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { combatBonusesSchema, combatStatsProfileSchema } from './combatStats.js'
 import { gameBindingSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
 import { assertGraphicReference, graphicAppearanceSchema } from './assets.js'
@@ -72,6 +73,7 @@ export const itemPresentationSchema = z
   })
 
 const itemTypeSchema = itemPresentationSchema.safeExtend({
+  combatBonuses: combatBonusesSchema.optional(),
   container: z.boolean().default(false),
   equipmentSlots: z.array(gameIdSchema).default([]),
   icon: gameIdSchema.optional(),
@@ -93,6 +95,7 @@ export const inventorySchema = z.object({
     gameIdSchema,
     z.object({
       label: labelSchema,
+      combatStats: combatStatsProfileSchema.optional(),
       equipmentSlots: z.record(gameIdSchema, labelSchema).default({}),
     }),
   ),

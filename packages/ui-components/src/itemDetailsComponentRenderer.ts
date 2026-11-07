@@ -82,6 +82,33 @@ export class ItemDetailsComponentRenderer implements IComponentRenderer<ItemDeta
       placement.textContent = location
       root.append(name, description, values, placement)
 
+      if (component.showCombatStats && scene?.type === 'game') {
+        const effects = document.createElement('dl')
+
+        const labels = Object.values(scene.game.data.inventory?.owners ?? {}).find(
+          (owner) => owner.combatStats,
+        )?.combatStats?.messages
+
+        for (const stat of combatStatNames)
+          if (type.combatBonuses?.[stat]) {
+            const label = document.createElement('dt'),
+              value = document.createElement('dd')
+
+            label.textContent = labels?.[stat] ?? stat
+            value.textContent = `+${type.combatBonuses[stat]}`
+            effects.append(label, value)
+          }
+
+        root.append(effects)
+
+        const equipment = scene.data.components.find(
+          (c) => c.id === component.equipment && c.type === 'equipment',
+        )
+
+        if (equipment?.type === 'equipment')
+          root.append(equipmentStatsView(document, scene, equipment))
+      }
+
       const issues = properties.flatMap((property) =>
         property.issue ? [`${property.id}: ${property.issue}`] : [],
       )
@@ -100,6 +127,9 @@ export class ItemDetailsComponentRenderer implements IComponentRenderer<ItemDeta
         const selection = scene.game.inventorySelection?.subscribe(update)
 
         if (selection) cleanups.push(selection)
+        const equipment = scene.game.equipment?.subscribe(update)
+
+        if (equipment) cleanups.push(equipment)
       }
 
       const inventory = context.inventory?.subscribeChanges(update)
@@ -125,3 +155,6 @@ export class ItemDetailsComponentRenderer implements IComponentRenderer<ItemDeta
     }
   }
 }
+
+import { equipmentStatsView } from './equipmentStatsView.js'
+import { combatStatNames } from '@ancadeba/schemas'

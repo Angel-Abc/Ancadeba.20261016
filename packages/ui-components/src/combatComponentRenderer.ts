@@ -1,4 +1,9 @@
-import type { SceneComponentData, PlannedMove } from '@ancadeba/game-runtime'
+import {
+  combatMoveValues,
+  type SceneComponentData,
+  type PlannedMove,
+  type CombatSnapshot,
+} from '@ancadeba/game-runtime'
 import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import type {
   IComponentRenderer,
@@ -56,7 +61,9 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
                 type: 'bar',
                 label: definition.messages.health,
                 value: actor.health,
-                maximum: actor.maximumHealth,
+                maximum: actor.equipmentOwner
+                  ? { source: 'game.combatStats', path: [actor.equipmentOwner, 'maximumHealth'] }
+                  : actor.maximumHealth,
               },
             ],
             effects: [],
@@ -84,14 +91,26 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
         return { actor, resources, target, plan }
       })
 
-      const moveText = (queued: PlannedMove) => {
+      const moveText = (queued: PlannedMove, actor: string, snapshot: CombatSnapshot) => {
         const move = definition.moves[queued.move]!
 
         const target =
           [definition.player, ...definition.enemies].find((actor) => actor.id === queued.target)
             ?.label ?? queued.target
 
-        return `${move.label} · ${move.apCost} ${definition.messages.ap} · ${target} · ${move.type === 'attack' ? `${move.damage.min}–${move.damage.max}` : `${definition.messages.guard} +${move.guard}`}`
+        let values
+
+        try {
+          values = combatMoveValues(
+            move,
+            snapshot.stats[actor],
+            snapshot.stats[queued.target]?.defense ?? 0,
+          )
+        } catch {
+          return definition.messages.unavailable
+        }
+
+        return `${move.label} · ${move.apCost} ${definition.messages.ap} · ${target} · ${move.type === 'attack' ? `${values.min}–${values.max}` : `${definition.messages.guard} +${values.guard}`}`
       }
 
       const update = () => {
@@ -118,7 +137,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
           target.setAttribute('aria-pressed', String(snapshot.target === actor.id))
 
           if (focused && target.disabled) context.onActionBarFocusLost?.()
-          const lines = queued.map(moveText)
+          const lines = queued.map((move) => moveText(move, actor.id, snapshot))
 
           if (actor.id === definition.player.id && snapshot.escape)
             lines.push(definition.messages.escape)

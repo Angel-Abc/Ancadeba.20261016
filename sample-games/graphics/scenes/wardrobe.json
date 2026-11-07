@@ -75,7 +75,9 @@
         "column": 7,
         "rowSpan": 6,
         "columnSpan": 6
-      }
+      },
+      "showCombatStats": true,
+      "equipment": "equipment"
     },
     {
       "id": "equipment",
@@ -90,7 +92,8 @@
         "column": 7,
         "rowSpan": 3,
         "columnSpan": 6
-      }
+      },
+      "showCombatStats": true
     },
     {
       "id": "commands",

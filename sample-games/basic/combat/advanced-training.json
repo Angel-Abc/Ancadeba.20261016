@@ -22,7 +22,8 @@
     "leveling": "player",
     "moveLevels": {
       "power-strike": 2
-    }
+    },
+    "equipmentOwner": "player"
   },
   "enemies": [
     {
@@ -116,7 +117,8 @@
     "rewardUnavailable": "rewards.message.rewardUnavailable",
     "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
     "rewardInventory": "rewards.message.rewardInventory",
-    "requiresLevel": "leveling.requires"
+    "requiresLevel": "leveling.requires",
+    "mitigated": "equipment.mitigated"
   },
   "rewards": {
     "recipient": "player",

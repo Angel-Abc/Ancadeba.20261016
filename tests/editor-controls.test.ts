@@ -708,6 +708,8 @@ describe('action bar editor controls', () => {
     editor.render({ ...initial, view }, true)
     edit('Item editing target', 'item:cloak')
     edit('Description', 'A warm cloak')
+    edit('Combat equipment effects', 'enabled')
+    edit('Equipment attack bonus', '4')
     click('Add property')
     edit('Property label', 'Value')
     edit('Property value type', 'number')
@@ -734,6 +736,7 @@ describe('action bar editor controls', () => {
     expect(commands[0]).toMatchObject({
       type: 'inventory.setItemPresentation',
       itemType: 'cloak',
+      combatBonuses: { attack: 4, defense: 0, guard: 0, maximumHealth: 0 },
       presentation: {
         description: 'A warm cloak',
         properties: [{ id: 'property', label: 'Value', value: 12 }],
@@ -743,6 +746,7 @@ describe('action bar editor controls', () => {
     click('Add equipment')
     edit('Equipment owner', 'player')
     edit('Grid columns', '2')
+    edit('Show equipment stats', 'true')
     edit('Slot order (comma separated IDs)', 'body')
     submit('Save items and equipment')
     expect(commands[1]).toMatchObject({
@@ -752,6 +756,7 @@ describe('action bar editor controls', () => {
         inventory: 'items',
         owner: 'player',
         columns: 2,
+        showCombatStats: true,
         order: ['body'],
       },
     })
@@ -788,6 +793,48 @@ describe('action bar editor controls', () => {
         },
       },
     })
+  })
+  it('authors owner stat bindings and retains profile drafts across unrelated refreshes', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [
+        { path: ['hp'], value: 20 },
+        { path: ['max'], value: 30 },
+      ],
+      actions: {},
+    }
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      owners: { player: { label: 'Player', equipmentSlots: { hand: 'Hand' } } },
+      itemTypes: { sword: { label: 'Sword', equipmentSlots: ['hand'] } },
+      items: {},
+    })
+    const editor = bindItemEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    edit('Item editing target', 'owner:player')
+    edit('Combat stat profile', 'enabled')
+    edit('Source', JSON.stringify({ source: 'game.state', path: ['max'] }), 'Base maximumHealth')
+    edit('Value', '3', 'Base defense')
+    edit('Item editing target', 'item:sword')
+    expect(field('Item editing target').value).toBe('owner:player')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, preserveDrafts: true, conflict: true },
+      false,
+    )
+    expect(field('Value', 'Base defense').value).toBe('3')
+    submit('Save items and equipment')
+    expect(commands[0]).toMatchObject({
+      type: 'inventory.setEquipmentSlots',
+      owner: 'player',
+      combatStats: {
+        health: { source: 'game.state', path: ['hp'] },
+        maximumHealth: { source: 'game.state', path: ['max'] },
+        defense: 3,
+      },
+    })
+    click('Discard item draft')
+    expect(field('Combat stat profile').value).toBe('disabled')
   })
   it('authors and reorders status rows and effects while preserving conflicting and unrelated drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()

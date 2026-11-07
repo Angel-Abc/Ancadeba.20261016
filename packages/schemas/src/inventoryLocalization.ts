@@ -1,4 +1,5 @@
 import { inventorySchema, type InventoryDefinition } from './inventory.js'
+import { combatStatsTextSchema } from './combatStats.js'
 import type { GameTranslation } from './localization.js'
 
 /** Localize presentation only; item identities, placement, and compatibility remain unchanged. */
@@ -25,6 +26,29 @@ export function localizeInventory(
 
   return inventorySchema.parse({
     ...definition,
+    owners: Object.fromEntries(
+      Object.entries(definition.owners).map(([id, owner]) => [
+        id,
+        {
+          ...owner,
+          ...(owner.combatStats
+            ? {
+                combatStats: {
+                  ...owner.combatStats,
+                  messages: Object.fromEntries(
+                    combatStatsTextSchema
+                      .keyof()
+                      .options.map((key) => [
+                        key,
+                        text(owner.combatStats!.messageKeys[key], owner.combatStats!.messages[key]),
+                      ]),
+                  ),
+                },
+              }
+            : {}),
+        },
+      ]),
+    ),
     itemTypes: Object.fromEntries(
       Object.entries(definition.itemTypes).map(([id, item]) => [
         id,

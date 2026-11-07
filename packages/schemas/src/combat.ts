@@ -52,10 +52,11 @@ export const combatActorSchema = z
     id,
     ...label,
     portrait: id.optional(),
+    equipmentOwner: id.optional(),
     leveling: id.optional(),
     moveLevels: z.record(id, z.number().int().positive().safe()).optional(),
     health: combatHealthSchema,
-    maximumHealth: z.union([z.number().int().positive().safe(), gameBindingSchema]),
+    maximumHealth: z.union([z.number().int().nonnegative().safe(), gameBindingSchema]),
     ap: z.number().int().positive().max(100).default(3),
     moves: z
       .array(id)
@@ -67,8 +68,20 @@ export const combatActorSchema = z
     (actor) => Boolean(actor.label || actor.labelKey),
     'An actor label or translation is required',
   )
+  .refine(
+    (actor) =>
+      typeof actor.maximumHealth !== 'number' ||
+      actor.maximumHealth > 0 ||
+      Boolean(actor.equipmentOwner),
+    'Maximum health must be positive without an equipment profile',
+  )
 
 export const combatTextSchema = z.object({
+  mitigated: z
+    .string()
+    .default(
+      '{actor} attacks {target}: {damage} damage, {defended} prevented by defense, {blocked} absorbed by Guard.',
+    ),
   requiresLevel: z.string().default('Requires level {level}'),
   planning: z.string().default('Planning'),
   target: z.string().default('Target'),

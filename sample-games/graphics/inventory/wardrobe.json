@@ -5,7 +5,10 @@
       "label": "Backpack",
       "container": true,
       "equipmentSlots": ["back"],
-      "description": "A travel pack. Items inside it share its owner."
+      "description": "A travel pack. Items inside it share its owner.",
+      "combatBonuses": {
+        "maximumHealth": 4
+      }
     },
     "letter": {
       "label": "Folded letter",
@@ -34,7 +37,44 @@
           "label": "Value",
           "value": 45
         }
-      ]
+      ],
+      "combatBonuses": {
+        "attack": 2,
+        "defense": 1,
+        "guard": 2,
+        "maximumHealth": 8
+      }
+    },
+    "reinforced-cloak": {
+      "label": "Reinforced traveling cloak",
+      "equipmentSlots": ["outerwear"],
+      "icon": "cloak",
+      "wornPart": "cloak",
+      "description": "A warm cloak with a metal clasp. Instance dyes also appear on the paper doll.",
+      "artwork": "cloak",
+      "properties": [
+        {
+          "id": "category",
+          "label": "Category",
+          "value": "Outerwear"
+        },
+        {
+          "id": "quality",
+          "label": "Quality",
+          "value": "Handmade"
+        },
+        {
+          "id": "value",
+          "label": "Value",
+          "value": 45
+        }
+      ],
+      "combatBonuses": {
+        "attack": 1,
+        "defense": 2,
+        "guard": 3,
+        "maximumHealth": 12
+      }
     }
   },
   "owners": {
@@ -43,6 +83,16 @@
       "equipmentSlots": {
         "back": "Back",
         "outerwear": "Outerwear"
+      },
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["combat", "player"]
+        },
+        "maximumHealth": {
+          "source": "game.state",
+          "path": ["combat", "maximumHealth"]
+        }
       }
     },
     "ranger": {
@@ -92,7 +142,7 @@
       }
     },
     "amber-cloak": {
-      "itemType": "cloak",
+      "itemType": "reinforced-cloak",
       "placement": {
         "type": "carried",
         "owner": "wayfarer"

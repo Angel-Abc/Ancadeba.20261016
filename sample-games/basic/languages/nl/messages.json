@@ -200,5 +200,21 @@
   "leveling.powerStrike": "Krachtslag",
   "leveling.advanced": "Gevorderde training",
   "leveling.requires": "Vereist niveau {level}",
-  "leveling.returnTraining": "Terug naar de training"
+  "leveling.returnTraining": "Terug naar de training",
+  "equipment.attack": "Aanvalsbonus",
+  "equipment.defense": "Verdediging",
+  "equipment.guard": "Blokkeerbonus",
+  "equipment.maximumHealth": "Maximale gezondheid",
+  "equipment.base": "Basis",
+  "equipment.equipment": "Uitrusting",
+  "equipment.total": "Totaal",
+  "equipment.comparison": "Uitrusting vergelijken",
+  "equipment.currentHealth": "Huidige gezondheid",
+  "equipment.chooseSlot": "Kies een uitrustingsvak om te vergelijken.",
+  "equipment.locked": "Uitrusting vergrendeld door {encounter}.",
+  "equipment.unavailable": "Uitrustingswaarden zijn niet beschikbaar: controleer waarden en staatstoegang.",
+  "equipment.heading": "Uitrusting",
+  "equipment.equip": "Uitrusten",
+  "equipment.unequip": "Afleggen",
+  "equipment.mitigated": "{actor} valt {target} aan: {damage} schade, {defended} voorkomen door verdediging, {blocked} opgevangen door blokkeren."
 }

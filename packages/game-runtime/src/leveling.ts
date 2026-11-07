@@ -34,6 +34,10 @@ export interface IGameLeveling {
 
 /** Expands XP writes into one validated state batch. Prepared commits never notify observers. */
 export class GameLeveling implements IGameLeveling, IStateTransactions {
+  private healthBonus: (path: readonly string[]) => number = () => 0
+  setHealthBonus(read: (path: readonly string[]) => number): void {
+    this.healthBonus = read
+  }
   private readonly receipts = new Map<string, LevelReceipt>()
   private readonly listeners = new Set<() => void>()
   private readonly versions = new Map<string, { signature: string; token: object }>()
@@ -87,9 +91,20 @@ export class GameLeveling implements IGameLeveling, IStateTransactions {
 
     if (profile.health) {
       const current = this.read(profile.health.current.path)
-      const maximum = this.read(profile.health.maximum.path)
+      const baseMaximum = this.read(profile.health.maximum.path)
 
-      if (current === undefined || maximum === undefined || maximum <= 0 || current > maximum)
+      const maximum =
+        baseMaximum === undefined
+          ? undefined
+          : baseMaximum + this.healthBonus(profile.health.current.path)
+
+      if (
+        current === undefined ||
+        maximum === undefined ||
+        !Number.isSafeInteger(maximum) ||
+        maximum <= 0 ||
+        current > maximum
+      )
         available = false
     }
 
@@ -224,12 +239,16 @@ export class GameLeveling implements IGameLeveling, IStateTransactions {
 
       if (profile.health) {
         const current = candidate(profile.health.current.path)
-        const maximum = candidate(profile.health.maximum.path)
-        const beforeMaximum = this.read(profile.health.maximum.path)
+        const bonus = this.healthBonus(profile.health.current.path)
+        const maximumBase = candidate(profile.health.maximum.path)
+        const beforeBase = this.read(profile.health.maximum.path)
+        const maximum = maximumBase === undefined ? undefined : maximumBase + bonus
+        const beforeMaximum = beforeBase === undefined ? undefined : beforeBase + bonus
 
         if (
           current === undefined ||
           maximum === undefined ||
+          !Number.isSafeInteger(maximum) ||
           beforeMaximum === undefined ||
           maximum <= 0 ||
           current > maximum

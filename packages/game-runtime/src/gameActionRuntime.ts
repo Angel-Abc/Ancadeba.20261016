@@ -1,4 +1,5 @@
 import { GameLeveling } from './leveling.js'
+import { GameCombatStats } from './combatStats.js'
 import { GameCombatRewards } from './combatRewards.js'
 import type { ILogger, IMonotonicClock, ITaskScheduler } from '@ancadeba/utilities'
 import { ActionProcessor } from './actionProcessor.js'
@@ -29,6 +30,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly trading: GameTrading | undefined
   readonly combatRewards: GameCombatRewards | undefined
   readonly leveling: GameLeveling
+  readonly combatStats: GameCombatStats
   readonly combat: GameCombat | undefined
   private readonly timers: TimerService
   private started = false
@@ -57,20 +59,35 @@ export class GameActionRuntime implements IGameRuntime {
         state: () => game.state,
         progression: () => this.actions.progression,
         leveling: () => this.leveling?.bindingValues,
+        combatStats: () => this.combatStats?.bindingValues,
       },
       messages,
     )
-    this.leveling = new GameLeveling(game, this.bindings, stateTransactions, () =>
+
+    const statState: IStateTransactions | undefined = stateTransactions
+      ? {
+          prepare: (writes) =>
+            this.combatStats
+              ? this.combatStats.prepareState(writes)
+              : stateTransactions.prepare(writes),
+        }
+      : undefined
+
+    this.leveling = new GameLeveling(game, this.bindings, statState, () =>
       this.bindings.invalidate(),
     )
-    const numericState = game.data.leveling?.size ? this.leveling : stateTransactions
+    const numericState = game.data.leveling?.size ? this.leveling : statState
+    this.combatStats = new GameCombatStats(game, this.bindings, stateTransactions, () =>
+      this.bindings.invalidate(),
+    )
+    this.leveling.setHealthBonus((path) => this.combatStats.healthBonus(path))
     this.nearby = lifecycle ? new GameNearbyContext(lifecycle, this.bindings) : undefined
     this.inventorySelection = lifecycle
       ? new GameInventoryContext(lifecycle, game.inventory)
       : undefined
     this.equipment =
       lifecycle && this.inventorySelection
-        ? new GameEquipment(lifecycle, this.inventorySelection, game.inventory)
+        ? new GameEquipment(lifecycle, this.inventorySelection, game.inventory, this.combatStats)
         : undefined
     this.trading =
       lifecycle && this.inventorySelection
@@ -79,7 +96,11 @@ export class GameActionRuntime implements IGameRuntime {
             this.inventorySelection,
             game.inventory,
             this.bindings,
-            game.data.leveling?.size ? this.leveling : tradeState,
+            game.data.leveling?.size
+              ? this.leveling
+              : tradeState
+                ? { prepare: (writes) => this.combatStats.prepareState(writes, tradeState) }
+                : undefined,
             () => this.bindings.invalidate(),
           )
         : undefined
@@ -138,6 +159,7 @@ export class GameActionRuntime implements IGameRuntime {
             () => this.bindings.invalidate(),
             this.combatRewards,
             this.leveling,
+            this.combatStats,
           )
         : undefined
     } catch (error) {
@@ -145,6 +167,7 @@ export class GameActionRuntime implements IGameRuntime {
       this.combat?.dispose()
       this.combatRewards?.dispose()
       this.leveling.dispose()
+      this.combatStats.dispose()
       this.trading?.dispose()
       this.equipment?.dispose()
       this.inventorySelection?.dispose()
@@ -171,6 +194,7 @@ export class GameActionRuntime implements IGameRuntime {
     this.combat?.dispose()
     this.combatRewards?.dispose()
     this.leveling.dispose()
+    this.combatStats.dispose()
     this.trading?.dispose()
     this.equipment?.dispose()
     this.inventorySelection?.dispose()

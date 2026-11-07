@@ -18,6 +18,8 @@ export type InventoryMoveResult =
   | { readonly status: 'rejected'; readonly reason: string }
 
 export interface IGameInventory {
+  /** Internal transaction participant, installed by the playthrough's equipment stat service. */
+  setEquipmentPolicy?(policy: InventoryEquipmentPolicy): () => void
   /** Stage new finite item instances without publishing or invoking observers. */
   prepareCreate?(items: readonly InventoryItemSnapshot[]): PreparedInventoryTransfer | undefined
   /** Validate and stage the entire transfer batch against one candidate inventory. */
@@ -35,6 +37,18 @@ export interface IGameInventory {
   checkEquip(itemId: string, owner: string, slot: string): string | undefined
   equip(itemId: string, owner: string, slot: string): InventoryMoveResult
   subscribeChanges(handler: () => void): Unsubscribe
+}
+
+export interface InventoryEquipmentPolicy {
+  prepare(
+    before: ReadonlyMap<string, InventoryItemSnapshot>,
+    after: ReadonlyMap<string, InventoryItemSnapshot>,
+  ): InventoryEquipmentPreparation
+}
+
+export interface InventoryEquipmentPreparation {
+  reason?: string
+  effects?: PreparedInventoryTransfer
 }
 
 export interface PreparedInventoryTransfer {
@@ -57,6 +71,16 @@ export class GameInventory implements IGameInventory {
   private readonly subscribers = new Set<() => void>()
   private disposed = false
   private revision = 0
+  private equipmentPolicy: InventoryEquipmentPolicy | undefined
+
+  setEquipmentPolicy(policy: InventoryEquipmentPolicy): () => void {
+    if (this.equipmentPolicy) throw new Error('An equipment policy is already installed')
+    this.equipmentPolicy = policy
+
+    return () => {
+      if (this.equipmentPolicy === policy) this.equipmentPolicy = undefined
+    }
+  }
 
   constructor(private readonly definition: InventoryDefinition) {
     for (const [id, item] of Object.entries(definition.items)) {
@@ -87,7 +111,13 @@ export class GameInventory implements IGameInventory {
   }
 
   checkMove(itemId: string, destination: InventoryPlacement): string | undefined {
-    return this.validate(itemId, destination).reason
+    const validation = this.validate(itemId, destination)
+
+    if (!validation.destination) return validation.reason
+    const staged = new Map(this.items)
+    staged.set(itemId, { ...staged.get(itemId)!, placement: validation.destination })
+
+    return this.equipmentPolicy?.prepare(this.items, staged).reason
   }
 
   move(itemId: string, destination: InventoryPlacement): InventoryMoveResult {
@@ -99,9 +129,15 @@ export class GameInventory implements IGameInventory {
     if (samePlacement(item.placement, result.destination))
       return { status: 'applied', changed: false }
 
-    this.items.set(itemId, Object.freeze({ ...item, placement: Object.freeze(result.destination) }))
-    this.revision++
-    this.notify()
+    const reason = this.checkMove(itemId, result.destination)
+
+    if (reason) return { status: 'rejected', reason }
+    const staged = this.prepareTransfer(itemId, result.destination)
+
+    if (!staged?.isCurrent())
+      return { status: 'rejected', reason: 'Equipment transaction is unavailable' }
+    staged.commit()
+    staged.notify()
 
     return { status: 'applied', changed: true }
   }
@@ -148,7 +184,11 @@ export class GameInventory implements IGameInventory {
   }
 
   checkEquip(itemId: string, owner: string, slot: string): string | undefined {
-    return this.prepareEquip(itemId, owner, slot).reason
+    const result = this.prepareEquip(itemId, owner, slot)
+
+    return result.staged
+      ? this.equipmentPolicy?.prepare(this.items, result.staged).reason
+      : result.reason
   }
 
   equip(itemId: string, owner: string, slot: string): InventoryMoveResult {
@@ -158,9 +198,15 @@ export class GameInventory implements IGameInventory {
 
     if (!result.changed) return { status: 'applied', changed: false }
 
-    for (const [id, item] of result.staged) this.items.set(id, item)
-    this.revision++
-    this.notify()
+    const reason = this.equipmentPolicy?.prepare(this.items, result.staged).reason
+
+    if (reason) return { status: 'rejected', reason }
+    const staged = this.prepareBatch(result.staged)
+
+    if (!staged?.isCurrent())
+      return { status: 'rejected', reason: 'Equipment transaction is unavailable' }
+    staged.commit()
+    staged.notify()
 
     return { status: 'applied', changed: true }
   }
@@ -191,24 +237,10 @@ export class GameInventory implements IGameInventory {
     if (!result.destination) return
     const item = this.items.get(itemId)!
     const next = Object.freeze({ ...item, placement: Object.freeze(result.destination) })
-    const revision = this.revision
-    let committed = false
-    let notified = false
+    const staged = new Map(this.items)
+    staged.set(itemId, next)
 
-    return {
-      isCurrent: () => !this.disposed && !committed && this.revision === revision,
-      commit: () => {
-        if (this.disposed || committed || this.revision !== revision) return
-        this.items.set(itemId, next)
-        this.revision++
-        committed = true
-      },
-      notify: () => {
-        if (!committed || notified) return
-        notified = true
-        this.notify()
-      },
-    }
+    return this.prepareBatch(staged)
   }
 
   prepareCreate(items: readonly InventoryItemSnapshot[]): PreparedInventoryTransfer | undefined {
@@ -273,15 +305,31 @@ export class GameInventory implements IGameInventory {
 
   private prepareBatch(
     staged: ReadonlyMap<string, InventoryItemSnapshot>,
-  ): PreparedInventoryTransfer {
+  ): PreparedInventoryTransfer | undefined {
+    const policy = this.equipmentPolicy?.prepare(this.items, staged)
+
+    if (policy?.reason) return
+    const effects = policy?.effects
     const revision = this.revision
     let committed = false
     let notified = false
 
     return {
-      isCurrent: () => !this.disposed && !committed && this.revision === revision,
+      isCurrent: () =>
+        !this.disposed &&
+        !committed &&
+        this.revision === revision &&
+        (effects?.isCurrent() ?? true),
       commit: () => {
-        if (this.disposed || committed || this.revision !== revision) return
+        if (
+          this.disposed ||
+          committed ||
+          this.revision !== revision ||
+          (effects && !effects.isCurrent())
+        )
+          return
+
+        effects?.commit()
 
         for (const [id, item] of staged) this.items.set(id, item)
         this.revision++
@@ -290,7 +338,18 @@ export class GameInventory implements IGameInventory {
       notify: () => {
         if (!committed || notified) return
         notified = true
-        this.notify()
+        const errors: unknown[] = []
+
+        for (const notify of [() => this.notify(), () => effects?.notify()]) {
+          try {
+            notify()
+          } catch (error) {
+            errors.push(error)
+          }
+        }
+
+        if (errors.length)
+          throw new AggregateError(errors, 'Inventory transaction committed but observers failed')
       },
     }
   }

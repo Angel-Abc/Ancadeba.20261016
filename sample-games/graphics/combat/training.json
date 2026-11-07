@@ -23,7 +23,8 @@
     "leveling": "player",
     "moveLevels": {
       "power-strike": 2
-    }
+    },
+    "equipmentOwner": "wayfarer"
   },
   "enemies": [
     {

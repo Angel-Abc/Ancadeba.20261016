@@ -77,6 +77,27 @@ export function combatForm(
       select('Portrait', actor.portrait ?? '', art, (value) => {
         actor.portrait = value || undefined
       }),
+      select(
+        'Equipment stat owner',
+        actor.equipmentOwner ?? '',
+        [
+          '',
+          ...Object.entries(view.inventory?.owners ?? {})
+            .filter(([, owner]) => owner.combatStats)
+            .map(([id]) => id),
+        ],
+        (value) => {
+          actor.equipmentOwner = value || undefined
+          const stats = view.inventory?.owners[value]?.combatStats
+
+          if (stats) {
+            actor.health = structuredClone(stats.health)
+            actor.maximumHealth = structuredClone(stats.maximumHealth)
+          }
+
+          render()
+        },
+      ),
       select('Health field', JSON.stringify(actor.health), fields, (value) => {
         actor.health = combatHealthSchema.parse(JSON.parse(value))
       }),

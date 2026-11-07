@@ -1354,8 +1354,8 @@ describe('scene renderer', () => {
     const inventory = target.find((element) => element.dataset.componentId === 'items')!
     expect(inventory.className.split(' ')).toContain('ancadeba-scene-item')
     expect(
-      inventory.find((element) => element.className === 'ancadeba-inventory-empty'),
-    ).toBeDefined()
+      inventory.find((element) => element.className === 'ancadeba-inventory-items')?.textContent,
+    ).toContain('Empty')
 
     playthrough.inventory?.move('folded-letter', { type: 'carried', owner: 'player' })
     playthrough.inventory?.move('harbour-chart', { type: 'carried', owner: 'player' })
@@ -2188,6 +2188,7 @@ describe('editor scene picker', () => {
       expect(details().textContent).toContain('<em>Warm cloak</em>')
       expect(details().dataset.bindingStatus).toBe('unresolved')
       expect(details().textContent).toContain('Inside Backpack (Wayfarer)')
+      expect(details().textContent).toContain('40 → 48 (+8)')
       expect(slot('1').disabled).toBe(false)
       expect(
         equipment()
@@ -2199,8 +2200,12 @@ describe('editor scene picker', () => {
       flush(engine)
       expect(equipment().find((node) => node.dataset.equipmentItem === 'moss-cloak')).toBeDefined()
       expect(details().textContent).toContain('Wayfarer / Outerwear')
+      expect(engine.lifecycle!.currentGame!.combatStats!.snapshot('wayfarer')!.total).toMatchObject(
+        { attack: 2, defense: 1, guard: 2, maximumHealth: 48 },
+      )
       expect(slot('2').disabled).toBe(false)
       item('amber-cloak').dispatchEvent(new Event('click'))
+      expect(details().textContent).toContain('48 → 52 (+4)')
       slot('1').dispatchEvent(new Event('click'))
       expect(
         engine.lifecycle!.currentGame!.inventory!.snapshot.find((item) => item.id === 'moss-cloak')!
