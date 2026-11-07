@@ -280,6 +280,10 @@ describe('standalone game export', () => {
         }
 
         expect(game.combat!.snapshot(currentFight, 'combat')!.outcome).toBe('victory')
+        expect(game.leveling!.snapshot('player')).toMatchObject({ level: 2, xp: 5 })
+        expect(
+          game.bindings!.read({ source: 'game.state', path: ['combat', 'maximumHealth'] }),
+        ).toMatchObject({ value: 46 })
         const loot = game.combatRewards!.snapshot(currentFight, 'combat')!
         const prize = loot.items[0]!
         const dyed = game.inventory!.snapshot.find((item) => item.id === prize)!
@@ -298,6 +302,15 @@ describe('standalone game export', () => {
           ...dyed,
           placement: { type: 'equipped', owner: 'wayfarer', slot: 'outerwear' },
         })
+        engine.lifecycle!.enterScene('advanced-training')
+        const advanced = engine.lifecycle!.activeScene!
+        expect(game.actionBar!.isEnabled(advanced, 'commands', '12')).toBe(false)
+        game.combat!.selectTarget(advanced, 'combat', 'advanced-sentinel')
+        expect(game.actionBar!.isEnabled(advanced, 'commands', '12')).toBe(true)
+        game.actionBar!.activate(advanced, 'commands', '12')
+
+        for (let i = 0; i < 6; i++) engine.flushMessages()
+        expect(game.combat!.snapshot(advanced, 'combat')!.plan[0]!.move).toBe('power-strike')
       } finally {
         engine.stop()
       }

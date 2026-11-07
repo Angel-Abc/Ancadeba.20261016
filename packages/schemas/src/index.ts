@@ -41,3 +41,5 @@ export * from './shop.js'
 export * from './combat.js'
 
 export * from './combatRewards.js'
+
+export * from './leveling.js'

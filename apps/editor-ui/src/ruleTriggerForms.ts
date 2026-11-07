@@ -1,10 +1,11 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
 import {
-  type RuleFormControls,
   parseStatePath,
   placementFields,
+  type RuleFormControls,
   statePath,
+  translationChoices,
 } from './ruleFormControls.js'
 import { inventoryActionsForm } from './inventoryActionsForm.js'
 import { nearbyForm } from './nearbyForm.js'
@@ -19,7 +20,7 @@ export function ruleTriggerForms(
   view: ProjectView,
   save: (command: EditorCommand) => void,
 ): HTMLElement[] {
-  const { create, input, select, group } = controls
+  const { create, input, select, group, translation } = controls
   const rules = view.rules
   const actions = Object.keys(rules?.actions ?? {})
   const state = rules?.state ?? []
@@ -99,10 +100,10 @@ export function ruleTriggerForms(
         input('Label', label, (next) => {
           label = next
         }),
-        select(
+        translation(
           'Label translation',
           labelKey,
-          [['', 'Use literal label'], ...(view.translationKeys ?? [])],
+          translationChoices(view, 'Use literal label'),
           (next) => {
             labelKey = next
           },

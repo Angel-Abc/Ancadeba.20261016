@@ -13,7 +13,8 @@
     "shoals",
     "north-cliff-landing",
     "shop",
-    "training"
+    "training",
+    "advanced-training"
   ],
   "input": "controls",
   "stylesheet": "museum.css",
@@ -26,5 +27,6 @@
   "maps": ["museum", "harbour"],
   "inventory": ["museum", "harbour"],
   "rules": ["rules", "museum-puzzle", "harbour-route", "shop", "combat"],
-  "combat": ["training"]
+  "combat": ["training", "advanced-training"],
+  "leveling": ["player"]
 }

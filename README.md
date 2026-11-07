@@ -1838,6 +1838,112 @@ cloak. F takes selected loot, G takes all, and Z retries delivery in both sample
 Enemy equipment transfers, stacks, automatic leveling, loot choices, shared loot
 tables and repeatable encounter farming are deferred.
 
+## Character progression and leveling
+
+Opt in with `"leveling": ["player"]` in `game.json`. Each ID loads
+`leveling/<id>.json`. Character leveling is separate from turn/world-time
+progression. Existing games without profiles keep their current behavior.
+
+A profile links declared numeric `xp` and `level` fields to an explicit cumulative
+threshold table. Level numbers are the row positions, starting at 1. The first
+row has zero XP and no gains; later XP thresholds strictly increase. Starting XP
+and level declarations must agree, and starting stat values describe that starting
+level. Historic stat gains are never replayed on load.
+
+```json
+{
+  "schema-version": "1.0.0",
+  "id": "player",
+  "label": "Player progression",
+  "xp": { "source": "game.state", "path": ["player", "experience"] },
+  "level": { "source": "game.state", "path": ["player", "level"] },
+  "levels": [
+    { "xp": 0 },
+    {
+      "xp": 5,
+      "gains": [
+        {
+          "id": "health",
+          "label": "Maximum health",
+          "field": { "source": "game.state", "path": ["player", "maximumHealth"] },
+          "amount": 6
+        }
+      ]
+    }
+  ],
+  "health": {
+    "current": { "source": "game.state", "path": ["player", "health"] },
+    "maximum": { "source": "game.state", "path": ["player", "maximumHealth"] },
+    "policy": "preserve"
+  }
+}
+```
+
+Numeric combat rewards targeting a profile's XP field enlist leveling in the
+same state transaction as currency and loot. One grant can cross several levels;
+each crossed row applies its additive gains once. Overflow, invalid fields or an
+unsupported adapter reject the entire payout, leaving victory and its reward
+bundle pending for Retry Rewards. Observers run only after XP, level, stats, loot,
+receipts and the delivery marker are committed. Observer failures retain that
+result without replaying gains.
+
+XP never decreases. It continues accumulating beyond the last threshold while
+the level stays capped. Profiles cannot share owned fields; gain targets cannot
+be XP, level or current combat-health fields. Direct authored `set-state` effects
+on managed XP/level fields are rejected. Code hosts can grant XP through
+`game.leveling.grantXp(profileId, amount)`; zero grants are valid and do not replay
+gains. Supply the existing `createStateTransactions` adapter for code-hosted games.
+Authored games receive it automatically. Numeric field writes must go through
+the supported transaction path; mutating host state directly cannot trigger a
+level-up. Quest-reward authoring is deferred.
+
+When maximum health grows, `health.policy` chooses `preserve` (the default),
+`increase` (add the maximum-health gain to current health), or `restore` (fill the
+new maximum). A character at zero health stays defeated under every policy.
+Health recovery happens only when a level-up raises the configured maximum.
+Combat players linked to a profile with health configuration must use matching
+current and maximum health bindings. Other stat gains update their declared
+fields; V1 does not add damage formulas, AP scaling or equipment modifiers.
+
+Set `leveling` on a combat player to its profile ID, and configure `moveLevels`
+with available move IDs and minimum authored levels. For example,
+`"leveling": "player", "moveLevels": { "power-strike": 2 }`. Action-bar positions
+stay fixed. Locked move buttons show a level requirement and consume their input
+gestures without activating. Queued move inputs retain the original progression
+version; unlocking a move cannot activate an earlier disabled press. Existing
+plans, enemy intent, AP and RNG remain unchanged by an XP grant.
+
+`game.leveling.snapshot(id)` provides immutable XP, level, cap status, progress
+values and the latest receipt; `text(id)` formats localized gained levels, stat
+increases and move unlocks. Names, stat labels and message templates support the
+usual translation keys. Language changes preserve state and selection. Scene
+changes preserve levels; New Game resets XP, stats, unlocks and receipts.
+
+Existing text and status panels can read `game.leveling` bindings using paths
+`[profileId, field]`. Numeric fields are `xp`, `level`, `maximumLevel`,
+`nextLevelXp`, `xpIntoLevel`, `xpToNextLevel`, `progressValue` and
+`progressMaximum`; `available` and `capped` are booleans. At the cap the visual
+progress pair is 1/1, `xpToNextLevel` is zero, and `nextLevelXp` is unavailable.
+The status-panel editor lists these sources. For a full summary add a
+`character-progression` component with `profile`, normal grid `placement`, and
+an optional same-scene `textTarget` for its latest receipt. Linked combat logs
+also include the latest level-up receipt.
+
+Use the editor's **Character progression** section for profiles, thresholds,
+stat gains, health policy, translated text and view placement. The form previews
+the level table before saving. The Combat player group configures its profile
+and minimum move levels. Saves use the inspected revision and retain conflicting
+or unrelated drafts and extension properties. Validation protects referenced
+profiles, bindings, state declarations, views and move requirements.
+
+The basic and graphics courtyard rewards advance the player to level 2 at 5 XP,
+raise maximum health and unlock Power strike on X. C opens the separate Advanced
+training encounter, where the unlocked move can be used. Its XP reward reaches
+level 3 at 15 XP. Basic preserves current health; graphics demonstrates increasing
+current health by the maximum-health gain. Leveling consumes no additional turn
+or game time. XP loss, level-down, respec, skill-point spending, branching trees,
+formula-based XP curves and repeatable encounter farming are deferred.
+
 ## Queued messaging
 
 `@ancadeba/utilities` exports `MessageBus<Topics>` and `IMessageBus<Topics>`.

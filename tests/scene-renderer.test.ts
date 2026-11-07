@@ -473,6 +473,25 @@ describe('scene renderer', () => {
     },
   )
 
+  it('opens the editor preview at the scene being edited instead of the start screen', async () => {
+    const game = await new GameLoader(new JsonResourceLoader(source, logger), ['en']).load()
+    const { target } = setup(game)
+
+    const engine = new Engine(
+      { load: async () => game },
+      new EditorPreviewHost(target.asElement(), undefined, undefined, undefined, () => 'shop'),
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      timing,
+    )
+
+    onTestFinished(() => engine.stop())
+    await engine.start()
+
+    expect(target.find((node) => node.dataset.componentId === 'merchant-items')).toBeDefined()
+    expect(target.find((node) => node.dataset.componentId === 'new-game')).toBeUndefined()
+  })
+
   it.each([
     { host: 'preview', language: 'en' },
     { host: 'standalone', language: 'nl' },
@@ -1889,6 +1908,9 @@ describe('editor scene picker', () => {
       const slot = (id: string) =>
         component('commands').find((node) => node.dataset.actionBarSlot === id)!
 
+      expect(slot('12').disabled).toBe(true)
+      expect(slot('12').textContent).toContain('Requires level 2')
+
       for (const id of ['sentinel', 'keeper']) {
         game.combat!.selectTarget(scene, 'combat', id)
         engine.input!.pressKey('KeyQ')
@@ -1901,6 +1923,13 @@ describe('editor scene picker', () => {
       flush(engine)
       expect(component('narrative').textContent).toContain('Victory rewards received.')
       expect(component('narrative').textContent).toContain('Gold: +8')
+      expect(game.leveling!.snapshot('player')).toMatchObject({ level: 2, xp: 5 })
+      expect(component('progression').textContent).toContain('Level 2')
+      expect(component('progression').textContent).toContain('Maximum health: +6')
+      expect(component('narrative').textContent).toContain('Unlocked: Power strike')
+      expect(
+        game.bindings!.read({ source: 'game.state', path: ['player', 'maximumHealth'] }),
+      ).toMatchObject({ value: 46 })
       expect(game.bindings!.read({ source: 'game.state', path: ['player', 'gold'] })).toMatchObject(
         { value: 20 },
       )
@@ -1914,6 +1943,8 @@ describe('editor scene picker', () => {
       engine.game!.localization!.select('nl')
       expect(component('narrative').textContent).toContain('Overwinningsbeloningen ontvangen.')
       expect(component('loot-details').textContent).toContain('Trainingsmunt')
+      expect(component('progression').textContent).toContain('Niveau 2')
+      expect(component('progression').textContent).toContain('Vrijgespeeld: Krachtslag')
       expect(slot('9').disabled).toBe(false)
       lootItem().focus()
       engine.input!.pressKey('KeyF')
@@ -1930,6 +1961,16 @@ describe('editor scene picker', () => {
       expect(game.combatRewards!.snapshot(scene, 'combat')!.remaining).toEqual([])
       expect(game.actions!.progression.turn).toBe(1)
       expect(component('loot').textContent).not.toContain('Trainingsmunt')
+      engine.lifecycle!.enterScene('advanced-training')
+      expect(slot('12').textContent).not.toContain('Vereist')
+      const advanced = engine.lifecycle!.activeScene!
+      game.combat!.selectTarget(advanced, 'combat', 'advanced-sentinel')
+      expect(slot('12').disabled).toBe(false)
+      engine.input!.pressKey('KeyX')
+      engine.input!.releaseKey('KeyX')
+      flush(engine)
+      expect(game.combat!.snapshot(advanced, 'combat')!.plan[0]!.move).toBe('power-strike')
+      engine.lifecycle!.enterScene('training')
       slot('14').dispatchEvent(new Event('click'))
       flush(engine)
       engine.lifecycle!.enterScene('training')
@@ -1944,6 +1985,10 @@ describe('editor scene picker', () => {
           'combat',
         ),
       ).toBeUndefined()
+      expect(engine.lifecycle!.currentGame!.leveling!.snapshot('player')).toMatchObject({
+        level: 1,
+        xp: 0,
+      })
       expect(slot('10').disabled).toBe(true)
     },
   )

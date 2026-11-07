@@ -83,6 +83,117 @@ describe('shared editor project API', () => {
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
 
+  it.each(['success', 'before-scene', 'after-scene'] as const)(
+    'publishes a leveling profile, manifest and view consistently: %s',
+    async (failure) => {
+      await command((await inspect()).revision, {
+        type: 'scene.create',
+        scene: { ...scene, type: 'game' },
+      })
+      await command((await inspect()).revision, {
+        type: 'game.updateRules',
+        ruleId: 'values',
+        rules: {
+          state: [
+            { path: ['xp'], value: 0 },
+            { path: ['level'], value: 1 },
+            { path: ['maximumHealth'], value: 30 },
+          ],
+          actions: {},
+        },
+      })
+      const before = await inspect()
+      const originalManifest = await readFile(join(root, 'basic/game.json'), 'utf8')
+      const originalScene = await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')
+      let failed = false
+
+      const failing: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+        write: async (path, bytes) => {
+          if (!failed && path.endsWith('scenes/shop.json') && failure !== 'success') {
+            failed = true
+
+            if (failure === 'after-scene') await workspace.write(path, bytes)
+            throw new Error('Scene publication failed')
+          }
+
+          return workspace.write(path, bytes)
+        },
+      }
+
+      const service = new EditorProjectService(
+        new WorkspaceProjectRepository(failing),
+        new EditorCoordinator(),
+      )
+
+      const operation = {
+        type: 'game.upsertLeveling',
+        profile: {
+          'schema-version': '1.0.0',
+          id: 'player',
+          label: 'Player',
+          xp: { source: 'game.state', path: ['xp'] },
+          level: { source: 'game.state', path: ['level'] },
+          levels: [
+            { xp: 0 },
+            {
+              xp: 5,
+              gains: [
+                {
+                  id: 'health',
+                  label: 'Maximum health',
+                  field: { source: 'game.state', path: ['maximumHealth'] },
+                  amount: 6,
+                },
+              ],
+            },
+          ],
+        },
+        scene: {
+          id: 'shop',
+          component: {
+            id: 'progression',
+            type: 'character-progression',
+            profile: 'player',
+            placement: { row: 1, column: 1 },
+          },
+        },
+      }
+
+      const saving = service.apply({
+        path: 'basic',
+        expectedRevision: before.revision,
+        command: operation,
+      })
+
+      if (failure === 'before-scene') {
+        await expect(saving).rejects.toThrow('Scene publication failed')
+        expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(originalManifest)
+        expect(await readFile(join(root, 'basic/scenes/shop.json'), 'utf8')).toBe(originalScene)
+        await expect(readFile(join(root, 'basic/leveling/player.json'))).rejects.toHaveProperty(
+          'code',
+          'ENOENT',
+        )
+      } else {
+        const saved = await saving
+        expect(saved.view.leveling!.player!.levels[1]!.xp).toBe(5)
+        expect(saved.view.scenes[0]!.components[0]!.type).toBe('character-progression')
+        await expect(
+          service.apply({ path: 'basic', expectedRevision: before.revision, command: operation }),
+        ).rejects.toMatchObject({ status: 409 })
+
+        const deleted = await command(saved.view.revision, {
+          type: 'game.removeLeveling',
+          profileId: 'player',
+        })
+
+        expect(deleted.status).toBe(422)
+      }
+    },
+  )
   it('saves reward configuration with revision checks and protects referenced fields', async () => {
     await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'rewards'), {
       recursive: true,
@@ -751,7 +862,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(29)
+    expect((await capabilities.json()).commands).toHaveLength(34)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

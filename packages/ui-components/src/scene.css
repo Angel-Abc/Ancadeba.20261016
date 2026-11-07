@@ -534,3 +534,17 @@
 .ancadeba-combat-log {
   white-space: pre-wrap;
 }
+
+.ancadeba-character-progression {
+  padding: 0.5em;
+  overflow: auto;
+  box-sizing: border-box;
+  min-height: 0;
+}
+.ancadeba-character-progression progress {
+  width: 100%;
+  accent-color: currentColor;
+}
+.ancadeba-action-bar-lock {
+  font-size: 0.7em;
+}

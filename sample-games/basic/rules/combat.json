@@ -11,6 +11,14 @@
     {
       "path": ["player", "experience"],
       "value": 0
+    },
+    {
+      "path": ["combat", "advanced-sentinel"],
+      "value": 26
+    },
+    {
+      "path": ["combat", "advanced-keeper"],
+      "value": 26
     }
   ],
   "actions": {}

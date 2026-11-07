@@ -84,6 +84,8 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       false,
     )
 
+    picker.className = 'context-picker'
+
     fields.append(picker)
 
     if (!scene) return
@@ -99,6 +101,8 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
         },
         false,
       )
+
+      picker.className = 'context-picker'
 
       fields.append(picker)
     }

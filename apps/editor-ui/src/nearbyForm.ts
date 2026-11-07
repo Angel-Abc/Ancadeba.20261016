@@ -1,10 +1,11 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, gameIdSchema, type NearbyComponentDefinition } from '@ancadeba/schemas'
 import {
-  type RuleFormControls,
   placementFields,
+  type RuleFormControls,
   ruleFormControls,
   statePath,
+  translationChoices,
 } from './ruleFormControls.js'
 
 /** Edits scene targets separately from the action-bar slots that display their commands. */
@@ -12,6 +13,7 @@ export function nearbyForm(
   controls: RuleFormControls,
   view: ProjectView,
   save: (command: EditorCommand) => void,
+  initialScene?: string,
 ): HTMLElement {
   const root = controls.group('Nearby characters and objects')
   const scenes = view.scenes.filter((scene) => scene.type === 'game')
@@ -22,7 +24,7 @@ export function nearbyForm(
     return root
   }
 
-  let sceneId = scenes[0]!.id
+  let sceneId = scenes.find((scene) => scene.id === initialScene)?.id ?? scenes[0]!.id
   let draft: NearbyComponentDefinition
   let selected = ''
   let dirty = false
@@ -38,7 +40,7 @@ export function nearbyForm(
     controls.markEdited()
   })
 
-  const { create, input, select, button, group } = fields
+  const { create, input, select, button, group, translation } = fields
 
   const conditions = (view.rules?.state ?? [])
     .filter((field) => typeof field.value === 'boolean')
@@ -50,7 +52,7 @@ export function nearbyForm(
         ] as const,
     )
 
-  const keys = [['', 'Use literal text'], ...(view.translationKeys ?? [])] as const
+  const keys = translationChoices(view, 'Use literal text')
   const actionIds = Object.keys(view.rules?.actions ?? {})
 
   const condition = (
@@ -80,7 +82,7 @@ export function nearbyForm(
       input('Nearby title', draft.label, (value) => {
         draft.label = value
       }),
-      select('Nearby title translation', draft.labelKey ?? '', keys, (value) => {
+      translation('Nearby title translation', draft.labelKey ?? '', keys, (value) => {
         draft.labelKey = value || undefined
       }),
       select(
@@ -136,11 +138,11 @@ export function nearbyForm(
         input('Target label', entry.label, (value) => {
           entry.label = value
         }),
-        select('Target label translation', entry.labelKey ?? '', keys, (value) => {
+        translation('Target label translation', entry.labelKey ?? '', keys, (value) => {
           entry.labelKey = value || undefined
         }),
         label,
-        select('Target description translation', entry.descriptionKey ?? '', keys, (value) => {
+        translation('Target description translation', entry.descriptionKey ?? '', keys, (value) => {
           entry.descriptionKey = value || undefined
         }),
         condition('Visible when true', entry.visibleWhen, (value) => {
@@ -279,6 +281,8 @@ export function nearbyForm(
     false,
   )
 
+  // Opened from a scene in the explorer, the scene is already chosen.
+  picker.hidden = Boolean(initialScene)
   root.append(picker, error, area)
   reset()
 

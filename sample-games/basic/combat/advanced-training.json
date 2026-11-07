@@ -1,0 +1,156 @@
+{
+  "schema-version": "1.0.0",
+  "id": "advanced-training",
+  "labelKey": "leveling.advanced",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 60000,
+  "logCapacity": 30,
+  "player": {
+    "id": "player",
+    "labelKey": "combat.player",
+    "health": {
+      "source": "game.state",
+      "path": ["player", "health"]
+    },
+    "maximumHealth": {
+      "source": "game.state",
+      "path": ["player", "maximumHealth"]
+    },
+    "ap": 3,
+    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "leveling": "player",
+    "moveLevels": {
+      "power-strike": 2
+    }
+  },
+  "enemies": [
+    {
+      "id": "advanced-sentinel",
+      "labelKey": "combat.first",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "advanced-sentinel"]
+      },
+      "maximumHealth": 26,
+      "ap": 2,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"]
+    },
+    {
+      "id": "advanced-keeper",
+      "labelKey": "combat.second",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "advanced-keeper"]
+      },
+      "maximumHealth": 26,
+      "ap": 2,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"]
+    }
+  ],
+  "moves": {
+    "attack": {
+      "type": "attack",
+      "labelKey": "combat.attack",
+      "apCost": 1,
+      "damage": {
+        "min": 3,
+        "max": 6
+      }
+    },
+    "heavy": {
+      "type": "attack",
+      "labelKey": "combat.heavy-strike",
+      "apCost": 2,
+      "damage": {
+        "min": 8,
+        "max": 12
+      }
+    },
+    "guard": {
+      "type": "guard",
+      "labelKey": "combat.guard",
+      "apCost": 1,
+      "guard": 5
+    },
+    "power-strike": {
+      "type": "attack",
+      "labelKey": "leveling.powerStrike",
+      "apCost": 2,
+      "damage": {
+        "min": 14,
+        "max": 18
+      }
+    }
+  },
+  "outcomes": {
+    "victory": "standard",
+    "defeat": "standard",
+    "escaped": "standard"
+  },
+  "descriptionKey": "combat.description",
+  "messageKeys": {
+    "planning": "combat.message.planning",
+    "target": "combat.message.target",
+    "round": "combat.message.round",
+    "health": "combat.message.health",
+    "ap": "combat.message.ap",
+    "empty": "combat.message.empty",
+    "victory": "combat.message.victory",
+    "defeat": "combat.message.defeat",
+    "escaped": "combat.message.escaped",
+    "attack": "combat.message.attack",
+    "guarded": "combat.message.guarded",
+    "skipped": "combat.message.skipped",
+    "unavailable": "combat.message.unavailable",
+    "invalid": "combat.message.invalid",
+    "guard": "combat.guard",
+    "escape": "combat.escape",
+    "rewardsPending": "rewards.message.rewardsPending",
+    "rewardsDelivered": "rewards.message.rewardsDelivered",
+    "rewardAmount": "rewards.message.rewardAmount",
+    "lootRemaining": "rewards.message.lootRemaining",
+    "lootTaken": "rewards.message.lootTaken",
+    "rewardUnavailable": "rewards.message.rewardUnavailable",
+    "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
+    "rewardInventory": "rewards.message.rewardInventory",
+    "requiresLevel": "leveling.requires"
+  },
+  "rewards": {
+    "recipient": "player",
+    "lootOwner": "advanced-loot",
+    "numeric": [
+      {
+        "id": "gold",
+        "labelKey": "shop.gold",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "gold"]
+        },
+        "amount": 8
+      },
+      {
+        "id": "experience",
+        "labelKey": "rewards.xp",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "experience"]
+        },
+        "amount": 10
+      }
+    ],
+    "drops": [
+      {
+        "id": "prize",
+        "itemType": "training-token"
+      },
+      {
+        "id": "bonus",
+        "itemType": "postcard",
+        "chance": 5000
+      }
+    ]
+  }
+}

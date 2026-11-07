@@ -17,6 +17,7 @@ const sectionIcons = new Map([
   ['items', 'M5 8h14v12H5zM9 8V5h6v3M5 13h14'],
   ['shops', 'M4 9l1.5-5h13L20 9M4 9h16v11H4zM9 20v-6h6v6'],
   ['combat', 'M14 4h6v6L9 21l-3-3zM5 15l4 4M3 21l3-3'],
+  ['data', 'M6 3h9l3 3v15H6zM15 3v3h3M9 11h6M9 15h6'],
 ])
 
 const fallbackIcon = 'M5 5h14v14H5zM9 12h6'

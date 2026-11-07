@@ -1,3 +1,4 @@
+import { levelingProfileSchema, levelingFile } from '@ancadeba/schemas'
 import {
   gameSchema,
   sceneSchema,
@@ -10,8 +11,11 @@ import {
   mergeInventorySources,
   inputSchema,
   inputFile,
+  inventoryFile,
   combatFile,
   combatDefinitionSchema,
+  mapDefinitionSchema,
+  mapFile,
 } from '@ancadeba/schemas'
 import { validateProject } from './validation.js'
 import {
@@ -48,11 +52,41 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
 
   const ruleFiles = Object.fromEntries(sources.map(({ id, rules }) => [id, rules]))
 
+  const parsedFiles = <T>(
+    ids: readonly string[] | undefined,
+    file: (id: string) => string,
+    parse: (document: unknown) => T | undefined,
+  ) =>
+    Object.fromEntries(
+      (ids ?? []).flatMap((id) => {
+        const data = parse(project.documents[file(id)])
+
+        return data ? [[id, data]] : []
+      }),
+    )
+
+  const maps = parsedFiles(game.data?.maps, mapFile, (document) => {
+    return mapDefinitionSchema.safeParse(document).data
+  })
+
+  const inventoryFiles = parsedFiles(game.data?.inventory, inventoryFile, (document) => {
+    return inventorySchema.safeParse(document).data
+  })
+
   const catalog =
     language &&
     languageCatalogSchema.safeParse(project.documents[`languages/${language}/messages.json`])
 
   return {
+    ...(game.data?.leveling?.length
+      ? {
+          leveling: parsedFiles(
+            game.data.leveling,
+            levelingFile,
+            (value) => levelingProfileSchema.safeParse(value).data,
+          ),
+        }
+      : {}),
     ...(game.data?.combat?.length
       ? {
           combat: Object.fromEntries(
@@ -68,7 +102,11 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     ...(sources.length ? { rules: mergeRuleSources(sources).rules, ruleFiles } : {}),
     ...(assets?.success ? { assets: assets.data } : {}),
     ...(inventory ? { inventory } : {}),
-    ...(catalog && catalog.success ? { translationKeys: Object.keys(catalog.data).sort() } : {}),
+    ...(catalog && catalog.success
+      ? { translationKeys: Object.keys(catalog.data).sort(), translations: catalog.data }
+      : {}),
+    ...(Object.keys(maps).length ? { maps } : {}),
+    ...(Object.keys(inventoryFiles).length ? { inventoryFiles } : {}),
     revision: project.revision,
     game: game.success ? game.data : null,
     scenes: game.success

@@ -244,6 +244,32 @@
             "context": "gameplay",
             "input": "slot-11"
           }
+        },
+        "12": {
+          "labelKey": "leveling.powerStrike",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "power-strike"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "labelKey": "leveling.advanced",
+          "action": {
+            "type": "enter-scene",
+            "scene": "advanced-training"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
         }
       }
     },
@@ -267,9 +293,20 @@
       "inventory": "loot",
       "labelKey": "rewards.details",
       "placement": {
+        "row": 7,
+        "column": 10,
+        "rowSpan": 3,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "progression",
+      "type": "character-progression",
+      "profile": "player",
+      "placement": {
         "row": 5,
         "column": 10,
-        "rowSpan": 5,
+        "rowSpan": 2,
         "columnSpan": 3
       }
     }

@@ -13,10 +13,17 @@
       "source": "game.state",
       "path": ["combat", "player"]
     },
-    "maximumHealth": 40,
+    "maximumHealth": {
+      "source": "game.state",
+      "path": ["combat", "maximumHealth"]
+    },
     "ap": 3,
-    "moves": ["attack", "heavy", "guard"],
-    "portrait": "paper-doll"
+    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "portrait": "paper-doll",
+    "leveling": "player",
+    "moveLevels": {
+      "power-strike": 2
+    }
   },
   "enemies": [
     {
@@ -70,6 +77,15 @@
       "label": "Guard",
       "apCost": 1,
       "guard": 5
+    },
+    "power-strike": {
+      "type": "attack",
+      "label": "Power strike",
+      "apCost": 2,
+      "damage": {
+        "min": 14,
+        "max": 18
+      }
     }
   },
   "outcomes": {

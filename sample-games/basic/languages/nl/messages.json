@@ -186,5 +186,19 @@
   "rewards.take": "Buit pakken",
   "rewards.takeAll": "Alles pakken",
   "rewards.retry": "Beloningen opnieuw proberen",
-  "rewards.details": "Buitdetails"
+  "rewards.details": "Buitdetails",
+  "leveling.message.level": "Niveau",
+  "leveling.message.xp": "XP",
+  "leveling.message.next": "Volgend niveau",
+  "leveling.message.capped": "Maximaal niveau",
+  "leveling.message.unavailable": "Personageontwikkeling is niet beschikbaar: controleer de velden en staatstoegang.",
+  "leveling.message.gained": "Niveau {level} bereikt.",
+  "leveling.message.stat": "{label}: +{amount}",
+  "leveling.message.unlocked": "Vrijgespeeld: {move}",
+  "leveling.title": "Ontwikkeling van de reiziger",
+  "leveling.maximumHealth": "Maximale gezondheid",
+  "leveling.powerStrike": "Krachtslag",
+  "leveling.advanced": "Gevorderde training",
+  "leveling.requires": "Vereist niveau {level}",
+  "leveling.returnTraining": "Terug naar de training"
 }

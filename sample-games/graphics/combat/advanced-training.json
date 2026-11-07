@@ -1,0 +1,135 @@
+{
+  "schema-version": "1.0.0",
+  "id": "advanced-training",
+  "label": "Advanced training",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 60000,
+  "logCapacity": 30,
+  "player": {
+    "id": "player",
+    "label": "Wayfarer",
+    "health": {
+      "source": "game.state",
+      "path": ["combat", "player"]
+    },
+    "maximumHealth": {
+      "source": "game.state",
+      "path": ["combat", "maximumHealth"]
+    },
+    "ap": 3,
+    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "portrait": "paper-doll",
+    "leveling": "player",
+    "moveLevels": {
+      "power-strike": 2
+    }
+  },
+  "enemies": [
+    {
+      "id": "advanced-sentinel",
+      "label": "Practice sentinel",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "advanced-sentinel"]
+      },
+      "maximumHealth": 26,
+      "ap": 2,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"],
+      "portrait": "paper-doll"
+    },
+    {
+      "id": "advanced-keeper",
+      "label": "Practice keeper",
+      "health": {
+        "source": "game.state",
+        "path": ["combat", "advanced-keeper"]
+      },
+      "maximumHealth": 26,
+      "ap": 2,
+      "moves": ["attack", "guard"],
+      "rotation": ["guard", "attack"],
+      "portrait": "paper-doll"
+    }
+  ],
+  "moves": {
+    "attack": {
+      "type": "attack",
+      "label": "Attack",
+      "apCost": 1,
+      "damage": {
+        "min": 3,
+        "max": 6
+      }
+    },
+    "heavy": {
+      "type": "attack",
+      "label": "Heavy strike",
+      "apCost": 2,
+      "damage": {
+        "min": 8,
+        "max": 12
+      }
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Guard",
+      "apCost": 1,
+      "guard": 5
+    },
+    "power-strike": {
+      "type": "attack",
+      "label": "Power strike",
+      "apCost": 2,
+      "damage": {
+        "min": 14,
+        "max": 18
+      }
+    }
+  },
+  "outcomes": {
+    "victory": "wardrobe",
+    "defeat": "wardrobe",
+    "escaped": "wardrobe"
+  },
+  "description": "Choose a target, queue moves, then End Turn. Enemy intentions show their full plan. Leave to pause; return to resume. New Game resets the encounter.",
+  "rewards": {
+    "recipient": "wayfarer",
+    "lootOwner": "advanced-loot",
+    "numeric": [
+      {
+        "id": "gold",
+        "label": "Coins",
+        "field": {
+          "source": "game.state",
+          "path": ["coins"]
+        },
+        "amount": 8
+      },
+      {
+        "id": "experience",
+        "label": "XP",
+        "field": {
+          "source": "game.state",
+          "path": ["experience"]
+        },
+        "amount": 10
+      }
+    ],
+    "drops": [
+      {
+        "id": "prize",
+        "itemType": "cloak",
+        "colors": {
+          "fabric": "#594cad"
+        }
+      },
+      {
+        "id": "bonus",
+        "itemType": "letter",
+        "chance": 5000
+      }
+    ]
+  }
+}

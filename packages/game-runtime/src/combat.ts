@@ -1,3 +1,4 @@
+import type { GameLeveling } from './leveling.js'
 import { isRewardOperation } from '@ancadeba/schemas'
 import type { GameCombatRewards } from './combatRewards.js'
 import type { CombatDefinition, CombatCommand } from '@ancadeba/schemas'
@@ -19,6 +20,7 @@ import {
 } from './combatResolution.js'
 
 export interface CombatCapture {
+  readonly leveling?: object | undefined
   readonly round: object
   readonly target: object | undefined
 }
@@ -79,6 +81,7 @@ interface Session {
   token: object
   target: { readonly id: string } | undefined
   baseCapture?: CombatCapture
+  guardCapture?: CombatCapture
   moveCapture?: CombatCapture
   log: CombatLogEntry[]
   issue: string | undefined
@@ -99,9 +102,17 @@ export class GameCombat implements IGameCombat {
     private readonly prepareProgression: (cost: number) => PreparedProgression,
     private readonly invalidate: () => void,
     private readonly rewards?: GameCombatRewards,
+    private readonly leveling?: GameLeveling,
   ) {
     this.cleanups = [
       messages.subscribe('combat.command', (request) => this.execute(request)),
+      ...(leveling
+        ? [
+            leveling.subscribeChanges(() => {
+              if (!this.publishing) this.notify()
+            }),
+          ]
+        : []),
       ...(rewards
         ? [
             rewards.subscribeChanges(() => {
@@ -268,12 +279,26 @@ export class GameCombat implements IGameCombat {
     const targeted =
       command.type === 'queue-move' && definition.moves[command.move]?.type === 'attack'
 
-    const key = targeted ? 'moveCapture' : 'baseCapture'
+    const key = targeted
+      ? 'moveCapture'
+      : command.type === 'queue-move'
+        ? 'guardCapture'
+        : 'baseCapture'
+
     const target = targeted ? session.target : undefined
+
+    const leveling =
+      command.type === 'queue-move' ? this.leveling?.version(definition.player.leveling) : undefined
+
     let capture = session[key]
 
-    if (!capture || capture.round !== session.token || capture.target !== target) {
-      capture = Object.freeze({ round: session.token, target })
+    if (
+      !capture ||
+      capture.round !== session.token ||
+      capture.target !== target ||
+      capture.leveling !== leveling
+    ) {
+      capture = Object.freeze({ round: session.token, target, leveling })
       session[key] = capture
     }
 
@@ -338,6 +363,8 @@ export class GameCombat implements IGameCombat {
 
     return Boolean(
       move &&
+      (!definition.player.leveling ||
+        (this.leveling?.moveAvailable(definition, command.move) ?? false)) &&
       definition.player.moves.includes(command.move) &&
       !snapshot.escape &&
       move.apCost <= snapshot.remainingAp &&
@@ -540,7 +567,14 @@ export class GameCombat implements IGameCombat {
       ),
     )
 
-    return [...lines, snapshot.issue, this.rewards?.text(scene, id)].filter(Boolean).join('\n')
+    return [
+      ...lines,
+      snapshot.issue,
+      this.rewards?.text(scene, id),
+      definition.player.leveling ? this.leveling?.text(definition.player.leveling) : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
   }
   subscribeChanges(listener: () => void): () => void {
     if (this.disposed) return () => {}

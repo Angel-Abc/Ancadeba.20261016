@@ -6,7 +6,12 @@ import {
   type ShopComponentDefinition,
   type InventoryComponentDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, humanizeCode, placementFields } from './ruleFormControls.js'
+import {
+  humanizeCode,
+  placementFields,
+  type RuleFormControls,
+  translationChoices,
+} from './ruleFormControls.js'
 
 export function shopForm(
   controls: RuleFormControls,
@@ -16,8 +21,8 @@ export function shopForm(
   panels: InventoryComponentDefinition[],
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, group, button, create } = controls
-  const keys = ['', ...(view.translationKeys ?? [])]
+  const { input, select, group, button, create, translation } = controls
+  const keys = translationChoices(view)
   const fields = (view.rules?.state ?? []).filter((field) => typeof field.value === 'number')
 
   const bindings = fields.map(
@@ -53,13 +58,13 @@ export function shopForm(
     input('Shop title', shop.label, (value) => {
       shop.label = value
     }),
-    select('Shop title translation', shop.labelKey ?? '', keys, (value) => {
+    translation('Shop title translation', shop.labelKey ?? '', keys, (value) => {
       shop.labelKey = value || undefined
     }),
     input('Currency label', shop.currency, (value) => {
       shop.currency = value
     }),
-    select('Currency translation', shop.currencyKey ?? '', keys, (value) => {
+    translation('Currency translation', shop.currencyKey ?? '', keys, (value) => {
       shop.currencyKey = value || undefined
     }),
     balance('Player balance field', shop.playerBalance, (value) => {
@@ -249,10 +254,15 @@ export function shopForm(
         input(`${humanizeCode(code)} message`, shop.messages[code], (value) => {
           shop.messages[code] = value
         }),
-        select(`${humanizeCode(code)} translation`, shop.messageKeys[code] ?? '', keys, (value) => {
-          if (value) shop.messageKeys[code] = value
-          else delete shop.messageKeys[code]
-        }),
+        translation(
+          `${humanizeCode(code)} translation`,
+          shop.messageKeys[code] ?? '',
+          keys,
+          (value) => {
+            if (value) shop.messageKeys[code] = value
+            else delete shop.messageKeys[code]
+          },
+        ),
       ),
     )
   result.push(messages, group('Shop placement', ...placement(shop)))

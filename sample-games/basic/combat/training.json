@@ -18,7 +18,11 @@
       "path": ["player", "maximumHealth"]
     },
     "ap": 3,
-    "moves": ["attack", "heavy", "guard"]
+    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "leveling": "player",
+    "moveLevels": {
+      "power-strike": 2
+    }
   },
   "enemies": [
     {
@@ -70,6 +74,15 @@
       "labelKey": "combat.guard",
       "apCost": 1,
       "guard": 5
+    },
+    "power-strike": {
+      "type": "attack",
+      "labelKey": "leveling.powerStrike",
+      "apCost": 2,
+      "damage": {
+        "min": 14,
+        "max": 18
+      }
     }
   },
   "outcomes": {
@@ -102,7 +115,8 @@
     "lootTaken": "rewards.message.lootTaken",
     "rewardUnavailable": "rewards.message.rewardUnavailable",
     "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
-    "rewardInventory": "rewards.message.rewardInventory"
+    "rewardInventory": "rewards.message.rewardInventory",
+    "requiresLevel": "leveling.requires"
   },
   "rewards": {
     "recipient": "player",

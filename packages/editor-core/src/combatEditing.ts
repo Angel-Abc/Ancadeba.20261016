@@ -38,6 +38,8 @@ export function editCombat(
       labelKey: actor.labelKey,
       descriptionKey: actor.descriptionKey,
       portrait: actor.portrait,
+      leveling: actor.leveling,
+      moveLevels: actor.moveLevels ? { ...actor.moveLevels } : undefined,
       health: { ...object(old.health), ...actor.health, fallback: actor.health.fallback },
       maximumHealth:
         typeof actor.maximumHealth === 'object'

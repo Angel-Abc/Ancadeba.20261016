@@ -1,3 +1,4 @@
+import type { LevelingProfile } from '@ancadeba/schemas'
 import {
   ruleFile,
   inventoryFile,
@@ -10,6 +11,7 @@ import {
   type RuleSource,
   type InputDefinition,
   type CombatDefinition,
+  type MapDefinition,
 } from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
@@ -28,6 +30,7 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  leveling?: Record<string, LevelingProfile> | undefined
   combat?: Record<string, CombatDefinition> | undefined
   input?: InputDefinition | undefined
   rules?: GameRulesDefinition | undefined
@@ -35,6 +38,10 @@ export interface ProjectView {
   assets?: AssetCatalog | undefined
   inventory?: InventoryDefinition | undefined
   translationKeys?: string[] | undefined
+  /** Default-language text for each translation key, for previews in the editor. */
+  translations?: Record<string, string> | undefined
+  maps?: Record<string, MapDefinition> | undefined
+  inventoryFiles?: Record<string, InventoryDefinition> | undefined
   revision: string
   game: GameDefinition | null
   scenes: SceneDefinition[]

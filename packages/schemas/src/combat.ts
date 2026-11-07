@@ -52,6 +52,8 @@ export const combatActorSchema = z
     id,
     ...label,
     portrait: id.optional(),
+    leveling: id.optional(),
+    moveLevels: z.record(id, z.number().int().positive().safe()).optional(),
     health: combatHealthSchema,
     maximumHealth: z.union([z.number().int().positive().safe(), gameBindingSchema]),
     ap: z.number().int().positive().max(100).default(3),
@@ -67,6 +69,7 @@ export const combatActorSchema = z
   )
 
 export const combatTextSchema = z.object({
+  requiresLevel: z.string().default('Requires level {level}'),
   planning: z.string().default('Planning'),
   target: z.string().default('Target'),
   round: z.string().default('Round'),

@@ -85,6 +85,8 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
       false,
     )
 
+    picker.className = 'context-picker'
+
     fields.append(picker)
 
     if (!scene()) return

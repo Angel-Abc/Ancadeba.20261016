@@ -1,3 +1,4 @@
+import { levelingFile, levelingProfileSchema } from '@ancadeba/schemas'
 import {
   gameSchema,
   inputSchema,
@@ -94,6 +95,15 @@ export class GameLoader implements IGameLoader {
       ),
     )
 
+    const leveling = new Map(
+      await Promise.all(
+        (definition.leveling ?? []).map(
+          async (id) =>
+            [id, await this.resources.load(levelingFile(id), levelingProfileSchema)] as const,
+        ),
+      ),
+    )
+
     if (!definition.languages)
       return {
         ...assembleGameData(
@@ -106,6 +116,7 @@ export class GameLoader implements IGameLoader {
           undefined,
           rules,
           combat,
+          leveling,
         ),
         ...styling,
       }
@@ -149,6 +160,7 @@ export class GameLoader implements IGameLoader {
           },
           rules,
           combat,
+          leveling,
         ),
         ...styling,
         language: tag,
@@ -179,6 +191,9 @@ export class GameLoader implements IGameLoader {
       },
       get inventory() {
         return localization.current.inventory
+      },
+      get leveling() {
+        return variants.get(localization.current.language)?.leveling
       },
       get combat() {
         return variants.get(localization.current.language)?.combat

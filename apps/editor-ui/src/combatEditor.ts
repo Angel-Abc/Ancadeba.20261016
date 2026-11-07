@@ -100,6 +100,8 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       false,
     )
 
+    picker.className = 'context-picker'
+
     const encounters = controls.select(
       'Combat encounter',
       encounterId,
@@ -109,6 +111,8 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       },
       false,
     )
+
+    encounters.className = 'context-picker'
 
     fields.append(
       picker,

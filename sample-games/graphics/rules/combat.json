@@ -15,6 +15,22 @@
     {
       "path": ["experience"],
       "value": 0
+    },
+    {
+      "path": ["level"],
+      "value": 1
+    },
+    {
+      "path": ["combat", "maximumHealth"],
+      "value": 40
+    },
+    {
+      "path": ["combat", "advanced-sentinel"],
+      "value": 26
+    },
+    {
+      "path": ["combat", "advanced-keeper"],
+      "value": 26
     }
   ],
   "actions": {}

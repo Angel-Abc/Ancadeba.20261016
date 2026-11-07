@@ -36,6 +36,11 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
       (entry) => entry.type === 'combat' && entry.textTarget === component.id,
     )
 
+    const progression =
+      scene?.data.components.filter(
+        (entry) => entry.type === 'character-progression' && entry.textTarget === component.id,
+      ) ?? []
+
     const shop = scene?.data.components.find(
       (entry) => entry.type === 'shop' && entry.feedbackTarget === component.id,
     )
@@ -83,6 +88,11 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
         ...items,
         shop && scene ? trading?.feedback(scene, shop.id) : '',
         encounter && scene ? combat?.text(scene, encounter.id) : '',
+        ...progression.map((entry) =>
+          entry.type === 'character-progression' && scene?.type === 'game'
+            ? scene.game.leveling?.text(entry.profile)
+            : '',
+        ),
       ]
         .filter(Boolean)
         .join('\n\n')
@@ -99,6 +109,13 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     }
 
     try {
+      const leveling =
+        scene?.type === 'game'
+          ? scene.game.leveling?.subscribeChanges(() => updateText(latest))
+          : undefined
+
+      if (leveling) cleanups.push(leveling)
+
       if (component.bindings === undefined) updateText({ text: component.text, diagnostics: [] })
       else {
         const options = { mode: context.bindingMode ?? 'standalone' }

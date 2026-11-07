@@ -4,7 +4,12 @@ import {
   type ActionBarComponentDefinition,
   type ActionBarSlotDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, placementFields, statePath } from './ruleFormControls.js'
+import {
+  placementFields,
+  type RuleFormControls,
+  statePath,
+  translationChoices,
+} from './ruleFormControls.js'
 
 function shortcut(view: ProjectView, binding: ActionBarSlotDefinition['inputBinding']): string {
   if (!binding || !view.input) return ''
@@ -25,7 +30,7 @@ export function actionBarForm(
   change: (edit: () => void) => void,
   sceneId?: string,
 ): HTMLElement[] {
-  const { create, input, select, button, group } = controls
+  const { create, input, select, button, group, translation } = controls
   const grid = create('div')
   grid.className = 'action-bar-slot-grid'
 
@@ -143,10 +148,10 @@ export function actionBarForm(
       input('Slot label', slot.label, (value) => {
         slot.label = value
       }),
-      select(
+      translation(
         'Label translation',
         slot.labelKey ?? '',
-        [['', 'Use literal label'], ...(view.translationKeys ?? [])],
+        translationChoices(view, 'Use literal label'),
         (value) => {
           if (value) slot.labelKey = value
           else delete slot.labelKey

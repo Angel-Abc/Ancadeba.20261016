@@ -1,3 +1,4 @@
+import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 /// <reference lib="dom" />
 import { describe, expect, it } from 'vite-plus/test'
 import {
@@ -349,7 +350,130 @@ function panel(withInput = true) {
   return { controls, commands, root, initial, field, edit, click, submit }
 }
 
+describe('translation key fields', () => {
+  it('previews the chosen key and only accepts listed keys or the empty choice', () => {
+    const document = new ControlDocument()
+    const updates: string[] = []
+    let edits = 0
+
+    const controls = ruleFormControls(document.asDocument(), () => {
+      edits++
+    })
+
+    const choices = [
+      ['', 'Use literal text'],
+      ['shop.title', 'Museum shop'],
+      ['shop.empty', ''],
+    ] as const
+
+    const form = document.createElement('form')
+    form.asElement().append(
+      controls.translation('Title translation', 'shop.title', choices, (value) => {
+        updates.push(value)
+      }),
+      controls.translation('Other', '', choices, () => {}),
+    )
+    const field = form.children[0]!
+    const second = form.children[1]!
+
+    const control = field.children[0]!
+    const preview = field.children.find((child) => child.className === 'translation-preview')!
+    const list = field.children.find((child) => child.tagName === 'datalist')!
+
+    const type = (value: string) => {
+      control.value = value
+      control.dispatchEvent(new Event('input'))
+    }
+
+    expect(preview.textContent).toBe('Museum shop')
+    expect(list.children.map((option) => option.value)).toEqual(['shop.title', 'shop.empty'])
+    type('shop.unknown')
+    expect(control.attributes.get('aria-invalid')).toBe('true')
+    expect(preview.textContent).toBe('Unknown translation key')
+    type('shop.empty')
+    expect(preview.textContent).toBe('(empty text)')
+    type('')
+    expect(control.attributes.get('aria-invalid')).toBe('false')
+    expect(updates).toEqual(['shop.empty', ''])
+    expect(edits).toBe(2)
+
+    expect(second.children.some((child) => child.tagName === 'datalist')).toBe(false)
+    expect(second.children[0]!.attributes.get('list')).toBe(control.attributes.get('list'))
+  })
+})
+
 describe('action bar editor controls', () => {
+  it('authors level tables, gains, health policies and progression views without losing drafts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.rules = {
+      state: [
+        { path: ['experience'], value: 0 },
+        { path: ['level'], value: 1 },
+        { path: ['health'], value: 20 },
+        { path: ['maximumHealth'], value: 30 },
+      ],
+      actions: {},
+    }
+    const editor = bindLevelingEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    click('Add leveling profile')
+    edit('Profile label', 'Progression draft')
+    edit('Level 2 total XP threshold', '5')
+    click('Add level 2 stat gain')
+    edit('Level 2 gain 1 amount', '6')
+    edit('Configure health recovery', 'yes')
+    edit('Level-up health policy', 'increase')
+    edit('Progression main text target', 'description')
+    expect(root.textContent).toContain('Level 2: 5 XP')
+    edit('Leveling game scene', 'other')
+    expect(field('Leveling game scene').value).toBe('shop')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, conflict: true, preserveDrafts: true },
+      false,
+    )
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'unrelated' },
+        lastCommand: 'game.updateRules',
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(field('Level 2 gain 1 amount').value).toBe('6')
+    submit('Save character progression')
+    const saved = commands[0]!
+    expect(saved).toMatchObject({
+      type: 'game.upsertLeveling',
+      profile: {
+        label: 'Progression draft',
+        xp: { path: ['experience'] },
+        level: { path: ['level'] },
+        levels: [{ xp: 0 }, { xp: 5, gains: [{ amount: 6, field: { path: ['maximumHealth'] } }] }],
+        health: { policy: 'increase' },
+      },
+      scene: {
+        id: 'shop',
+        component: { type: 'character-progression', textTarget: 'description' },
+      },
+    })
+
+    if (saved.type !== 'game.upsertLeveling' || !saved.scene)
+      throw new Error('Expected progression')
+    view.leveling = { [saved.profile.id]: saved.profile }
+    view.scenes[0]!.components.push(saved.scene.component)
+    editor.render(
+      {
+        ...initial,
+        view: { ...view, revision: 'saved' },
+        lastCommand: saved.type,
+        preserveDrafts: true,
+      },
+      true,
+    )
+    expect(editor.hasDrafts()).toBe(false)
+  })
   it('authors combat definitions and input commands while retaining conflicting and unrelated drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)

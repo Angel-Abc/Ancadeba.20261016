@@ -7,7 +7,12 @@ import {
   type EquipmentComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
+import {
+  placementFields,
+  ruleFormControls,
+  saveBar,
+  translationChoices,
+} from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
@@ -102,6 +107,8 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       false,
     )
 
+    scenePicker.className = 'context-picker'
+
     const targets = [
       ...Object.keys(view.inventory?.itemTypes ?? {}).map(
         (id) => [`item:${id}`, `Item: ${id}`] as const,
@@ -133,6 +140,8 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       },
       false,
     )
+
+    picker.className = 'context-picker'
 
     fields.append(scenePicker, picker)
 
@@ -236,10 +245,10 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         controls.input('View label', draft.label, (value) => {
           draft.label = value
         }),
-        controls.select(
+        controls.translation(
           'View label translation',
           draft.labelKey ?? '',
-          ['', ...(view.translationKeys ?? [])],
+          translationChoices(view),
           (value) => {
             draft.labelKey = value || undefined
           },
@@ -270,10 +279,10 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           controls.input('Empty selection text', draft.emptyText, (value) => {
             draft.emptyText = value
           }),
-          controls.select(
+          controls.translation(
             'Empty text translation',
             draft.emptyTextKey ?? '',
-            ['', ...(view.translationKeys ?? [])],
+            translationChoices(view),
             (value) => {
               draft.emptyTextKey = value || undefined
             },

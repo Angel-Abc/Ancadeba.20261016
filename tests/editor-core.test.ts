@@ -241,8 +241,94 @@ describe('editor core', () => {
     })
   })
 
+  it('saves basic components in place, clearing removed fields and keeping extensions', () => {
+    const source = project()
+
+    const withComponents: ProjectSnapshot = {
+      ...source,
+      documents: {
+        ...source.documents,
+        'scenes/start.json': {
+          ...scene,
+          components: [
+            {
+              id: 'title',
+              type: 'text',
+              placement: { row: 1, column: 1 },
+              text: 'Old',
+              presentation: { variant: 'body', align: 'start' },
+              extension: 'kept',
+            },
+            {
+              id: 'go',
+              type: 'button',
+              placement: { row: 2, column: 1 },
+              label: 'Go',
+              action: { type: 'enter-scene', scene: 'start' },
+            },
+          ],
+        },
+      },
+    }
+
+    const result = applyCommand(withComponents, {
+      type: 'scene.upsertComponent',
+      sceneId: 'start',
+      component: {
+        id: 'title',
+        type: 'text',
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+        text: 'New',
+        presentation: { variant: 'heading', align: 'center' },
+      },
+    })
+
+    const components = object(result.project.documents['scenes/start.json']).components
+
+    expect(result.changedFiles).toEqual(['scenes/start.json'])
+    expect(components).toEqual([
+      {
+        id: 'title',
+        type: 'text',
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+        text: 'New',
+        presentation: { variant: 'heading', align: 'center' },
+        extension: 'kept',
+      },
+      expect.objectContaining({ id: 'go' }),
+    ])
+
+    const cleared = applyCommand(withComponents, {
+      type: 'scene.upsertComponent',
+      sceneId: 'start',
+      component: {
+        id: 'go',
+        type: 'button',
+        placement: { row: 2, column: 1, rowSpan: 1, columnSpan: 1 },
+        label: 'Go',
+      },
+    })
+
+    expect(
+      JSON.parse(JSON.stringify(cleared.project.documents['scenes/start.json'])).components[1],
+    ).not.toHaveProperty('action')
+    expect(() =>
+      applyCommand(withComponents, {
+        type: 'scene.upsertComponent',
+        sceneId: 'start',
+        component: {
+          id: 'go',
+          type: 'text',
+          placement: { row: 2, column: 1, rowSpan: 1, columnSpan: 1 },
+          text: 'Go',
+          presentation: { variant: 'body', align: 'start' },
+        },
+      }),
+    ).toThrow('This ID belongs to another component')
+  })
+
   it('publishes machine-readable requests and examples for every command', () => {
-    expect(capabilities.commands).toHaveLength(29)
+    expect(capabilities.commands).toHaveLength(34)
     expect(capabilities.requestSchema).toHaveProperty('properties')
 
     for (const command of capabilities.commands) expect(command.example.type).toBe(command.type)

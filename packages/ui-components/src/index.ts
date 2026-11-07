@@ -44,3 +44,5 @@ export * from './equipmentComponentRenderer.js'
 export * from './shopComponentRenderer.js'
 
 export * from './combatComponentRenderer.js'
+
+export * from './characterProgressionComponentRenderer.js'

@@ -217,5 +217,22 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       triggerFields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
     hasDrafts: () => rulesDirty || triggersDirty,
+    /** Opens a rule file's definitions; refuses while the current file has a draft. */
+    navigate(id: string) {
+      if (id === ruleId) {
+        showTriggers(false)
+
+        return true
+      }
+
+      if (rulesDirty) return false
+      ruleId = id
+      newRuleId = ''
+      error.textContent = ''
+      showTriggers(false)
+      resetRules()
+
+      return true
+    },
   }
 }

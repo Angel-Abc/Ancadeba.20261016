@@ -1,3 +1,4 @@
+import { levelingFile } from '@ancadeba/schemas'
 import { createHash } from 'node:crypto'
 import {
   gameSchema,
@@ -97,6 +98,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const id of game.data.rules ?? []) await read(ruleFile(id))
 
+      for (const id of game.data.leveling ?? []) await read(levelingFile(id))
+
       for (const id of game.data.combat ?? []) await read(combatFile(id))
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
@@ -143,8 +146,10 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   }
 
   async save(folder: string, change: CommandResult): Promise<void> {
-    if (change.changedFiles.some((file) => file.startsWith('combat/'))) {
-      await this.saveCombat(folder, change)
+    if (
+      change.changedFiles.some((file) => file.startsWith('combat/') || file.startsWith('leveling/'))
+    ) {
+      await this.saveDefinitions(folder, change)
 
       return
     }
@@ -255,7 +260,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     }
   }
 
-  private async saveCombat(folder: string, change: CommandResult): Promise<void> {
+  private async saveDefinitions(folder: string, change: CommandResult): Promise<void> {
     const records: { file: string; before: Uint8Array | undefined; after: Uint8Array }[] = []
 
     for (const file of change.changedFiles) {
@@ -281,14 +286,17 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const record of records)
         if (
-          record.file.startsWith('combat/') &&
+          (record.file.startsWith('combat/') || record.file.startsWith('leveling/')) &&
           record.before &&
-          !(previous.combat ?? []).some((id) => combatFile(id) === record.file)
+          ![
+            ...(previous.combat ?? []).map(combatFile),
+            ...(previous.leveling ?? []).map(levelingFile),
+          ].includes(record.file)
         )
           throw new EditorError(
             409,
-            'combat_exists',
-            'An unreferenced encounter file already exists',
+            record.file.startsWith('leveling/') ? 'leveling_exists' : 'combat_exists',
+            'An unreferenced definition file already exists',
           )
     }
 
@@ -338,8 +346,10 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       } catch {
         throw new EditorError(
           500,
-          'combat_publication_failed',
-          'Could not confirm encounter rollback. Reload the project before retrying.',
+          records.some((record) => record.file.startsWith('leveling/'))
+            ? 'leveling_publication_failed'
+            : 'combat_publication_failed',
+          'Could not confirm definition rollback. Reload the project before retrying.',
         )
       }
 

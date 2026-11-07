@@ -32,6 +32,10 @@ export const gameSchema = z
       .refine(uniqueFileIds, { message: 'Inventory references must be unique' })
       .optional(),
     input: gameIdSchema.optional(),
+    leveling: z
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Leveling references must be unique' })
+      .optional(),
     combat: z
       .array(gameIdSchema)
       .refine(uniqueFileIds, { message: 'Combat references must be unique' })
@@ -66,6 +70,10 @@ export function ruleFile(id: string): string {
 
 export function inventoryFile(id: string): string {
   return `inventory/${id}.json`
+}
+
+export function mapFile(id: string): string {
+  return `maps/${id}.json`
 }
 
 export function assetCatalogFile(id: string): string {

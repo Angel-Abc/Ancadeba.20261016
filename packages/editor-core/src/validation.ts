@@ -1,3 +1,9 @@
+import {
+  levelingFile,
+  levelingProfileSchema,
+  levelingIssues,
+  localizeLeveling,
+} from '@ancadeba/schemas'
 import { combatLootViewIssues } from '@ancadeba/schemas'
 import type { z } from 'zod'
 import {
@@ -88,6 +94,14 @@ export function validateProject(
   const combats = new Map(
     (game.data.combat ?? []).flatMap((id) => {
       const result = check(combatFile(id), combatDefinitionSchema)
+
+      return result.success ? [[id, result.data] as const] : []
+    }),
+  )
+
+  const leveling = new Map(
+    (game.data.leveling ?? []).flatMap((id) => {
+      const result = check(levelingFile(id), levelingProfileSchema)
 
       return result.success ? [[id, result.data] as const] : []
     }),
@@ -200,6 +214,8 @@ export function validateProject(
           if (inventory) localizeInventory(inventory, { fallback, messages })
 
           for (const combat of combats.values()) localizeCombat(combat, { fallback, messages })
+
+          for (const profile of leveling.values()) localizeLeveling(profile, { fallback, messages })
         } catch (error) {
           diagnostics.push({
             code: 'invalid_translation',
@@ -216,6 +232,16 @@ export function validateProject(
 
   const validatedRules = validateRuleSources(sources, scenes, maps, inventory, defaultMessages)
   const mergedRules = validatedRules.rules
+
+  for (const issue of levelingIssues(
+    leveling,
+    mergedRules,
+    combats,
+    scenes,
+    inventory,
+    assets?.data,
+  ))
+    diagnostics.push({ code: 'invalid_leveling', ...issue })
 
   for (const [id, encounter] of combats) {
     if (encounter.id !== id)
@@ -304,7 +330,11 @@ export function validateProject(
 
     if (inventory && !game.data.languages) localizeInventory(inventory)
 
-    if (!game.data.languages) for (const combat of combats.values()) localizeCombat(combat)
+    if (!game.data.languages) {
+      for (const combat of combats.values()) localizeCombat(combat)
+
+      for (const profile of leveling.values()) localizeLeveling(profile)
+    }
   } catch (error) {
     diagnostics.push({
       code: 'missing_languages',

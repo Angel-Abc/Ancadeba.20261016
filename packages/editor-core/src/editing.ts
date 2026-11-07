@@ -1,3 +1,4 @@
+import { editLeveling } from './levelingEditing.js'
 import { assetCatalogFile, gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand } from './commands.js'
 import { EditorError, object, type CommandResult, type ProjectSnapshot } from './project.js'
@@ -6,6 +7,7 @@ import { editAssets } from './assetEditing.js'
 import { editRules } from './ruleEditing.js'
 import { editControls } from './controlEditing.js'
 import { editStatusPanel } from './statusPanelEditing.js'
+import { editComponent } from './componentEditing.js'
 import { editItems } from './itemEditing.js'
 import { editShop } from './shopEditing.js'
 import { editCombat } from './combatEditing.js'
@@ -45,6 +47,13 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const changedFiles: string[] = []
 
   if (
+    command.type === 'game.upsertLeveling' ||
+    command.type === 'game.removeLeveling' ||
+    command.type === 'scene.upsertLevelingView' ||
+    command.type === 'scene.removeLevelingView'
+  ) {
+    changedFiles.push(...editLeveling(documents, game, command))
+  } else if (
     command.type === 'game.upsertCombat' ||
     command.type === 'game.removeCombat' ||
     command.type === 'scene.setCombat'
@@ -60,6 +69,8 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.removeItemView'
   ) {
     changedFiles.push(...editItems(documents, game, command))
+  } else if (command.type === 'scene.upsertComponent') {
+    changedFiles.push(...editComponent(documents, game, command))
   } else if (
     command.type === 'scene.upsertStatusPanel' ||
     command.type === 'scene.removeStatusPanel'

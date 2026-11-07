@@ -7,8 +7,9 @@
   "assets": "wardrobe",
   "inventory": ["wardrobe"],
   "initial-scene": "gallery",
-  "scenes": ["gallery", "ember", "wardrobe", "shop", "training"],
+  "scenes": ["gallery", "ember", "wardrobe", "shop", "training", "advanced-training"],
   "input": "controls",
   "rules": ["shop", "combat"],
-  "combat": ["training"]
+  "combat": ["training", "advanced-training"],
+  "leveling": ["player"]
 }

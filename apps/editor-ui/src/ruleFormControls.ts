@@ -1,4 +1,21 @@
+import type { ProjectView } from '@ancadeba/editor-core'
 import type { RuleValue } from '@ancadeba/schemas'
+
+/** A translation key with its default-language text; an empty key means "no translation". */
+export type TranslationChoice = readonly [key: string, text: string]
+
+/** Translation keys for pickers, optionally led by an empty choice with the given label. */
+export function translationChoices(
+  view: ProjectView,
+  empty: string | false = '',
+): TranslationChoice[] {
+  return [
+    ...(empty === false ? [] : [['', empty] as const]),
+    ...(view.translationKeys ?? []).map((key) => [key, view.translations?.[key] ?? ''] as const),
+  ]
+}
+
+let suggestionLists = 0
 
 export function ruleFormControls(document: Document, onEdit: () => void) {
   const create = <T extends keyof HTMLElementTagNameMap>(tag: T) => document.createElement(tag)
@@ -59,6 +76,67 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     return label(title, control)
   }
 
+  const suggestions = new WeakMap<readonly TranslationChoice[], HTMLDataListElement>()
+
+  /** A searchable key field that previews the default-language text of the chosen key. */
+  const translation = (
+    title: string,
+    value: string,
+    choices: readonly TranslationChoice[],
+    update: (value: string) => void,
+  ) => {
+    const control = create('input')
+    const preview = create('small')
+    const texts = new Map(choices)
+    const emptyLabel = texts.get('')
+    let list = suggestions.get(choices)
+    const created = !list
+
+    if (!list) {
+      list = create('datalist')
+      list.id = `translation-keys-${++suggestionLists}`
+
+      for (const [key, text] of choices) {
+        if (!key) continue
+        const option = create('option')
+        option.value = key
+        option.label = text
+        list.append(option)
+      }
+
+      suggestions.set(choices, list)
+    }
+
+    control.value = value
+    control.autocomplete = 'off'
+    control.spellcheck = false
+    control.placeholder = emptyLabel || 'Search translation keys'
+    control.setAttribute('list', list.id)
+    preview.className = 'translation-preview'
+
+    const show = () => {
+      const known = texts.has(control.value)
+      control.setAttribute('aria-invalid', String(!known))
+      preview.textContent = known
+        ? texts.get(control.value) || (control.value ? '(empty text)' : '')
+        : 'Unknown translation key'
+    }
+
+    control.addEventListener('input', () => {
+      show()
+
+      if (!texts.has(control.value)) return
+      onEdit()
+      update(control.value)
+    })
+    show()
+
+    const wrapper = label(title, control)
+    wrapper.append(...(created ? [list] : []), preview)
+
+    return wrapper
+  }
+
   const button = (title: string, action: () => void, disabled = false) => {
     const control = create('button')
     control.type = 'button'
@@ -78,7 +156,7 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     return box
   }
 
-  return { create, input, select, button, group, markEdited: onEdit }
+  return { create, input, select, translation, button, group, markEdited: onEdit }
 }
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>
@@ -114,19 +192,19 @@ export function ruleValueControls(
   controls: RuleFormControls,
   title: string,
   value: RuleValue,
-  keys: string[],
+  keys: readonly TranslationChoice[],
   update: (value: RuleValue) => void,
   rerender: () => void,
   types = ['text', 'number', 'boolean', 'translation'],
 ): HTMLElement[] {
-  const { input, select } = controls
+  const { input, select, translation } = controls
 
   const type =
     typeof value === 'object' ? 'translation' : typeof value === 'string' ? 'text' : typeof value
 
   const field =
     type === 'translation'
-      ? select(title, typeof value === 'object' ? value.textKey : '', keys, (textKey) =>
+      ? translation(title, typeof value === 'object' ? value.textKey : '', keys, (textKey) =>
           update({ textKey }),
         )
       : type === 'boolean'
@@ -147,7 +225,7 @@ export function ruleValueControls(
           )
 
   const chooseType = select('Value type', type, types, (next) => {
-    if (next === 'translation') update({ textKey: keys[0] ?? '' })
+    if (next === 'translation') update({ textKey: keys.find(([key]) => key)?.[0] ?? '' })
     else if (next === 'boolean') update(false)
     else if (next === 'number') update(0)
     else update('')

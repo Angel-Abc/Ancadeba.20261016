@@ -33,6 +33,8 @@ export function bindAssetsPanel(
   fetcher: typeof fetch,
   t: Translate,
   onSelectAsset?: (id: string) => void,
+  /** Opens an explorer node by key, such as the image import form from an empty gallery. */
+  onOpen?: (key: string) => void,
 ) {
   const panel = root.querySelector<HTMLElement>('#assets-panel')
   const dirty = new Set<string>()
@@ -58,7 +60,8 @@ export function bindAssetsPanel(
   const document = panel.ownerDocument
   panel.innerHTML = `
     <h3 data-i18n="assets.heading"></h3><p class="help" data-i18n="assets.help"></p>
-    <div id="asset-gallery" class="asset-gallery"></div><div id="asset-workshop">
+    <div id="asset-gallery" class="asset-gallery"></div>
+    <div id="asset-empty" class="asset-empty" hidden><p id="asset-empty-text"></p><button type="button" id="asset-empty-action"></button></div><div id="asset-workshop">
     <label for="asset-select" data-i18n="assets.visual"></label><select id="asset-select"></select>
     <div id="asset-preview" class="asset-preview"></div><div id="asset-preview-controls" class="asset-preview-controls"></div>
     <p class="help" data-i18n="assets.temporary"></p>
@@ -102,6 +105,25 @@ export function bindAssetsPanel(
 
   const value = (id: string) =>
     find<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(id).value
+
+  let browsingKind = ''
+
+  // An empty gallery explains what belongs in it and offers the form that adds one.
+  const showEmptyState = () => {
+    const hasVisuals = [...panel.querySelectorAll<HTMLElement>('.asset-thumbnail')].some(
+      (thumbnail) => !thumbnail.hidden,
+    )
+
+    const empty = find('asset-empty')
+    empty.hidden = !browsingKind || hasVisuals
+
+    if (empty.hidden) return
+    const images = browsingKind === 'images' || browsingKind === 'section'
+    find('asset-empty-text').textContent = t(`assets.empty.${browsingKind}`)
+    const action = find<HTMLButtonElement>('asset-empty-action')
+    action.textContent = t(images ? 'assets.import' : 'tree.addDefinition')
+    action.dataset.target = images ? 'asset-import' : 'asset-new'
+  }
 
   const set = (id: string, value: string | number) => {
     find<HTMLInputElement | HTMLTextAreaElement>(id).value = String(value)
@@ -364,6 +386,11 @@ export function bindAssetsPanel(
       await actions.save({ type: 'assets.upsertPart', id: selected, part: partSchema.parse(next) })
   }
 
+  on('asset-empty-action', 'click', () => {
+    const target = find('asset-empty-action').dataset.target
+
+    if (target) onOpen?.(target)
+  })
   on('asset-select', 'change', () => {
     selected = value('asset-select')
     appearance = graphicAppearanceSchema.parse({})
@@ -524,9 +551,11 @@ export function bindAssetsPanel(
       const graphic = kind === 'component' || kind === 'new-graphic'
       const browsing = ['section', 'images', 'parts', 'compositions'].includes(kind)
       find('asset-gallery').hidden = !browsing
+      browsingKind = browsing ? kind : ''
 
       for (const thumbnail of panel.querySelectorAll<HTMLElement>('.asset-thumbnail'))
         thumbnail.hidden = kind !== 'section' && thumbnail.dataset.assetKind !== kind
+      showEmptyState()
       find('asset-workshop').hidden = kind !== 'asset'
       find('asset-image').hidden =
         kind !== 'import' && !(kind === 'asset' && id && catalog().images[id])
@@ -673,6 +702,7 @@ export function bindAssetsPanel(
       if (!dirty.has('asset-palettes')) appearance = graphicAppearanceSchema.parse({})
       fillSelection(false)
       fillGraphics()
+      showEmptyState()
     },
     dispose() {
       abort.abort()

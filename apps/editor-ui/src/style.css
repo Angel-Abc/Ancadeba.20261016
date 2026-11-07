@@ -603,6 +603,7 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
+    #component-editor,
     #assets-panel
   )
   label {
@@ -618,6 +619,7 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
+    #component-editor,
     #assets-panel
   )
   button {
@@ -631,6 +633,7 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
+    #component-editor,
     #assets-panel
   )
   fieldset {
@@ -644,7 +647,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   fieldset
   fieldset {
@@ -661,7 +665,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   :is(form, fieldset) {
   display: flex;
@@ -676,7 +681,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   :is(form, fieldset)
   > label {
@@ -690,7 +696,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   :is(form, fieldset)
   > :is(input, select, textarea) {
@@ -705,7 +712,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   :is(form, fieldset)
   > :is(fieldset, form, details, div, p, pre, table, h3, h4) {
@@ -719,7 +727,8 @@ label[for='graphic-existing'] {
     #status-panel-editor,
     #item-editor,
     #shop-editor,
-    #combat-editor
+    #combat-editor,
+    #component-editor
   )
   :is(form, fieldset)
   > button {
@@ -743,6 +752,30 @@ label[for='graphic-existing'] {
 
 .save-bar > button {
   margin: 0 !important;
+}
+
+/* Same weight as [hidden]: the panels' ID-scoped label rules would otherwise win. */
+[data-scope='component'] .context-picker {
+  display: none !important;
+}
+
+/* Translation fields show the chosen key's default-language text below the key. */
+.translation-preview {
+  overflow: hidden;
+  color: var(--ed-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input[aria-invalid='true'] + .translation-preview,
+input[aria-invalid='true'] + datalist + .translation-preview {
+  color: var(--ed-danger, #f28b82);
+}
+
+#component-editor textarea {
+  min-height: 5rem;
+  resize: vertical;
 }
 
 .action-bar-slot-grid {
@@ -823,6 +856,18 @@ label[for='graphic-existing'] {
   gap: 0.6rem;
   max-height: 250px;
   overflow: auto;
+}
+
+.asset-empty {
+  padding: 1.25rem;
+  border: 1px dashed var(--ed-border-strong);
+  border-radius: var(--ed-radius);
+  color: var(--ed-muted);
+  text-align: center;
+}
+
+.asset-empty p {
+  margin: 0 0 0.75rem;
 }
 
 #assets-panel .asset-thumbnail {

@@ -1,6 +1,6 @@
 import { numericRewardSchema, type CombatDefinition } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function combatRewardsForm(
   controls: RuleFormControls,
@@ -8,7 +8,7 @@ export function combatRewardsForm(
   draft: CombatDefinition,
   render: () => void,
 ): HTMLElement {
-  const { group, select, input, button } = controls
+  const { group, select, input, button, translation } = controls
   const owners = Object.keys(view.inventory?.owners ?? {})
 
   const fields = (view.rules?.state ?? [])
@@ -18,7 +18,7 @@ export function combatRewardsForm(
         [JSON.stringify({ source: 'game.state', path: field.path }), field.path.join('.')] as const,
     )
 
-  const keys = ['', ...(view.translationKeys ?? [])]
+  const keys = translationChoices(view)
 
   const root = group(
     'Victory rewards',
@@ -49,9 +49,14 @@ export function combatRewardsForm(
         input(`Reward ${index + 1} label`, entry.label, (value) => {
           entry.label = value
         }),
-        select(`Reward ${index + 1} label translation`, entry.labelKey ?? '', keys, (value) => {
-          entry.labelKey = value || undefined
-        }),
+        translation(
+          `Reward ${index + 1} label translation`,
+          entry.labelKey ?? '',
+          keys,
+          (value) => {
+            entry.labelKey = value || undefined
+          },
+        ),
         select(`Reward ${index + 1} field`, JSON.stringify(entry.field), fields, (value) => {
           entry.field = numericRewardSchema.shape.field.parse(JSON.parse(value))
         }),

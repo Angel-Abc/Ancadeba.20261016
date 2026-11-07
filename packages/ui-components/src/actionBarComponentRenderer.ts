@@ -22,7 +22,12 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
 
     const buttons = new Map<
       string,
-      { button: HTMLButtonElement; badge: HTMLElement; empty: HTMLElement | undefined }
+      {
+        button: HTMLButtonElement
+        badge: HTMLElement
+        lock: HTMLElement
+        empty: HTMLElement | undefined
+      }
     >()
 
     const cleanups: (() => void)[] = []
@@ -31,7 +36,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
     const update = () => {
       if (!active) return
 
-      for (const [id, { button, badge, empty }] of buttons) {
+      for (const [id, { button, badge, lock, empty }] of buttons) {
         const focused = document.activeElement === button
 
         const available =
@@ -40,6 +45,29 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
 
         button.disabled = !scene || !actionBar?.isEnabled(scene, component.id, id)
         button.hidden = !available
+        const action = component.slots[id]!.action
+
+        const definition =
+          action.type === 'combat-action' && scene?.type === 'game'
+            ? scene.game.combat?.definition(scene, action.combat)
+            : undefined
+
+        const required =
+          action.type === 'combat-action' && action.command.type === 'queue-move'
+            ? definition?.player.moveLevels?.[action.command.move]
+            : undefined
+
+        const leveling =
+          definition?.player.leveling && scene?.type === 'game'
+            ? scene.game.leveling?.snapshot(definition.player.leveling)
+            : undefined
+
+        lock.textContent =
+          required && (!leveling?.available || leveling.level < required)
+            ? definition!.messages.requiresLevel.replaceAll('{level}', String(required))
+            : ''
+        lock.hidden = !lock.textContent
+        button.title = lock.textContent
 
         if (empty) empty.hidden = available
 
@@ -91,7 +119,9 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         label.textContent = slot.label
         const badge = document.createElement('kbd')
         badge.className = 'ancadeba-action-bar-key'
-        button.append(label, badge)
+        const lock = document.createElement('small')
+        lock.className = 'ancadeba-action-bar-lock'
+        button.append(label, badge, lock)
 
         const activate = () => {
           if (active && scene) actionBar?.activate(scene, component.id, id)
@@ -110,7 +140,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
           cell.append(button, empty)
           root.append(cell)
         } else root.append(button)
-        buttons.set(id, { button, badge, empty })
+        buttons.set(id, { button, badge, lock, empty })
       }
 
       update()

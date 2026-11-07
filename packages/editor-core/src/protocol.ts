@@ -1,3 +1,4 @@
+import { levelingProfileSchema } from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
   gameSchema,
@@ -8,6 +9,8 @@ import {
   gameIdSchema,
   inputSchema,
   combatDefinitionSchema,
+  languageCatalogSchema,
+  mapDefinitionSchema,
 } from '@ancadeba/schemas'
 
 export const diagnosticSchema = z.object({
@@ -18,6 +21,7 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  leveling: z.record(gameIdSchema, levelingProfileSchema).optional(),
   combat: z.record(gameIdSchema, combatDefinitionSchema).optional(),
   input: inputSchema.optional(),
   rules: gameRulesSchema.optional(),
@@ -25,6 +29,9 @@ export const projectViewSchema = z.object({
   assets: assetCatalogSchema.optional(),
   inventory: inventorySchema.optional(),
   translationKeys: z.array(z.string()).optional(),
+  translations: languageCatalogSchema.optional(),
+  maps: z.record(gameIdSchema, mapDefinitionSchema).optional(),
+  inventoryFiles: z.record(gameIdSchema, inventorySchema).optional(),
   revision: z.string().min(1),
   game: gameSchema.nullable(),
   scenes: z.array(sceneSchema),

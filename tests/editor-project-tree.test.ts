@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vite-plus/test'
 import { projectViewSchema } from '@ancadeba/editor-core'
 import {
   buildProjectTree,
+  dataFilesSection,
   filterProjectTree,
   flattenProjectTree,
+  ruleFileNodes,
+  sceneTitle,
   type ProjectTreeNode,
 } from '../apps/editor-ui/src/projectTree.js'
 import { bindProjectTree } from '../apps/editor-ui/src/projectTreeView.js'
@@ -156,6 +159,27 @@ describe('extensible project explorer', () => {
     expect(new Set(flattenProjectTree(nodes).map((node) => node.key)).size).toBe(
       flattenProjectTree(nodes).length,
     )
+  })
+
+  it('names scenes by their translated title and lists rule, map, and inventory files', () => {
+    const scene = { ...view.scenes[0]!, title: '', titleKey: 'scenes.standard.title' }
+
+    const translated = {
+      ...view,
+      game: { ...view.game!, rules: ['rules', 'puzzle'], maps: ['museum'], inventory: ['shop'] },
+      scenes: [scene],
+      translations: { 'scenes.standard.title': 'In the museum' },
+    }
+
+    expect(sceneTitle(translated, scene)).toBe('In the museum')
+    expect(sceneTitle({ ...translated, translations: {} }, scene)).toBe('standard')
+    expect(ruleFileNodes(translated).map((node) => node.key)).toEqual([
+      'rule-file:rules',
+      'rule-file:puzzle',
+    ])
+    expect(
+      flattenProjectTree(dataFilesSection.nodes(translated, t)).map((node) => node.key),
+    ).toEqual(['data:maps', 'map:museum', 'data:inventories', 'inventory-file:shop'])
   })
 
   it('accepts an additional system without changes to the tree renderer', () => {

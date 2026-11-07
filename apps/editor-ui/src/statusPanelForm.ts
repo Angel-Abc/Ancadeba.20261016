@@ -1,3 +1,4 @@
+import { levelingBindingFields } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   gameBindingSchema,
@@ -5,7 +6,12 @@ import {
   type StatusPanelComponentDefinition,
   type StatusValueDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, placementFields, statePath } from './ruleFormControls.js'
+import {
+  placementFields,
+  type RuleFormControls,
+  statePath,
+  translationChoices,
+} from './ruleFormControls.js'
 
 function reorder<T>(entries: T[], index: number, delta: number): void {
   const target = index + delta
@@ -22,8 +28,8 @@ export function statusPanelForm(
   rerender: () => void,
   existing: boolean,
 ): HTMLElement[] {
-  const { input, select, button, group } = controls
-  const keys = [['', 'Use literal text'], ...(view.translationKeys ?? [])] as const
+  const { input, select, button, group, translation } = controls
+  const keys = translationChoices(view, 'Use literal text')
 
   const visuals = [
     ...new Set([
@@ -40,6 +46,17 @@ export function statusPanelForm(
   }
 
   const bindings = (expected: 'number' | 'value' | 'boolean') => [
+    ...Object.keys(view.leveling ?? {}).flatMap((id) =>
+      Object.entries(levelingBindingFields)
+        .filter(([, type]) => (expected === 'value' ? type !== 'boolean' : type === expected))
+        .map(
+          ([key]) =>
+            [
+              JSON.stringify({ source: 'game.leveling', path: [id, key] }),
+              `Character · ${id} · ${key}`,
+            ] as const,
+        ),
+    ),
     ...(view.rules?.state ?? [])
       .filter((field) =>
         expected === 'value'
@@ -128,13 +145,13 @@ export function statusPanelForm(
     input('Status panel title', draft.label, (value) => {
       draft.label = value
     }),
-    select('Status title translation', draft.labelKey ?? '', keys, (value) => {
+    translation('Status title translation', draft.labelKey ?? '', keys, (value) => {
       draft.labelKey = value || undefined
     }),
     input('Character name', draft.name, (value) => {
       draft.name = value
     }),
-    select('Character name translation', draft.nameKey ?? '', keys, (value) => {
+    translation('Character name translation', draft.nameKey ?? '', keys, (value) => {
       draft.nameKey = value || undefined
     }),
     select('Portrait', draft.portrait ?? '', [['', 'None'], ...visuals], (value) => {
@@ -153,7 +170,7 @@ export function statusPanelForm(
       input(`${title} label`, row.label, (value) => {
         row.label = value
       }),
-      select(`${title} translation`, row.labelKey ?? '', keys, (value) => {
+      translation(`${title} translation`, row.labelKey ?? '', keys, (value) => {
         row.labelKey = value || undefined
       }),
       ...source(`${title} value`, row.value, row.type === 'bar', (value) => {
@@ -198,15 +215,20 @@ export function statusPanelForm(
       input(`${title} label`, effect.label, (value) => {
         effect.label = value
       }),
-      select(`${title} translation`, effect.labelKey ?? '', keys, (value) => {
+      translation(`${title} translation`, effect.labelKey ?? '', keys, (value) => {
         effect.labelKey = value || undefined
       }),
       input(`${title} description`, effect.description, (value) => {
         effect.description = value
       }),
-      select(`${title} description translation`, effect.descriptionKey ?? '', keys, (value) => {
-        effect.descriptionKey = value || undefined
-      }),
+      translation(
+        `${title} description translation`,
+        effect.descriptionKey ?? '',
+        keys,
+        (value) => {
+          effect.descriptionKey = value || undefined
+        },
+      ),
       select(`${title} icon`, effect.icon ?? '', [['', 'None'], ...visuals], (value) => {
         effect.icon = value || undefined
       }),

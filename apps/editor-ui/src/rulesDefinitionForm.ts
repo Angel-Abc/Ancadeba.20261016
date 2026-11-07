@@ -9,9 +9,10 @@ import {
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   parseStatePath,
+  type RuleFormControls,
   ruleValueControls,
   statePath,
-  type RuleFormControls,
+  translationChoices,
 } from './ruleFormControls.js'
 
 type ConditionType = RuleCondition['type']
@@ -29,7 +30,7 @@ export function rulesDefinitionForm(
   otherFields: GameRulesDefinition['state'],
 ): HTMLElement[] {
   const { button, create, group, input, select } = controls
-  const keys = view.translationKeys ?? []
+  const keys = translationChoices(view, false)
   const scenes = view.scenes.filter(({ type }) => type === 'game')
   const sceneIds = scenes.map(({ id }) => id)
   const owners = Object.keys(view.inventory?.owners ?? {})

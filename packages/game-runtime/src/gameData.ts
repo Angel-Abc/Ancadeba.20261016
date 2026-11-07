@@ -1,3 +1,4 @@
+import { levelingIssues, localizeLeveling, type LevelingProfile } from '@ancadeba/schemas'
 import { combatLootViewIssues } from '@ancadeba/schemas'
 import type {
   GameDefinition,
@@ -66,7 +67,7 @@ export interface LanguageSelectComponentData {
 }
 
 export type SceneComponentData =
-  | Extract<SceneDefinition['components'][number], { type: 'combat' }>
+  | Extract<SceneDefinition['components'][number], { type: 'combat' | 'character-progression' }>
   | TextComponentData
   | ButtonComponentData
   | LanguageSelectComponentData
@@ -112,6 +113,7 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly leveling?: ReadonlyMap<string, LevelingProfile> | undefined
   readonly combat?: ReadonlyMap<string, CombatDefinition> | undefined
   readonly assets?: AssetCatalog
   readonly inventory?: InventoryDefinition | undefined
@@ -142,6 +144,7 @@ export function assembleGameData(
   ruleTranslation?: GameTranslation,
   ruleDefinitions: ReadonlyMap<string, GameRulesDefinition> = new Map(),
   combatDefinitions: ReadonlyMap<string, CombatDefinition> = new Map(),
+  levelingDefinitions: ReadonlyMap<string, LevelingProfile> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -203,6 +206,26 @@ export function assembleGameData(
       throw new Error('Each encounter requires a distinct loot owner')
     combat.set(id, localizeCombat(encounter, ruleTranslation))
   }
+
+  const leveling = new Map<string, LevelingProfile>()
+
+  for (const id of definition.leveling ?? []) {
+    const profile = levelingDefinitions.get(id)
+
+    if (!profile) throw new Error(`Missing leveling profile: ${id}`)
+    leveling.set(id, localizeLeveling(profile, ruleTranslation))
+  }
+
+  const levelingIssue = levelingIssues(
+    leveling,
+    validated?.rules,
+    combat,
+    sceneDefinitions,
+    inventory,
+    assets,
+  )[0]
+
+  if (levelingIssue) throw new Error(`${levelingIssue.file}: ${levelingIssue.message}`)
 
   if (Boolean(definition.assets) !== Boolean(assets))
     throw new Error('Asset catalogue must match the game assets reference')
@@ -504,6 +527,7 @@ export function assembleGameData(
   }
 
   return {
+    ...(leveling.size && { leveling }),
     ...(combat.size ? { combat } : {}),
     ...(assets ? { assets } : {}),
     ...(inventory ? { inventory } : {}),

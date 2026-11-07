@@ -54,6 +54,9 @@
     },
     "training-loot": {
       "label": "Training loot"
+    },
+    "advanced-loot": {
+      "label": "Advanced training loot"
     }
   },
   "items": {

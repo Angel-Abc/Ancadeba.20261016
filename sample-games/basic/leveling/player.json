@@ -1,0 +1,67 @@
+{
+  "schema-version": "1.0.0",
+  "id": "player",
+  "labelKey": "leveling.title",
+  "xp": {
+    "source": "game.state",
+    "path": ["player", "experience"]
+  },
+  "level": {
+    "source": "game.state",
+    "path": ["player", "level"]
+  },
+  "levels": [
+    {
+      "xp": 0
+    },
+    {
+      "xp": 5,
+      "gains": [
+        {
+          "id": "health",
+          "labelKey": "leveling.maximumHealth",
+          "field": {
+            "source": "game.state",
+            "path": ["player", "maximumHealth"]
+          },
+          "amount": 6
+        }
+      ]
+    },
+    {
+      "xp": 15,
+      "gains": [
+        {
+          "id": "health",
+          "labelKey": "leveling.maximumHealth",
+          "field": {
+            "source": "game.state",
+            "path": ["player", "maximumHealth"]
+          },
+          "amount": 8
+        }
+      ]
+    }
+  ],
+  "health": {
+    "current": {
+      "source": "game.state",
+      "path": ["player", "health"]
+    },
+    "maximum": {
+      "source": "game.state",
+      "path": ["player", "maximumHealth"]
+    },
+    "policy": "preserve"
+  },
+  "messageKeys": {
+    "level": "leveling.message.level",
+    "xp": "leveling.message.xp",
+    "next": "leveling.message.next",
+    "capped": "leveling.message.capped",
+    "unavailable": "leveling.message.unavailable",
+    "gained": "leveling.message.gained",
+    "stat": "leveling.message.stat",
+    "unlocked": "leveling.message.unlocked"
+  }
+}

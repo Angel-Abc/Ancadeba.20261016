@@ -1,3 +1,4 @@
+import { CharacterProgressionComponentRenderer } from './characterProgressionComponentRenderer.js'
 import type { SceneComponentData } from '@ancadeba/game-runtime'
 import { ButtonComponentRenderer } from './buttonComponentRenderer.js'
 import { TextComponentRenderer } from './textComponentRenderer.js'
@@ -37,12 +38,15 @@ export class ComponentRenderer implements IComponentRenderer {
       equipment: new EquipmentComponentRenderer(),
       shop: new ShopComponentRenderer(),
       combat: new CombatComponentRenderer(),
+      'character-progression': new CharacterProgressionComponentRenderer(),
       ...renderers,
     }
   }
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'character-progression':
+        return this.renderers['character-progression'].render(component, context)
       case 'combat':
         return this.renderers.combat.render(component, context)
       case 'shop':

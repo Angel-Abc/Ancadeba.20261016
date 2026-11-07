@@ -82,6 +82,7 @@ let downloadUrl: string | undefined
 let exportState: ExportState = 'idle'
 let exportMessage: string | undefined
 let previewMessage: string | undefined
+let selectedScene: { id: string; title: string } | undefined
 
 function renderExportState(): void {
   exportButton.textContent = t(exporting ? 'export.exporting' : 'export.button')
@@ -102,6 +103,12 @@ function renderPreviewState(): void {
   error.textContent = previewMessage ? t('preview.error', { message: previewMessage }) : ''
 }
 
+function renderStartLabel(): void {
+  start.title = selectedScene
+    ? t('preview.startScene', { scene: selectedScene.title })
+    : t('preview.startGame')
+}
+
 function updateControls(): void {
   start.disabled = projectPath === undefined || previewState !== 'stopped' || exporting
   stop.disabled = previewState === 'stopped'
@@ -118,8 +125,15 @@ function clearDownload(): void {
 
 const container = new ContainerBuilder({
   fetcher: fetch,
-  host: new EditorPreviewHost(content, t, subscribeLanguageChanges),
-  createHost: (source) => new EditorPreviewHost(content, t, subscribeLanguageChanges, source),
+  host: new EditorPreviewHost(
+    content,
+    t,
+    subscribeLanguageChanges,
+    undefined,
+    () => selectedScene?.id,
+  ),
+  createHost: (source) =>
+    new EditorPreviewHost(content, t, subscribeLanguageChanges, source, () => selectedScene?.id),
   gameLanguagePreferences: new BrowserGameLanguagePreferences(() => window.localStorage),
   getPreferredGameLanguages: () => {
     return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []
@@ -175,6 +189,8 @@ const onExport = () => {
 
 form.addEventListener('submit', onStart)
 
+renderStartLabel()
+
 stop.addEventListener('click', onStop)
 
 exportButton.addEventListener('click', onExport)
@@ -195,6 +211,10 @@ const disposeProjectPanel = bindProjectPanel(
 
       if (restartPreview) void controller.start(path)
     },
+    onSceneSelect(scene) {
+      selectedScene = scene
+      renderStartLabel()
+    },
   },
 )
 
@@ -203,6 +223,7 @@ const onLanguageChange = () => {
   translatePage()
   renderExportState()
   renderPreviewState()
+  renderStartLabel()
 
   for (const listener of languageListeners) listener()
 }

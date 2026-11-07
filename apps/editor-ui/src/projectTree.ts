@@ -19,6 +19,42 @@ export interface ProjectTreeSection {
   nodes(view: ProjectView, t: Translate): ProjectTreeNode[]
 }
 
+/** A scene's literal title, else its default-language translation, else its ID. */
+export function sceneTitle(view: ProjectView, scene: ProjectView['scenes'][number]): string {
+  return (
+    scene.title || (scene.titleKey ? view.translations?.[scene.titleKey] : undefined) || scene.id
+  )
+}
+
+/** Rule files open in the rules editor; selecting one switches the file being edited. */
+export const ruleFileNodes = (view: ProjectView): ProjectTreeNode[] =>
+  (view.game?.rules ?? []).map((id) => ({
+    key: `rule-file:${id}`,
+    section: 'rules',
+    kind: 'rule-file',
+    id,
+    label: id,
+  }))
+
+/** Game data without an editor yet is listed for reference and shown read-only. */
+export const dataFilesSection: ProjectTreeSection = {
+  id: 'data',
+  labelKey: 'tree.data',
+  nodes: (view, t) =>
+    (
+      [
+        ['maps', 'map', view.game?.maps ?? []],
+        ['inventories', 'inventory-file', view.game?.inventory ?? []],
+      ] as const
+    ).map(([group, kind, ids]) => ({
+      key: `data:${group}`,
+      section: 'data',
+      kind: 'data-group',
+      label: t(`tree.${group}`),
+      children: ids.map((id) => ({ key: `${kind}:${id}`, section: 'data', kind, id, label: id })),
+    })),
+}
+
 export const projectTreeSections: readonly ProjectTreeSection[] = [
   {
     id: 'game',
@@ -34,7 +70,7 @@ export const projectTreeSections: readonly ProjectTreeSection[] = [
         section: 'scenes',
         kind: 'scene',
         id: scene.id,
-        label: scene.title || scene.id,
+        label: sceneTitle(view, scene),
         detail: `${t(scene.type === 'game' ? 'scene.game' : 'scene.standalone')}${view.game?.['initial-scene'] === scene.id ? ` · ${t('tree.startup')}` : ''}`,
         children: [
           ...scene.components.map((component): ProjectTreeNode => ({

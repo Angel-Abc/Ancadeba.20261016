@@ -24,6 +24,14 @@ export const gridPlacementSchema = z.object({
   columnSpan: z.number().int().positive().default(1),
 })
 
+export const characterProgressionComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('character-progression'),
+  profile: gameIdSchema,
+  textTarget: gameIdSchema.optional(),
+  placement: gridPlacementSchema,
+})
+
 export const combatComponentSchema = z.object({
   id: gameIdSchema,
   type: z.literal('combat'),
@@ -470,6 +478,7 @@ export type StatusValueDefinition = z.infer<typeof statusValueSchema>
 
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   combatComponentSchema,
+  characterProgressionComponentSchema,
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
@@ -525,6 +534,20 @@ export const sceneSchema = z
     let hasCombat = false
     const descriptionTargets = new Set<string>()
     scene.components.forEach((component, index) => {
+      if (
+        component.type === 'character-progression' &&
+        (scene.type !== 'game' ||
+          (component.textTarget &&
+            !scene.components.some(
+              (entry) => entry.type === 'text' && entry.id === component.textTarget,
+            )))
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index],
+          message: 'Character progression requires a game scene and a same-scene text target',
+        })
+
       if (component.type === 'combat') {
         if (hasCombat || scene.type !== 'game')
           context.addIssue({

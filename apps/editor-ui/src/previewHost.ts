@@ -14,6 +14,8 @@ export class EditorPreviewHost implements IEngineHost {
     private readonly t: Translate = editorLocalization().t,
     private readonly subscribeLanguageChanges?: (listener: () => void) => () => void,
     private readonly resources?: IResourceSource,
+    /** The scene being edited; the preview opens there instead of the game's start scene. */
+    private readonly startScene?: () => string | undefined,
   ) {}
 
   mount(game: GameData, session: EngineHostSession): () => void {
@@ -37,6 +39,7 @@ export class EditorPreviewHost implements IEngineHost {
         },
         bindingMode: 'editor',
       })
+      this.enterStartScene(game, session)
     } catch (error) {
       graphics?.dispose()
       throw error
@@ -63,5 +66,16 @@ export class EditorPreviewHost implements IEngineHost {
         graphics?.dispose()
       }
     }
+  }
+
+  private enterStartScene(game: GameData, session: EngineHostSession): void {
+    const id = this.startScene?.()
+    const scene = id === undefined ? undefined : game.scenes.get(id)
+    const { lifecycle } = session
+
+    if (!scene || lifecycle.activeScene?.data.id === scene.id) return
+
+    if (scene.type === 'game' && !lifecycle.currentGame) lifecycle.startGame()
+    lifecycle.enterScene(scene.id)
   }
 }

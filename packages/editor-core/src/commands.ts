@@ -1,3 +1,4 @@
+import { levelingProfileSchema, characterProgressionComponentSchema } from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
   gameIdSchema,
@@ -23,7 +24,18 @@ import {
   inventoryComponentSchema,
   combatDefinitionSchema,
   combatComponentSchema,
+  textComponentSchema,
+  languageSelectComponentSchema,
+  mapViewComponentSchema,
 } from '@ancadeba/schemas'
+
+/** Scene components without a dedicated authoring command are saved whole. */
+export const basicComponentSchema = z.discriminatedUnion('type', [
+  textComponentSchema,
+  buttonComponentSchema,
+  languageSelectComponentSchema,
+  mapViewComponentSchema,
+])
 
 const metadata = {
   // A blank title is valid when the document has a titleKey; project validation enforces one of them.
@@ -124,6 +136,11 @@ export const commandSchema = z.discriminatedUnion('type', [
     component: nearbyComponentSchema,
   }),
   z.strictObject({
+    type: z.literal('scene.upsertComponent'),
+    sceneId: gameIdSchema,
+    component: basicComponentSchema,
+  }),
+  z.strictObject({
     type: z.literal('scene.upsertStatusPanel'),
     sceneId: gameIdSchema,
     component: statusPanelComponentSchema,
@@ -181,6 +198,24 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     component: combatComponentSchema.nullable(),
   }),
+  z.strictObject({
+    type: z.literal('game.upsertLeveling'),
+    profile: levelingProfileSchema,
+    scene: z
+      .object({ id: gameIdSchema, component: characterProgressionComponentSchema })
+      .optional(),
+  }),
+  z.strictObject({ type: z.literal('game.removeLeveling'), profileId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('scene.upsertLevelingView'),
+    sceneId: gameIdSchema,
+    component: characterProgressionComponentSchema,
+  }),
+  z.strictObject({
+    type: z.literal('scene.removeLevelingView'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -215,6 +250,38 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.upsertLeveling',
+      example: {
+        type: 'game.upsertLeveling',
+        profile: {
+          'schema-version': '1.0.0',
+          id: 'player',
+          label: 'Player',
+          xp: { source: 'game.state', path: ['xp'] },
+          level: { source: 'game.state', path: ['level'] },
+          levels: [{ xp: 0 }, { xp: 10 }],
+        },
+      },
+    },
+    { type: 'game.removeLeveling', example: { type: 'game.removeLeveling', profileId: 'player' } },
+    {
+      type: 'scene.upsertLevelingView',
+      example: {
+        type: 'scene.upsertLevelingView',
+        sceneId: 'shop',
+        component: {
+          id: 'progression',
+          type: 'character-progression',
+          profile: 'player',
+          placement: { row: 1, column: 1 },
+        },
+      },
+    },
+    {
+      type: 'scene.removeLevelingView',
+      example: { type: 'scene.removeLevelingView', sceneId: 'shop', componentId: 'progression' },
+    },
     {
       type: 'game.upsertCombat',
       example: {
@@ -309,6 +376,20 @@ export const capabilities = {
     {
       type: 'scene.removeItemView',
       example: { type: 'scene.removeItemView', sceneId: 'shop', componentId: 'details' },
+    },
+    {
+      type: 'scene.upsertComponent',
+      example: {
+        type: 'scene.upsertComponent',
+        sceneId: 'shop',
+        component: {
+          id: 'title',
+          type: 'text',
+          text: 'Museum shop',
+          placement: { row: 1, column: 1 },
+          presentation: { variant: 'heading', align: 'center' },
+        },
+      },
     },
     {
       type: 'scene.upsertStatusPanel',

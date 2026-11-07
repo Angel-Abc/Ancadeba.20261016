@@ -7,7 +7,7 @@ import {
   type CombatDefinition,
   type CombatActorDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, humanizeCode } from './ruleFormControls.js'
+import { humanizeCode, type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function combatForm(
   controls: RuleFormControls,
@@ -15,8 +15,8 @@ export function combatForm(
   draft: CombatDefinition,
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, group, button, create } = controls
-  const keys = ['', ...(view.translationKeys ?? [])]
+  const { input, select, group, button, create, translation } = controls
+  const keys = translationChoices(view)
 
   const fields = (view.rules?.state ?? [])
     .filter((field) => typeof field.value === 'number')
@@ -51,15 +51,20 @@ export function combatForm(
     input(scoped(prefix, 'Name'), value.label, (next) => {
       value.label = next
     }),
-    select(scoped(prefix, 'Name translation'), value.labelKey ?? '', keys, (next) => {
+    translation(scoped(prefix, 'Name translation'), value.labelKey ?? '', keys, (next) => {
       value.labelKey = next || undefined
     }),
     input(scoped(prefix, 'Description'), value.description, (next) => {
       value.description = next
     }),
-    select(scoped(prefix, 'Description translation'), value.descriptionKey ?? '', keys, (next) => {
-      value.descriptionKey = next || undefined
-    }),
+    translation(
+      scoped(prefix, 'Description translation'),
+      value.descriptionKey ?? '',
+      keys,
+      (next) => {
+        value.descriptionKey = next || undefined
+      },
+    ),
   ]
 
   const actorForm = (actor: CombatActorDefinition, title: string, ...actions: HTMLElement[]) =>
@@ -101,7 +106,26 @@ export function combatForm(
           .filter(Boolean)
       }),
       ...(actor === draft.player
-        ? []
+        ? [
+            select(
+              'Leveling profile',
+              actor.leveling ?? '',
+              ['', ...Object.keys(view.leveling ?? {})],
+              (value) => {
+                actor.leveling = value || undefined
+
+                if (!value) actor.moveLevels = undefined
+                render()
+              },
+            ),
+            ...(actor.leveling
+              ? actor.moves.map((move) =>
+                  number(`Move ${move} minimum level`, actor.moveLevels?.[move] ?? 1, (value) => {
+                    actor.moveLevels = { ...actor.moveLevels, [move]: value }
+                  }),
+                )
+              : []),
+          ]
         : [
             input('Rotation (IDs)', actor.rotation.join(', '), (value) => {
               actor.rotation = value
@@ -251,7 +275,7 @@ export function combatForm(
         input(`${humanizeCode(code)} text`, draft.messages[code], (value) => {
           draft.messages[code] = value
         }),
-        select(
+        translation(
           `${humanizeCode(code)} translation`,
           draft.messageKeys[code] ?? '',
           keys,

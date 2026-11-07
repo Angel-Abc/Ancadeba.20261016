@@ -143,3 +143,5 @@ export * from './combatResolution.js'
 export * from './stateTransactions.js'
 
 export * from './combatRewards.js'
+
+export * from './leveling.js'

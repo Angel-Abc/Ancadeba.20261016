@@ -1,3 +1,4 @@
+import { bindLevelingEditor } from './levelingEditor.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
 import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
@@ -12,9 +13,13 @@ import { bindItemEditor } from './itemEditor.js'
 import { bindShopEditor } from './shopEditor.js'
 import { bindCombatEditor } from './combatEditor.js'
 import { bindSectionRail } from './sectionRail.js'
+import { bindComponentEditor, editableComponentTypes } from './componentEditor.js'
 import {
   buildProjectTree,
+  dataFilesSection,
   flattenProjectTree,
+  ruleFileNodes,
+  sceneTitle,
   projectTreeSections,
   type ProjectTreeNode,
   type ProjectTreeSection,
@@ -34,9 +39,12 @@ export function bindProjectPanel(
   {
     additionalSections = [],
     onProjectChange,
+    onSceneSelect,
   }: {
     additionalSections?: readonly ProjectWorkspaceSection[]
     onProjectChange?: (path: string) => void
+    /** Reports the scene of the explorer selection, or undefined outside the scenes section. */
+    onSceneSelect?: (scene: { id: string; title: string } | undefined) => void
   } = {},
 ): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
@@ -167,21 +175,27 @@ export function bindProjectPanel(
   let itemEditor: ReturnType<typeof bindItemEditor> | undefined
   const shopElement = treeElement && root.querySelector<HTMLElement>('#shop-editor')
   let shopEditor: ReturnType<typeof bindShopEditor> | undefined
+  const levelingElement = treeElement && root.querySelector<HTMLElement>('#leveling-editor')
+  let levelingEditor: ReturnType<typeof bindLevelingEditor> | undefined
   const combatElement = treeElement && root.querySelector<HTMLElement>('#combat-editor')
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
+  const componentElement = treeElement && root.querySelector<HTMLElement>('#component-editor')
+  let componentEditor: ReturnType<typeof bindComponentEditor> | undefined
   const railElement = treeElement && root.querySelector<HTMLElement>('#section-rail')
   let rail: ReturnType<typeof bindSectionRail> | undefined
 
   const sections = [
     ...projectTreeSections,
-    ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: () => [] }] : []),
+    ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: ruleFileNodes }] : []),
     ...(actionBarElement
       ? [{ id: 'controls', labelKey: 'controls.heading', nodes: () => [] }]
       : []),
     ...(statusPanelElement ? [{ id: 'status', labelKey: 'status.heading', nodes: () => [] }] : []),
     ...(itemElement ? [{ id: 'items', labelKey: 'items.heading', nodes: () => [] }] : []),
     ...(shopElement ? [{ id: 'shops', labelKey: 'shops.heading', nodes: () => [] }] : []),
+    ...(levelingElement ? [{ id: 'leveling', labelKey: 'leveling.heading', nodes: () => [] }] : []),
     ...(combatElement ? [{ id: 'combat', labelKey: 'combat.heading', nodes: () => [] }] : []),
+    ...(treeElement ? [dataFilesSection] : []),
     ...additionalSections,
   ]
 
@@ -193,17 +207,37 @@ export function bindProjectPanel(
     const sceneId =
       node.section === 'scenes' ? (node.kind === 'scene' ? node.id : node.parentId) : undefined
 
-    const component = view?.scenes
-      .find((scene) => scene.id === sceneId)
-      ?.components.find((component) => component.id === node.id)
+    // Scenes and components can share an ID, so only component rows resolve a component.
+    const component =
+      node.kind === 'component'
+        ? view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.find((component) => component.id === node.id)
+        : undefined
+
+    const dataFile =
+      node.kind === 'map'
+        ? view?.maps?.[node.id ?? '']
+        : node.kind === 'inventory-file'
+          ? view?.inventoryFiles?.[node.id ?? '']
+          : undefined
 
     const graphic =
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
 
     const actionBar = Boolean(actionBarElement && component?.type === 'action-bar')
+
+    const levelingComponent = Boolean(
+      levelingElement && component?.type === 'character-progression',
+    )
+
     const combatComponent = Boolean(combatElement && component?.type === 'combat')
     const shopComponent = Boolean(shopElement && component?.type === 'shop')
     const statusComponent = Boolean(statusPanelElement && component?.type === 'status-panel')
+
+    const editableComponent = Boolean(
+      componentElement && component && editableComponentTypes.includes(component.type),
+    )
 
     const itemComponent = Boolean(
       itemElement &&
@@ -226,6 +260,14 @@ export function bindProjectPanel(
     if (statusPanelElement)
       statusPanelElement.hidden = node.section !== 'status' && !statusComponent
 
+    if (levelingElement) levelingElement.hidden = node.section !== 'leveling' && !levelingComponent
+
+    if (levelingComponent)
+      levelingEditor?.navigate(
+        sceneId,
+        component?.type === 'character-progression' ? component.profile : undefined,
+      )
+
     if (combatElement) combatElement.hidden = node.section !== 'combat' && !combatComponent
 
     if (combatComponent)
@@ -245,29 +287,65 @@ export function bindProjectPanel(
     if (actionBar) actionBarPanel?.navigate(sceneId)
 
     if (statusComponent) statusPanel?.navigate(sceneId, component?.id)
+
+    if (componentElement) componentElement.hidden = !editableComponent
+
+    // Opened from a component, an editor's own scene and target pickers repeat the explorer.
+    for (const element of [
+      actionBarElement,
+      statusPanelElement,
+      itemElement,
+      shopElement,
+      combatElement,
+      levelingElement,
+    ])
+      element?.setAttribute('data-scope', node.kind === 'component' ? 'component' : 'section')
+
+    if (editableComponent) componentEditor?.navigate(sceneId, component?.id)
     find('component-details').hidden =
-      node.section !== 'scenes' ||
-      node.kind !== 'component' ||
-      graphic ||
-      actionBar ||
-      statusComponent ||
-      itemComponent ||
-      shopComponent ||
-      combatComponent
-    find('component-json').textContent =
-      component && !graphic ? JSON.stringify(component, null, 2) : ''
+      !dataFile &&
+      (node.section !== 'scenes' ||
+        node.kind !== 'component' ||
+        graphic ||
+        actionBar ||
+        statusComponent ||
+        itemComponent ||
+        shopComponent ||
+        combatComponent ||
+        levelingComponent ||
+        editableComponent)
+    find('component-help').textContent = t(dataFile ? 'tree.readOnlyFile' : 'tree.readOnly')
+    find('component-json').textContent = dataFile
+      ? JSON.stringify(dataFile, null, 2)
+      : component && !graphic
+        ? JSON.stringify(component, null, 2)
+        : ''
 
     const sectionLabel = t(
       sections.find((section) => section.id === node.section)?.labelKey ?? node.label,
     )
 
     // The eyebrow names where the selection lives; top-level sections belong to the project.
+    const parentScene = view?.scenes.find((scene) => scene.id === node.parentId)
+
     find('editor-heading').textContent =
       node.kind === 'section'
         ? t('project.heading')
-        : [sectionLabel, node.parentId].filter(Boolean).join(' › ')
+        : [sectionLabel, parentScene && view ? sceneTitle(view, parentScene) : node.parentId]
+            .filter(Boolean)
+            .join(' › ')
     find('workspace-heading').textContent = node.kind === 'section' ? sectionLabel : node.label
     rail?.render(view ? node.section : undefined)
+
+    const selectedScene = view?.scenes.find(
+      (scene) => scene.id === (node.kind === 'scene' ? node.id : node.parentId),
+    )
+
+    onSceneSelect?.(
+      selectedScene && view
+        ? { id: selectedScene.id, title: sceneTitle(view, selectedScene) }
+        : undefined,
+    )
 
     for (const section of additionalSections) {
       if (section.id === node.section) section.show(node, view)
@@ -281,66 +359,39 @@ export function bindProjectPanel(
 
     const sceneChanges = sceneId && sceneId !== scenes.value
 
+    const componentType =
+      node.kind === 'component'
+        ? view?.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.find((component) => component.id === node.id)?.type
+        : undefined
+
     const usesAssets =
       node.section === 'assets' ||
-      (node.section === 'scenes' &&
-        (node.kind === 'new-graphic' ||
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) => component.id === node.id && component.type === 'graphic',
-            )))
+      (node.section === 'scenes' && (node.kind === 'new-graphic' || componentType === 'graphic'))
 
     const usesActionBar = Boolean(
-      actionBarElement &&
-      (node.section === 'controls' ||
-        (node.section === 'scenes' &&
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) => component.id === node.id && component.type === 'action-bar',
-            ))),
+      actionBarElement && (node.section === 'controls' || componentType === 'action-bar'),
     )
 
     const usesStatusPanel = Boolean(
-      statusPanelElement &&
-      (node.section === 'status' ||
-        (node.section === 'scenes' &&
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) => component.id === node.id && component.type === 'status-panel',
-            ))),
+      statusPanelElement && (node.section === 'status' || componentType === 'status-panel'),
     )
 
     if (
       (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
       ((node.section === 'items' ||
-        (node.section === 'scenes' &&
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) =>
-                component.id === node.id &&
-                ['item-details', 'equipment', 'inventory'].includes(component.type),
-            ))) &&
+        ['item-details', 'equipment', 'inventory'].includes(componentType ?? '')) &&
         !itemEditor?.navigate(sceneId, node.section === 'scenes' ? node.id : undefined)) ||
-      ((node.section === 'shops' ||
-        (node.section === 'scenes' &&
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) => component.id === node.id && component.type === 'shop',
-            ))) &&
-        !shopEditor?.navigate(sceneId)) ||
-      ((node.section === 'combat' ||
-        (node.section === 'scenes' &&
-          view?.scenes
-            .find((scene) => scene.id === sceneId)
-            ?.components.some(
-              (component) => component.id === node.id && component.type === 'combat',
-            ))) &&
+      ((node.section === 'shops' || componentType === 'shop') && !shopEditor?.navigate(sceneId)) ||
+      ((node.section === 'leveling' || componentType === 'character-progression') &&
+        !levelingEditor?.navigate(sceneId)) ||
+      ((node.section === 'combat' || componentType === 'combat') &&
         !combatEditor?.navigate(sceneId)) ||
+      (node.kind === 'rule-file' && !rulesPanel?.navigate(node.id ?? '')) ||
+      (componentElement &&
+        editableComponentTypes.includes(componentType ?? '') &&
+        !componentEditor?.navigate(sceneId, node.id)) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
       (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
       (usesStatusPanel &&
@@ -408,6 +459,8 @@ export function bindProjectPanel(
     itemEditor?.render(state, replaceFields)
     shopEditor?.render(state, replaceFields)
     combatEditor?.render(state, replaceFields)
+    levelingEditor?.render(state, replaceFields)
+    componentEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -433,6 +486,7 @@ export function bindProjectPanel(
         state.lastCommand === 'scene.upsertStatusPanel' ||
         state.lastCommand === 'scene.removeStatusPanel' ||
         state.lastCommand === 'scene.setActionBar' ||
+        state.lastCommand === 'scene.upsertComponent' ||
         state.lastCommand === 'game.updateInput')
 
     if (projectChanged || ruleChange) onProjectChange?.(loadedPath)
@@ -622,6 +676,11 @@ export function bindProjectPanel(
       void controller.save(command)
     })
 
+  if (levelingElement)
+    levelingEditor = bindLevelingEditor(levelingElement, (command) => {
+      void controller.save(command)
+    })
+
   if (combatElement)
     combatEditor = bindCombatEditor(combatElement, (command) => {
       void controller.save(command)
@@ -636,6 +695,11 @@ export function bindProjectPanel(
     itemEditor = bindItemEditor(itemElement, (command) => {
       void controller.save(command)
     })
+
+  if (componentElement)
+    componentEditor = bindComponentEditor(componentElement, (command) => {
+      void controller.save(command)
+    })
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -645,6 +709,7 @@ export function bindProjectPanel(
     fetcher,
     t,
     (id) => tree?.select(`asset:${id}`),
+    (key) => tree?.select(key),
   )
 
   if (treeElement) {
@@ -706,7 +771,9 @@ export function bindProjectPanel(
       statusPanel?.hasDrafts() ||
       itemEditor?.hasDrafts() ||
       shopEditor?.hasDrafts() ||
-      combatEditor?.hasDrafts(),
+      combatEditor?.hasDrafts() ||
+      levelingEditor?.hasDrafts() ||
+      componentEditor?.hasDrafts(),
     )
 
   on(reload, 'click', () => {

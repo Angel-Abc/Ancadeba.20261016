@@ -186,5 +186,19 @@
   "rewards.take": "Take Loot",
   "rewards.takeAll": "Take All",
   "rewards.retry": "Retry Rewards",
-  "rewards.details": "Loot details"
+  "rewards.details": "Loot details",
+  "leveling.message.level": "Level",
+  "leveling.message.xp": "XP",
+  "leveling.message.next": "Next level",
+  "leveling.message.capped": "Maximum level",
+  "leveling.message.unavailable": "Character progression is unavailable: check its fields and state adapter.",
+  "leveling.message.gained": "Reached level {level}.",
+  "leveling.message.stat": "{label}: +{amount}",
+  "leveling.message.unlocked": "Unlocked: {move}",
+  "leveling.title": "Wayfarer progression",
+  "leveling.maximumHealth": "Maximum health",
+  "leveling.powerStrike": "Power strike",
+  "leveling.advanced": "Advanced training",
+  "leveling.requires": "Requires level {level}",
+  "leveling.returnTraining": "Return to training"
 }

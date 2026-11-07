@@ -110,6 +110,8 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
       false,
     )
 
+    picker.className = 'context-picker'
+
     barFields.append(picker)
 
     if (!scene) {

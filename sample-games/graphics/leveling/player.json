@@ -1,0 +1,57 @@
+{
+  "schema-version": "1.0.0",
+  "id": "player",
+  "label": "Wayfarer progression",
+  "xp": {
+    "source": "game.state",
+    "path": ["experience"]
+  },
+  "level": {
+    "source": "game.state",
+    "path": ["level"]
+  },
+  "levels": [
+    {
+      "xp": 0
+    },
+    {
+      "xp": 5,
+      "gains": [
+        {
+          "id": "health",
+          "label": "Maximum health",
+          "field": {
+            "source": "game.state",
+            "path": ["combat", "maximumHealth"]
+          },
+          "amount": 6
+        }
+      ]
+    },
+    {
+      "xp": 15,
+      "gains": [
+        {
+          "id": "health",
+          "label": "Maximum health",
+          "field": {
+            "source": "game.state",
+            "path": ["combat", "maximumHealth"]
+          },
+          "amount": 8
+        }
+      ]
+    }
+  ],
+  "health": {
+    "current": {
+      "source": "game.state",
+      "path": ["combat", "player"]
+    },
+    "maximum": {
+      "source": "game.state",
+      "path": ["combat", "maximumHealth"]
+    },
+    "policy": "increase"
+  }
+}

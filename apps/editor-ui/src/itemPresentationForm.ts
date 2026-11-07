@@ -1,6 +1,6 @@
 import type { ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, type InventoryDefinition } from '@ancadeba/schemas'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function itemPresentationForm(
   controls: RuleFormControls,
@@ -8,8 +8,8 @@ export function itemPresentationForm(
   draft: InventoryDefinition['itemTypes'][string],
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, group, button } = controls
-  const keys = ['', ...(view.translationKeys ?? [])]
+  const { input, select, group, button, translation } = controls
+  const keys = translationChoices(view)
 
   const art = [
     '',
@@ -22,13 +22,13 @@ export function itemPresentationForm(
     input('Item name', draft.label, (value) => {
       draft.label = value
     }),
-    select('Name translation', draft.labelKey ?? '', keys, (value) => {
+    translation('Name translation', draft.labelKey ?? '', keys, (value) => {
       draft.labelKey = value || undefined
     }),
     input('Description', draft.description, (value) => {
       draft.description = value
     }),
-    select('Description translation', draft.descriptionKey ?? '', keys, (value) => {
+    translation('Description translation', draft.descriptionKey ?? '', keys, (value) => {
       draft.descriptionKey = value || undefined
     }),
     select('Large artwork', draft.artwork ?? '', art, (value) => {
@@ -47,7 +47,7 @@ export function itemPresentationForm(
       input('Property label', property.label, (value) => {
         property.label = value
       }),
-      select('Property label translation', property.labelKey ?? '', keys, (value) => {
+      translation('Property label translation', property.labelKey ?? '', keys, (value) => {
         property.labelKey = value || undefined
       }),
       select('Property value type', type, ['string', 'number', 'binding'], (value) => {
@@ -99,7 +99,7 @@ export function itemPresentationForm(
 
     if (typeof property.value === 'string')
       box.append(
-        select('Property value translation', property.valueKey ?? '', keys, (value) => {
+        translation('Property value translation', property.valueKey ?? '', keys, (value) => {
           property.valueKey = value || undefined
         }),
       )
