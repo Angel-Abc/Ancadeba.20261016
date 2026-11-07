@@ -1,0 +1,62 @@
+{
+  "schema-version": "1.0.0",
+  "id": "harbour-survey",
+  "labelKey": "quest.survey.name",
+  "descriptionKey": "quest.survey.description",
+  "stages": [
+    {
+      "id": "explore",
+      "labelKey": "quest.survey.explore",
+      "objectives": [
+        {
+          "id": "harbour",
+          "labelKey": "quest.survey.visit",
+          "when": [
+            {
+              "type": "scene-is",
+              "scene": "old-harbour"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "labelKey": "quest.survey.report",
+      "objectives": [
+        {
+          "id": "return",
+          "labelKey": "quest.survey.return",
+          "when": [
+            {
+              "type": "scene-is",
+              "scene": "standard"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rewards": {
+    "numeric": [
+      {
+        "id": "gold",
+        "labelKey": "quest.survey.gold",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "gold"]
+        },
+        "amount": 8
+      },
+      {
+        "id": "xp",
+        "labelKey": "quest.survey.xp",
+        "field": {
+          "source": "game.state",
+          "path": ["player", "experience"]
+        },
+        "amount": 5
+      }
+    ]
+  }
+}

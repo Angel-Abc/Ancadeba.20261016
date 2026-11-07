@@ -497,3 +497,160 @@ and commit guarantees. Without supported adapters, trade commands are disabled.
 
 V1 excludes baskets, barter, quantities, generated or replenishing stock, pricing
 formulas, haggling, currency conversion, buyback history, and trade time costs.
+
+## Dialogue and quests
+
+Open **Dialogue & quests** in the editor to create branching conversations and
+linear quests. These are optional resources; existing games need no migration.
+Add their IDs to `game.json`:
+
+```json
+{ "dialogues": ["curator"], "quests": ["harbour-survey"] }
+```
+
+Definitions live in `dialogues/<id>.json` and `quests/<id>.json`. Each has
+`"schema-version": "1.0.0"`, its manifest ID, and a `label` or `labelKey`.
+Labels, descriptions, dialogue text and speakers, rewards, and feedback support
+the game's language catalogs. Editor saves check the inspected revision and
+preserve extension properties. Conflicting drafts remain available to review.
+
+### Conversations
+
+```json
+{
+  "schema-version": "1.0.0",
+  "id": "curator",
+  "label": "The curator's request",
+  "entry": "hello",
+  "nodes": {
+    "hello": {
+      "lines": [{ "speaker": "Curator", "text": "Can you survey the harbour?" }],
+      "choices": [
+        {
+          "id": "accept",
+          "label": "I will help.",
+          "when": [{ "type": "quest-state", "quest": "harbour-survey", "status": "not-started" }],
+          "effects": [{ "type": "start-quest", "quest": "harbour-survey" }],
+          "next": "accepted"
+        }
+      ]
+    },
+    "accepted": {
+      "terminal": true,
+      "lines": [{ "speaker": "Curator", "text": "Visit the harbour, then return here." }]
+    }
+  }
+}
+```
+
+Nearby entries can set `dialogue: "curator"`. Selection still displays their
+description in the nearby panel's existing `descriptionTarget`. Dialogue is
+appended there too. A `dialogue-action` slot references that nearby component:
+
+```json
+{
+  "label": "Talk",
+  "action": { "type": "dialogue-action", "nearby": "nearby", "command": { "type": "start" } },
+  "inputBinding": { "context": "gameplay", "input": "slot-11" }
+}
+```
+
+Other commands are `choose` with `position: 1` through `15`, `end`,
+`previous-page`, and `next-page`. Reply slots show the current choice labels.
+Configure contiguous reply positions starting at 1 and an End command. Add both
+page commands when a node contains more choices than the configured reply slots.
+Hidden choices leave blank positions; disabled choices remain visible with their
+unavailable explanation. Keyboard mappings stay in the existing input file.
+
+Each choice has an ID and either `next` or `end: true`. `visibleWhen` and `when`
+are lists of conditions that must all match. Effects can set declared state,
+append to the existing log, start a quest, or complete a ready quest. A choice
+can optionally set `scene` for navigation after commit.
+There are no automatic node-entry effects or arbitrary code effects.
+
+Leaving a scene, selecting another participant, or hiding the participant pauses
+the conversation. Talk resumes its node and checks choices again. Finished
+exchanges restart at the entry node on the next Talk. By default identity is
+scoped to scene, nearby component, entry, and dialogue. An optional nearby-entry
+`conversationId` shares one conversation across scenes; every reference to that
+identity must use the same dialogue. Only one conversation is active at a time.
+
+Lines can use existing `{{alias}}` text bindings. Values are captured when each
+line enters the transcript; changing language re-renders definition references
+with those captured values and does not repeat effects. Without a `bindings`
+map, braces remain literal. Missing values use the binding fallback and a
+localized diagnostic. `transcriptCapacity` bounds retained lines and replies.
+
+### Quest stages, hand-ins, and rewards
+
+A quest has ordered `stages`, each with an ID and `objectives`. Each objective
+has an ID, label, and `when` conditions or numeric `progress`, for example:
+
+```json
+{
+  "id": "experience",
+  "label": "Earn five XP",
+  "progress": {
+    "binding": { "source": "game.state", "path": ["player", "experience"] },
+    "target": 5
+  }
+}
+```
+
+Supported world conditions are `scene-is`, `state-is`, `state-compare` with
+`eq/gte/lte/gt/lt`, `item-carried-by`, `item-owned-by`, `quest-state`, and
+`combat-outcome` (`victory/defeat/escaped`). Owned-item checks include containers;
+carried-item checks retain their direct-carried meaning. Combat checks only read
+recorded outcomes and never start encounters. Conditions also work in authored
+rules, alongside the existing payload conditions.
+
+Quests start explicitly, advance intermediate stages at completed transaction
+boundaries, and become `ready` when final objectives and required possessions
+are satisfied. Readiness can revert to `active` before turn-in. Completion is
+explicit and terminal. Existing facts can satisfy objectives when accepting a
+quest; authors maintain counters through existing rules.
+
+`handIns` name exact `item` instances and their required `owner`. Use
+`operation: "consume"`, or `operation: "transfer"` with a distinct `recipient`.
+Nested items are supported. Equipped items, nonempty containers, and items
+reserved by combat plans cannot be handed in. Matching item types never
+substitute for the authored instance.
+
+`rewards.numeric` uses the existing `{ id, label, field, amount }` reward format.
+Amounts are fixed nonnegative safe integers. XP rewards use the leveling
+transaction path. `rewards.items` contains `{ id, itemType, colors? }` entries and
+requires `rewards.recipient`. Generated IDs are stable:
+`quest-reward-<quest-ID-length>-<quest-ID>-<reward-ID>`. Items are finite and
+delivered to the recipient's carried inventory.
+
+Hand-ins, rewards, level gains, related state/log effects, completion, and the
+dialogue cursor commit together before observers run. Failure changes nothing;
+observer failure keeps the completed result without retrying it. Commands spend
+no game turn or world time. New Game resets quests and conversations.
+
+### Journal and runtime services
+
+Add a `quest-log` scene component with normal grid placement, optional `quests`
+IDs, `statuses` filters (default active/ready/completed), and optional `textTarget`.
+Select a quest for details. `quest-action` slots use `operation: "start"`,
+`"turn-in"`, `"track"`, or `"untrack"` and reference either a fixed `quest` or
+a `journal` component for its selection. One quest can be tracked globally.
+
+`game.quests` and `game.dialogue` expose snapshots, eligibility, captured requests,
+text, and subscriptions. Read-only bindings use `game.quests` paths
+`[questId, "status" | "stage" | "tracked"]`. Queued shortcuts retain their scene,
+participant, page/choice, journal selection, and world facts; stale commands are
+discarded and held-key terminal phases stay consumed.
+
+Authored games receive declared numeric and string/boolean transaction adapters.
+Custom hosts can supply `createStateTransactions` and
+`createStoryStateTransactions`; `MapStoryState` supports declared Map fields and
+an optional staged log adapter. Preparation must be pure, and commits synchronous,
+infallible, and observer-free. Custom inventories can implement
+`prepareTransaction` to stage creation, removal, and transfers together. Missing
+capabilities disable the affected operation with a reason; bindings stay read-only.
+
+The basic sample demonstrates a localized curator survey. The graphics sample's
+ranger post demonstrates an exact-letter transfer, XP/level gains, and a dyed
+cloak reward. Repeatable or failed quests, branching quest stages, deadlines,
+procedural dialogue, type-matched hand-ins, and random quest rewards are deferred.

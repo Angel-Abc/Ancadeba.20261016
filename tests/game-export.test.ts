@@ -338,6 +338,29 @@ describe('standalone game export', () => {
           'stunning-blow': 4,
         })
         expect(game.combat!.text(advanced, 'combat')).toContain('Stunned')
+        engine.lifecycle!.enterScene('ranger-post')
+        const post = engine.lifecycle!.activeScene!
+        game.nearby!.select(post, 'nearby', 'ranger')
+
+        for (const slot of ['1', '2', '1', '3']) {
+          game.actionBar!.activate(post, 'commands', slot)
+
+          for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+        }
+
+        expect(game.quests!.snapshot('ranger-letter')?.status).toBe('completed')
+        expect(game.inventory!.snapshot.find((item) => item.id === 'letter')?.placement).toEqual({
+          type: 'carried',
+          owner: 'ranger',
+        })
+        expect(
+          game.inventory!.snapshot.find(
+            (item) => item.id === 'quest-reward-13-ranger-letter-cloak',
+          ),
+        ).toMatchObject({
+          colors: { fabric: '#6859b8' },
+          placement: { type: 'carried', owner: 'wayfarer' },
+        })
       } finally {
         engine.stop()
       }
@@ -553,6 +576,33 @@ describe('standalone game export', () => {
       )
       expect(game.inventory!.snapshot.some((item) => item.id === 'healing-potion-one')).toBe(false)
       expect(game.itemUse!.feedback(lifecycle.activeScene!, 'items')).toContain('restored')
+      lifecycle.enterScene('standard')
+      game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
+
+      for (const slot of ['11', '12']) {
+        game.actionBar!.activate(lifecycle.activeScene!, 'action-bar', slot)
+
+        for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+      }
+
+      lifecycle.enterScene('old-harbour')
+
+      for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+      lifecycle.enterScene('standard')
+
+      for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+      game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
+
+      for (const slot of ['11', '13']) {
+        game.actionBar!.activate(lifecycle.activeScene!, 'action-bar', slot)
+
+        for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+      }
+
+      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('completed')
+      expect(game.dialogue!.text(lifecycle.activeScene!, 'nearby')).toContain(
+        'Your observations are valuable',
+      )
     } finally {
       engine?.stop()
       await server.close()

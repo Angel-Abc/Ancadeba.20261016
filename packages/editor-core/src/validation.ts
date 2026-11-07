@@ -1,4 +1,12 @@
 import {
+  dialogueSchema,
+  dialogueFile,
+  questSchema,
+  questFile,
+  storyIssues,
+  localizeStory,
+} from '@ancadeba/schemas'
+import {
   combatLibrarySchema,
   itemUseIssues,
   combatLibraryFile,
@@ -116,6 +124,22 @@ export function validateProject(
   const leveling = new Map(
     (game.data.leveling ?? []).flatMap((id) => {
       const result = check(levelingFile(id), levelingProfileSchema)
+
+      return result.success ? [[id, result.data] as const] : []
+    }),
+  )
+
+  const dialogues = new Map(
+    (game.data.dialogues ?? []).flatMap((id) => {
+      const result = check(dialogueFile(id), dialogueSchema)
+
+      return result.success ? [[id, result.data] as const] : []
+    }),
+  )
+
+  const quests = new Map(
+    (game.data.quests ?? []).flatMap((id) => {
+      const result = check(questFile(id), questSchema)
 
       return result.success ? [[id, result.data] as const] : []
     }),
@@ -243,6 +267,9 @@ export function validateProject(
           for (const combat of combats.values()) localizeCombat(combat, { fallback, messages })
 
           for (const profile of leveling.values()) localizeLeveling(profile, { fallback, messages })
+
+          for (const definition of [...dialogues.values(), ...quests.values()])
+            localizeStory(definition, { fallback, messages })
         } catch (error) {
           diagnostics.push({
             code: 'invalid_translation',
@@ -267,6 +294,18 @@ export function validateProject(
 
   const validatedRules = validateRuleSources(sources, scenes, maps, inventory, defaultMessages)
   const mergedRules = validatedRules.rules
+
+  for (const issue of storyIssues({
+    dialogues,
+    quests,
+    scenes,
+    rules: mergedRules,
+    inventory,
+    combat: combats,
+    assets: assets?.data,
+    leveling,
+  }))
+    diagnostics.push({ code: 'invalid_story', ...issue })
 
   for (const issue of itemUseIssues(inventory, libraries, mergedRules))
     diagnostics.push({ code: 'invalid_item_use', file: 'game.json', ...issue })
@@ -304,6 +343,8 @@ export function validateProject(
     scenes,
     assets?.data,
     mergedRules,
+    dialogues,
+    quests,
   ]))
     diagnostics.push({ code: 'invalid_combat_stats', file: 'game.json', ...issue })
 
@@ -379,6 +420,9 @@ export function validateProject(
       for (const combat of combats.values()) localizeCombat(combat)
 
       for (const profile of leveling.values()) localizeLeveling(profile)
+
+      for (const definition of [...dialogues.values(), ...quests.values()])
+        localizeStory(definition)
     }
   } catch (error) {
     diagnostics.push({

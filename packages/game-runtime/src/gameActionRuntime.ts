@@ -1,3 +1,6 @@
+import { GameQuests } from './quests.js'
+import { GameDialogue } from './dialogue.js'
+import type { IStoryStateTransactions } from './storyState.js'
 import { GameItemUse } from './itemUse.js'
 import { GameLeveling } from './leveling.js'
 import { GameCombatStats } from './combatStats.js'
@@ -21,6 +24,8 @@ import { TimerService, type TimerId } from './timers.js'
 
 /** Owns actions, bindings, and private host timers for one playthrough. */
 export class GameActionRuntime implements IGameRuntime {
+  readonly quests: GameQuests | undefined
+  readonly dialogue: GameDialogue | undefined
   readonly actions: ActionProcessor
   readonly bindings: GameBindings
   readonly actionBar: GameActionBar | undefined
@@ -53,12 +58,14 @@ export class GameActionRuntime implements IGameRuntime {
     tradeState?: ITradeState,
     stateTransactions: IStateTransactions | undefined = tradeState,
     updateAuthoredClock?: (worldTimeMs: number) => void,
+    storyState?: IStoryStateTransactions,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
     this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
     this.bindings = new GameBindings(
       {
         state: () => game.state,
+        quests: () => this.quests?.bindingValues,
         progression: () => this.actions.progression,
         leveling: () => this.leveling?.bindingValues,
         combatStats: () => this.combatStats?.bindingValues,
@@ -132,6 +139,16 @@ export class GameActionRuntime implements IGameRuntime {
             () => this.bindings.invalidate(),
           )
         : undefined
+    this.quests =
+      lifecycle && (game.data.quests?.size || game.data.dialogues?.size)
+        ? new GameQuests(game, lifecycle, this.bindings, numericState, storyState, messages, () =>
+            this.bindings.invalidate(),
+          )
+        : undefined
+    this.dialogue =
+      lifecycle && this.nearby && this.quests
+        ? new GameDialogue(game, lifecycle, this.nearby, this.bindings, this.quests, messages)
+        : undefined
     this.actionBar = lifecycle
       ? new GameActionBar(
           lifecycle,
@@ -143,6 +160,8 @@ export class GameActionRuntime implements IGameRuntime {
           this.trading,
           () => this.combat,
           () => this.itemUse,
+          () => this.dialogue,
+          () => this.quests,
         )
       : undefined
 
@@ -182,6 +201,8 @@ export class GameActionRuntime implements IGameRuntime {
           )
         : undefined
     } catch (error) {
+      this.dialogue?.dispose()
+      this.quests?.dispose()
       this.itemUse?.dispose()
       this.actionBar?.dispose()
       this.combat?.dispose()
@@ -204,6 +225,7 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed || this.started || !this.isRunning()) return
     this.started = true
     this.onStart()
+    this.quests?.start()
     this.itemUse?.start()
     this.actions.start()
   }
@@ -211,6 +233,8 @@ export class GameActionRuntime implements IGameRuntime {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.dialogue?.dispose()
+    this.quests?.dispose()
     this.itemUse?.dispose()
     this.actionBar?.dispose()
     this.combat?.dispose()

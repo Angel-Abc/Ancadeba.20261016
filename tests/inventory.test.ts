@@ -18,6 +18,9 @@ const bag: InventoryPlacement = { type: 'inside', container: 'travel-pack' }
 
 const paths = [
   'game.json',
+  'dialogues/ranger.json',
+  'quests/ranger-letter.json',
+  'scenes/ranger-post.json',
   'rules/shop.json',
   'rules/combat.json',
   'combat-libraries/common.json',

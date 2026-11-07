@@ -20,6 +20,14 @@ export const gameSchema = z
       .array(gameIdSchema)
       .refine(uniqueFileIds, { message: 'Rule references must be unique' })
       .optional(),
+    dialogues: z
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Dialogue references must be unique' })
+      .optional(),
+    quests: z
+      .array(gameIdSchema)
+      .refine(uniqueFileIds, { message: 'Quest references must be unique' })
+      .optional(),
     version: z.string().trim().min(1),
     'initial-scene': gameIdSchema.optional(),
     stylesheet: z

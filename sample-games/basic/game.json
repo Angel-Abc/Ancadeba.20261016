@@ -29,5 +29,7 @@
   "rules": ["rules", "museum-puzzle", "harbour-route", "shop", "combat"],
   "combat": ["training", "advanced-training"],
   "leveling": ["player"],
-  "combatLibraries": ["common"]
+  "combatLibraries": ["common"],
+  "dialogues": ["curator"],
+  "quests": ["harbour-survey"]
 }

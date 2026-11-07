@@ -160,5 +160,7 @@
   "rail.combat": "Combat",
   "rail.data": "Data",
   "welcome.heading": "Open a game to start editing",
-  "welcome.body": "Pick a game from the list on the left. Its scenes, assets and rules appear in the explorer."
+  "welcome.body": "Pick a game from the list on the left. Its scenes, assets and rules appear in the explorer.",
+  "story.heading": "Dialogue & quests",
+  "rail.story": "Story"
 }

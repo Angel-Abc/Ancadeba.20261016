@@ -22,6 +22,7 @@ export interface InventoryReservation {
 }
 
 export interface IGameInventory {
+  prepareTransaction?(changes: InventoryChanges): PreparedInventoryTransfer | undefined
   reserveItem?(item: string, token: InventoryReservation): string | undefined
   releaseItems?(token: InventoryReservation, item?: string): void
   isReserved?(item: string): boolean
@@ -57,6 +58,12 @@ export interface InventoryEquipmentPolicy {
     before: ReadonlyMap<string, InventoryItemSnapshot>,
     after: ReadonlyMap<string, InventoryItemSnapshot>,
   ): InventoryEquipmentPreparation
+}
+
+export interface InventoryChanges {
+  readonly create: readonly InventoryItemSnapshot[]
+  readonly remove: readonly string[]
+  readonly transfers: readonly { readonly item: string; readonly destination: InventoryPlacement }[]
 }
 
 export interface InventoryEquipmentPreparation {
@@ -290,6 +297,73 @@ export class GameInventory implements IGameInventory {
       if (!item || inventoryPlacementIssue(this.definition, staged, source.id, item.placement))
         return
     }
+
+    return this.prepareBatch(staged)
+  }
+
+  prepareTransaction(changes: InventoryChanges): PreparedInventoryTransfer | undefined {
+    if (this.disposed) return
+
+    const ids = [
+      ...changes.remove,
+      ...changes.transfers.map((entry) => entry.item),
+      ...changes.create.map((entry) => entry.id),
+    ]
+
+    if (new Set(ids).size !== ids.length) return
+    const staged = new Map(this.items)
+
+    for (const id of changes.remove) {
+      const item = this.items.get(id)
+
+      if (
+        !item ||
+        item.placement.type === 'equipped' ||
+        [...this.items.values()].some(
+          (entry) => entry.placement.type === 'inside' && entry.placement.container === id,
+        )
+      )
+        return
+      staged.delete(id)
+    }
+
+    for (const transfer of changes.transfers) {
+      const item = this.items.get(transfer.item)
+      const placement = inventoryPlacementSchema.safeParse(transfer.destination)
+
+      if (
+        !item ||
+        !placement.success ||
+        item.placement.type === 'equipped' ||
+        [...this.items.values()].some(
+          (entry) => entry.placement.type === 'inside' && entry.placement.container === item.id,
+        )
+      )
+        return
+      staged.set(item.id, Object.freeze({ ...item, placement: Object.freeze(placement.data) }))
+    }
+
+    const parsed = inventorySchema.shape.items.safeParse(
+      Object.fromEntries(changes.create.map((item) => [item.id, item])),
+    )
+
+    if (!parsed.success) return
+
+    for (const [id, item] of Object.entries(parsed.data)) {
+      if (this.items.has(id)) return
+      staged.set(
+        id,
+        Object.freeze({
+          id,
+          ...item,
+          placement: Object.freeze({ ...item.placement }),
+          colors: Object.freeze({ ...item.colors }),
+        }),
+      )
+    }
+
+    for (const [id, item] of staged)
+      if (inventoryPlacementIssue(this.definition, staged, id, item.placement)) return
 
     return this.prepareBatch(staged)
   }

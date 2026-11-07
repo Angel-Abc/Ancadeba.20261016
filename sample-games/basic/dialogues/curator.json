@@ -1,0 +1,84 @@
+{
+  "schema-version": "1.0.0",
+  "id": "curator",
+  "labelKey": "dialogue.curator.title",
+  "entry": "greeting",
+  "nodes": {
+    "greeting": {
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.greeting"
+          }
+        }
+      ],
+      "choices": [
+        {
+          "id": "accept",
+          "labelKey": "dialogue.curator.accept",
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "harbour-survey",
+              "status": "not-started"
+            }
+          ],
+          "effects": [
+            {
+              "type": "start-quest",
+              "quest": "harbour-survey"
+            }
+          ],
+          "next": "accepted"
+        },
+        {
+          "id": "report",
+          "labelKey": "dialogue.curator.report",
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "harbour-survey",
+              "status": "ready"
+            }
+          ],
+          "effects": [
+            {
+              "type": "complete-quest",
+              "quest": "harbour-survey"
+            }
+          ],
+          "next": "thanks"
+        }
+      ]
+    },
+    "accepted": {
+      "terminal": true,
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.accepted"
+          }
+        }
+      ]
+    },
+    "thanks": {
+      "terminal": true,
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.thanks"
+          }
+        }
+      ]
+    }
+  }
+}

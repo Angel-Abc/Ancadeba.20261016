@@ -1,0 +1,186 @@
+{
+  "schema-version": "1.0.0",
+  "id": "ranger-post",
+  "title": "Ranger post",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "narrative",
+      "type": "text",
+      "text": "A ranger waits beside the woodland trail. Select the ranger and Talk. Accept the delivery, then talk again to hand over the letter.",
+      "placement": {
+        "row": 1,
+        "column": 4,
+        "rowSpan": 6,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "nearby",
+      "type": "nearby",
+      "label": "Nearby",
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 3
+      },
+      "entries": {
+        "ranger": {
+          "kind": "character",
+          "label": "Ranger",
+          "description": "A patient guardian of the trail.",
+          "dialogue": "ranger"
+        }
+      }
+    },
+    {
+      "id": "quests",
+      "type": "quest-log",
+      "placement": {
+        "row": 4,
+        "column": 1,
+        "rowSpan": 5,
+        "columnSpan": 3
+      },
+      "textTarget": "narrative"
+    },
+    {
+      "id": "items",
+      "type": "inventory",
+      "label": "Wayfarer inventory",
+      "owners": ["wayfarer"],
+      "readOnly": true,
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 8,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "progression",
+      "type": "character-progression",
+      "profile": "player",
+      "placement": {
+        "row": 7,
+        "column": 4,
+        "rowSpan": 2,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Talk",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "start"
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "equip"
+          }
+        },
+        "2": {
+          "label": "Reply 1",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "choose",
+              "position": 1
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "unequip"
+          }
+        },
+        "3": {
+          "label": "Reply 2",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "choose",
+              "position": 2
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "buy"
+          }
+        },
+        "4": {
+          "label": "End conversation",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "end"
+            }
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "sell"
+          }
+        },
+        "5": {
+          "label": "Turn in delivery",
+          "action": {
+            "type": "quest-action",
+            "journal": "quests",
+            "operation": "turn-in"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-5"
+          }
+        },
+        "6": {
+          "label": "Track quest",
+          "action": {
+            "type": "quest-action",
+            "journal": "quests",
+            "operation": "track"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-6"
+          }
+        },
+        "7": {
+          "label": "Return to wardrobe",
+          "action": {
+            "type": "enter-scene",
+            "scene": "wardrobe"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-7"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -7,10 +7,20 @@
   "assets": "wardrobe",
   "inventory": ["wardrobe"],
   "initial-scene": "gallery",
-  "scenes": ["gallery", "ember", "wardrobe", "shop", "training", "advanced-training"],
+  "scenes": [
+    "gallery",
+    "ember",
+    "wardrobe",
+    "shop",
+    "training",
+    "advanced-training",
+    "ranger-post"
+  ],
   "input": "controls",
   "rules": ["shop", "combat"],
   "combat": ["training", "advanced-training"],
   "leveling": ["player"],
-  "combatLibraries": ["common"]
+  "combatLibraries": ["common"],
+  "dialogues": ["ranger"],
+  "quests": ["ranger-letter"]
 }

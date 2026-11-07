@@ -3,7 +3,13 @@ import { z } from 'zod'
 export const bindingAliasSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/)
 
 export const gameBindingSchema = z.object({
-  source: z.enum(['game.state', 'game.progression', 'game.leveling', 'game.combatStats']),
+  source: z.enum([
+    'game.state',
+    'game.progression',
+    'game.leveling',
+    'game.combatStats',
+    'game.quests',
+  ]),
   path: z.array(z.union([z.string().min(1), z.number().int().nonnegative().safe()])).min(1),
   fallback: z.string().optional(),
 })

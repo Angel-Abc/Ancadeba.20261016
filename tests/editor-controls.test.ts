@@ -1,3 +1,4 @@
+import { bindStoryEditor } from '../apps/editor-ui/src/storyEditor.js'
 import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 /// <reference lib="dom" />
 import { describe, expect, it } from 'vite-plus/test'
@@ -1374,5 +1375,63 @@ describe('action bar editor controls', () => {
     })
     click('Discard input draft')
     expect(field('Physical key code').value).toBe('KeyQ')
+  })
+})
+
+describe('dialogue and quest editor controls', () => {
+  it('authors nodes and preserves a conflicting dialogue draft', () => {
+    const { root, initial, edit, click, submit, commands, field } = panel()
+    const editor = bindStoryEditor(root.asElement(), (command) => commands.push(command))
+    editor.render(initial, true)
+    click('Add dialogue')
+    edit('Definition ID', 'greeting')
+    edit('Name', 'A conversation')
+    edit('Dialogue text', 'Welcome back.')
+    editor.render(
+      {
+        ...initial,
+        view: { ...initial.view!, revision: 'changed' },
+        preserveDrafts: true,
+        conflict: true,
+      },
+      false,
+    )
+    expect(field('Name').value).toBe('A conversation')
+    submit('Save dialogue')
+    expect(commands[0]).toMatchObject({
+      type: 'game.upsertDialogue',
+      dialogue: {
+        id: 'greeting',
+        label: 'A conversation',
+        nodes: { start: { lines: [{ text: 'Welcome back.' }] } },
+      },
+    })
+    click('Add quest')
+    expect(root.textContent).toContain('Save or discard')
+    expect(editor.hasDrafts()).toBe(true)
+  })
+  it('authors quest objectives, hand-ins, rewards and a journal', () => {
+    const { root, initial, edit, click, submit, commands } = panel()
+    const editor = bindStoryEditor(root.asElement(), (command) => commands.push(command))
+    editor.render(initial, true)
+    click('Add quest')
+    edit('Name', 'Visit the shop')
+    submit('Save quest')
+    expect(commands[0]).toMatchObject({
+      type: 'game.upsertQuest',
+      quest: {
+        label: 'Visit the shop',
+        stages: [{ objectives: [{ when: [{ type: 'scene-is', scene: 'shop' }] }] }],
+      },
+    })
+    edit('Journal scene', 'shop')
+    edit('Journal Row', '3')
+    edit('Journal main text', 'description')
+    submit('Save quest journal')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.upsertComponent',
+      sceneId: 'shop',
+      component: { type: 'quest-log', textTarget: 'description', placement: { row: 3 } },
+    })
   })
 })

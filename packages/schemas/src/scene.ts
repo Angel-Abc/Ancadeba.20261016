@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { dialogueCommandSchema, questOperationSchema } from './story.js'
+import { questStatusSchema } from './storyConditions.js'
 import { gameIdSchema } from './game.js'
 import { translationKeySchema } from './languages.js'
 import {
@@ -107,6 +109,21 @@ export const actionBarSlotSchema = z
     labelKey: translationKeySchema.optional(),
     action: z.discriminatedUnion('type', [
       ...buttonActionSchema.options,
+      z.object({
+        type: z.literal('dialogue-action'),
+        nearby: gameIdSchema,
+        command: dialogueCommandSchema,
+      }),
+      z
+        .object({
+          type: z.literal('quest-action'),
+          quest: gameIdSchema.optional(),
+          journal: gameIdSchema.optional(),
+          operation: questOperationSchema,
+        })
+        .refine((action) => Boolean(action.quest) !== Boolean(action.journal), {
+          message: 'Choose a fixed quest or a quest journal',
+        }),
       z.object({
         type: z.literal('item-use'),
         inventory: gameIdSchema,
@@ -371,6 +388,8 @@ export type ShopComponentDefinition = z.infer<typeof shopComponentSchema>
 export const nearbyEntrySchema = z
   .object({
     kind: z.enum(['character', 'object']),
+    dialogue: gameIdSchema.optional(),
+    conversationId: gameIdSchema.optional(),
     label: z.string().trim().default(''),
     labelKey: translationKeySchema.optional(),
     description: z.string().default(''),
@@ -486,8 +505,22 @@ export type StatusEffectDefinition = z.infer<typeof statusEffectSchema>
 
 export type StatusValueDefinition = z.infer<typeof statusValueSchema>
 
+export const questLogComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('quest-log'),
+  placement: gridPlacementSchema,
+  label: z.string().default('Quests'),
+  labelKey: translationKeySchema.optional(),
+  quests: z.array(gameIdSchema).optional(),
+  statuses: z.array(questStatusSchema).default(['active', 'ready', 'completed']),
+  textTarget: gameIdSchema.optional(),
+})
+
+export type QuestLogComponentDefinition = z.infer<typeof questLogComponentSchema>
+
 export const sceneComponentSchema = z.discriminatedUnion('type', [
   combatComponentSchema,
+  questLogComponentSchema,
   characterProgressionComponentSchema,
   textComponentSchema,
   buttonComponentSchema,

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { worldConditionSchema } from './storyConditions.js'
 import { bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
 
@@ -8,8 +9,6 @@ const pathSchema = z
   .array(id.refine((segment) => !['__proto__', 'constructor', 'prototype'].includes(segment)))
   .min(1)
 
-const scalar = z.union([z.string(), z.number(), z.boolean()])
-
 export const ruleTextSchema = z.union([
   z.string(),
   z.strictObject({ textKey: translationKeySchema }),
@@ -18,9 +17,7 @@ export const ruleTextSchema = z.union([
 export const ruleValueSchema = z.union([ruleTextSchema, z.number(), z.boolean()])
 
 export const ruleConditionSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('scene-is'), scene: id }),
-  z.strictObject({ type: z.literal('state-is'), path: pathSchema, value: scalar }),
-  z.strictObject({ type: z.literal('item-carried-by'), item: id, owner: id }),
+  ...worldConditionSchema.options,
   z.strictObject({ type: z.literal('payload-is-item'), item: id }),
   z.strictObject({ type: z.literal('payload-is-target'), target: id }),
 ])
@@ -30,6 +27,8 @@ export const ruleEffectSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('move-item'), item: id, owner: id }),
   z.strictObject({ type: z.literal('enter-scene'), scene: id, mapView: id.optional() }),
   z.strictObject({ type: z.literal('append-log'), text: ruleTextSchema }),
+  z.strictObject({ type: z.literal('start-quest'), quest: id }),
+  z.strictObject({ type: z.literal('complete-quest'), quest: id }),
 ])
 
 const branchSchema = z

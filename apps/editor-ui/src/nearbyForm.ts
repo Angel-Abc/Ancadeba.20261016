@@ -145,6 +145,19 @@ export function nearbyForm(
         translation('Target description translation', entry.descriptionKey ?? '', keys, (value) => {
           entry.descriptionKey = value || undefined
         }),
+        select(
+          'Dialogue definition',
+          entry.dialogue ?? '',
+          ['', ...Object.keys(view.dialogues ?? {})],
+          (value) => {
+            entry.dialogue = value || undefined
+
+            if (!value) entry.conversationId = undefined
+          },
+        ),
+        input('Shared conversation ID (optional)', entry.conversationId ?? '', (value) => {
+          entry.conversationId = value || undefined
+        }),
         condition('Visible when true', entry.visibleWhen, (value) => {
           entry.visibleWhen = value
         }),

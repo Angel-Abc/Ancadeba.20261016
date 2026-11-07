@@ -1,3 +1,4 @@
+import { QuestLogComponentRenderer } from './questLogComponentRenderer.js'
 import { CharacterProgressionComponentRenderer } from './characterProgressionComponentRenderer.js'
 import type { SceneComponentData } from '@ancadeba/game-runtime'
 import { ButtonComponentRenderer } from './buttonComponentRenderer.js'
@@ -38,6 +39,7 @@ export class ComponentRenderer implements IComponentRenderer {
       equipment: new EquipmentComponentRenderer(),
       shop: new ShopComponentRenderer(),
       combat: new CombatComponentRenderer(),
+      'quest-log': new QuestLogComponentRenderer(),
       'character-progression': new CharacterProgressionComponentRenderer(),
       ...renderers,
     }
@@ -45,6 +47,8 @@ export class ComponentRenderer implements IComponentRenderer {
 
   render(component: SceneComponentData, context: ComponentRenderContext): RenderedComponent {
     switch (component.type) {
+      case 'quest-log':
+        return this.renderers['quest-log'].render(component, context)
       case 'character-progression':
         return this.renderers['character-progression'].render(component, context)
       case 'combat':

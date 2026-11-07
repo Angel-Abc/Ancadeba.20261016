@@ -1,5 +1,6 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type {
+  QuestLogComponentDefinition,
   ButtonComponentDefinition,
   LanguageSelectComponentDefinition,
   MapViewComponentDefinition,
@@ -16,6 +17,7 @@ import {
 } from './ruleFormControls.js'
 
 type BasicComponent =
+  | QuestLogComponentDefinition
   | TextComponentDefinition
   | ButtonComponentDefinition
   | LanguageSelectComponentDefinition
@@ -30,10 +32,11 @@ export const editableComponentTypes: readonly string[] = [
   'language-select',
   'map-view',
   'nearby',
+  'quest-log',
 ]
 
 const isBasic = (component: { type: string }): component is BasicComponent =>
-  ['text', 'button', 'language-select', 'map-view'].includes(component.type)
+  ['text', 'button', 'language-select', 'map-view', 'quest-log'].includes(component.type)
 
 /** Edits one scene component selected in the project explorer. */
 export function bindComponentEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -229,6 +232,41 @@ function componentFields(
     }),
     literal('Label translation', 'Use literal label'),
   ]
+
+  if (draft.type === 'quest-log')
+    return [
+      ...label,
+      input('Quest IDs (empty means all)', draft.quests?.join(', ') ?? '', (value) => {
+        draft.quests = value.trim() ? value.split(',').map((id) => id.trim()) : undefined
+      }),
+      select(
+        'Main text target',
+        draft.textTarget ?? '',
+        [
+          '',
+          ...(view.scenes
+            .find((scene) => scene.id === sceneId)
+            ?.components.filter((component) => component.type === 'text')
+            .map((component) => component.id) ?? []),
+        ],
+        (value) => {
+          draft.textTarget = value || undefined
+        },
+      ),
+      ...(['not-started', 'active', 'ready', 'completed'] as const).map((status) =>
+        select(
+          `Show ${status}`,
+          String(draft.statuses.includes(status)),
+          ['true', 'false'],
+          (value) => {
+            draft.statuses =
+              value === 'true'
+                ? [...new Set([...draft.statuses, status])]
+                : draft.statuses.filter((entry) => entry !== status)
+          },
+        ),
+      ),
+    ]
 
   if (draft.type === 'language-select') return label
 

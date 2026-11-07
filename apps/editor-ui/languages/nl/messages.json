@@ -160,5 +160,7 @@
   "rail.combat": "Gevechten",
   "rail.data": "Data",
   "welcome.heading": "Open een spel om te beginnen",
-  "welcome.body": "Kies links een spel uit de lijst. De schermen, illustraties en spelregels verschijnen dan in de verkenner."
+  "welcome.body": "Kies links een spel uit de lijst. De schermen, illustraties en spelregels verschijnen dan in de verkenner.",
+  "story.heading": "Dialogen en missies",
+  "rail.story": "Verhaal"
 }

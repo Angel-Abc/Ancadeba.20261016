@@ -1,3 +1,4 @@
+import { editStory } from './storyEditing.js'
 import { editLeveling } from './levelingEditing.js'
 import { assetCatalogFile, gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand } from './commands.js'
@@ -48,6 +49,13 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const changedFiles: string[] = []
 
   if (
+    command.type === 'game.upsertDialogue' ||
+    command.type === 'game.removeDialogue' ||
+    command.type === 'game.upsertQuest' ||
+    command.type === 'game.removeQuest'
+  ) {
+    changedFiles.push(...editStory(documents, game, command))
+  } else if (
     command.type === 'game.upsertCombatLibrary' ||
     command.type === 'game.removeCombatLibrary' ||
     command.type === 'combat.copySharedEntry'

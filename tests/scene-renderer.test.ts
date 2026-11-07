@@ -1863,6 +1863,72 @@ describe.each([
 
 describe('editor scene picker', () => {
   it.each([false, true])(
+    'uses dialogue replies and quest journals in preview=%s',
+    async (preview) => {
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(source, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+
+      const lifecycle = engine.lifecycle!,
+        game = lifecycle.currentGame!
+
+      const scene = lifecycle.activeScene!
+      game.nearby!.select(scene, 'nearby', 'curator')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+
+      const mainText = () =>
+        target.find((node) => node.dataset.componentId === 'narrative')!.textContent
+
+      slot('11').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(mainText()).toContain('Could you survey the old harbour')
+      expect(mainText()).toContain('curator')
+      expect(slot('12').textContent).toContain('I will survey the harbour.')
+      slot('12').focus()
+      engine.input!.pressKey('KeyX')
+      engine.input!.releaseKey('KeyX')
+      flush(engine)
+      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('active')
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      const journal = target.find((node) => node.dataset.quest === 'harbour-survey')!
+      journal.dispatchEvent(new Event('click'))
+      expect(mainText()).toContain('Visit the old harbour')
+      lifecycle.enterScene('old-harbour')
+      flush(engine)
+      lifecycle.enterScene('standard')
+      flush(engine)
+      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('ready')
+      game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
+      slot('11').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(slot('12').hidden).toBe(true)
+      expect(slot('13').textContent).toContain('I have returned')
+      slot('13').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('completed')
+      expect(mainText()).toContain('Here is your payment')
+      game.data.localization!.select('nl')
+      expect(mainText()).toContain('Hier zijn je betaling')
+      expect(
+        game.bindings!.read({ source: 'game.state', path: ['player', 'experience'] }),
+      ).toMatchObject({ value: 5 })
+      engine.stop()
+      expect(target.children).toHaveLength(0)
+    },
+  )
+
+  it.each([false, true])(
     'uses localized consumables through focused native buttons and keys in preview=%s',
     async (preview) => {
       const resources = {

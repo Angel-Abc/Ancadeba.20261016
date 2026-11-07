@@ -1,4 +1,10 @@
-import { levelingProfileSchema, characterProgressionComponentSchema } from '@ancadeba/schemas'
+import {
+  dialogueSchema,
+  questSchema,
+  questLogComponentSchema,
+  levelingProfileSchema,
+  characterProgressionComponentSchema,
+} from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
   itemUseSchema,
@@ -36,6 +42,7 @@ import {
 
 /** Scene components without a dedicated authoring command are saved whole. */
 export const basicComponentSchema = z.discriminatedUnion('type', [
+  questLogComponentSchema,
   textComponentSchema,
   buttonComponentSchema,
   languageSelectComponentSchema,
@@ -224,6 +231,10 @@ export const commandSchema = z.discriminatedUnion('type', [
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
   }),
+  z.strictObject({ type: z.literal('game.upsertDialogue'), dialogue: dialogueSchema }),
+  z.strictObject({ type: z.literal('game.removeDialogue'), dialogueId: gameIdSchema }),
+  z.strictObject({ type: z.literal('game.upsertQuest'), quest: questSchema }),
+  z.strictObject({ type: z.literal('game.removeQuest'), questId: gameIdSchema }),
   z.strictObject({ type: z.literal('game.upsertCombatLibrary'), library: combatLibrarySchema }),
   z.strictObject({ type: z.literal('game.removeCombatLibrary'), libraryId: gameIdSchema }),
   z.strictObject({
@@ -596,5 +607,46 @@ export const capabilities = {
         localId: 'local-attack',
       },
     },
+    {
+      type: 'game.upsertDialogue',
+      example: {
+        type: 'game.upsertDialogue',
+        dialogue: {
+          'schema-version': '1.0.0',
+          id: 'greeting',
+          label: 'Greeting',
+          entry: 'hello',
+          nodes: { hello: { terminal: true, lines: [{ text: 'Hello.' }] } },
+        },
+      },
+    },
+    {
+      type: 'game.removeDialogue',
+      example: { type: 'game.removeDialogue', dialogueId: 'greeting' },
+    },
+    {
+      type: 'game.upsertQuest',
+      example: {
+        type: 'game.upsertQuest',
+        quest: {
+          'schema-version': '1.0.0',
+          id: 'visit',
+          label: 'Visit',
+          stages: [
+            {
+              id: 'visit',
+              objectives: [
+                {
+                  id: 'visit',
+                  label: 'Visit the shop',
+                  when: [{ type: 'scene-is', scene: 'shop' }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { type: 'game.removeQuest', example: { type: 'game.removeQuest', questId: 'visit' } },
   ],
 }

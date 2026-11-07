@@ -16,11 +16,15 @@ import { GameActionRuntime } from './gameActionRuntime.js'
 import { GameMessageScopes } from './gameMessageScope.js'
 import { AuthoredPlaythrough } from './authoredRules.js'
 import type { ITradeState } from './tradeState.js'
+import type { IStoryStateTransactions } from './storyState.js'
 import type { IStateTransactions } from './stateTransactions.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
 export interface EngineRuntimeServices {
+  readonly createStoryStateTransactions?: (
+    game: GameInstance,
+  ) => IStoryStateTransactions | undefined
   readonly createStateTransactions?: (game: GameInstance) => IStateTransactions | undefined
   readonly createTradeState?: (game: GameInstance) => ITradeState | undefined
   readonly createGameRules?: GameRulesFactory
@@ -255,6 +259,7 @@ export class Engine implements IEngine {
           this.runtime.createTradeState?.(instance) ?? stateTransactions,
           stateTransactions,
           playthrough ? (time) => playthrough.updateClock(time) : undefined,
+          playthrough?.storyState ?? this.runtime.createStoryStateTransactions?.(instance),
         )
 
         session.gameRuntimes.set(instance, runtime)

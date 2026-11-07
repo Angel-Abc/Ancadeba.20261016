@@ -28,6 +28,14 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     const cleanups: (() => void)[] = []
     let latest: TextResolution = { text: component.text, diagnostics: [] }
     const scene = context.scene
+    const dialogue = scene?.type === 'game' ? scene.game.dialogue : undefined
+    const quests = scene?.type === 'game' ? scene.game.quests : undefined
+
+    const journals =
+      scene?.data.components.filter(
+        (entry) => entry.type === 'quest-log' && entry.textTarget === component.id,
+      ) ?? []
+
     const nearby = scene?.type === 'game' ? scene.game.nearby : undefined
     const trading = scene?.type === 'game' ? scene.game.trading : undefined
     const combat = scene?.type === 'game' ? scene.game.combat : undefined
@@ -85,6 +93,12 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
         text,
         entry?.label,
         entry?.description,
+        panel && scene ? dialogue?.text(scene, panel.id) : '',
+        ...journals.map((journal) => {
+          const selected = scene && quests?.selected(scene, journal.id)
+
+          return selected ? quests?.text(selected) : ''
+        }),
         ...items,
         ...inventoryPanels.map((panel) =>
           scene?.type === 'game' ? scene.game.itemUse?.feedback(scene, panel.id) : '',
@@ -112,6 +126,11 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
     }
 
     try {
+      const dialogueCleanup = dialogue?.subscribeChanges(() => updateText(latest))
+      const questCleanup = quests?.subscribeChanges(() => updateText(latest))
+
+      for (const cleanup of [dialogueCleanup, questCleanup]) if (cleanup) cleanups.push(cleanup)
+
       const leveling =
         scene?.type === 'game'
           ? scene.game.leveling?.subscribeChanges(() => updateText(latest))

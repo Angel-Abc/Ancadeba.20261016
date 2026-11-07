@@ -1,4 +1,4 @@
-import { levelingFile } from '@ancadeba/schemas'
+import { dialogueFile, questFile, levelingFile } from '@ancadeba/schemas'
 import { createHash } from 'node:crypto'
 import {
   gameSchema,
@@ -99,6 +99,10 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const id of game.data.rules ?? []) await read(ruleFile(id))
 
+      for (const id of game.data.dialogues ?? []) await read(dialogueFile(id))
+
+      for (const id of game.data.quests ?? []) await read(questFile(id))
+
       for (const id of game.data.leveling ?? []) await read(levelingFile(id))
 
       for (const id of game.data.combat ?? []) await read(combatFile(id))
@@ -154,7 +158,9 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
         (file) =>
           file.startsWith('combat/') ||
           file.startsWith('combat-libraries/') ||
-          file.startsWith('leveling/'),
+          file.startsWith('leveling/') ||
+          file.startsWith('dialogues/') ||
+          file.startsWith('quests/'),
       )
     ) {
       await this.saveDefinitions(folder, change)
@@ -296,17 +302,25 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
         if (
           (record.file.startsWith('combat/') ||
             record.file.startsWith('combat-libraries/') ||
-            record.file.startsWith('leveling/')) &&
+            record.file.startsWith('leveling/') ||
+            record.file.startsWith('dialogues/') ||
+            record.file.startsWith('quests/')) &&
           record.before &&
           ![
             ...(previous.combat ?? []).map(combatFile),
             ...(previous.combatLibraries ?? []).map(combatLibraryFile),
             ...(previous.leveling ?? []).map(levelingFile),
+            ...(previous.dialogues ?? []).map(dialogueFile),
+            ...(previous.quests ?? []).map(questFile),
           ].includes(record.file)
         )
           throw new EditorError(
             409,
-            record.file.startsWith('leveling/') ? 'leveling_exists' : 'combat_exists',
+            record.file.startsWith('leveling/')
+              ? 'leveling_exists'
+              : record.file.startsWith('dialogues/') || record.file.startsWith('quests/')
+                ? 'story_exists'
+                : 'combat_exists',
             'An unreferenced definition file already exists',
           )
     }
@@ -359,7 +373,12 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           500,
           records.some((record) => record.file.startsWith('leveling/'))
             ? 'leveling_publication_failed'
-            : 'combat_publication_failed',
+            : records.some(
+                  (record) =>
+                    record.file.startsWith('dialogues/') || record.file.startsWith('quests/'),
+                )
+              ? 'story_publication_failed'
+              : 'combat_publication_failed',
           'Could not confirm definition rollback. Reload the project before retrying.',
         )
       }

@@ -9,6 +9,8 @@ import type { ActionOutcome, GameRules } from './actions.js'
 import type { GameData } from './gameData.js'
 import type { GameInstance, IGameLifecycle } from './gameLifecycle.js'
 import type { IGameInventory } from './inventory.js'
+import { matchesConditions } from './storyConditions.js'
+import { MapStoryState } from './storyState.js'
 import { MapTradeState } from './tradeState.js'
 
 type Scalar = string | number | boolean
@@ -84,6 +86,44 @@ export class AuthoredPlaythrough {
     )
   }
 
+  get storyState(): MapStoryState {
+    return new MapStoryState(
+      this.state,
+      this.rules.state
+        .filter(
+          (field) =>
+            typeof field.value !== 'number' &&
+            ![this.rules.log?.path, this.rules.clock?.path].some(
+              (path) => JSON.stringify(path) === JSON.stringify(field.path),
+            ),
+        )
+        .map((field) => field.path),
+      {
+        prepare: (entries) => {
+          const log = this.rules.log
+
+          if (!log) return
+          const before = [...this.entries]
+          const clock = this.rules.clock && read(this.state, this.rules.clock.path)
+
+          const next = [...entries]
+            .reverse()
+            .map((text) => (typeof clock === 'string' ? `${clock}  ${text}` : text))
+            .concat(before)
+            .slice(0, log.capacity)
+
+          return {
+            isCurrent: () => JSON.stringify(this.entries) === JSON.stringify(before),
+            commit: () => {
+              this.entries.splice(0, this.entries.length, ...next)
+              set(this.state, log.path, next.join('\n'))
+            },
+          }
+        },
+      },
+    )
+  }
+
   constructor(
     private readonly rules: GameRulesDefinition,
     private readonly data: GameData,
@@ -146,6 +186,11 @@ export class AuthoredPlaythrough {
             const branch = branches.find(({ when }) =>
               when.every((condition) => {
                 switch (condition.type) {
+                  case 'state-compare':
+                  case 'item-owned-by':
+                  case 'quest-state':
+                  case 'combat-outcome':
+                    return matchesConditions([condition], { game, scene: lifecycle.activeScene })
                   case 'scene-is':
                     return scene === condition.scene
                   case 'state-is':
@@ -161,6 +206,38 @@ export class AuthoredPlaythrough {
             )
 
             if (!branch) return rejected(`No matching branch for action ${id}`)
+
+            if (
+              branch.effects.some(
+                (effect) => effect.type === 'start-quest' || effect.type === 'complete-quest',
+              )
+            ) {
+              const origin = lifecycle.activeScene
+
+              if (
+                !origin ||
+                branch.effects.some(
+                  (effect) => effect.type === 'move-item' || effect.type === 'enter-scene',
+                )
+              )
+                return rejected('Quest transactions cannot include legacy movement effects')
+
+              const effects = branch.effects.filter(
+                (effect) => effect.type !== 'move-item' && effect.type !== 'enter-scene',
+              )
+
+              const prepared = game.quests?.prepareEffects(origin, effects)
+
+              if (!prepared?.isCurrent()) return rejected('Quest transaction is unavailable')
+              prepared.commit()
+              completeCommittedEffect(
+                () => prepared.notify(),
+                () => true,
+                logger,
+              )
+
+              return { status: 'applied', worldTimeCostMs: 0 }
+            }
 
             let cost = 0
 

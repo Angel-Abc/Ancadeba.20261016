@@ -1,4 +1,10 @@
 import {
+  localizeStory,
+  storyIssues,
+  type DialogueDefinition,
+  type QuestDefinition,
+} from '@ancadeba/schemas'
+import {
   combatLibraryIssues,
   itemUseIssues,
   localizeCombatLibrary,
@@ -79,7 +85,10 @@ export interface LanguageSelectComponentData {
 }
 
 export type SceneComponentData =
-  | Extract<SceneDefinition['components'][number], { type: 'combat' | 'character-progression' }>
+  | Extract<
+      SceneDefinition['components'][number],
+      { type: 'combat' | 'character-progression' | 'quest-log' }
+    >
   | TextComponentData
   | ButtonComponentData
   | LanguageSelectComponentData
@@ -124,6 +133,8 @@ export interface SceneData {
 }
 
 export interface GameData {
+  readonly dialogues?: ReadonlyMap<string, DialogueDefinition> | undefined
+  readonly quests?: ReadonlyMap<string, QuestDefinition> | undefined
   readonly leveling?: ReadonlyMap<string, LevelingProfile> | undefined
   readonly combatLibraries?: ReadonlyMap<string, CombatLibrary> | undefined
   readonly combat?: ReadonlyMap<string, CombatDefinition> | undefined
@@ -158,6 +169,8 @@ export function assembleGameData(
   combatDefinitions: ReadonlyMap<string, CombatSource> = new Map(),
   levelingDefinitions: ReadonlyMap<string, LevelingProfile> = new Map(),
   combatLibraries: ReadonlyMap<string, CombatLibrary> = new Map(),
+  dialogueDefinitions: ReadonlyMap<string, DialogueDefinition> = new Map(),
+  questDefinitions: ReadonlyMap<string, QuestDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -247,6 +260,26 @@ export function assembleGameData(
     combat.set(id, freezeCombatDefinition(localizeCombat(encounter, ruleTranslation)))
   }
 
+  const dialogues = new Map(
+    (definition.dialogues ?? []).map((id) => {
+      const value = dialogueDefinitions.get(id)
+
+      if (!value) throw new Error(`Missing dialogue: ${id}`)
+
+      return [id, localizeStory(value, ruleTranslation)] as const
+    }),
+  )
+
+  const quests = new Map(
+    (definition.quests ?? []).map((id) => {
+      const value = questDefinitions.get(id)
+
+      if (!value) throw new Error(`Missing quest: ${id}`)
+
+      return [id, localizeStory(value, ruleTranslation)] as const
+    }),
+  )
+
   const leveling = new Map<string, LevelingProfile>()
 
   for (const id of definition.leveling ?? []) {
@@ -255,6 +288,20 @@ export function assembleGameData(
     if (!profile) throw new Error(`Missing leveling profile: ${id}`)
     leveling.set(id, localizeLeveling(profile, ruleTranslation))
   }
+
+  const storyIssue = storyIssues({
+    dialogues,
+    quests,
+    scenes: sceneDefinitions,
+    rules: validated?.rules,
+    inventory,
+    combat,
+    assets,
+    leveling,
+    translation: ruleTranslation,
+  })[0]
+
+  if (storyIssue) throw new Error(`${storyIssue.file}: ${storyIssue.message}`)
 
   const levelingIssue = levelingIssues(
     leveling,
@@ -271,6 +318,8 @@ export function assembleGameData(
     sceneDefinitions,
     assets,
     validated?.rules,
+    dialogues,
+    quests,
   ])[0]
 
   if (statIssue) throw new Error(`Equipment stats: ${statIssue.message}`)
@@ -575,6 +624,8 @@ export function assembleGameData(
   }
 
   return {
+    ...(dialogues.size ? { dialogues } : {}),
+    ...(quests.size ? { quests } : {}),
     ...(leveling.size && { leveling }),
     ...(declaredLibraries.size
       ? {

@@ -1,4 +1,11 @@
-import { levelingFile, levelingProfileSchema } from '@ancadeba/schemas'
+import {
+  dialogueFile,
+  questFile,
+  dialogueSchema,
+  questSchema,
+  levelingFile,
+  levelingProfileSchema,
+} from '@ancadeba/schemas'
 import {
   gameSchema,
   inputSchema,
@@ -115,6 +122,22 @@ export class GameLoader implements IGameLoader {
       ),
     )
 
+    const dialogues = new Map(
+      await Promise.all(
+        (definition.dialogues ?? []).map(
+          async (id) => [id, await this.resources.load(dialogueFile(id), dialogueSchema)] as const,
+        ),
+      ),
+    )
+
+    const quests = new Map(
+      await Promise.all(
+        (definition.quests ?? []).map(
+          async (id) => [id, await this.resources.load(questFile(id), questSchema)] as const,
+        ),
+      ),
+    )
+
     if (!definition.languages)
       return {
         ...assembleGameData(
@@ -129,6 +152,8 @@ export class GameLoader implements IGameLoader {
           combat,
           leveling,
           libraries,
+          dialogues,
+          quests,
         ),
         ...styling,
       }
@@ -174,6 +199,8 @@ export class GameLoader implements IGameLoader {
           combat,
           leveling,
           libraries,
+          dialogues,
+          quests,
         ),
         ...styling,
         language: tag,
@@ -201,6 +228,12 @@ export class GameLoader implements IGameLoader {
       },
       get scenes() {
         return localization.current.scenes
+      },
+      get dialogues() {
+        return variants.get(localization.current.language)?.dialogues
+      },
+      get quests() {
+        return variants.get(localization.current.language)?.quests
       },
       get inventory() {
         return localization.current.inventory

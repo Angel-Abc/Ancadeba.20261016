@@ -158,6 +158,17 @@
             "context": "wardrobe",
             "input": "slot-6"
           }
+        },
+        "7": {
+          "label": "Visit ranger post",
+          "action": {
+            "type": "enter-scene",
+            "scene": "ranger-post"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-7"
+          }
         }
       }
     }

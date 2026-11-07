@@ -120,7 +120,8 @@
             "talk": {
               "action": "talk-curator"
             }
-          }
+          },
+          "dialogue": "curator"
         },
         "folded-letter": {
           "kind": "object",
@@ -228,7 +229,7 @@
       "placement": {
         "row": 5,
         "column": 11,
-        "rowSpan": 4,
+        "rowSpan": 2,
         "columnSpan": 2
       },
       "owners": ["player"],
@@ -383,8 +384,90 @@
             "context": "gameplay",
             "input": "slot-10"
           }
+        },
+        "11": {
+          "labelKey": "dialogue.talk",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "start"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-11"
+          }
+        },
+        "12": {
+          "labelKey": "dialogue.reply1",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "choose",
+              "position": 1
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "labelKey": "dialogue.reply2",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "choose",
+              "position": 2
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
+        },
+        "14": {
+          "labelKey": "dialogue.end",
+          "action": {
+            "type": "dialogue-action",
+            "nearby": "nearby",
+            "command": {
+              "type": "end"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "labelKey": "quest.turnIn",
+          "action": {
+            "type": "quest-action",
+            "quest": "harbour-survey",
+            "operation": "turn-in"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
         }
       }
+    },
+    {
+      "id": "quests",
+      "type": "quest-log",
+      "labelKey": "quest.journal",
+      "placement": {
+        "row": 7,
+        "column": 11,
+        "rowSpan": 2,
+        "columnSpan": 2
+      },
+      "textTarget": "narrative"
     }
   ],
   "titleKey": "scenes.standard.title",

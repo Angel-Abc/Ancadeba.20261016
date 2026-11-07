@@ -18,7 +18,13 @@ import type {
   TurnRosterChanged,
 } from './turns.js'
 
+import type { QuestRequest } from './quests.js'
+import type { DialogueRequest } from './dialogue.js'
+
 export interface EngineMessages {
+  'quests.evaluate': Record<string, never>
+  'quest.request': QuestRequest
+  'dialogue.request': DialogueRequest
   'item-use.request': ItemUseRequest
   'combat.command': CombatCommandRequest
   'turn.started': TurnStarted

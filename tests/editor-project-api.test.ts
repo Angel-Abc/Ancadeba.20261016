@@ -83,6 +83,126 @@ describe('shared editor project API', () => {
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
 
+  it.each(['success', 'before-manifest', 'after-manifest'] as const)(
+    'publishes dialogue files with revision checks and rollback: %s',
+    async (failure) => {
+      const before = await inspect()
+      const original = await readFile(join(root, 'basic/game.json'), 'utf8')
+      let failed = false
+
+      const failing: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+        write: async (path, bytes) => {
+          if (!failed && path.endsWith('game.json') && failure !== 'success') {
+            failed = true
+
+            if (failure === 'after-manifest') await workspace.write(path, bytes)
+            throw new Error('Story publication failed')
+          }
+
+          return workspace.write(path, bytes)
+        },
+      }
+
+      const service = new EditorProjectService(
+        new WorkspaceProjectRepository(failing),
+        new EditorCoordinator(),
+      )
+
+      const operation = {
+        type: 'game.upsertDialogue',
+        dialogue: {
+          'schema-version': '1.0.0',
+          id: 'greeting',
+          label: 'Greeting',
+          entry: 'hello',
+          nodes: { hello: { terminal: true, lines: [{ text: 'Hello.' }] } },
+        },
+      }
+
+      const saving = service.apply({
+        path: 'basic',
+        expectedRevision: before.revision,
+        command: operation,
+      })
+
+      if (failure === 'before-manifest') {
+        await expect(saving).rejects.toThrow('Story publication failed')
+        expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(original)
+        await expect(readFile(join(root, 'basic/dialogues/greeting.json'))).rejects.toHaveProperty(
+          'code',
+          'ENOENT',
+        )
+      } else {
+        const saved = await saving
+        expect(saved.view.dialogues!.greeting!.entry).toBe('hello')
+        await expect(
+          service.apply({ path: 'basic', expectedRevision: before.revision, command: operation }),
+        ).rejects.toMatchObject({ status: 409 })
+        await writeFile(
+          join(root, 'basic/dialogues/greeting.json'),
+          JSON.stringify({ ...saved.view.dialogues!.greeting!, extension: 'external' }),
+        )
+        await expect(
+          service.apply({
+            path: 'basic',
+            expectedRevision: saved.view.revision,
+            command: operation,
+          }),
+        ).rejects.toMatchObject({ status: 409 })
+      }
+    },
+  )
+  it('creates, updates and protects quest resources through the shared API', async () => {
+    await command((await inspect()).revision, {
+      type: 'scene.create',
+      scene: { ...scene, type: 'game' },
+    })
+    const before = await inspect()
+
+    const operation = {
+      type: 'game.upsertQuest',
+      quest: {
+        'schema-version': '1.0.0',
+        id: 'visit',
+        label: 'Visit shop',
+        stages: [
+          {
+            id: 'visit',
+            objectives: [
+              { id: 'visit', label: 'Visit', when: [{ type: 'scene-is', scene: 'shop' }] },
+            ],
+          },
+        ],
+      },
+    }
+
+    expect((await command(before.revision, operation)).status).toBe(200)
+    const saved = await inspect()
+    expect(saved.quests!.visit!.stages[0]!.id).toBe('visit')
+    expect((await command(before.revision, operation)).status).toBe(409)
+    expect(
+      (
+        await command(saved.revision, {
+          type: 'scene.upsertComponent',
+          sceneId: 'shop',
+          component: {
+            id: 'journal',
+            type: 'quest-log',
+            quests: ['visit'],
+            placement: { row: 1, column: 1 },
+          },
+        })
+      ).status,
+    ).toBe(200)
+    const linked = await inspect()
+    expect(
+      (await command(linked.revision, { type: 'game.removeQuest', questId: 'visit' })).status,
+    ).toBe(422)
+  })
   it.each(['success', 'before-scene', 'after-scene'] as const)(
     'publishes a leveling profile, manifest and view consistently: %s',
     async (failure) => {
@@ -993,7 +1113,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(37)
+    expect((await capabilities.json()).commands).toHaveLength(41)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

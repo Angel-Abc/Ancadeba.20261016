@@ -1,4 +1,11 @@
-import { levelingProfileSchema, levelingFile } from '@ancadeba/schemas'
+import {
+  dialogueSchema,
+  dialogueFile,
+  questSchema,
+  questFile,
+  levelingProfileSchema,
+  levelingFile,
+} from '@ancadeba/schemas'
 import {
   gameSchema,
   sceneSchema,
@@ -101,6 +108,12 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
   )
 
   return {
+    dialogues: parsedFiles(
+      game.data?.dialogues,
+      dialogueFile,
+      (value) => dialogueSchema.safeParse(value).data,
+    ),
+    quests: parsedFiles(game.data?.quests, questFile, (value) => questSchema.safeParse(value).data),
     combatLibraries,
     combatSources,
     combatOrigins: Object.fromEntries(resolved.map(([id, result]) => [id, result.origins])),

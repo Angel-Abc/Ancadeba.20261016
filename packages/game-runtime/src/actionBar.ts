@@ -1,3 +1,5 @@
+import type { IGameDialogue } from './dialogue.js'
+import type { IGameQuests, StoryCapture } from './quests.js'
 import type { IGameItemUse, ItemUseCapture } from './itemUse.js'
 import { inventoryEntry, type ActionBarSlotDefinition } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
@@ -24,6 +26,7 @@ export interface IGameActionBar {
 }
 
 interface CapturedSlot {
+  readonly storyCapture?: StoryCapture | undefined
   readonly itemCapture?: ItemUseCapture | undefined
   readonly combatCapture?: CombatCapture | undefined
   readonly scene: SceneInstance
@@ -55,6 +58,9 @@ export class GameActionBar implements IGameActionBar {
     private readonly trading: IGameTrading | undefined = lifecycle.currentGame?.trading,
     private readonly combat: () => IGameCombat | undefined = () => lifecycle.currentGame?.combat,
     private readonly itemUse: () => IGameItemUse | undefined = () => lifecycle.currentGame?.itemUse,
+    private readonly dialogue: () => IGameDialogue | undefined = () =>
+      lifecycle.currentGame?.dialogue,
+    private readonly quests: () => IGameQuests | undefined = () => lifecycle.currentGame?.quests,
   ) {
     this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
     this.inventoryContext = selection ?? this.ownedContext!
@@ -76,6 +82,8 @@ export class GameActionBar implements IGameActionBar {
     const trading = this.trading?.subscribeChanges(listener)
     const combat = this.combat()?.subscribeChanges(listener)
     const items = this.itemUse()?.subscribeChanges(listener)
+    const dialogue = this.dialogue()?.subscribeChanges(listener)
+    const quests = this.quests()?.subscribeChanges(listener)
 
     return () => {
       inventory()
@@ -85,6 +93,8 @@ export class GameActionBar implements IGameActionBar {
       trading?.()
       combat?.()
       items?.()
+      dialogue?.()
+      quests?.()
     }
   }
 
@@ -105,6 +115,7 @@ export class GameActionBar implements IGameActionBar {
   ):
     | {
         definition: ActionBarSlotDefinition
+        storyCapture?: StoryCapture | undefined
         itemCapture?: ItemUseCapture | undefined
         combatCapture?: CombatCapture | undefined
         payload?: string
@@ -118,6 +129,25 @@ export class GameActionBar implements IGameActionBar {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'dialogue-action') {
+      const action = definition.action
+
+      const reply =
+        action.command.type === 'choose'
+          ? this.dialogue()?.reply(scene, action.nearby, action.command.position)
+          : undefined
+
+      if (action.command.type === 'choose' && !reply) return
+
+      return {
+        definition: reply ? { ...definition, label: reply.label, labelKey: undefined } : definition,
+        storyCapture: this.dialogue()?.capture(scene, action.nearby, action.command),
+      }
+    }
+
+    if (definition.action.type === 'quest-action')
+      return { definition, storyCapture: this.quests()?.capture(scene) }
 
     if (definition.action.type === 'item-use')
       return {
@@ -210,6 +240,23 @@ export class GameActionBar implements IGameActionBar {
 
     if (!action) return false
 
+    if (action.type === 'dialogue-action')
+      return Boolean(
+        this.dialogue() &&
+        this.dialogue()?.reason(scene, action.nearby, action.command) === undefined,
+      )
+
+    if (action.type === 'quest-action') {
+      const quest =
+        action.quest ?? (action.journal && this.quests()?.selected(scene, action.journal))
+
+      return Boolean(
+        quest &&
+        this.quests() &&
+        this.quests()?.reason(scene, quest, action.operation) === undefined,
+      )
+    }
+
     if (action.type === 'item-use')
       return Boolean(
         this.itemUse() &&
@@ -249,6 +296,7 @@ export class GameActionBar implements IGameActionBar {
       selection: resolved?.selection,
       combatCapture: resolved?.combatCapture,
       itemCapture: resolved?.itemCapture,
+      storyCapture: resolved?.storyCapture,
     })
   }
 
@@ -264,6 +312,26 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'dialogue-action' || action.type === 'quest-action') {
+      if (
+        !target.storyCapture ||
+        target.storyCapture.signature !== resolved.storyCapture?.signature
+      )
+        return
+
+      if (action.type === 'dialogue-action')
+        this.dialogue()?.request(scene, action.nearby, action.command, target.storyCapture, origin)
+      else {
+        const quest =
+          action.quest ?? (action.journal && this.quests()?.selected(scene, action.journal))
+
+        if (quest)
+          this.quests()?.request(scene, quest, action.operation, target.storyCapture, origin)
+      }
+
+      return
+    }
 
     if (action.type === 'item-use') {
       if (resolved.itemCapture === target.itemCapture)
@@ -333,14 +401,15 @@ export class GameActionBar implements IGameActionBar {
 
         const resolved = bar && slot && this.resolve(scene, bar.id, slot[0])
 
-        if (bar && slot && resolved)
+        if (bar && slot && (resolved || slot[1].action.type === 'dialogue-action'))
           target = {
             scene,
             bar: bar.id,
             slot: slot[0],
-            selection: resolved.selection,
-            combatCapture: resolved.combatCapture,
-            itemCapture: resolved.itemCapture,
+            selection: resolved?.selection,
+            combatCapture: resolved?.combatCapture,
+            itemCapture: resolved?.itemCapture,
+            storyCapture: resolved?.storyCapture,
           }
       }
 

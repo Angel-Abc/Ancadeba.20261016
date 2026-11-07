@@ -74,6 +74,7 @@ export interface CombatSnapshot {
 }
 
 export interface IGameCombat {
+  outcome?(encounter: string): CombatOutcome | undefined
   itemIssue(scene: SceneInstance, component: string, item: string): string | undefined
   unfinishedOwner(owner: string): boolean
   moveIssue(scene: SceneInstance, component: string, move: string): string | undefined
@@ -120,6 +121,9 @@ interface Session {
 
 /** Playthrough-owned encounter plans. All commands use the scoped message queue. */
 export class GameCombat implements IGameCombat {
+  outcome(encounter: string): CombatOutcome | undefined {
+    return this.sessions.get(encounter)?.outcome
+  }
   private readonly sessions = new Map<string, Session>()
   private readonly listeners = new Set<() => void>()
   private readonly cleanups: (() => void)[]

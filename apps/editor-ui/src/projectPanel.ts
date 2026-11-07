@@ -7,6 +7,7 @@ import { editorLocalization } from './localization.js'
 import { bindAssetsPanel } from './assetsPanel.js'
 import { bindProjectTree } from './projectTreeView.js'
 import { bindRulesPanel } from './rulesPanel.js'
+import { bindStoryEditor } from './storyEditor.js'
 import { bindActionBarPanel } from './actionBarPanel.js'
 import { bindStatusPanelEditor } from './statusPanelEditor.js'
 import { bindItemEditor } from './itemEditor.js'
@@ -166,6 +167,8 @@ export function bindProjectPanel(
   let assetTarget = ''
   const treeElement = root.querySelector<HTMLElement>('#project-tree')
   const rulesElement = treeElement && root.querySelector<HTMLElement>('#rules-panel')
+  const storyElement = treeElement && root.querySelector<HTMLElement>('#story-editor')
+  let storyEditor: ReturnType<typeof bindStoryEditor> | undefined
   const actionBarElement = treeElement && root.querySelector<HTMLElement>('#action-bar-panel')
   const statusPanelElement = treeElement && root.querySelector<HTMLElement>('#status-panel-editor')
   let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
@@ -186,6 +189,7 @@ export function bindProjectPanel(
 
   const sections = [
     ...projectTreeSections,
+    ...(storyElement ? [{ id: 'story', labelKey: 'story.heading', nodes: () => [] }] : []),
     ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: ruleFileNodes }] : []),
     ...(actionBarElement
       ? [{ id: 'controls', labelKey: 'controls.heading', nodes: () => [] }]
@@ -252,6 +256,8 @@ export function bindProjectPanel(
     create.hidden = node.section !== 'scenes' || !['section', 'new-scene'].includes(node.kind)
     fields.hidden = metadata.hidden && sceneMetadata.hidden && create.hidden
     find('assets-panel').hidden = node.section !== 'assets' && !graphic
+
+    if (storyElement) storyElement.hidden = node.section !== 'story'
 
     if (rulesElement) rulesElement.hidden = node.section !== 'rules'
 
@@ -461,6 +467,7 @@ export function bindProjectPanel(
     combatEditor?.render(state, replaceFields)
     levelingEditor?.render(state, replaceFields)
     componentEditor?.render(state, replaceFields)
+    storyEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     view = state.view
@@ -681,6 +688,11 @@ export function bindProjectPanel(
       void controller.save(command)
     })
 
+  if (storyElement)
+    storyEditor = bindStoryEditor(storyElement, (command) => {
+      void controller.save(command)
+    })
+
   if (combatElement)
     combatEditor = bindCombatEditor(combatElement, (command) => {
       void controller.save(command)
@@ -773,7 +785,8 @@ export function bindProjectPanel(
       shopEditor?.hasDrafts() ||
       combatEditor?.hasDrafts() ||
       levelingEditor?.hasDrafts() ||
-      componentEditor?.hasDrafts(),
+      componentEditor?.hasDrafts() ||
+      storyEditor?.hasDrafts(),
     )
 
   on(reload, 'click', () => {

@@ -1,4 +1,4 @@
-import { levelingProfileSchema } from '@ancadeba/schemas'
+import { dialogueSchema, questSchema, levelingProfileSchema } from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
   gameSchema,
@@ -24,6 +24,8 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  dialogues: z.record(gameIdSchema, dialogueSchema).optional(),
+  quests: z.record(gameIdSchema, questSchema).optional(),
   leveling: z.record(gameIdSchema, levelingProfileSchema).optional(),
   combat: z.record(gameIdSchema, combatDefinitionSchema).optional(),
   combatSources: z.record(gameIdSchema, combatSourceSchema).optional(),

@@ -1,4 +1,4 @@
-import type { LevelingProfile } from '@ancadeba/schemas'
+import type { DialogueDefinition, QuestDefinition, LevelingProfile } from '@ancadeba/schemas'
 import {
   ruleFile,
   inventoryFile,
@@ -33,6 +33,8 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  dialogues?: Record<string, DialogueDefinition> | undefined
+  quests?: Record<string, QuestDefinition> | undefined
   leveling?: Record<string, LevelingProfile> | undefined
   combat?: Record<string, CombatDefinition> | undefined
   combatSources?: Record<string, CombatSource> | undefined

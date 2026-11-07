@@ -1,0 +1,56 @@
+{
+  "schema-version": "1.0.0",
+  "id": "ranger-letter",
+  "label": "A letter for the ranger",
+  "description": "Deliver the exact letter from your inventory, then claim a dyed cloak and XP.",
+  "stages": [
+    {
+      "id": "deliver",
+      "label": "Deliver the letter",
+      "objectives": [
+        {
+          "id": "letter",
+          "label": "Bring the letter to the ranger",
+          "when": [
+            {
+              "type": "item-owned-by",
+              "item": "letter",
+              "owner": "wayfarer"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "handIns": [
+    {
+      "item": "letter",
+      "owner": "wayfarer",
+      "operation": "transfer",
+      "recipient": "ranger"
+    }
+  ],
+  "rewards": {
+    "recipient": "wayfarer",
+    "numeric": [
+      {
+        "id": "xp",
+        "label": "XP",
+        "field": {
+          "source": "game.state",
+          "path": ["experience"]
+        },
+        "amount": 5
+      }
+    ],
+    "items": [
+      {
+        "id": "cloak",
+        "itemType": "cloak",
+        "colors": {
+          "fabric": "#6859b8"
+        }
+      }
+    ]
+  }
+}

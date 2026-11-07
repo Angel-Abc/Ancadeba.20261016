@@ -63,6 +63,13 @@ export function rulesDefinitionForm(
         return { type, scene: sceneIds[0] ?? '' }
       case 'state-is':
         return { type, path: firstPath(), value: firstValue() }
+      case 'state-compare':
+        return { type, path: firstPath(), operator: 'gte', value: 1 }
+      case 'quest-state':
+        return { type, quest: Object.keys(view.quests ?? {})[0] ?? '', status: 'completed' }
+      case 'combat-outcome':
+        return { type, encounter: Object.keys(view.combat ?? {})[0] ?? '', outcome: 'victory' }
+      case 'item-owned-by':
       case 'item-carried-by':
         return { type, item: items[0] ?? '', owner: owners[0] ?? '' }
       case 'payload-is-item':
@@ -88,6 +95,9 @@ export function rulesDefinitionForm(
         return { type, item: items[0] ?? '', owner: owners[0] ?? '' }
       case 'enter-scene':
         return { type, scene: sceneIds[0] ?? '' }
+      case 'start-quest':
+      case 'complete-quest':
+        return { type, quest: Object.keys(view.quests ?? {})[0] ?? '' }
       case 'append-log':
         return { type, text: '' }
     }
@@ -315,6 +325,10 @@ export function rulesDefinitionForm(
             [
               ['scene-is', 'Active scene'],
               ['state-is', 'State equals'],
+              ['state-compare', 'Compare numeric state'],
+              ['quest-state', 'Quest status'],
+              ['combat-outcome', 'Recorded combat outcome'],
+              ['item-owned-by', 'Item owned, including containers'],
               ['item-carried-by', 'Item carried by owner'],
               ['payload-is-item', 'Request is for item'],
               ['payload-is-target', 'Request is for nearby target'],
@@ -334,6 +348,52 @@ export function rulesDefinitionForm(
           )
 
         if (entry.type === 'state-is') field.append(...stateField(entry))
+
+        if (entry.type === 'state-compare')
+          field.append(
+            select('State field', statePath(entry.path), fields, (value) => {
+              entry.path = parseStatePath(value)
+            }),
+            select('Comparison', entry.operator, ['eq', 'gte', 'lte', 'gt', 'lt'], (value) => {
+              entry.operator = value
+            }),
+            input(
+              'Required amount',
+              String(entry.value),
+              (value) => {
+                entry.value = Number(value)
+              },
+              'number',
+            ),
+          )
+
+        if (entry.type === 'quest-state')
+          field.append(
+            select('Quest', entry.quest, Object.keys(view.quests ?? {}), (value) => {
+              entry.quest = value
+            }),
+            select(
+              'Quest status',
+              entry.status,
+              ['not-started', 'active', 'ready', 'completed'],
+              (value) => {
+                entry.status = value
+              },
+            ),
+            input('Optional stage ID', entry.stage ?? '', (value) => {
+              entry.stage = value || undefined
+            }),
+          )
+
+        if (entry.type === 'combat-outcome')
+          field.append(
+            select('Encounter', entry.encounter, Object.keys(view.combat ?? {}), (value) => {
+              entry.encounter = value
+            }),
+            select('Outcome', entry.outcome, ['victory', 'defeat', 'escaped'], (value) => {
+              entry.outcome = value
+            }),
+          )
 
         if (entry.type === 'payload-is-target')
           field.append(
@@ -397,6 +457,8 @@ export function rulesDefinitionForm(
               ['move-item', 'Move carried item'],
               ['enter-scene', 'Enter game scene'],
               ['append-log', 'Append to activity log'],
+              ['start-quest', 'Start quest'],
+              ['complete-quest', 'Complete ready quest'],
             ],
             (next) =>
               change(() => {
@@ -406,6 +468,13 @@ export function rulesDefinitionForm(
         )
 
         if (entry.type === 'set-state') field.append(...stateField(entry))
+
+        if (entry.type === 'start-quest' || entry.type === 'complete-quest')
+          field.append(
+            select('Quest', entry.quest, Object.keys(view.quests ?? {}), (value) => {
+              entry.quest = value
+            }),
+          )
 
         if (entry.type === 'move-item')
           field.append(

@@ -1,6 +1,8 @@
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   gameBindingSchema,
+  dialogueCommandSchema,
+  questOperationSchema,
   type ActionBarComponentDefinition,
   type ActionBarSlotDefinition,
 } from '@ancadeba/schemas'
@@ -109,6 +111,8 @@ export function actionBarForm(
         ['equipment-action', 'Equipment command'],
         ['shop-action', 'Shop command'],
         ['combat-action', 'Combat command'],
+        ['dialogue-action', 'Dialogue command'],
+        ['quest-action', 'Quest command'],
       ],
       (type) =>
         change(() => {
@@ -121,26 +125,34 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'item-use'
-                ? { type, inventory: inventoryPanels[0]?.id ?? '', combat: combats[0]?.id }
-                : type === 'combat-action'
-                  ? { type, combat: combats[0]?.id ?? '', command: { type: 'end-turn' } }
-                  : type === 'shop-action'
-                    ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
-                    : type === 'equipment-action'
-                      ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
-                      : type === 'move-map'
-                        ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                        : type === 'nearby-action'
-                          ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                          : type === 'inventory-action'
-                            ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                            : type === 'request-action'
-                              ? { type, action: actions[0] ?? '' }
-                              : {
-                                  type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                                  scene: gameScenes[0] ?? '',
-                                },
+              type === 'dialogue-action'
+                ? { type, nearby: nearbyPanels[0]?.id ?? '', command: { type: 'start' } }
+                : type === 'quest-action'
+                  ? { type, quest: Object.keys(view.quests ?? {})[0] ?? '', operation: 'start' }
+                  : type === 'item-use'
+                    ? { type, inventory: inventoryPanels[0]?.id ?? '', combat: combats[0]?.id }
+                    : type === 'combat-action'
+                      ? { type, combat: combats[0]?.id ?? '', command: { type: 'end-turn' } }
+                      : type === 'shop-action'
+                        ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
+                        : type === 'equipment-action'
+                          ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
+                          : type === 'move-map'
+                            ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                            : type === 'nearby-action'
+                              ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                              : type === 'inventory-action'
+                                ? {
+                                    type,
+                                    inventory: inventoryPanels[0]?.id ?? '',
+                                    action: 'inspect',
+                                  }
+                                : type === 'request-action'
+                                  ? { type, action: actions[0] ?? '' }
+                                  : {
+                                      type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                                      scene: gameScenes[0] ?? '',
+                                    },
           }
         }),
     ),
@@ -162,6 +174,87 @@ export function actionBarForm(
       ),
     )
     const action = slot.action
+
+    if (action.type === 'dialogue-action') {
+      detail.append(
+        select(
+          'Dialogue nearby panel',
+          action.nearby,
+          nearbyPanels.map((panel) => panel.id),
+          (value) => {
+            action.nearby = value
+          },
+        ),
+        select(
+          'Dialogue command',
+          action.command.type,
+          ['start', 'choose', 'end', 'previous-page', 'next-page'],
+          (value) =>
+            change(() => {
+              action.command = dialogueCommandSchema.parse(
+                value === 'choose' ? { type: value, position: 1 } : { type: value },
+              )
+            }),
+        ),
+      )
+
+      if (action.command.type === 'choose')
+        detail.append(
+          input(
+            'Reply position',
+            String(action.command.position),
+            (value) => {
+              if (action.command.type === 'choose') action.command.position = Number(value)
+            },
+            'number',
+          ),
+        )
+    }
+
+    if (action.type === 'quest-action') {
+      detail.append(
+        select(
+          'Quest target mode',
+          action.journal ? 'journal' : 'quest',
+          ['quest', 'journal'],
+          (value) =>
+            change(() => {
+              action.quest =
+                value === 'quest' ? (Object.keys(view.quests ?? {})[0] ?? '') : undefined
+              action.journal =
+                value === 'journal'
+                  ? (view.scenes
+                      .find((scene) => scene.id === sceneId)
+                      ?.components.find((component) => component.type === 'quest-log')?.id ?? '')
+                  : undefined
+            }),
+        ),
+        select('Quest operation', action.operation, questOperationSchema.options, (value) => {
+          action.operation = value
+        }),
+      )
+
+      if (action.quest !== undefined)
+        detail.append(
+          select('Fixed quest', action.quest, Object.keys(view.quests ?? {}), (value) => {
+            action.quest = value
+          }),
+        )
+      else
+        detail.append(
+          select(
+            'Quest journal',
+            action.journal ?? '',
+            view.scenes
+              .find((scene) => scene.id === sceneId)
+              ?.components.filter((component) => component.type === 'quest-log')
+              .map((component) => component.id) ?? [],
+            (value) => {
+              action.journal = value
+            },
+          ),
+        )
+    }
 
     if (action.type === 'item-use') {
       detail.append(

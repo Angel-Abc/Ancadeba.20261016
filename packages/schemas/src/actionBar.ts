@@ -21,6 +21,18 @@ export function actionBarIssues(
 
     const action = slot.action
 
+    if (action.type === 'dialogue-action' || action.type === 'quest-action') {
+      const target = action.type === 'dialogue-action' ? action.nearby : action.journal
+      const type = action.type === 'dialogue-action' ? 'nearby' : 'quest-log'
+
+      if (
+        target &&
+        !scene?.components.some((component) => component.id === target && component.type === type)
+      )
+        issues.push({ path: ['slots', id, 'action'], message: `Unknown ${type}: ${target}` })
+      continue
+    }
+
     if (action.type === 'item-use') {
       if (
         !scene?.components.some(

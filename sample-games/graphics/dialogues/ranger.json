@@ -1,0 +1,54 @@
+{
+  "schema-version": "1.0.0",
+  "id": "ranger",
+  "label": "The ranger’s delivery",
+  "entry": "greeting",
+  "nodes": {
+    "greeting": {
+      "lines": [
+        {
+          "speaker": "Ranger",
+          "text": "Have you brought the letter? I can offer you a violet cloak for your trouble."
+        }
+      ],
+      "choices": [
+        {
+          "id": "accept",
+          "label": "I can deliver it.",
+          "end": true,
+          "effects": [
+            {
+              "type": "start-quest",
+              "quest": "ranger-letter"
+            }
+          ],
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "ranger-letter",
+              "status": "not-started"
+            }
+          ]
+        },
+        {
+          "id": "deliver",
+          "label": "Here is your letter.",
+          "end": true,
+          "effects": [
+            {
+              "type": "complete-quest",
+              "quest": "ranger-letter"
+            }
+          ],
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "ranger-letter",
+              "status": "ready"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

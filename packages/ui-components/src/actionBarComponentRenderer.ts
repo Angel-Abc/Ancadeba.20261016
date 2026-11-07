@@ -25,6 +25,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
       string,
       {
         button: HTMLButtonElement
+        label: HTMLElement
         badge: HTMLElement
         lock: HTMLElement
         empty: HTMLElement | undefined
@@ -37,15 +38,24 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
     const update = () => {
       if (!active) return
 
-      for (const [id, { button, badge, lock, empty }] of buttons) {
+      for (const [id, { button, label, badge, lock, empty }] of buttons) {
         const focused = document.activeElement === button
 
         const available =
-          !['inventory-action', 'nearby-action'].includes(component.slots[id]!.action.type) ||
+          !['inventory-action', 'nearby-action', 'dialogue-action'].includes(
+            component.slots[id]!.action.type,
+          ) ||
+          (component.slots[id]!.action.type === 'dialogue-action' &&
+            component.slots[id]!.action.command.type !== 'choose') ||
           Boolean(scene && actionBar?.getSlot(scene, component.id, id))
 
         button.disabled = !scene || !actionBar?.isEnabled(scene, component.id, id)
         button.hidden = !available
+        label.textContent =
+          component.slots[id]!.action.type === 'dialogue-action'
+            ? ((scene && actionBar?.getSlot(scene, component.id, id)?.label) ??
+              component.slots[id]!.label)
+            : component.slots[id]!.label
         const action = component.slots[id]!.action
 
         const definition =
@@ -109,7 +119,23 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
               : ''
         lock.hidden = !lock.textContent
         lock.setAttribute('aria-hidden', String(Boolean(equipmentIssue || moveIssue)))
-        button.title = itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent
+
+        const storyIssue =
+          scene?.type === 'game'
+            ? action.type === 'dialogue-action'
+              ? scene.game.dialogue?.reason(scene, action.nearby, action.command)
+              : action.type === 'quest-action'
+                ? scene.game.quests?.reason(
+                    scene,
+                    action.quest ??
+                      (action.journal && scene.game.quests.selected(scene, action.journal)) ??
+                      '',
+                    action.operation,
+                  )
+                : undefined
+            : undefined
+
+        button.title = storyIssue ?? itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent
         button.setAttribute('aria-description', button.title)
 
         if (empty) empty.hidden = available
@@ -159,7 +185,9 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
                     ? slot.action.action
                     : slot.action.type === 'item-use'
                       ? `${slot.action.inventory}:use`
-                      : slot.action.scene
+                      : 'scene' in slot.action
+                        ? slot.action.scene
+                        : slot.action.type
         const label = document.createElement('span')
         label.textContent = slot.label
         const badge = document.createElement('kbd')
@@ -176,7 +204,11 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
         cleanups.push(() => button.removeEventListener('click', activate))
         let empty: HTMLElement | undefined
 
-        if (slot.action.type === 'inventory-action' || slot.action.type === 'nearby-action') {
+        if (
+          slot.action.type === 'inventory-action' ||
+          slot.action.type === 'nearby-action' ||
+          (slot.action.type === 'dialogue-action' && slot.action.command.type === 'choose')
+        ) {
           const cell = document.createElement('div')
           cell.className = 'ancadeba-action-bar-cell'
           empty = document.createElement('div')
@@ -185,7 +217,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
           cell.append(button, empty)
           root.append(cell)
         } else root.append(button)
-        buttons.set(id, { button, badge, lock, empty })
+        buttons.set(id, { button, label, badge, lock, empty })
       }
 
       update()
