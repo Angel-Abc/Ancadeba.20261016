@@ -1048,12 +1048,9 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   padding: 0.75rem;
   overflow: auto;
   border-radius: 0.375rem;
-  color: oklch(0.819 0.1135 65.12);
-  background: #000000;
   box-shadow:
     0 0 0 1px var(--ed-border),
     0 0.75rem 2rem rgb(0 0 0 / 45%);
-  font-family: Arial, sans-serif;
 }
 
 .status-bar {

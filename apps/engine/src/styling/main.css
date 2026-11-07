@@ -1,11 +1,10 @@
 @import './reset.css';
-@import './variables.css';
 
+/* The page carries the shared game theme so startup messages match the game. */
 :root {
-  font-family: var(--ge-font-family);
-  color: var(--ge-font-color);
-  font-size: var(--ge-font-size);
-  background-color: var(--ge-background-color);
+  font-family: var(--ge-game-font-family);
+  color: var(--ge-game-color);
+  background-color: var(--ge-game-background);
 }
 
 #app {

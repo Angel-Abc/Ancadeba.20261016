@@ -84,7 +84,7 @@
   margin: 0;
   padding: var(--ge-scene-text-padding);
   border: 1px solid currentColor;
-  border-radius: 0.35rem;
+  border-radius: 0.35em;
   overflow: auto;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -111,23 +111,23 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 0.25rem;
+  gap: 0.25em;
 }
 
 .ancadeba-action-bar-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.6em;
   position: relative;
-  padding: 0.2rem 1.8rem 0.2rem 0.4rem;
+  padding: 0.25em 2.1em 0.25em 0.5em;
   font-size: 0.85em;
 }
 
 .ancadeba-action-bar-key {
   position: absolute;
-  top: 0.15rem;
-  right: 0.3rem;
+  top: 0.25em;
+  right: 0.5em;
   font: inherit;
   font-size: 0.65em;
   opacity: 0.75;
@@ -135,7 +135,7 @@
 
 .ancadeba-action-bar-empty {
   border: 1px solid currentColor;
-  border-radius: 0.35rem;
+  border-radius: 0.35em;
   background: var(--ge-scene-text-background);
   opacity: 0.35;
 }
@@ -172,7 +172,7 @@
   min-width: 0;
   padding: 0.5em;
   border: 1px solid currentColor;
-  border-radius: 0.35rem;
+  border-radius: 0.35em;
   font: inherit;
   color: inherit;
   background: var(--ge-scene-background);
@@ -420,6 +420,11 @@
   border-width: var(--ge-scene-picker-border-width);
   font: inherit;
 }
+.ancadeba-nearby {
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
 .ancadeba-nearby h2 {
   margin: 0 0 0.5em;
   font-size: inherit;

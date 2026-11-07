@@ -566,20 +566,27 @@ Appearance can be adjusted on a containing element through CSS custom properties
 }
 ```
 
-A scene unit (`--ge-scene-unit-size`) is limited by the scene's own width and
-height and capped at the browser-wide unit. Body text uses 20 scene units and
-headings use 28. Resizing an embedded preview updates these sizes even when the
-browser window stays the same size.
+A scene unit (`--ge-scene-unit-size`) depends only on the scene viewport: it is
+1/1000 of the scene width or 1/740 of its height, whichever is smaller. The
+browser window size does not enter into it, so a scene looks the same in the
+standalone engine, the editor preview, and an exported game whenever the scene
+has the same shape. Body text uses 20 scene units and headings use 28, with a
+floor of `--ge-scene-min-font-size` (10px; headings 1.4 times that) so very small
+previews stay readable.
 
-The surrounding editor and the scene picker use `--ge-unit-size`, which follows
-the browser viewport. Grid tracks still fill the available scene without
-rearranging components at breakpoints.
+The unit is `min(0.1cqw, 0.135cqh)`. Its container units resolve on the element
+that uses the variable, against that element's nearest size container. Use it on
+the scene and on component roots, whose container is the scene viewport; inside a
+component that is itself a size container, such as the map view, it would follow
+that component instead. Sizes inside components use `em`, which follows the scene
+font size, so they scale with the same unit. Grid tracks fill the available scene
+without rearranging components at breakpoints.
 
-Font families and colors inherit from the containing app unless overridden, so
-the editor and standalone host currently inherit different application themes.
-Both use the shared, unit-based text sizing.
-`--ge-scene-text-color` can override text color separately. Scene-picker spacing
-uses `--ge-scene-picker-gap`, `--ge-scene-picker-margin`, and
+The shared game theme is `--ge-game-font-family`, `--ge-game-color`, and
+`--ge-game-background` on `.ancadeba-game`; the standalone page uses the same
+values around the game. `--ge-scene-color` and `--ge-scene-text-color` override
+text color inside the scene. The scene picker sizes itself from its own font with
+`--ge-scene-picker-gap`, `--ge-scene-picker-margin`,
 `--ge-scene-picker-padding`, and `--ge-scene-picker-border-width`. Gaps and outer padding
 reduce the space available for tracks; component padding is inside its assigned
 rectangle. Stable `data-scene-id` and `data-component-id` attributes allow CSS
