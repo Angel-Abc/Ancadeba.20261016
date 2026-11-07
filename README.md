@@ -516,10 +516,9 @@ The scene fills its host's available width and height. The standalone host fills
 `#app`, whose height follows the browser viewport. The editor sizes the preview
 canvas from its pane width and caps its height at 66% of the viewport. The scene
 selector takes its own space above the scene. Rows divide the remaining height
-equally and columns divide the width equally by default. To give panels more
-room on square canvases, set `screen.grid.compactColumns` to one positive integer
-weight per column. These weights apply when the scene viewport is at or below a
-3:2 width-to-height ratio. Component placements and spans stay the same.
+equally and columns divide the width equally. The engine keeps one layout at
+every size and shape; a game that wants a different arrangement on some shapes
+can add container queries on the `ge-scene` container to its own stylesheet.
 
 Both applications import `@ancadeba/ui-components/game.css`. This entry point
 imports `variables.css` for defaults and `scene.css` for rendering rules, and
@@ -570,9 +569,8 @@ A scene unit (`--ge-scene-unit-size`) depends only on the scene viewport: it is
 1/1000 of the scene width or 1/740 of its height, whichever is smaller. The
 browser window size does not enter into it, so a scene looks the same in the
 standalone engine, the editor preview, and an exported game whenever the scene
-has the same shape. Body text uses 20 scene units and headings use 28, with a
-floor of `--ge-scene-min-font-size` (10px; headings 1.4 times that) so very small
-previews stay readable.
+has the same shape. Body text uses 20 scene units and headings use 28, without a
+minimum, so text keeps its proportion to the grid at every size.
 
 The unit is `min(0.1cqw, 0.135cqh)`. Its container units resolve on the element
 that uses the variable, against that element's nearest size container. Use it on

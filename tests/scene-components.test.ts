@@ -68,16 +68,13 @@ describe('language selector definitions', () => {
 })
 
 describe('text component definitions', () => {
-  it('requires one positive compact track weight per column', () => {
-    const parse = (compactColumns: number[]) =>
-      sceneSchema.safeParse({
-        ...scene,
-        screen: { type: 'grid', grid: { rows: 12, columns: 3, compactColumns } },
-      })
+  it('keeps one grid layout without alternative column tracks', () => {
+    const parsed = sceneSchema.parse({
+      ...scene,
+      screen: { type: 'grid', grid: { rows: 12, columns: 3, compactColumns: [1, 2, 3] } },
+    })
 
-    expect(parse([1, 2, 3]).data?.screen.grid.compactColumns).toEqual([1, 2, 3])
-    expect(parse([1, 2]).success).toBe(false)
-    expect(parse([1, 0, 3]).success).toBe(false)
+    expect(parsed.screen.grid).toEqual({ rows: 12, columns: 3 })
   })
 
   it('defaults to a single grid cell and body text aligned to the start', () => {

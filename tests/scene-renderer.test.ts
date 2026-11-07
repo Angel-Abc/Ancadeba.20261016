@@ -1328,9 +1328,6 @@ describe('scene renderer', () => {
     expect(standard.attributes.get('aria-label')).toBe('Standard view')
     expect(standard.style.getPropertyValue('--ge-scene-grid-rows')).toBe('12')
     expect(standard.style.getPropertyValue('--ge-scene-grid-columns')).toBe('12')
-    expect(standard.style.getPropertyValue('--ge-scene-compact-columns')).toBe(
-      [2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3].map((weight) => `minmax(0, ${weight}fr)`).join(' '),
-    )
     expect(standard.style).not.toHaveProperty('gridTemplateRows')
     expect(standard.style).not.toHaveProperty('gridTemplateColumns')
     const heading = standard.find((element) => element.dataset.componentId === 'location-title')!

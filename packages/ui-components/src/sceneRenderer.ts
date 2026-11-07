@@ -96,16 +96,10 @@ export class SceneRenderer {
     root.className = 'ancadeba-scene'
     root.dataset.sceneId = data.id
     root.setAttribute('aria-label', data.title)
-    const { rows, columns, compactColumns } = data.screen.grid
+    const { rows, columns } = data.screen.grid
 
     root.style.setProperty('--ge-scene-grid-rows', String(rows))
     root.style.setProperty('--ge-scene-grid-columns', String(columns))
-
-    if (compactColumns)
-      root.style.setProperty(
-        '--ge-scene-compact-columns',
-        compactColumns.map((weight) => `minmax(0, ${weight}fr)`).join(' '),
-      )
 
     const components: RenderedComponent[] = []
     let active = true

@@ -22,15 +22,6 @@
   font-size: var(--ge-scene-font-size);
 }
 
-@container ge-scene (max-aspect-ratio: 3/2) {
-  .ancadeba-scene {
-    grid-template-columns: var(
-      --ge-scene-compact-columns,
-      repeat(var(--ge-scene-grid-columns), minmax(0, 1fr))
-    );
-  }
-}
-
 .ancadeba-scene-item {
   box-sizing: border-box;
   min-width: 0;

@@ -106,7 +106,6 @@ export interface SceneData {
     readonly grid: {
       readonly rows: number
       readonly columns: number
-      readonly compactColumns?: readonly number[] | undefined
     }
   }
   readonly components: readonly SceneComponentData[]
@@ -256,7 +255,7 @@ export function assembleGameData(
     const lootIssue = combatLootViewIssues(scene, combat)[0]
 
     if (lootIssue) throw new Error(lootIssue.message)
-    const { rows, columns, compactColumns } = scene.screen.grid
+    const { rows, columns } = scene.screen.grid
 
     scenes.set(id, {
       id: scene.id,
@@ -265,7 +264,7 @@ export function assembleGameData(
       type: scene.type,
       screen: {
         type: scene.screen.type,
-        grid: { rows, columns, ...(compactColumns && { compactColumns: [...compactColumns] }) },
+        grid: { rows, columns },
       },
       components: scene.components.map((component) => {
         if (component.type === 'shop')

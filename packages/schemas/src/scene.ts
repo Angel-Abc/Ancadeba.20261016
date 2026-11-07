@@ -507,20 +507,12 @@ export const sceneSchema = z
       grid: z.object({
         rows: z.number().int().positive(),
         columns: z.number().int().positive(),
-        compactColumns: z.array(z.number().int().positive()).optional(),
       }),
     }),
     components: z.array(sceneComponentSchema),
   })
   .superRefine((scene, context) => {
-    const { rows, columns, compactColumns } = scene.screen.grid
-
-    if (compactColumns && compactColumns.length !== columns)
-      context.addIssue({
-        code: 'custom',
-        path: ['screen', 'grid', 'compactColumns'],
-        message: 'Compact column weights must match the number of grid columns',
-      })
+    const { rows, columns } = scene.screen.grid
 
     if (!scene.title && !scene.titleKey)
       context.addIssue({
