@@ -17,7 +17,7 @@
   --ge-scene-background: transparent;
   --ge-scene-color: inherit;
   --ge-scene-font-family: inherit;
-  --ge-scene-font-size: calc(20 * var(--ge-scene-unit-size));
+  --ge-scene-font-size: calc(16 * var(--ge-scene-unit-size));
 
   --ge-component-row: 1;
   --ge-component-column: 1;
@@ -25,11 +25,11 @@
   --ge-component-column-span: 1;
   --ge-component-text-align: start;
 
-  --ge-scene-text-padding: calc(7 * var(--ge-scene-unit-size));
+  --ge-scene-text-padding: calc(6 * var(--ge-scene-unit-size));
   --ge-scene-line-height: 1.6;
   --ge-scene-text-color: inherit;
   --ge-scene-text-background: transparent;
-  --ge-scene-heading-size: calc(28 * var(--ge-scene-unit-size));
+  --ge-scene-heading-size: calc(22 * var(--ge-scene-unit-size));
   --ge-scene-heading-weight: 600;
 
   --ge-inventory-item-min-width: 7.5em;
