@@ -1,3 +1,4 @@
+import { GameItemUse } from './itemUse.js'
 import { GameLeveling } from './leveling.js'
 import { GameCombatStats } from './combatStats.js'
 import { GameCombatRewards } from './combatRewards.js'
@@ -31,6 +32,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly combatRewards: GameCombatRewards | undefined
   readonly leveling: GameLeveling
   readonly combatStats: GameCombatStats
+  readonly itemUse: GameItemUse | undefined
   readonly combat: GameCombat | undefined
   private readonly timers: TimerService
   private started = false
@@ -115,6 +117,21 @@ export class GameActionRuntime implements IGameRuntime {
           () => this.bindings.invalidate(),
         )
       : undefined
+    this.itemUse =
+      lifecycle &&
+      this.inventorySelection &&
+      Object.values(game.data.inventory?.itemTypes ?? {}).some((item) => item.use)
+        ? new GameItemUse(
+            lifecycle,
+            this.inventorySelection,
+            game.inventory,
+            this.bindings,
+            numericState,
+            () => this.combat,
+            messages,
+            () => this.bindings.invalidate(),
+          )
+        : undefined
     this.actionBar = lifecycle
       ? new GameActionBar(
           lifecycle,
@@ -125,6 +142,7 @@ export class GameActionRuntime implements IGameRuntime {
           this.equipment,
           this.trading,
           () => this.combat,
+          () => this.itemUse,
         )
       : undefined
 
@@ -160,9 +178,11 @@ export class GameActionRuntime implements IGameRuntime {
             this.combatRewards,
             this.leveling,
             this.combatStats,
+            game.inventory,
           )
         : undefined
     } catch (error) {
+      this.itemUse?.dispose()
       this.actionBar?.dispose()
       this.combat?.dispose()
       this.combatRewards?.dispose()
@@ -184,12 +204,14 @@ export class GameActionRuntime implements IGameRuntime {
     if (this.disposed || this.started || !this.isRunning()) return
     this.started = true
     this.onStart()
+    this.itemUse?.start()
     this.actions.start()
   }
 
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.itemUse?.dispose()
     this.actionBar?.dispose()
     this.combat?.dispose()
     this.combatRewards?.dispose()

@@ -233,13 +233,11 @@
           }
         },
         "11": {
-          "label": "Retry Rewards",
+          "label": "Use item",
           "action": {
-            "type": "combat-action",
-            "combat": "combat",
-            "command": {
-              "type": "retry-rewards"
-            }
+            "type": "item-use",
+            "inventory": "supplies",
+            "combat": "combat"
           },
           "inputBinding": {
             "context": "wardrobe",
@@ -282,9 +280,9 @@
       "readOnly": true,
       "descriptionTarget": "narrative",
       "placement": {
-        "row": 1,
+        "row": 5,
         "column": 10,
-        "rowSpan": 4,
+        "rowSpan": 2,
         "columnSpan": 3
       }
     },
@@ -294,9 +292,9 @@
       "inventory": "loot",
       "label": "Loot details",
       "placement": {
-        "row": 7,
+        "row": 8,
         "column": 10,
-        "rowSpan": 3,
+        "rowSpan": 2,
         "columnSpan": 3
       }
     },
@@ -305,9 +303,22 @@
       "type": "character-progression",
       "profile": "player",
       "placement": {
-        "row": 5,
+        "row": 7,
         "column": 10,
-        "rowSpan": 2,
+        "rowSpan": 1,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "supplies",
+      "type": "inventory",
+      "label": "Combat supplies",
+      "owners": ["wayfarer"],
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 4,
         "columnSpan": 3
       }
     }

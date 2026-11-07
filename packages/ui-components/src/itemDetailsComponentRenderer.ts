@@ -82,6 +82,12 @@ export class ItemDetailsComponentRenderer implements IComponentRenderer<ItemDeta
       placement.textContent = location
       root.append(name, description, values, placement)
 
+      if (details.useDetails) {
+        const use = document.createElement('p')
+        use.textContent = details.useDetails
+        root.append(use)
+      }
+
       if (component.showCombatStats && scene?.type === 'game') {
         const effects = document.createElement('dl')
 
@@ -124,6 +130,9 @@ export class ItemDetailsComponentRenderer implements IComponentRenderer<ItemDeta
       update()
 
       if (scene?.type === 'game') {
+        const itemUse = scene.game.itemUse?.subscribeChanges(update)
+
+        if (itemUse) cleanups.push(itemUse)
         const selection = scene.game.inventorySelection?.subscribe(update)
 
         if (selection) cleanups.push(selection)

@@ -86,6 +86,9 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
         entry?.label,
         entry?.description,
         ...items,
+        ...inventoryPanels.map((panel) =>
+          scene?.type === 'game' ? scene.game.itemUse?.feedback(scene, panel.id) : '',
+        ),
         shop && scene ? trading?.feedback(scene, shop.id) : '',
         encounter && scene ? combat?.text(scene, encounter.id) : '',
         ...progression.map((entry) =>
@@ -140,6 +143,9 @@ export class TextComponentRenderer implements IComponentRenderer<TextComponentDa
       }
 
       if (inventoryPanels.length && scene?.type === 'game') {
+        const itemUse = scene.game.itemUse?.subscribeChanges(() => updateText(latest))
+
+        if (itemUse) cleanups.push(itemUse)
         const selection = scene.game.inventorySelection?.subscribe(() => updateText(latest))
         const inventory = scene.game.inventory?.subscribeChanges(() => updateText(latest))
         const bindings = context.bindings?.subscribeChanges(() => updateText(latest))

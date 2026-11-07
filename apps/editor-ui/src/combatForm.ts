@@ -1,3 +1,4 @@
+import { combatItemUseForm } from './combatItemUseForm.js'
 import { combatMovesForm } from './combatMovesForm.js'
 import { combatRewardsForm } from './combatRewardsForm.js'
 import { combatStatusesForm } from './combatAbilitiesForm.js'
@@ -186,6 +187,7 @@ export function combatForm(
         draft.allowEscape = value === 'true'
       },
     ),
+    combatItemUseForm(controls, view, draft, render),
     actorForm(draft.player, 'Player'),
   ]
 
@@ -232,8 +234,12 @@ export function combatForm(
       draft,
       render,
       (id) => draft.player.moves.push(id),
-      resolveCombatSource(draft, new Map(Object.entries(view.combatLibraries ?? {}))).definition
-        ?.statuses ?? draft.statuses,
+      resolveCombatSource(
+        draft,
+        new Map(Object.entries(view.combatLibraries ?? {})),
+        undefined,
+        view.inventory,
+      ).definition?.statuses ?? draft.statuses,
     ),
   )
   result.push(

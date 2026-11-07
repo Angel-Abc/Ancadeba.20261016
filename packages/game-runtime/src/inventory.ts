@@ -17,7 +17,20 @@ export type InventoryMoveResult =
   | { readonly status: 'applied'; readonly changed: boolean }
   | { readonly status: 'rejected'; readonly reason: string }
 
+export interface InventoryReservation {
+  readonly encounter: string
+}
+
 export interface IGameInventory {
+  reserveItem?(item: string, token: InventoryReservation): string | undefined
+  releaseItems?(token: InventoryReservation, item?: string): void
+  isReserved?(item: string): boolean
+  /** Publish a completed batch of reservation changes, after the combat plan is updated. */
+  notifyReservations?(): void
+  prepareRemove?(
+    items: readonly string[],
+    token?: InventoryReservation,
+  ): PreparedInventoryTransfer | undefined
   /** Internal transaction participant, installed by the playthrough's equipment stat service. */
   setEquipmentPolicy?(policy: InventoryEquipmentPolicy): () => void
   /** Stage new finite item instances without publishing or invoking observers. */
@@ -71,6 +84,7 @@ export class GameInventory implements IGameInventory {
   private readonly subscribers = new Set<() => void>()
   private disposed = false
   private revision = 0
+  private readonly reservations = new Map<string, InventoryReservation>()
   private equipmentPolicy: InventoryEquipmentPolicy | undefined
 
   setEquipmentPolicy(policy: InventoryEquipmentPolicy): () => void {
@@ -117,7 +131,7 @@ export class GameInventory implements IGameInventory {
     const staged = new Map(this.items)
     staged.set(itemId, { ...staged.get(itemId)!, placement: validation.destination })
 
-    return this.equipmentPolicy?.prepare(this.items, staged).reason
+    return this.reservationIssue(staged) ?? this.equipmentPolicy?.prepare(this.items, staged).reason
   }
 
   move(itemId: string, destination: InventoryPlacement): InventoryMoveResult {
@@ -187,7 +201,8 @@ export class GameInventory implements IGameInventory {
     const result = this.prepareEquip(itemId, owner, slot)
 
     return result.staged
-      ? this.equipmentPolicy?.prepare(this.items, result.staged).reason
+      ? (this.reservationIssue(result.staged) ??
+          this.equipmentPolicy?.prepare(this.items, result.staged).reason)
       : result.reason
   }
 
@@ -303,9 +318,75 @@ export class GameInventory implements IGameInventory {
     return this.prepareBatch(staged)
   }
 
+  reserveItem(item: string, token: InventoryReservation): string | undefined {
+    if (this.disposed || !this.items.has(item)) return 'Item is unavailable'
+
+    if (this.reservations.has(item)) return 'Item is reserved by a combat plan'
+    this.reservations.set(item, token)
+  }
+
+  releaseItems(token: InventoryReservation, item?: string): void {
+    for (const [id, owner] of this.reservations)
+      if (owner === token && (item === undefined || item === id)) this.reservations.delete(id)
+  }
+
+  isReserved(item: string): boolean {
+    return this.reservations.has(item)
+  }
+  notifyReservations(): void {
+    this.notify()
+  }
+
+  private reservationIssue(
+    staged: ReadonlyMap<string, InventoryItemSnapshot>,
+    token?: InventoryReservation,
+  ): string | undefined {
+    for (const [id, owner] of this.reservations) {
+      if (owner === token) continue
+      let item = this.items.get(id)
+      const seen = new Set<string>()
+
+      while (item && !seen.has(item.id)) {
+        seen.add(item.id)
+        const next = staged.get(item.id)
+
+        if (!next || !samePlacement(item.placement, next.placement))
+          return 'Item is reserved by a combat plan'
+        item =
+          item.placement.type === 'inside' ? this.items.get(item.placement.container) : undefined
+      }
+    }
+  }
+
+  prepareRemove(
+    ids: readonly string[],
+    token?: InventoryReservation,
+  ): PreparedInventoryTransfer | undefined {
+    if (this.disposed || new Set(ids).size !== ids.length) return
+    const staged = new Map(this.items)
+
+    for (const id of ids) {
+      const item = this.items.get(id)
+
+      if (
+        !item ||
+        item.placement.type === 'equipped' ||
+        [...this.items.values()].some(
+          (entry) => entry.placement.type === 'inside' && entry.placement.container === id,
+        )
+      )
+        return
+      staged.delete(id)
+    }
+
+    return this.prepareBatch(staged, token)
+  }
+
   private prepareBatch(
     staged: ReadonlyMap<string, InventoryItemSnapshot>,
+    token?: InventoryReservation,
   ): PreparedInventoryTransfer | undefined {
+    if (this.reservationIssue(staged, token)) return
     const policy = this.equipmentPolicy?.prepare(this.items, staged)
 
     if (policy?.reason) return
@@ -319,17 +400,21 @@ export class GameInventory implements IGameInventory {
         !this.disposed &&
         !committed &&
         this.revision === revision &&
+        !this.reservationIssue(staged, token) &&
         (effects?.isCurrent() ?? true),
       commit: () => {
         if (
           this.disposed ||
           committed ||
           this.revision !== revision ||
+          this.reservationIssue(staged, token) ||
           (effects && !effects.isCurrent())
         )
           return
 
         effects?.commit()
+
+        this.items.clear()
 
         for (const [id, item] of staged) this.items.set(id, item)
         this.revision++
@@ -368,5 +453,6 @@ export class GameInventory implements IGameInventory {
     this.disposed = true
     this.items.clear()
     this.subscribers.clear()
+    this.reservations.clear()
   }
 }

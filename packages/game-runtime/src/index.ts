@@ -138,6 +138,8 @@ export * from './trading.js'
 
 export * from './combat.js'
 
+export * from './itemUse.js'
+
 export * from './combatResolution.js'
 
 export * from './stateTransactions.js'

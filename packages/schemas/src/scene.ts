@@ -108,6 +108,11 @@ export const actionBarSlotSchema = z
     action: z.discriminatedUnion('type', [
       ...buttonActionSchema.options,
       z.object({
+        type: z.literal('item-use'),
+        inventory: gameIdSchema,
+        combat: gameIdSchema.optional(),
+      }),
+      z.object({
         type: z.literal('inventory-action'),
         inventory: gameIdSchema,
         action: gameIdSchema,
@@ -272,6 +277,7 @@ export const shopMessageSchema = z.enum([
   'insufficientMerchantFunds',
   'equipped',
   'containerNotEmpty',
+  'reserved',
   'wrongOwner',
   'unsupportedState',
   'stale',
@@ -326,6 +332,7 @@ export const shopComponentSchema = z
           .default('The merchant does not have enough currency.'),
         equipped: z.string().default('Unequip this item first.'),
         containerNotEmpty: z.string().default('Empty this container first.'),
+        reserved: z.string().default('This item is reserved by a combat plan.'),
         wrongOwner: z.string().default('The item no longer belongs to this participant.'),
         unsupportedState: z.string().default('Trading is unavailable for this game state.'),
         stale: z.string().default('The trade changed. Select the item again.'),

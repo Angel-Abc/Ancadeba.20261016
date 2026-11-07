@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { combatItemUseIssues } from './itemUseValidation.js'
+import { combatItemUseSchema } from './itemUse.js'
 import { abilityEffectSchema, combatStatusSchema } from './combatAbilities.js'
 import { gameBindingSchema, bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
@@ -95,6 +97,8 @@ export const combatActorSchema = z
   )
 
 export const combatTextSchema = z.object({
+  itemUsed: z.string().default('{actor} uses {item}.'),
+  itemSkipped: z.string().default('{actor}: {item} had no effect.'),
   statAttack: z.string().default('Attack bonus'),
   statDefense: z.string().default('Defense'),
   statGuard: z.string().default('Guard bonus'),
@@ -162,6 +166,7 @@ export const combatFieldsSchema = z.object({
   allowEscape: z.boolean().default(false),
   roundTimeMs: amount.default(0),
   rewards: victoryRewardsSchema.optional(),
+  itemUse: combatItemUseSchema.optional(),
   logCapacity: z.number().int().positive().max(1000).default(100),
   outcomes: z
     .object({ victory: id.optional(), defeat: id.optional(), escaped: id.optional() })
@@ -238,6 +243,7 @@ export type CombatMoveDefinition = z.infer<typeof combatMoveSchema>
 
 export const combatCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('queue-move'), move: id }),
+  z.object({ type: z.literal('queue-item'), item: id, inventory: id.optional() }),
   ...(
     [
       'previous-target',
@@ -316,7 +322,11 @@ export function combatIssues(
     if (destination && !scenes.has(destination))
       issues.push({ path: ['outcomes'], message: `Unknown combat destination: ${destination}` })
 
-  return [...issues, ...combatRewardIssues(combat, rules, inventory, assets)]
+  return [
+    ...issues,
+    ...combatItemUseIssues(combat, inventory),
+    ...combatRewardIssues(combat, rules, inventory, assets),
+  ]
 }
 
 export function localizeCombat(

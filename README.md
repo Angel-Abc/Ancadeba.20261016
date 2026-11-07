@@ -1951,7 +1951,7 @@ protection. Definitions load and export through existing combat files without
 migration.
 
 Both samples demonstrate abilities in **Advanced training**. Its existing input
-file maps W to Poison Strike, E to Stunning Blow, S to Weaken, F to Regenerate,
+file maps W to Poison Strike, E to Stunning Blow, S to Use item, F to Regenerate,
 Z to Recover, and V to Battle Focus. Q remains Attack, R Undo, T Clear, A Next
 target, D Escape, G Take All, X the level-unlocked Power strike, C Return, and B
 End Turn. These are scene slot choices, not new hard-coded keyboard behavior.
@@ -2032,6 +2032,86 @@ cooldowns, RNG, and outcomes remain independent for every encounter/playthrough.
 Both samples use `common` in training and advanced training. **S** in training
 queues the shared Poison Strike; heavy/power strikes stay local variants.
 Automatic extraction and bulk migration of existing encounters are deferred.
+
+## Usable items and consumables
+
+Item types may opt into built-in use alongside existing custom item actions:
+
+```json
+{
+  "label": "Healing potion",
+  "use": {
+    "ability": { "library": "common", "id": "restore-vitality" },
+    "consumption": "consume",
+    "contexts": ["combat", "outside-combat"]
+  }
+}
+```
+
+The reference must identify a shared move of type `ability`. Its target, effects,
+positive AP cost and optional combat cooldown stay unchanged. Use `"keep"` for a
+reusable item. Optional `enabledWhen` uses the existing binding format; state
+bindings must reference declared boolean fields. Custom actions named Use keep
+their existing behavior. Items grant their ability without teaching the move or
+requiring its learned-move level unlock.
+
+An encounter opts in with `"itemUse": { "owner": "player", "itemTypes":
+["healing-potion", "antidote", "flame-scroll", "healing-rune"] }`. The owner must
+match the player's equipment stat owner when either uses a stat profile. The
+existing pure resolver includes the listed items' abilities and required statuses
+automatically, preserving source references and rejecting ID conflicts. These
+imports do not add entries to the player's learned moves.
+
+An action-bar slot uses `{ "type": "item-use", "inventory": "supplies",
+"combat": "combat" }`. Omit `combat` for outside-combat use. Configure keys in the
+game's existing input file, exactly as for other slots. Selecting an owned carried
+or nested item enables Use when eligible. Equipped items must be unequipped;
+containers must be empty. Read-only inventory panels disable built-in use.
+
+Combat use queues the exact item and current target among ordinary moves. It
+reserves AP and the instance until Undo, Clear, Escape, resolution or encounter
+completion. Reservations survive pause and block moving, selling, equipping,
+consuming or requeuing the item, including moving a containing bag. Reusable
+copies and learned casts share the same ability cooldown within the encounter;
+cooldowns start only on execution. One instance can appear only once in a plan.
+
+Uses that are definitely ineffective are disabled without spending item or AP.
+Resolution checks effects again in queue order. A use skipped because of earlier
+healing, stun, a defeated target or encounter completion keeps its item and starts
+no cooldown. Unused AP is released when the round ends; End Turn does not reopen
+planning. Damage rolls occur only during staged resolution. Rejected commits
+retain the same plan, reservations and RNG state.
+
+Outside combat, only self-targeted healing-only abilities are supported. They
+heal the item's owner through its existing combat stat health profile, clamp to
+the effective maximum, never revive, and consume no turn or world time. Owners
+with unfinished paused encounters must return to combat to queue healing.
+Round-based cooldowns do not run outside combat; authors can restrict reusable
+healing to combat using `contexts`.
+
+Inventory removal and health changes commit together. Combat commits also include
+status effects, cooldowns, RNG and progression. Observers run after the complete
+result is visible; observer failures retain that result and never retry use.
+Consumption clears selection without selecting a replacement. Reusable items
+stay selected. Item details show costs, availability and unavailable reasons;
+combat logs show use, while inventory `descriptionTarget` text also appends the
+latest outside-combat feedback without replacing existing sections.
+
+Item use has optional `messages` and `messageKeys` for localized feedback and
+availability text. Combat messages add `itemUsed` and `itemSkipped`. Language
+changes update presentation without replacing state, identity or selection.
+
+In **Items**, configure built-in use, shared ability, consumption, availability,
+enablement and messages. **Combat** configures owner and allowed types; **Controls**
+configures Use and its input binding. Saves preserve extension properties and
+conflicting drafts, check revisions and protect referenced definitions/fields.
+Both samples demonstrate the four item types. Use **Z** in training, **S** in
+advanced training, and **A** in the inventory/wardrobe. The graphics sample includes
+catalog artwork and a dyed potion nested inside the travel pack.
+
+Existing games need no migration. V1 uses individual finite instances and
+player-controlled use. Quantities, charges, durability, enemy item use, ally
+targeting, persistent outside-combat statuses and world-time cooldowns are deferred.
 
 ## Equipment effects on combat
 

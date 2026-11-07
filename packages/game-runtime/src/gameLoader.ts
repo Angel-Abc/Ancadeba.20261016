@@ -208,6 +208,9 @@ export class GameLoader implements IGameLoader {
       get leveling() {
         return variants.get(localization.current.language)?.leveling
       },
+      get combatLibraries() {
+        return variants.get(localization.current.language)?.combatLibraries
+      },
       get combat() {
         return variants.get(localization.current.language)?.combat
       },

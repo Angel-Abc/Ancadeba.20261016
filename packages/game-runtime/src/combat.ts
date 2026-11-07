@@ -1,3 +1,5 @@
+import { usableItem, abilityCanMatter } from './itemUseEligibility.js'
+import type { IGameInventory, InventoryReservation, InventoryItemSnapshot } from './inventory.js'
 import type { GameLeveling } from './leveling.js'
 import type { GameCombatStats } from './combatStats.js'
 import {
@@ -33,6 +35,10 @@ import {
 } from './combatResolution.js'
 
 export interface CombatCapture {
+  readonly itemVersion?: object | undefined
+  readonly lineage?: readonly InventoryItemSnapshot[] | undefined
+  readonly selection?: object | undefined
+  readonly item?: object | undefined
   readonly reservation?: object | undefined
   readonly stats?: object | undefined
   readonly leveling?: object | undefined
@@ -68,6 +74,8 @@ export interface CombatSnapshot {
 }
 
 export interface IGameCombat {
+  itemIssue(scene: SceneInstance, component: string, item: string): string | undefined
+  unfinishedOwner(owner: string): boolean
   moveIssue(scene: SceneInstance, component: string, move: string): string | undefined
   definition(scene: SceneInstance, component: string): CombatDefinition | undefined
   snapshot(scene: SceneInstance, component: string): CombatSnapshot | undefined
@@ -93,6 +101,8 @@ interface Session {
   statuses: CombatStatuses
   cooldowns: CombatCooldowns
   captures: Map<string, CombatCapture>
+  itemReservation: InventoryReservation
+  itemVersions: Map<string, object>
   reservations: Map<string, object>
   started?: boolean
   round: number
@@ -125,6 +135,7 @@ export class GameCombat implements IGameCombat {
     private readonly rewards?: GameCombatRewards,
     private readonly leveling?: GameLeveling,
     private readonly stats?: GameCombatStats,
+    private readonly inventory: IGameInventory | undefined = lifecycle.currentGame?.inventory,
   ) {
     this.cleanups = [
       ...(stats ? [stats.setTemporaryEffects((owner) => this.ownerEffects(owner))] : []),
@@ -271,6 +282,8 @@ export class GameCombat implements IGameCombat {
         statuses: {},
         cooldowns: {},
         captures: new Map(),
+        itemReservation: { encounter: definition.id },
+        itemVersions: new Map(),
         reservations: new Map(),
         round: 1,
         seed: definition.seed,
@@ -314,6 +327,8 @@ export class GameCombat implements IGameCombat {
 
         if (outcome) {
           session.outcome = outcome
+          this.inventory?.releaseItems?.(session.itemReservation)
+          session.plan = []
           session.statuses = {}
           session.cooldowns = {}
           this.stats?.release(definition.id)
@@ -410,11 +425,40 @@ export class GameCombat implements IGameCombat {
     if (isRewardOperation(command.type)) return this.rewards?.capture(scene, id, command.type)
 
     const targeted =
-      command.type === 'queue-move' &&
-      definition.moves[command.move] &&
-      combatMoveTarget(definition.moves[command.move]!) === 'enemy'
+      (command.type === 'queue-move' || command.type === 'queue-item') &&
+      definition.moves[
+        command.type === 'queue-move'
+          ? command.move
+          : (this.itemMove(definition, command.item) ?? '')
+      ] &&
+      combatMoveTarget(
+        definition.moves[
+          command.type === 'queue-move'
+            ? command.move
+            : command.type === 'queue-item'
+              ? (this.itemMove(definition, command.item) ?? '')
+              : ''
+        ]!,
+      ) === 'enemy'
 
-    const key = command.type === 'queue-move' ? `move:${command.move}` : 'control'
+    const moveId =
+      command.type === 'queue-move'
+        ? command.move
+        : command.type === 'queue-item'
+          ? this.itemMove(definition, command.item)
+          : undefined
+
+    const item =
+      command.type === 'queue-item'
+        ? this.inventory?.snapshot.find((item) => item.id === command.item)
+        : undefined
+
+    const key =
+      command.type === 'queue-item'
+        ? `item:${command.item}`
+        : command.type === 'queue-move'
+          ? `move:${command.move}`
+          : 'control'
 
     const target = targeted ? session.target : undefined
 
@@ -423,8 +467,26 @@ export class GameCombat implements IGameCombat {
 
     const stats = this.stats?.encounterVersion(definition)
 
-    const reservation =
-      command.type === 'queue-move' ? session.reservations.get(command.move) : undefined
+    const selection =
+      command.type === 'queue-item' && command.inventory && scene.type === 'game'
+        ? scene.game.inventorySelection?.get(scene, command.inventory)
+        : undefined
+
+    const reservation = moveId ? session.reservations.get(moveId) : undefined
+
+    const itemVersion =
+      command.type === 'queue-item' ? session.itemVersions.get(command.item) : undefined
+
+    const lineage =
+      command.type === 'queue-item'
+        ? usableItem(
+            this.inventory,
+            this.lifecycle.currentGame?.data.inventory,
+            command.item,
+            this.bindings,
+            true,
+          ).lineage
+        : undefined
 
     let capture = session.captures.get(key)
 
@@ -434,9 +496,24 @@ export class GameCombat implements IGameCombat {
       capture.target !== target ||
       capture.leveling !== leveling ||
       capture.stats !== stats ||
-      capture.reservation !== reservation
+      capture.reservation !== reservation ||
+      capture.item !== item ||
+      capture.itemVersion !== itemVersion ||
+      capture.selection !== selection ||
+      capture.lineage?.length !== lineage?.length ||
+      capture.lineage?.some((entry, index) => entry !== lineage?.[index])
     ) {
-      capture = Object.freeze({ round: session.token, target, leveling, stats, reservation })
+      capture = Object.freeze({
+        round: session.token,
+        target,
+        leveling,
+        stats,
+        reservation,
+        itemVersion,
+        item,
+        selection,
+        lineage,
+      })
       session.captures.set(key, capture)
     }
 
@@ -502,6 +579,24 @@ export class GameCombat implements IGameCombat {
     if (command.type === 'end-turn') return true
 
     if (command.type === 'escape') return definition.allowEscape && !snapshot.escape
+
+    if (command.type === 'queue-item') {
+      if (command.inventory) {
+        const panel = scene.data.components.find(
+          (entry) => entry.id === command.inventory && entry.type === 'inventory',
+        )
+
+        if (
+          scene.type !== 'game' ||
+          panel?.type !== 'inventory' ||
+          panel.readOnly ||
+          scene.game.inventorySelection?.get(scene, command.inventory)?.item !== command.item
+        )
+          return false
+      }
+
+      return this.itemIssue(scene, id, command.item) === undefined
+    }
 
     if (command.type !== 'queue-move') return false
     const move = definition.moves[command.move]
@@ -570,6 +665,7 @@ export class GameCombat implements IGameCombat {
 
     const session = this.session(definition)
     session.issue = undefined
+    const itemsBefore = session.plan.flatMap((entry) => (entry.item ? [entry.item] : [])).join(',')
 
     if (command.type === 'continue') {
       this.lifecycle.enterScene(definition.outcomes[session.outcome!]!)
@@ -596,7 +692,29 @@ export class GameCombat implements IGameCombat {
       return
     }
 
-    if (command.type === 'queue-move') {
+    if (command.type === 'queue-item') {
+      const move = this.itemMove(definition, command.item)!
+
+      const item = this.inventory?.snapshot.find((item) => item.id === command.item)
+      const use = item && this.lifecycle.currentGame?.data.inventory?.itemTypes[item.itemType]?.use
+
+      if (!item || !use || !this.inventory?.reserveItem) return
+
+      if (this.inventory.reserveItem(command.item, session.itemReservation)) return
+      session.itemVersions.set(command.item, {})
+
+      if (definition.moves[move]?.cooldown) session.reservations.set(move, {})
+      session.plan.push({
+        move,
+        item: command.item,
+        itemType: item.itemType,
+        consume: use.consumption === 'consume',
+        target:
+          combatMoveTarget(definition.moves[move]!) === 'self'
+            ? definition.player.id
+            : session.target!.id,
+      })
+    } else if (command.type === 'queue-move') {
       if (definition.moves[command.move]?.cooldown) session.reservations.set(command.move, {})
       session.plan.push({
         move: command.move,
@@ -610,15 +728,28 @@ export class GameCombat implements IGameCombat {
       else {
         const removed = session.plan.pop()
 
+        if (removed?.item) {
+          this.inventory?.releaseItems?.(session.itemReservation, removed.item)
+          session.itemVersions.set(removed.item, {})
+        }
+
         if (removed && definition.moves[removed.move]?.cooldown)
           session.reservations.set(removed.move, {})
       }
     } else if (command.type === 'clear') {
+      this.inventory?.releaseItems?.(session.itemReservation)
+
+      for (const move of session.plan) if (move.item) session.itemVersions.set(move.item, {})
+
       for (const move of session.plan)
         if (definition.moves[move.move]?.cooldown) session.reservations.set(move.move, {})
       session.plan = []
       session.escape = false
     } else if (command.type === 'escape') {
+      this.inventory?.releaseItems?.(session.itemReservation)
+
+      for (const move of session.plan) if (move.item) session.itemVersions.set(move.item, {})
+
       for (const move of session.plan)
         if (definition.moves[move.move]?.cooldown) session.reservations.set(move.move, {})
       session.plan = []
@@ -629,7 +760,24 @@ export class GameCombat implements IGameCombat {
       return
     }
 
-    this.notify()
+    const errors: unknown[] = []
+
+    const itemsAfter = session.plan.flatMap((entry) => (entry.item ? [entry.item] : [])).join(',')
+
+    for (const notify of [
+      () => {
+        if (itemsBefore !== itemsAfter) this.inventory?.notifyReservations?.()
+      },
+      () => this.notify(),
+    ])
+      try {
+        notify()
+      } catch (error) {
+        errors.push(error)
+      }
+
+    if (errors.length)
+      throw new AggregateError(errors, 'Combat plan committed but observers failed')
   }
   private resolve(definition: CombatDefinition, session: Session): void {
     const values = this.health(definition)
@@ -641,8 +789,29 @@ export class GameCombat implements IGameCombat {
     if (!stats || this.stats?.encounterIssue(definition)) return
     let notifyProgression: (() => void) | undefined
     let notifyRewards: (() => void) | undefined
+    let notifyInventory: (() => void) | undefined
+    const hadItems = session.plan.some((entry) => entry.item)
 
     try {
+      for (const queued of session.plan) {
+        if (!queued.item) continue
+
+        const selected = usableItem(
+          this.inventory,
+          this.lifecycle.currentGame?.data.inventory,
+          queued.item,
+          this.bindings,
+          true,
+        )
+
+        if (
+          selected.reason ||
+          selected.owner !== definition.itemUse?.owner ||
+          !this.inventory?.isReserved?.(queued.item)
+        )
+          throw new Error('Queued item is unavailable')
+      }
+
       const candidate = resolveCombatRound(definition, {
         health: values.health,
         guard: session.guard,
@@ -662,6 +831,19 @@ export class GameCombat implements IGameCombat {
       if (!Number.isSafeInteger(round))
         throw new RangeError('Combat round exceeds the supported range')
 
+      const consumed = session.plan
+        .filter(
+          (queued) => queued.item && queued.consume && candidate.usedItems.includes(queued.item),
+        )
+        .map((queued) => queued.item!)
+
+      const removal = consumed.length
+        ? this.inventory?.prepareRemove?.(consumed, session.itemReservation)
+        : undefined
+
+      if (consumed.length && !removal?.isCurrent())
+        throw new Error('Item consumption is unavailable')
+
       const writes = this.state?.prepare(
         [definition.player, ...definition.enemies].map((actor) => ({
           path: actor.health.path,
@@ -674,6 +856,7 @@ export class GameCombat implements IGameCombat {
 
       if (
         !writes?.isCurrent() ||
+        (removal && !removal.isCurrent()) ||
         !progression.isCurrent() ||
         version !== this.stats?.encounterVersion(definition)
       )
@@ -692,6 +875,7 @@ export class GameCombat implements IGameCombat {
             candidate.cooldowns,
           )
 
+      removal?.commit()
       writes.commit()
       progression.commit()
       session.guard = candidate.guard
@@ -704,9 +888,15 @@ export class GameCombat implements IGameCombat {
       session.log = [...session.log, ...candidate.entries].slice(-definition.logCapacity)
       session.round = candidate.outcome ? session.round : round
       session.enemies = enemies
+      this.inventory?.releaseItems?.(session.itemReservation)
       session.plan = []
       session.escape = false
       session.token = {}
+      notifyInventory = () => {
+        if (removal) removal.notify()
+        else if (hadItems) this.inventory?.notifyReservations?.()
+      }
+
       notifyProgression = () => progression.notify()
 
       if (candidate.outcome === 'victory') notifyRewards = this.rewards?.complete(definition)
@@ -721,7 +911,7 @@ export class GameCombat implements IGameCombat {
     this.publishing = true
 
     try {
-      for (const notify of [notifyProgression, notifyRewards, this.invalidate])
+      for (const notify of [notifyInventory, notifyProgression, notifyRewards, this.invalidate])
         try {
           notify?.()
         } catch (error) {
@@ -753,27 +943,31 @@ export class GameCombat implements IGameCombat {
         ? definition.messages.mitigated
         : definition.messages[entry.type]
       ).replace(
-        /\{(actor|target|damage|blocked|guard|defended|status|amount|duration)\}/g,
+        /\{(actor|target|damage|blocked|guard|defended|status|amount|duration|item)\}/g,
         (_, key: string) =>
-          key === 'status'
-            ? (definition.statuses?.[entry.status ?? '']?.label ?? '')
-            : key === 'amount'
-              ? String(entry.amount ?? 0)
-              : key === 'duration'
-                ? String(entry.duration ?? 0)
-                : key === 'actor'
-                  ? name(entry.actor)
-                  : key === 'target'
-                    ? name(entry.target)
-                    : String(
-                        key === 'damage'
-                          ? (entry.damage ?? 0)
-                          : key === 'defended'
-                            ? (entry.defended ?? 0)
-                            : key === 'blocked'
-                              ? (entry.blocked ?? 0)
-                              : (entry.guard ?? 0),
-                      ),
+          key === 'item'
+            ? (this.lifecycle.currentGame?.data.inventory?.itemTypes[entry.item ?? '']?.label ??
+              entry.item ??
+              '')
+            : key === 'status'
+              ? (definition.statuses?.[entry.status ?? '']?.label ?? '')
+              : key === 'amount'
+                ? String(entry.amount ?? 0)
+                : key === 'duration'
+                  ? String(entry.duration ?? 0)
+                  : key === 'actor'
+                    ? name(entry.actor)
+                    : key === 'target'
+                      ? name(entry.target)
+                      : String(
+                          key === 'damage'
+                            ? (entry.damage ?? 0)
+                            : key === 'defended'
+                              ? (entry.defended ?? 0)
+                              : key === 'blocked'
+                                ? (entry.blocked ?? 0)
+                                : (entry.guard ?? 0),
+                        ),
       ),
     )
 
@@ -793,6 +987,71 @@ export class GameCombat implements IGameCombat {
 
     return () => this.listeners.delete(listener)
   }
+  private itemMove(definition: CombatDefinition, item: string): string | undefined {
+    const selected = this.inventory?.snapshot.find((entry) => entry.id === item)
+
+    if (!selected || !definition.itemUse?.itemTypes.includes(selected.itemType)) return
+
+    return this.lifecycle.currentGame?.data.inventory?.itemTypes[selected.itemType]?.use?.ability.id
+  }
+
+  unfinishedOwner(owner: string): boolean {
+    return [...this.sessions].some(([id, session]) => {
+      const definition = this.lifecycle.currentGame?.data.combat?.get(id)
+
+      return (
+        session.started &&
+        !session.outcome &&
+        (definition?.itemUse?.owner === owner || definition?.player.equipmentOwner === owner)
+      )
+    })
+  }
+
+  itemIssue(scene: SceneInstance, component: string, item: string): string | undefined {
+    const definition = this.definition(scene, component)
+
+    const selected = usableItem(
+      this.inventory,
+      scene.type === 'game' ? scene.game.data.inventory : undefined,
+      item,
+      this.bindings,
+    )
+
+    if (selected.reason) return selected.reason
+
+    if (
+      !definition ||
+      !selected.use ||
+      !this.inventory?.reserveItem ||
+      !this.inventory.prepareRemove ||
+      !this.inventory.releaseItems ||
+      !this.inventory.isReserved ||
+      !this.state
+    )
+      return selected.messages.unavailable
+
+    if (selected.owner !== definition.itemUse?.owner) return selected.messages.owner
+    const moveId = this.itemMove(definition, item)
+    const move = moveId && definition.moves[moveId]
+
+    if (!moveId || !move || !selected.use.contexts.includes('combat'))
+      return selected.messages.context
+    const snapshot = this.snapshot(scene, component)
+
+    if (!snapshot || snapshot.issue || snapshot.phase !== 'planning' || snapshot.escape)
+      return selected.messages.unavailable
+    const issue = this.moveIssue(scene, component, moveId)
+
+    if (issue) return issue
+
+    if (move.apCost > snapshot.remainingAp) return selected.messages.ap
+    const target = combatMoveTarget(move) === 'self' ? definition.player.id : snapshot.target
+
+    if (!target || !snapshot.health[target]) return selected.messages.target
+
+    if (!abilityCanMatter(move, definition, snapshot, target)) return selected.messages.noEffect
+  }
+
   private notify(): void {
     if (
       this.disposed ||
@@ -818,6 +1077,9 @@ export class GameCombat implements IGameCombat {
 
     for (const cleanup of this.cleanups.reverse()) cleanup()
     this.cleanups.length = 0
+
+    for (const session of this.sessions.values())
+      this.inventory?.releaseItems?.(session.itemReservation)
     this.sessions.clear()
     this.listeners.clear()
   }

@@ -188,6 +188,44 @@
           "grip": "#373245"
         }
       }
+    },
+    "potion": {
+      "format": "svg",
+      "source": "assets/images/potion.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 96,
+        "height": 112
+      },
+      "colors": {
+        "liquid": "#d96379"
+      },
+      "palettes": {}
+    },
+    "scroll": {
+      "format": "svg",
+      "source": "assets/images/scroll.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 96,
+        "height": 112
+      },
+      "colors": {},
+      "palettes": {}
+    },
+    "rune": {
+      "format": "svg",
+      "source": "assets/images/rune.svg",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 96,
+        "height": 112
+      },
+      "colors": {},
+      "palettes": {}
     }
   },
   "parts": {

@@ -103,7 +103,9 @@
     "rewardInvalidAmount": "rewards.message.rewardInvalidAmount",
     "rewardInventory": "rewards.message.rewardInventory",
     "requiresLevel": "leveling.requires",
-    "mitigated": "equipment.mitigated"
+    "mitigated": "equipment.mitigated",
+    "itemUsed": "usable.messages.itemUsed",
+    "itemSkipped": "usable.messages.itemSkipped"
   },
   "rewards": {
     "recipient": "player",
@@ -153,5 +155,9 @@
       "library": "common",
       "id": "poison-strike"
     }
-  ]
+  ],
+  "itemUse": {
+    "owner": "player",
+    "itemTypes": ["healing-potion", "antidote", "flame-scroll", "healing-rune"]
+  }
 }

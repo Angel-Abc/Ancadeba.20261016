@@ -103,6 +103,7 @@ export function actionBarForm(
         ['enter-scene', 'Enter scene'],
         ['new-game', 'New game'],
         ['inventory-action', 'Selected inventory item'],
+        ['item-use', 'Use selected item'],
         ['nearby-action', 'Selected nearby target'],
         ['move-map', 'Move on map'],
         ['equipment-action', 'Equipment command'],
@@ -120,24 +121,26 @@ export function actionBarForm(
           draft.slots[selectedSlot] = {
             ...(slot ?? { label: '' }),
             action:
-              type === 'combat-action'
-                ? { type, combat: combats[0]?.id ?? '', command: { type: 'end-turn' } }
-                : type === 'shop-action'
-                  ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
-                  : type === 'equipment-action'
-                    ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
-                    : type === 'move-map'
-                      ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                      : type === 'nearby-action'
-                        ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                        : type === 'inventory-action'
-                          ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
-                          : type === 'request-action'
-                            ? { type, action: actions[0] ?? '' }
-                            : {
-                                type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                                scene: gameScenes[0] ?? '',
-                              },
+              type === 'item-use'
+                ? { type, inventory: inventoryPanels[0]?.id ?? '', combat: combats[0]?.id }
+                : type === 'combat-action'
+                  ? { type, combat: combats[0]?.id ?? '', command: { type: 'end-turn' } }
+                  : type === 'shop-action'
+                    ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
+                    : type === 'equipment-action'
+                      ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
+                      : type === 'move-map'
+                        ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                        : type === 'nearby-action'
+                          ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                          : type === 'inventory-action'
+                            ? { type, inventory: inventoryPanels[0]?.id ?? '', action: 'inspect' }
+                            : type === 'request-action'
+                              ? { type, action: actions[0] ?? '' }
+                              : {
+                                  type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                                  scene: gameScenes[0] ?? '',
+                                },
           }
         }),
     ),
@@ -159,6 +162,27 @@ export function actionBarForm(
       ),
     )
     const action = slot.action
+
+    if (action.type === 'item-use') {
+      detail.append(
+        select(
+          'Item-use inventory',
+          action.inventory,
+          inventoryPanels.map((panel) => panel.id),
+          (value) => {
+            action.inventory = value
+          },
+        ),
+        select(
+          'Item-use combat view',
+          action.combat ?? '',
+          ['', ...combats.map((entry) => entry.id)],
+          (value) => {
+            action.combat = value || undefined
+          },
+        ),
+      )
+    }
 
     if (action.type === 'combat-action') {
       detail.append(
@@ -189,6 +213,7 @@ export function actionBarForm(
           ],
           (value) =>
             change(() => {
+              if (value === 'queue-item') return
               action.command = value === 'queue-move' ? { type: value, move: '' } : { type: value }
             }),
         ),
@@ -311,7 +336,7 @@ export function actionBarForm(
           },
         ),
       )
-    } else
+    } else if (action.type === 'new-game' || action.type === 'enter-scene')
       detail.append(
         select(
           'Target scene',

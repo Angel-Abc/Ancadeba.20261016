@@ -1,3 +1,4 @@
+import { itemUseTextSchema } from './itemUse.js'
 import { inventorySchema, type InventoryDefinition } from './inventory.js'
 import { combatStatsTextSchema } from './combatStats.js'
 import type { GameTranslation } from './localization.js'
@@ -54,6 +55,21 @@ export function localizeInventory(
         id,
         {
           ...item,
+          ...(item.use
+            ? {
+                use: {
+                  ...item.use,
+                  messages: Object.fromEntries(
+                    itemUseTextSchema
+                      .keyof()
+                      .options.map((key) => [
+                        key,
+                        text(item.use!.messageKeys[key], item.use!.messages[key]),
+                      ]),
+                  ),
+                },
+              }
+            : {}),
           label: text(item.labelKey, item.label, true),
           description: text(item.descriptionKey, item.description),
           properties: item.properties.map((property) => ({

@@ -108,19 +108,31 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     const current = draft
     const usage = document.createElement('p')
 
-    const encounters = Object.values(view.combatSources ?? {}).filter((source) =>
-      [...(source.sharedMoves ?? []), ...(source.sharedStatuses ?? [])].some(
-        (ref) => ref.library === libraryId,
-      ),
+    const encounters = Object.values(view.combatSources ?? {}).filter(
+      (source) =>
+        [...(source.sharedMoves ?? []), ...(source.sharedStatuses ?? [])].some(
+          (ref) => ref.library === libraryId,
+        ) ||
+        source.itemUse?.itemTypes.some(
+          (id) => view?.inventory?.itemTypes[id]?.use?.ability.library === libraryId,
+        ),
     )
 
-    usage.textContent = `Affected encounters: ${encounters.map((source) => source.id).join(', ') || 'none'}. Changes apply after reloading play.`
+    const items = Object.entries(view.inventory?.itemTypes ?? {}).filter(
+      ([, item]) => item.use?.ability.library === libraryId,
+    )
+
+    usage.textContent = `Affected encounters: ${encounters.map((source) => source.id).join(', ') || 'none'}. Items: ${items.map(([id]) => id).join(', ') || 'none'}. Changes apply after reloading play.`
     const entryUsage = document.createElement('ul')
 
     const resolved = Object.values(view.combatSources ?? {}).map((source) => ({
       id: source.id,
-      origins: resolveCombatSource(source, new Map(Object.entries(view?.combatLibraries ?? {})))
-        .origins,
+      origins: resolveCombatSource(
+        source,
+        new Map(Object.entries(view?.combatLibraries ?? {})),
+        undefined,
+        view?.inventory,
+      ).origins,
     }))
 
     for (const kind of ['moves', 'statuses'] as const)

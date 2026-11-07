@@ -13,7 +13,7 @@ export function sharedCombatForm(
   const { group, select, button, create } = controls
   const copyControls = ruleFormControls(create('div').ownerDocument, () => {})
   const libraries = new Map(Object.entries(view.combatLibraries ?? {}))
-  const resolved = resolveCombatSource(draft, libraries)
+  const resolved = resolveCombatSource(draft, libraries, undefined, view.inventory)
   const rows: HTMLElement[] = []
 
   for (const kind of ['moves', 'statuses'] as const) {

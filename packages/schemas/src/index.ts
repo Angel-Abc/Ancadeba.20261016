@@ -49,3 +49,7 @@ export * from './combatStats.js'
 export * from './combatAbilities.js'
 
 export * from './combatLibraries.js'
+
+export * from './itemUse.js'
+
+export * from './itemUseValidation.js'

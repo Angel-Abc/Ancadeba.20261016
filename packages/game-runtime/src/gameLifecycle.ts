@@ -1,3 +1,4 @@
+import type { IGameItemUse } from './itemUse.js'
 import type { IGameLeveling } from './leveling.js'
 import type { IGameCombatRewards } from './combatRewards.js'
 import type { GameData, SceneData } from './gameData.js'
@@ -13,6 +14,7 @@ import type { IGameTrading } from './trading.js'
 import type { IGameCombat } from './combat.js'
 
 export interface IGameRuntime {
+  readonly itemUse?: IGameItemUse | undefined
   readonly combatStats?: IGameCombatStats | undefined
   readonly combatRewards?: IGameCombatRewards | undefined
   readonly leveling?: IGameLeveling | undefined
@@ -32,6 +34,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly itemUse?: IGameItemUse | undefined
   readonly combatStats?: IGameCombatStats | undefined
   readonly combatRewards?: IGameCombatRewards | undefined
   readonly leveling?: IGameLeveling | undefined
@@ -129,6 +132,10 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+
+  get itemUse(): IGameItemUse | undefined {
+    return this.runtime?.itemUse
+  }
 
   get combatRewards(): IGameCombatRewards | undefined {
     return this.runtime?.combatRewards

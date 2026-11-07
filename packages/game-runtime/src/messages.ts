@@ -1,3 +1,4 @@
+import type { ItemUseRequest } from './itemUse.js'
 import type { GameData } from './gameData.js'
 import type { VirtualInput } from './input.js'
 import type { TimerWakeup } from './timers.js'
@@ -18,6 +19,7 @@ import type {
 } from './turns.js'
 
 export interface EngineMessages {
+  'item-use.request': ItemUseRequest
   'combat.command': CombatCommandRequest
   'turn.started': TurnStarted
   'turn.ended': TurnEnded

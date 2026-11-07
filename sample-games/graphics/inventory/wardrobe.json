@@ -75,6 +75,62 @@
         "guard": 3,
         "maximumHealth": 12
       }
+    },
+    "healing-potion": {
+      "label": "Healing potion",
+      "description": "Restores 12 health. Consumed only when its use succeeds.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "restore-vitality"
+        },
+        "consumption": "consume",
+        "contexts": ["combat", "outside-combat"]
+      },
+      "icon": "potion",
+      "artwork": "potion"
+    },
+    "antidote": {
+      "label": "Antidote",
+      "description": "Removes combat poison. Requires an active poison effect.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "cleanse-poison"
+        },
+        "consumption": "consume",
+        "contexts": ["combat"]
+      },
+      "icon": "potion",
+      "artwork": "potion"
+    },
+    "flame-scroll": {
+      "label": "Flame scroll",
+      "description": "Queues a flame burst against the selected enemy.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "flame-burst"
+        },
+        "consumption": "consume",
+        "contexts": ["combat"]
+      },
+      "icon": "scroll",
+      "artwork": "scroll"
+    },
+    "healing-rune": {
+      "label": "Healing rune",
+      "description": "Reusable healing. Shares Recover’s combat cooldown, including learned casts.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "recover"
+        },
+        "consumption": "keep",
+        "contexts": ["combat", "outside-combat"]
+      },
+      "icon": "rune",
+      "artwork": "rune"
     }
   },
   "owners": {
@@ -175,6 +231,44 @@
       },
       "colors": {
         "fabric": "#bd7d32"
+      }
+    },
+    "healing-potion-one": {
+      "itemType": "healing-potion",
+      "placement": {
+        "type": "inside",
+        "container": "travel-pack"
+      },
+      "colors": {
+        "liquid": "#5c9cdd"
+      }
+    },
+    "antidote-one": {
+      "itemType": "antidote",
+      "placement": {
+        "type": "carried",
+        "owner": "wayfarer"
+      }
+    },
+    "flame-scroll-one": {
+      "itemType": "flame-scroll",
+      "placement": {
+        "type": "carried",
+        "owner": "wayfarer"
+      }
+    },
+    "healing-rune-one": {
+      "itemType": "healing-rune",
+      "placement": {
+        "type": "carried",
+        "owner": "wayfarer"
+      }
+    },
+    "healing-potion-two": {
+      "itemType": "healing-potion",
+      "placement": {
+        "type": "carried",
+        "owner": "wayfarer"
       }
     }
   }

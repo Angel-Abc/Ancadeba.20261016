@@ -13,6 +13,7 @@ import {
   actionBarComponentSchema,
   inputSchema,
   inventorySchema,
+  combatLibrarySchema,
   sceneComponentSchema,
 } from '@ancadeba/schemas'
 import { bindActionBarPanel } from '../apps/editor-ui/src/actionBarPanel.js'
@@ -403,6 +404,85 @@ describe('translation key fields', () => {
 })
 
 describe('action bar editor controls', () => {
+  it('configures usable items, preserves conflicting drafts, and binds Use through existing input controls', () => {
+    const { initial, root, edit, submit, commands, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { potion: { label: 'Potion' } },
+      owners: { player: { label: 'Player' } },
+      items: {},
+    })
+    view.combatLibraries = {
+      items: combatLibrarySchema.parse({
+        'schema-version': '1.0.0',
+        id: 'items',
+        moves: {
+          heal: {
+            type: 'ability',
+            label: 'Recover',
+            apCost: 1,
+            cooldown: 2,
+            target: 'self',
+            effects: [{ id: 'heal', type: 'heal', amount: 10 }],
+          },
+        },
+      }),
+    }
+    view.scenes[0]!.components.push(
+      sceneComponentSchema.parse({
+        id: 'items',
+        type: 'inventory',
+        owners: ['player'],
+        placement: { row: 1, column: 1 },
+      }),
+    )
+    const editor = bindItemEditor(root.asElement(), (command) => commands.push(command))
+    editor.render({ ...initial, view }, true)
+    edit('Item editing target', 'item:potion')
+    edit('Built-in item use', 'enabled')
+    edit('Item shared ability', 'items/heal')
+    edit('Item consumption', 'keep')
+    edit('Item availability', 'combat,outside-combat')
+    edit('Item use noEffect text', 'Nothing to restore.')
+    editor.render(
+      { ...initial, view: { ...view, revision: 'conflict' }, conflict: true, preserveDrafts: true },
+      false,
+    )
+    expect(field('Item consumption').value).toBe('keep')
+    expect(field('Item use noEffect text').value).toBe('Nothing to restore.')
+    submit('Save items and equipment')
+    expect(commands[0]).toMatchObject({
+      type: 'inventory.setItemPresentation',
+      use: {
+        ability: { library: 'items', id: 'heal' },
+        consumption: 'keep',
+        contexts: ['combat', 'outside-combat'],
+        messages: { noEffect: 'Nothing to restore.' },
+      },
+    })
+    bindActionBarPanel(root.asElement(), (command) => commands.push(command)).render(
+      { ...initial, view },
+      true,
+    )
+    edit('Action type', 'item-use')
+    edit('Slot label', 'Use')
+    edit('Item-use inventory', 'items')
+    edit('Input context', 'gameplay')
+    edit('Virtual input', 'slot-1')
+    submit('Save action bar')
+    expect(commands[1]).toMatchObject({
+      type: 'scene.setActionBar',
+      component: {
+        slots: {
+          '1': {
+            action: { type: 'item-use', inventory: 'items' },
+            inputBinding: { context: 'gameplay', input: 'slot-1' },
+          },
+        },
+      },
+    })
+  })
   it('edits shared libraries without flattening imports and preserves both conflicting drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const editor = bindCombatEditor(root.asElement(), (command) => commands.push(command))

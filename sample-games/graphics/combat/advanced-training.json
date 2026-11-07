@@ -164,5 +164,9 @@
       "library": "common",
       "id": "stunning-blow"
     }
-  ]
+  ],
+  "itemUse": {
+    "owner": "wayfarer",
+    "itemTypes": ["healing-potion", "antidote", "flame-scroll", "healing-rune"]
+  }
 }

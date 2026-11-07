@@ -825,7 +825,7 @@ describe('scene renderer', () => {
 
       expect(component('nearby').textContent).toContain(catalog['nearby.letter.name'])
       expect(component('player-status').textContent).toContain('40 / 40')
-      expect(component('items').textContent).toContain('Empty')
+      expect(component('items').textContent).toContain(catalog['usable.healing-potion.name'])
       expect(inspectLetter()).toBeUndefined()
       expect(component('clock').textContent).toContain('09:00')
       expect(mapColumn()).toBe('2')
@@ -975,7 +975,7 @@ describe('scene renderer', () => {
       engine.lifecycle?.enterScene('start-screen')
       startSampleGame(target)
       expect(component('take-letter').disabled).toBe(false)
-      expect(component('items').textContent).toContain('Empty')
+      expect(component('items').textContent).toContain(catalog['usable.healing-potion.name'])
       expect(component('event-log').textContent).not.toContain(message('pickup'))
       expect(component('clock').textContent).toContain('09:00')
 
@@ -1355,7 +1355,7 @@ describe('scene renderer', () => {
     expect(inventory.className.split(' ')).toContain('ancadeba-scene-item')
     expect(
       inventory.find((element) => element.className === 'ancadeba-inventory-items')?.textContent,
-    ).toContain('Empty')
+    ).toContain('Healing potion')
 
     playthrough.inventory?.move('folded-letter', { type: 'carried', owner: 'player' })
     playthrough.inventory?.move('harbour-chart', { type: 'carried', owner: 'player' })
@@ -1363,6 +1363,11 @@ describe('scene renderer', () => {
     expect(itemList.tagName).toBe('UL')
     expect(itemList.children.map((item) => item.textContent)).toEqual([
       'Folded letter',
+      'Healing potion',
+      'Antidote',
+      'Flame scroll',
+      'Healing rune',
+      'Healing potion',
       'Harbour chart',
     ])
     expect(
@@ -1857,6 +1862,73 @@ describe.each([
 })
 
 describe('editor scene picker', () => {
+  it.each([false, true])(
+    'uses localized consumables through focused native buttons and keys in preview=%s',
+    async (preview) => {
+      const resources = {
+        ...source,
+        readText: async (path: string) => {
+          const text = await source.readText(path)
+
+          if (path !== 'rules/rules.json') return text
+          const definition = JSON.parse(text)
+
+          for (const field of definition.state)
+            if (JSON.stringify(field.path) === JSON.stringify(['player', 'health']))
+              field.value = 25
+
+          return JSON.stringify(definition)
+        },
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      engine.lifecycle!.enterScene('inventory')
+
+      const game = engine.lifecycle!.currentGame!,
+        scene = engine.lifecycle!.activeScene!
+
+      game.inventorySelection!.select(scene, 'items', 'healing-potion-one')
+      const slot = () => target.find((node) => node.dataset.actionBarSlot === '6')!
+      expect(slot().disabled).toBe(false)
+      slot().focus()
+      engine.input!.pressKey('KeyA')
+      engine.input!.releaseKey('KeyA')
+      flush(engine)
+      expect(game.combatStats!.snapshot('player')!.health).toBe(37)
+      expect(game.inventorySelection!.get(scene, 'items')).toBeUndefined()
+      expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
+      const details = () => target.find((node) => node.dataset.componentId === 'details')!
+      expect(details().textContent).toContain('Used Healing potion: restored 12 health.')
+      game.data.localization!.select('nl')
+      expect(details().textContent).toContain('Genezingsdrank gebruikt: 12 gezondheid hersteld.')
+      game.inventorySelection!.select(scene, 'items', 'healing-potion-two')
+      slot().dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(game.combatStats!.snapshot('player')!.health).toBe(40)
+      expect(details().textContent).toContain('3 gezondheid hersteld.')
+      engine.stop()
+      await engine.start()
+      startSampleGame(target)
+      expect(
+        engine.lifecycle!.currentGame!.inventory!.snapshot.some(
+          (item) => item.id === 'healing-potion-one',
+        ),
+      ).toBe(true)
+    },
+  )
   it.each([false, true])(
     'renders ability statuses, cooldowns and expiry focus recovery in preview=%s',
     async (preview) => {

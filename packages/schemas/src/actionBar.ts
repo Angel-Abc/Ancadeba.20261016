@@ -21,6 +21,30 @@ export function actionBarIssues(
 
     const action = slot.action
 
+    if (action.type === 'item-use') {
+      if (
+        !scene?.components.some(
+          (component) => component.type === 'inventory' && component.id === action.inventory,
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'inventory'],
+          message: 'Unknown item-use inventory panel',
+        })
+
+      if (
+        action.combat &&
+        !scene?.components.some(
+          (component) => component.type === 'combat' && component.id === action.combat,
+        )
+      )
+        issues.push({
+          path: ['slots', id, 'action', 'combat'],
+          message: 'Unknown item-use combat component',
+        })
+      continue
+    }
+
     if (action.type === 'combat-action') {
       if (
         !scene?.components.some(

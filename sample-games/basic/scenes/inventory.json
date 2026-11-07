@@ -35,8 +35,9 @@
         "columnSpan": 4
       },
       "owners": ["player"],
-      "readOnly": true,
-      "labelKey": "scenes.inventory.title"
+      "readOnly": false,
+      "labelKey": "scenes.inventory.title",
+      "descriptionTarget": "details"
     },
     {
       "id": "details",
@@ -142,6 +143,17 @@
             "context": "gameplay",
             "input": "slot-2"
           }
+        },
+        "6": {
+          "action": {
+            "type": "item-use",
+            "inventory": "items"
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          },
+          "labelKey": "usable.use"
         }
       }
     },

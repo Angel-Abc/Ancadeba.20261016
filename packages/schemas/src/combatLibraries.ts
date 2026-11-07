@@ -10,6 +10,7 @@ import {
 import { combatStatusSchema } from './combatAbilities.js'
 import { assertGraphicReference, graphicAppearanceSchema, type AssetCatalog } from './assets.js'
 import type { GameTranslation } from './localization.js'
+import type { InventoryDefinition } from './inventory.js'
 
 const entryId = z
   .string()
@@ -90,6 +91,10 @@ export function combatLibraryFile(id: string): string {
 
 /** Definitions contain only JSON values. Session state must never be written into them. */
 export function freezeCombatDefinition(definition: CombatDefinition): CombatDefinition {
+  return freezeCombatData(definition)
+}
+
+function freezeCombatData<T>(definition: T): T {
   const freeze = (value: unknown): void => {
     if (value === null || typeof value !== 'object') return
 
@@ -107,6 +112,7 @@ export function resolveCombatSource(
   source: CombatSource,
   libraries: ReadonlyMap<string, CombatLibrary>,
   file = `combat/${source.id}.json`,
+  inventory?: InventoryDefinition,
 ) {
   const moves = { ...source.moves }
   const statuses = { ...source.statuses }
@@ -151,6 +157,40 @@ export function resolveCombatSource(
     }
   }
 
+  const addMove = (ref: CombatReference, path: (string | number)[], implicit = false) => {
+    const move = libraries.get(ref.library)?.moves[ref.id]
+
+    if (!move) {
+      issues.push({
+        file,
+        path,
+        message: `Missing shared move ${ref.library}/${ref.id} (${combatLibraryFile(ref.library)})`,
+      })
+
+      return
+    }
+
+    if (Object.hasOwn(moves, ref.id)) {
+      if (implicit && origins.moves[ref.id]?.library === ref.library) return
+      issues.push({
+        file,
+        path,
+        message: `Move ID ${ref.id} conflicts with ${origins.moves[ref.id]?.file}; imported from ${combatLibraryFile(ref.library)}`,
+      })
+
+      return
+    }
+
+    moves[ref.id] = move
+    origins.moves[ref.id] = {
+      library: ref.library,
+      file: combatLibraryFile(ref.library),
+      path: ['moves', ref.id],
+    }
+
+    for (const id of moveStatusIds(move)) addStatus({ library: ref.library, id }, path)
+  }
+
   for (const key of ['sharedMoves', 'sharedStatuses'] as const) {
     const seen = new Set<string>()
 
@@ -170,35 +210,17 @@ export function resolveCombatSource(
         continue
       }
 
-      const move = libraries.get(ref.library)?.moves[ref.id]
-
-      if (!move) {
-        issues.push({
-          file,
-          path,
-          message: `Missing shared move ${identity} (${combatLibraryFile(ref.library)})`,
-        })
-        continue
-      }
-
-      if (Object.hasOwn(moves, ref.id)) {
-        issues.push({
-          file,
-          path,
-          message: `Move ID ${ref.id} conflicts with ${origins.moves[ref.id]?.file}; imported from ${combatLibraryFile(ref.library)}`,
-        })
-        continue
-      }
-
-      moves[ref.id] = move
-      origins.moves[ref.id] = {
-        library: ref.library,
-        file: combatLibraryFile(ref.library),
-        path: ['moves', ref.id],
-      }
-
-      for (const id of moveStatusIds(move)) addStatus({ library: ref.library, id }, path)
+      addMove(ref, path)
     }
+  }
+
+  for (const [index, type] of (source.itemUse?.itemTypes ?? []).entries()) {
+    const use = inventory?.itemTypes[type]?.use
+    const path = ['itemUse', 'itemTypes', index]
+
+    if (!use || !use.contexts.includes('combat'))
+      issues.push({ file, path, message: `Item type does not support combat use: ${type}` })
+    else addMove(use.ability, path, true)
   }
 
   const resolved = combatDefinitionSchema.safeParse({ ...source, moves, statuses })
@@ -217,6 +239,43 @@ export function resolveCombatSource(
     origins,
     issues,
   }
+}
+
+export function localizeCombatLibrary(
+  library: CombatLibrary,
+  translation?: GameTranslation,
+): CombatLibrary {
+  const text = (key: string | undefined, literal: string) =>
+    key ? (translation?.messages[key] ?? translation?.fallback[key] ?? literal) : literal
+
+  const entries = <
+    T extends {
+      label: string
+      labelKey?: string | undefined
+      description: string
+      descriptionKey?: string | undefined
+    },
+  >(
+    values: Record<string, T>,
+  ) =>
+    Object.fromEntries(
+      Object.entries(values).map(([id, value]) => [
+        id,
+        {
+          ...value,
+          label: text(value.labelKey, value.label),
+          description: text(value.descriptionKey, value.description),
+        },
+      ]),
+    )
+
+  return freezeCombatData(
+    combatLibrarySchema.parse({
+      ...library,
+      moves: entries(library.moves),
+      statuses: entries(library.statuses),
+    }),
+  )
 }
 
 /** Validate every library entry, including definitions not yet imported by any encounter. */

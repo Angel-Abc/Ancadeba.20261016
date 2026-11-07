@@ -1,3 +1,4 @@
+import type { IGameItemUse, ItemUseCapture } from './itemUse.js'
 import { inventoryEntry, type ActionBarSlotDefinition } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { VirtualInput } from './input.js'
@@ -23,6 +24,7 @@ export interface IGameActionBar {
 }
 
 interface CapturedSlot {
+  readonly itemCapture?: ItemUseCapture | undefined
   readonly combatCapture?: CombatCapture | undefined
   readonly scene: SceneInstance
   readonly bar: string
@@ -52,6 +54,7 @@ export class GameActionBar implements IGameActionBar {
     private readonly equipment: IGameEquipment | undefined = lifecycle.currentGame?.equipment,
     private readonly trading: IGameTrading | undefined = lifecycle.currentGame?.trading,
     private readonly combat: () => IGameCombat | undefined = () => lifecycle.currentGame?.combat,
+    private readonly itemUse: () => IGameItemUse | undefined = () => lifecycle.currentGame?.itemUse,
   ) {
     this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
     this.inventoryContext = selection ?? this.ownedContext!
@@ -72,6 +75,7 @@ export class GameActionBar implements IGameActionBar {
     const equipment = this.equipment?.subscribe(listener)
     const trading = this.trading?.subscribeChanges(listener)
     const combat = this.combat()?.subscribeChanges(listener)
+    const items = this.itemUse()?.subscribeChanges(listener)
 
     return () => {
       inventory()
@@ -80,6 +84,7 @@ export class GameActionBar implements IGameActionBar {
       equipment?.()
       trading?.()
       combat?.()
+      items?.()
     }
   }
 
@@ -100,6 +105,7 @@ export class GameActionBar implements IGameActionBar {
   ):
     | {
         definition: ActionBarSlotDefinition
+        itemCapture?: ItemUseCapture | undefined
         combatCapture?: CombatCapture | undefined
         payload?: string
         selection?:
@@ -112,6 +118,16 @@ export class GameActionBar implements IGameActionBar {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'item-use')
+      return {
+        definition,
+        itemCapture: this.itemUse()?.capture(
+          scene,
+          definition.action.inventory,
+          definition.action.combat,
+        ),
+      }
 
     if (definition.action.type === 'combat-action')
       return {
@@ -194,6 +210,12 @@ export class GameActionBar implements IGameActionBar {
 
     if (!action) return false
 
+    if (action.type === 'item-use')
+      return Boolean(
+        this.itemUse() &&
+        this.itemUse()?.reason(scene, action.inventory, action.combat) === undefined,
+      )
+
     if (action.type === 'combat-action')
       return this.combat()?.canCommand(scene, action.combat, action.command) ?? false
 
@@ -226,6 +248,7 @@ export class GameActionBar implements IGameActionBar {
       slot,
       selection: resolved?.selection,
       combatCapture: resolved?.combatCapture,
+      itemCapture: resolved?.itemCapture,
     })
   }
 
@@ -241,6 +264,13 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'item-use') {
+      if (resolved.itemCapture === target.itemCapture)
+        this.itemUse()?.request(scene, action.inventory, action.combat, target.itemCapture, origin)
+
+      return
+    }
 
     if (action.type === 'combat-action') {
       if (resolved.combatCapture !== target.combatCapture) return
@@ -310,6 +340,7 @@ export class GameActionBar implements IGameActionBar {
             slot: slot[0],
             selection: resolved.selection,
             combatCapture: resolved.combatCapture,
+            itemCapture: resolved.itemCapture,
           }
       }
 

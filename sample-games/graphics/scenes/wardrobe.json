@@ -35,7 +35,8 @@
         "column": 1,
         "rowSpan": 9,
         "columnSpan": 6
-      }
+      },
+      "readOnly": false
     },
     {
       "id": "gallery",
@@ -145,6 +146,17 @@
           "inputBinding": {
             "context": "wardrobe",
             "input": "sell"
+          }
+        },
+        "6": {
+          "label": "Use item",
+          "action": {
+            "type": "item-use",
+            "inventory": "wardrobe-items"
+          },
+          "inputBinding": {
+            "context": "wardrobe",
+            "input": "slot-6"
           }
         }
       }

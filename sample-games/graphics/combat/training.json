@@ -131,5 +131,9 @@
       "library": "common",
       "id": "poison-strike"
     }
-  ]
+  ],
+  "itemUse": {
+    "owner": "wayfarer",
+    "itemTypes": ["healing-potion", "antidote", "flame-scroll", "healing-rune"]
+  }
 }

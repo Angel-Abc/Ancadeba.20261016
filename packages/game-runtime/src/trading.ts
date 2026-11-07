@@ -211,6 +211,7 @@ export class GameTrading implements IGameTrading {
     )
       reason = 'invalidAmount'
     else if (item.placement.type === 'equipped') reason = 'equipped'
+    else if (this.inventory?.isReserved?.(itemId)) reason = 'reserved'
     else if (
       [...items.values()].some(
         (item) => item.placement.type === 'inside' && item.placement.container === itemId,

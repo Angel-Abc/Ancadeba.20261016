@@ -14,12 +14,17 @@ import {
 export type CombatOutcome = 'victory' | 'defeat' | 'escaped'
 
 export interface PlannedMove {
+  readonly item?: string | undefined
+  readonly itemType?: string | undefined
+  readonly consume?: boolean | undefined
   readonly move: string
   readonly target: string
 }
 
 export interface CombatLogEntry {
   readonly type:
+    | 'itemUsed'
+    | 'itemSkipped'
     | 'attack'
     | 'guarded'
     | 'skipped'
@@ -32,6 +37,7 @@ export interface CombatLogEntry {
     | 'regenerated'
     | 'stunned'
     | CombatOutcome
+  readonly item?: string | undefined
   readonly actor?: string
   readonly target?: string
   readonly damage?: number
@@ -150,6 +156,7 @@ export function resolveCombatRound(
   )
 
   const entries: CombatLogEntry[] = []
+  const usedItems: string[] = []
   const round = current.round ?? 1
 
   const cursors = Object.fromEntries(
@@ -165,6 +172,7 @@ export function resolveCombatRound(
     health,
     guard,
     seed,
+    usedItems,
     entries,
     outcome,
     statuses: outcome ? {} : statuses,
@@ -331,6 +339,8 @@ export function resolveCombatRound(
           if (cooldownRemaining(cooldowns, actor.id, queued.move, round))
             throw new Error('Move is on cooldown')
 
+          const entryStart = entries.length
+
           if (move.type === 'attack') attack(actor.id, queued.target, move.damage)
           else if (move.type === 'guard') {
             const strength = safe(move.guard + stats(actor.id).guard)
@@ -343,6 +353,37 @@ export function resolveCombatRound(
 
               if (outcome || !health[actor.id]) break
             }
+
+          if (queued.item) {
+            const meaningful = entries
+              .slice(entryStart)
+              .some(
+                (entry) =>
+                  entry.type === 'statusApplied' ||
+                  entry.type === 'statusRefreshed' ||
+                  entry.type === 'statusRemoved' ||
+                  (entry.type === 'healed' && Boolean(entry.amount)) ||
+                  (entry.type === 'guarded' && Boolean(entry.guard)) ||
+                  (entry.type === 'attack' && Boolean(entry.damage || entry.blocked)),
+              )
+
+            if (!meaningful) {
+              entries.splice(entryStart)
+              entries.push({
+                type: 'itemSkipped',
+                actor: actor.id,
+                item: queued.itemType ?? queued.item,
+              })
+              continue
+            }
+
+            usedItems.push(queued.item)
+            entries.splice(entryStart, 0, {
+              type: 'itemUsed',
+              actor: actor.id,
+              item: queued.itemType ?? queued.item,
+            })
+          }
 
           if (move.cooldown)
             (cooldowns[actor.id] ??= {})[queued.move] = safe(round + move.cooldown + 1)

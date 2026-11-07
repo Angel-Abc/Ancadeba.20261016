@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { itemUseSchema } from './itemUse.js'
 import { combatBonusesSchema, combatStatsProfileSchema } from './combatStats.js'
 import { gameBindingSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
@@ -74,6 +75,7 @@ export const itemPresentationSchema = z
 
 const itemTypeSchema = itemPresentationSchema.safeExtend({
   combatBonuses: combatBonusesSchema.optional(),
+  use: itemUseSchema.optional(),
   container: z.boolean().default(false),
   equipmentSlots: z.array(gameIdSchema).default([]),
   icon: gameIdSchema.optional(),

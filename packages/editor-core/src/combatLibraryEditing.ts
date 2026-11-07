@@ -5,6 +5,9 @@ import {
   combatSourceSchema,
   resolveCombatSource,
   moveStatusIds,
+  inventorySchema,
+  inventoryFile,
+  mergeInventorySources,
   type GameDefinition,
 } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
@@ -70,7 +73,14 @@ export function editCombatLibrary(
     ]),
   )
 
-  const resolved = resolveCombatSource(source, libraries)
+  const { inventory } = mergeInventorySources(
+    (game.inventory ?? []).map((id) => ({
+      file: inventoryFile(id),
+      inventory: inventorySchema.parse(documents[inventoryFile(id)]),
+    })),
+  )
+
+  const resolved = resolveCombatSource(source, libraries, undefined, inventory)
   const { library, id } = command.reference
   const origin = libraries.get(library)?.[command.kind][id]
 

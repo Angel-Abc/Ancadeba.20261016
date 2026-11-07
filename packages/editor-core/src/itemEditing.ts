@@ -49,6 +49,32 @@ export function editItems(
                     : undefined,
                 }
               : {}),
+            ...(command.use !== undefined
+              ? {
+                  use: command.use
+                    ? {
+                        ...object(previous.use),
+                        ...command.use,
+                        ability: {
+                          ...object(object(previous.use).ability),
+                          ...command.use.ability,
+                        },
+                        enabledWhen: command.use.enabledWhen
+                          ? {
+                              ...object(object(previous.use).enabledWhen),
+                              ...command.use.enabledWhen,
+                              fallback: command.use.enabledWhen.fallback,
+                            }
+                          : undefined,
+                        messages: {
+                          ...object(object(previous.use).messages),
+                          ...command.use.messages,
+                        },
+                        messageKeys: { ...command.use.messageKeys },
+                      }
+                    : undefined,
+                }
+              : {}),
             labelKey: command.presentation.labelKey,
             descriptionKey: command.presentation.descriptionKey,
             artwork: command.presentation.artwork,

@@ -236,6 +236,22 @@ async function setup(options: { unlimited?: boolean; adapter?: boolean; free?: b
 }
 
 describe('shops and atomic trading', () => {
+  it('disables selling a reserved item and leaves currency and ownership unchanged', async () => {
+    const { game, active, state, select, trade, quote } = await setup()
+    const token = { encounter: 'paused-fight' }
+    expect(game().inventory!.reserveItem!('owned', token)).toBeUndefined()
+    select('owned', 'player')
+    expect(quote()?.reason).toBe('reserved')
+    expect(game().trading!.checkTrade(active(), 'shop', 'sell')).toBe('reserved')
+    expect(trade('sell')).toMatchObject({ status: 'rejected', reason: 'reserved' })
+    expect(state().get('gold')).toBe(20)
+    expect(game().inventory!.snapshot.find((item) => item.id === 'owned')!.placement).toEqual({
+      type: 'carried',
+      owner: 'player',
+    })
+    game().inventory!.releaseItems!(token)
+    expect(quote()?.reason).toBeUndefined()
+  })
   it('commits ownership and both balances before notifying, and clears only the source selection', async () => {
     const { game, active, state, select, trade, quote } = await setup()
     select('owned', 'player')

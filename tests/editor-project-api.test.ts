@@ -323,6 +323,63 @@ describe('shared editor project API', () => {
       }),
     ).rejects.toMatchObject({ status: 422 })
   })
+  it('saves usable item drafts with revision checks and reloads authored references in preview', async () => {
+    await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'usable'), {
+      recursive: true,
+    })
+
+    const service = new EditorProjectService(
+      new WorkspaceProjectRepository(workspace),
+      new EditorCoordinator(),
+    )
+
+    const current = await service.inspect('usable')
+    const item = current.inventory!.itemTypes['healing-potion']!
+
+    const operation = {
+      type: 'inventory.setItemPresentation',
+      itemType: 'healing-potion',
+      presentation: item,
+      use: { ...item.use!, consumption: 'keep' },
+    }
+
+    const saved = await service.apply({
+      path: 'usable',
+      expectedRevision: current.revision,
+      command: operation,
+    })
+
+    expect(saved.view.inventory!.itemTypes['healing-potion']!.use!.consumption).toBe('keep')
+    await expect(
+      service.apply({ path: 'usable', expectedRevision: current.revision, command: operation }),
+    ).rejects.toMatchObject({ status: 409 })
+    const raw = JSON.parse(await readFile(join(root, 'usable/inventory/museum.json'), 'utf8'))
+    expect(raw.itemTypes['healing-potion'].use.ability).toEqual({
+      library: 'common',
+      id: 'restore-vitality',
+    })
+    await expect(
+      service.apply({
+        path: 'usable',
+        expectedRevision: saved.view.revision,
+        command: { type: 'game.removeCombatLibrary', libraryId: 'common' },
+      }),
+    ).rejects.toMatchObject({ status: 422 })
+
+    const game = await new GameLoader(
+      new JsonResourceLoader(
+        {
+          readText: (path) => readFile(join(root, 'usable', path), 'utf8'),
+          readBytes: async () => new Uint8Array(),
+        },
+        { debug: () => '', info: () => '', warn: () => '', error: () => '' },
+      ),
+    ).load()
+
+    expect(game.inventory!.itemTypes['healing-potion']!.use!.consumption).toBe('keep')
+    expect(game.combat!.get('training')!.moves['restore-vitality']).toBeDefined()
+    expect(game.combat!.get('training')!.player.moves).not.toContain('restore-vitality')
+  })
   it.each(['success', 'before-scene', 'after-scene', 'concurrent'] as const)(
     'publishes encounter, manifest, and view consistently: %s',
     async (failure) => {

@@ -33,7 +33,18 @@ export function selectedItemDetails(scene: SceneInstance, panel: string) {
     ...resolveStatusValue(property.value, scene.game.bindings),
   }))
 
-  return { item, type, location, properties }
+  const action = scene.data.components
+    .flatMap((entry) => (entry.type === 'action-bar' ? Object.values(entry.slots) : []))
+    .find((slot) => slot.action.type === 'item-use' && slot.action.inventory === panel)?.action
+
+  const useDetails =
+    scene.game.itemUse?.details(
+      scene,
+      panel,
+      action?.type === 'item-use' ? action.combat : undefined,
+    ) ?? ''
+
+  return { item, type, location, properties, useDetails }
 }
 
 export function itemDetailsText(details: ReturnType<typeof selectedItemDetails>): string {
@@ -44,6 +55,7 @@ export function itemDetailsText(details: ReturnType<typeof selectedItemDetails>)
     details.type.description,
     ...details.properties.map((property) => `${property.label}: ${property.value ?? '—'}`),
     details.location,
+    details.useDetails,
   ]
     .filter(Boolean)
     .join('\n\n')

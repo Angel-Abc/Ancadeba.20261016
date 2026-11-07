@@ -47,6 +47,150 @@
         "attack": 1,
         "guard": 1
       }
+    },
+    "healing-potion": {
+      "label": "Healing potion",
+      "description": "Restores 12 health. Consumed only when its use succeeds.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "restore-vitality"
+        },
+        "consumption": "consume",
+        "contexts": ["combat", "outside-combat"],
+        "messageKeys": {
+          "unavailable": "usable.messages.unavailable",
+          "selection": "usable.messages.selection",
+          "readOnly": "usable.messages.readOnly",
+          "reserved": "usable.messages.reserved",
+          "equipped": "usable.messages.equipped",
+          "container": "usable.messages.container",
+          "disabled": "usable.messages.disabled",
+          "owner": "usable.messages.owner",
+          "context": "usable.messages.context",
+          "paused": "usable.messages.paused",
+          "noEffect": "usable.messages.noEffect",
+          "target": "usable.messages.target",
+          "ap": "usable.messages.ap",
+          "used": "usable.messages.used",
+          "details": "usable.messages.details",
+          "cost": "usable.messages.cost",
+          "consume": "usable.messages.consume",
+          "keep": "usable.messages.keep",
+          "combat": "usable.messages.combat",
+          "outside": "usable.messages.outside"
+        }
+      },
+      "labelKey": "usable.healing-potion.name",
+      "descriptionKey": "usable.healing-potion.description"
+    },
+    "antidote": {
+      "label": "Antidote",
+      "description": "Removes combat poison. Requires an active poison effect.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "cleanse-poison"
+        },
+        "consumption": "consume",
+        "contexts": ["combat"],
+        "messageKeys": {
+          "unavailable": "usable.messages.unavailable",
+          "selection": "usable.messages.selection",
+          "readOnly": "usable.messages.readOnly",
+          "reserved": "usable.messages.reserved",
+          "equipped": "usable.messages.equipped",
+          "container": "usable.messages.container",
+          "disabled": "usable.messages.disabled",
+          "owner": "usable.messages.owner",
+          "context": "usable.messages.context",
+          "paused": "usable.messages.paused",
+          "noEffect": "usable.messages.noEffect",
+          "target": "usable.messages.target",
+          "ap": "usable.messages.ap",
+          "used": "usable.messages.used",
+          "details": "usable.messages.details",
+          "cost": "usable.messages.cost",
+          "consume": "usable.messages.consume",
+          "keep": "usable.messages.keep",
+          "combat": "usable.messages.combat",
+          "outside": "usable.messages.outside"
+        }
+      },
+      "labelKey": "usable.antidote.name",
+      "descriptionKey": "usable.antidote.description"
+    },
+    "flame-scroll": {
+      "label": "Flame scroll",
+      "description": "Queues a flame burst against the selected enemy.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "flame-burst"
+        },
+        "consumption": "consume",
+        "contexts": ["combat"],
+        "messageKeys": {
+          "unavailable": "usable.messages.unavailable",
+          "selection": "usable.messages.selection",
+          "readOnly": "usable.messages.readOnly",
+          "reserved": "usable.messages.reserved",
+          "equipped": "usable.messages.equipped",
+          "container": "usable.messages.container",
+          "disabled": "usable.messages.disabled",
+          "owner": "usable.messages.owner",
+          "context": "usable.messages.context",
+          "paused": "usable.messages.paused",
+          "noEffect": "usable.messages.noEffect",
+          "target": "usable.messages.target",
+          "ap": "usable.messages.ap",
+          "used": "usable.messages.used",
+          "details": "usable.messages.details",
+          "cost": "usable.messages.cost",
+          "consume": "usable.messages.consume",
+          "keep": "usable.messages.keep",
+          "combat": "usable.messages.combat",
+          "outside": "usable.messages.outside"
+        }
+      },
+      "labelKey": "usable.flame-scroll.name",
+      "descriptionKey": "usable.flame-scroll.description"
+    },
+    "healing-rune": {
+      "label": "Healing rune",
+      "description": "Reusable healing. Shares Recover’s combat cooldown, including learned casts.",
+      "use": {
+        "ability": {
+          "library": "common",
+          "id": "recover"
+        },
+        "consumption": "keep",
+        "contexts": ["combat", "outside-combat"],
+        "messageKeys": {
+          "unavailable": "usable.messages.unavailable",
+          "selection": "usable.messages.selection",
+          "readOnly": "usable.messages.readOnly",
+          "reserved": "usable.messages.reserved",
+          "equipped": "usable.messages.equipped",
+          "container": "usable.messages.container",
+          "disabled": "usable.messages.disabled",
+          "owner": "usable.messages.owner",
+          "context": "usable.messages.context",
+          "paused": "usable.messages.paused",
+          "noEffect": "usable.messages.noEffect",
+          "target": "usable.messages.target",
+          "ap": "usable.messages.ap",
+          "used": "usable.messages.used",
+          "details": "usable.messages.details",
+          "cost": "usable.messages.cost",
+          "consume": "usable.messages.consume",
+          "keep": "usable.messages.keep",
+          "combat": "usable.messages.combat",
+          "outside": "usable.messages.outside"
+        }
+      },
+      "labelKey": "usable.healing-rune.name",
+      "descriptionKey": "usable.healing-rune.description"
     }
   },
   "owners": {
@@ -168,6 +312,41 @@
       "placement": {
         "type": "carried",
         "owner": "museum-kiosk"
+      }
+    },
+    "healing-potion-one": {
+      "itemType": "healing-potion",
+      "placement": {
+        "type": "carried",
+        "owner": "player"
+      }
+    },
+    "antidote-one": {
+      "itemType": "antidote",
+      "placement": {
+        "type": "carried",
+        "owner": "player"
+      }
+    },
+    "flame-scroll-one": {
+      "itemType": "flame-scroll",
+      "placement": {
+        "type": "carried",
+        "owner": "player"
+      }
+    },
+    "healing-rune-one": {
+      "itemType": "healing-rune",
+      "placement": {
+        "type": "carried",
+        "owner": "player"
+      }
+    },
+    "healing-potion-two": {
+      "itemType": "healing-potion",
+      "placement": {
+        "type": "carried",
+        "owner": "player"
       }
     }
   }

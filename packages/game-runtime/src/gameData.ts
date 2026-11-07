@@ -1,5 +1,7 @@
 import {
   combatLibraryIssues,
+  itemUseIssues,
+  localizeCombatLibrary,
   freezeCombatDefinition,
   resolveCombatSource,
   type CombatSource,
@@ -123,6 +125,7 @@ export interface SceneData {
 
 export interface GameData {
   readonly leveling?: ReadonlyMap<string, LevelingProfile> | undefined
+  readonly combatLibraries?: ReadonlyMap<string, CombatLibrary> | undefined
   readonly combat?: ReadonlyMap<string, CombatDefinition> | undefined
   readonly assets?: AssetCatalog
   readonly inventory?: InventoryDefinition | undefined
@@ -203,6 +206,9 @@ export function assembleGameData(
     [...combatLibraries].filter(([id]) => definition.combatLibraries?.includes(id)),
   )
 
+  const useIssue = itemUseIssues(inventory, declaredLibraries, validated?.rules)[0]
+
+  if (useIssue) throw new Error(`Item use (${useIssue.path.join('.')}): ${useIssue.message}`)
   const combat = new Map<string, CombatDefinition>()
 
   for (const id of definition.combat ?? []) {
@@ -211,7 +217,7 @@ export function assembleGameData(
     if (!source || source.id !== id)
       throw new Error(`Missing or mismatched combat definition: ${id}`)
 
-    const resolved = resolveCombatSource(source, declaredLibraries)
+    const resolved = resolveCombatSource(source, declaredLibraries, undefined, inventory)
 
     if (!resolved.definition)
       throw new Error(
@@ -570,6 +576,16 @@ export function assembleGameData(
 
   return {
     ...(leveling.size && { leveling }),
+    ...(declaredLibraries.size
+      ? {
+          combatLibraries: new Map(
+            [...declaredLibraries].map(([id, library]) => [
+              id,
+              localizeCombatLibrary(library, ruleTranslation),
+            ]),
+          ),
+        }
+      : {}),
     ...(combat.size ? { combat } : {}),
     ...(assets ? { assets } : {}),
     ...(inventory ? { inventory } : {}),

@@ -68,6 +68,11 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
             ? scene.game.equipment?.reason(scene, action.equipment, action.operation)
             : undefined
 
+        const itemIssue =
+          action.type === 'item-use' && scene?.type === 'game'
+            ? scene.game.itemUse?.reason(scene, action.inventory, action.combat)
+            : undefined
+
         const moveIssue =
           action.type === 'combat-action' &&
           action.command.type === 'queue-move' &&
@@ -104,7 +109,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
               : ''
         lock.hidden = !lock.textContent
         lock.setAttribute('aria-hidden', String(Boolean(equipmentIssue || moveIssue)))
-        button.title = moveIssue ?? equipmentIssue ?? lock.textContent
+        button.title = itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent
         button.setAttribute('aria-description', button.title)
 
         if (empty) empty.hidden = available
@@ -152,7 +157,9 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
                   ? `${slot.action.mapView}:${slot.action.direction}`
                   : 'action' in slot.action
                     ? slot.action.action
-                    : slot.action.scene
+                    : slot.action.type === 'item-use'
+                      ? `${slot.action.inventory}:use`
+                      : slot.action.scene
         const label = document.createElement('span')
         label.textContent = slot.label
         const badge = document.createElement('kbd')

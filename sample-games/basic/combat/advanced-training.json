@@ -132,7 +132,9 @@
     "reserved": "abilities.message.reserved",
     "conditional": "abilities.message.conditional",
     "turnsRemaining": "abilities.message.turnsRemaining",
-    "healing": "abilities.message.healing"
+    "healing": "abilities.message.healing",
+    "itemUsed": "usable.messages.itemUsed",
+    "itemSkipped": "usable.messages.itemSkipped"
   },
   "rewards": {
     "recipient": "player",
@@ -202,5 +204,9 @@
       "library": "common",
       "id": "stunning-blow"
     }
-  ]
+  ],
+  "itemUse": {
+    "owner": "player",
+    "itemTypes": ["healing-potion", "antidote", "flame-scroll", "healing-rune"]
+  }
 }

@@ -116,6 +116,51 @@
         }
       ],
       "labelKey": "abilities.move.stunning-blow"
+    },
+    "restore-vitality": {
+      "type": "ability",
+      "label": "Restore vitality",
+      "target": "self",
+      "apCost": 1,
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 12
+        }
+      ],
+      "labelKey": "usable.restore-vitality"
+    },
+    "cleanse-poison": {
+      "type": "ability",
+      "label": "Cleanse poison",
+      "target": "self",
+      "apCost": 1,
+      "effects": [
+        {
+          "id": "cleanse",
+          "type": "remove-status",
+          "status": "poison"
+        }
+      ],
+      "labelKey": "usable.cleanse-poison"
+    },
+    "flame-burst": {
+      "type": "ability",
+      "label": "Flame burst",
+      "target": "enemy",
+      "apCost": 1,
+      "effects": [
+        {
+          "id": "flame",
+          "type": "damage",
+          "damage": {
+            "min": 4,
+            "max": 7
+          }
+        }
+      ],
+      "labelKey": "usable.flame-burst"
     }
   },
   "statuses": {

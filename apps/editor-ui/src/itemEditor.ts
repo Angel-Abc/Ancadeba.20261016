@@ -15,6 +15,7 @@ import {
   saveBar,
   translationChoices,
 } from './ruleFormControls.js'
+import { itemUseForm } from './itemUseForm.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
 
@@ -194,7 +195,11 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     button.textContent = 'Save items and equipment'
     form.append(saveBar(document, button))
 
-    if (item) form.append(...itemPresentationForm(controls, view, item, render))
+    if (item)
+      form.append(
+        ...itemPresentationForm(controls, view, item, render),
+        itemUseForm(controls, view, item, render),
+      )
 
     if (slots) {
       form.append(
@@ -395,6 +400,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           itemType: target.slice(5),
           presentation: item,
           combatBonuses: item.combatBonuses ?? null,
+          use: item.use ?? null,
         })
       else if (slots) {
         if (new Set(slots.map((slot) => slot[0])).size !== slots.length) {

@@ -79,6 +79,9 @@ export function editCombat(
         actor(entry, oldEnemies.find((old) => old.id === entry.id) ?? {}),
       ),
       ...mergeCombatEntries(previous, definition),
+      itemUse: definition.itemUse
+        ? { ...object(previous.itemUse), ...definition.itemUse }
+        : undefined,
       sharedMoves: definition.sharedMoves?.map((ref) => ({
         ...oldReferences('sharedMoves', ref.library, ref.id),
         ...ref,

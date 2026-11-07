@@ -149,18 +149,15 @@
         },
         "7": {
           "action": {
-            "type": "combat-action",
-            "combat": "combat",
-            "command": {
-              "type": "queue-move",
-              "move": "weaken"
-            }
+            "type": "item-use",
+            "inventory": "supplies",
+            "combat": "combat"
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-7"
           },
-          "labelKey": "abilities.move.weaken"
+          "labelKey": "usable.use"
         },
         "8": {
           "labelKey": "combat.escape",
@@ -285,9 +282,9 @@
       "readOnly": true,
       "descriptionTarget": "narrative",
       "placement": {
-        "row": 1,
+        "row": 5,
         "column": 10,
-        "rowSpan": 4,
+        "rowSpan": 2,
         "columnSpan": 3
       }
     },
@@ -297,9 +294,9 @@
       "inventory": "loot",
       "labelKey": "rewards.details",
       "placement": {
-        "row": 7,
+        "row": 8,
         "column": 10,
-        "rowSpan": 3,
+        "rowSpan": 2,
         "columnSpan": 3
       }
     },
@@ -308,11 +305,24 @@
       "type": "character-progression",
       "profile": "player",
       "placement": {
-        "row": 5,
+        "row": 7,
         "column": 10,
-        "rowSpan": 2,
+        "rowSpan": 1,
         "columnSpan": 3
       }
+    },
+    {
+      "id": "supplies",
+      "type": "inventory",
+      "owners": ["player"],
+      "descriptionTarget": "narrative",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 4,
+        "columnSpan": 3
+      },
+      "labelKey": "usable.supplies"
     }
   ]
 }

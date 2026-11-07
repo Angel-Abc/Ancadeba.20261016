@@ -1,6 +1,7 @@
 import { levelingProfileSchema, characterProgressionComponentSchema } from '@ancadeba/schemas'
 import { z } from 'zod'
 import {
+  itemUseSchema,
   combatBonusesSchema,
   combatStatsProfileSchema,
   gameIdSchema,
@@ -159,6 +160,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     itemType: gameIdSchema,
     presentation: itemPresentationSchema,
     combatBonuses: combatBonusesSchema.nullable().optional(),
+    use: itemUseSchema.nullable().optional(),
   }),
   z.strictObject({
     type: z.literal('inventory.setEquipmentSlots'),

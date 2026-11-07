@@ -530,6 +530,29 @@ describe('standalone game export', () => {
 
       expect(lifecycle.activeScene?.data.id).toBe('old-harbour')
       expect(engine.input!.getKeyboardCodes('gameplay', 'slot-1')).toEqual(['KeyQ'])
+      lifecycle.enterScene('training')
+      game.combat!.request(lifecycle.activeScene!, 'combat', { type: 'end-turn' })
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      game.combat!.request(lifecycle.activeScene!, 'combat', { type: 'escape' })
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      game.combat!.request(lifecycle.activeScene!, 'combat', { type: 'end-turn' })
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      lifecycle.enterScene('inventory')
+      const beforeHealing = game.combatStats!.snapshot('player')!
+      expect(beforeHealing.health).toBeLessThan(beforeHealing.total.maximumHealth)
+      game.inventorySelection!.select(lifecycle.activeScene!, 'items', 'healing-potion-one')
+      engine.input!.pressKey('KeyA')
+      engine.input!.releaseKey('KeyA')
+
+      for (let batch = 0; batch < 4; batch++) engine.flushMessages()
+      expect(game.combatStats!.snapshot('player')!.health).toBe(
+        Math.min(beforeHealing.total.maximumHealth, beforeHealing.health + 12),
+      )
+      expect(game.inventory!.snapshot.some((item) => item.id === 'healing-potion-one')).toBe(false)
+      expect(game.itemUse!.feedback(lifecycle.activeScene!, 'items')).toContain('restored')
     } finally {
       engine?.stop()
       await server.close()

@@ -1,5 +1,6 @@
 import {
   combatLibrarySchema,
+  itemUseIssues,
   combatLibraryFile,
   combatLibraryIssues,
   combatSourceSchema,
@@ -112,19 +113,6 @@ export function validateProject(
     }),
   )
 
-  const combats = new Map(
-    (game.data.combat ?? []).flatMap((id) => {
-      const result = check(combatFile(id), combatSourceSchema)
-
-      if (!result.success) return []
-      const resolved = resolveCombatSource(result.data, libraries, combatFile(id))
-
-      for (const issue of resolved.issues) diagnostics.push({ code: 'invalid_combat', ...issue })
-
-      return resolved.definition ? [[id, resolved.definition] as const] : []
-    }),
-  )
-
   const leveling = new Map(
     (game.data.leveling ?? []).flatMap((id) => {
       const result = check(levelingFile(id), levelingProfileSchema)
@@ -151,6 +139,19 @@ export function validateProject(
   )
 
   const { inventory, issues } = validateInventorySources(inventorySources, assets?.data)
+
+  const combats = new Map(
+    (game.data.combat ?? []).flatMap((id) => {
+      const result = check(combatFile(id), combatSourceSchema)
+
+      if (!result.success) return []
+      const resolved = resolveCombatSource(result.data, libraries, combatFile(id), inventory)
+
+      for (const issue of resolved.issues) diagnostics.push({ code: 'invalid_combat', ...issue })
+
+      return resolved.definition ? [[id, resolved.definition] as const] : []
+    }),
+  )
 
   for (const issue of issues) diagnostics.push({ ...issue, code: 'invalid_inventory' })
 
@@ -266,6 +267,9 @@ export function validateProject(
 
   const validatedRules = validateRuleSources(sources, scenes, maps, inventory, defaultMessages)
   const mergedRules = validatedRules.rules
+
+  for (const issue of itemUseIssues(inventory, libraries, mergedRules))
+    diagnostics.push({ code: 'invalid_item_use', file: 'game.json', ...issue })
 
   for (const issue of levelingIssues(
     leveling,

@@ -94,7 +94,10 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
 
   const resolved = Object.entries(combatSources).map(
     ([id, source]) =>
-      [id, resolveCombatSource(source, new Map(Object.entries(combatLibraries)))] as const,
+      [
+        id,
+        resolveCombatSource(source, new Map(Object.entries(combatLibraries)), undefined, inventory),
+      ] as const,
   )
 
   return {
