@@ -1,4 +1,9 @@
-import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
+import type {
+  CreateProjectRequest,
+  EditorCommand,
+  ProjectView,
+  ComponentClipboard,
+} from '@ancadeba/editor-core'
 import { EditorClientError, type IEditorClient } from './editorClient.js'
 
 export interface ProjectEditorState {
@@ -10,6 +15,7 @@ export interface ProjectEditorState {
   changedElsewhere: boolean
   lastCommand: EditorCommand['type'] | null
   preserveDrafts: boolean
+  historyChange?: 'undo' | 'redo' | undefined
 }
 
 export type ProjectEditorListener = (state: ProjectEditorState, replaceFields: boolean) => void
@@ -31,6 +37,26 @@ export class ProjectEditorController {
     private readonly client: IEditorClient,
     private readonly onChange: ProjectEditorListener,
   ) {}
+
+  create(request: CreateProjectRequest): Promise<void> {
+    return this.perform(async () => {
+      if (!this.client.create)
+        throw new EditorClientError('unsupported_creation', 'Project creation is unavailable')
+      const view = await this.client.create(request)
+      this.state = {
+        ...this.state,
+        path: request.path,
+        view,
+        lastCommand: null,
+        preserveDrafts: false,
+        error: '',
+        conflict: false,
+        changedElsewhere: false,
+      }
+
+      return true
+    })
+  }
 
   load(path: string, preserveFields = false): Promise<void> {
     const preserveDrafts = preserveFields && path === this.state.path
@@ -64,6 +90,74 @@ export class ProjectEditorController {
         view: next,
         lastCommand: command.type,
         preserveDrafts: true,
+        error: '',
+        conflict: false,
+        changedElsewhere: false,
+      }
+
+      return true
+    })
+  }
+
+  async copyComponent(
+    sceneId: string,
+    componentId: string,
+  ): Promise<ComponentClipboard | undefined> {
+    const { view, path } = this.state
+
+    if (!view) return undefined
+    let result: ComponentClipboard | undefined
+
+    await this.perform(async () => {
+      if (!this.client.copyComponent)
+        throw new EditorClientError('unsupported_copy', 'Component copying is unavailable')
+      result = await this.client.copyComponent({
+        path,
+        expectedRevision: view.revision,
+        sceneId,
+        componentId,
+      })
+
+      return false
+    })
+
+    return result
+  }
+
+  restore(direction: 'undo' | 'redo'): Promise<void> {
+    const { view, path } = this.state
+
+    if (!view || !view.history?.[direction === 'undo' ? 'canUndo' : 'canRedo'])
+      return Promise.resolve()
+
+    return this.perform(async () => {
+      if (!this.client.restore)
+        throw new EditorClientError('unsupported_history', 'Undo and redo are unavailable')
+      let next: ProjectView
+
+      try {
+        next = await this.client.restore({ path, expectedRevision: view.revision, direction })
+      } catch (error) {
+        if (
+          error instanceof EditorClientError &&
+          ['history_empty', 'history_restore_failed', 'history_restore_uncertain'].includes(
+            error.code,
+          )
+        )
+          this.state = {
+            ...this.state,
+            view: { ...view, history: { canUndo: false, canRedo: false } },
+          }
+
+        throw error
+      }
+
+      this.state = {
+        ...this.state,
+        view: next,
+        lastCommand: null,
+        historyChange: direction,
+        preserveDrafts: false,
         error: '',
         conflict: false,
         changedElsewhere: false,
@@ -107,7 +201,16 @@ export class ProjectEditorController {
     try {
       const next = await this.client.inspect(path)
 
-      if (!isCurrent() || next.revision === view.revision) return
+      if (!isCurrent()) return
+
+      if (next.revision === view.revision) {
+        if (JSON.stringify(next.history) !== JSON.stringify(view.history)) {
+          this.state = { ...this.state, view: { ...view, history: next.history } }
+          this.onChange(this.state, false)
+        }
+
+        return
+      }
 
       // Users can type or submit while the background read is in flight.
       if (typeof hasDrafts === 'function' ? hasDrafts() : hasDrafts) {
@@ -126,6 +229,7 @@ export class ProjectEditorController {
         changedElsewhere: false,
         lastCommand: null,
         preserveDrafts: false,
+        historyChange: undefined,
       }
       this.onChange(this.state, true)
     } catch (error) {
@@ -142,7 +246,7 @@ export class ProjectEditorController {
   private async perform(operation: () => Promise<boolean>): Promise<void> {
     if (this.disposed || this.state.busy) return
     this.refreshSequence++
-    this.state = { ...this.state, busy: true, error: '' }
+    this.state = { ...this.state, busy: true, error: '', historyChange: undefined }
     this.onChange(this.state, false)
     let replaceFields = false
 

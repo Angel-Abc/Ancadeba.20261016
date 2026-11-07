@@ -24,6 +24,8 @@
             Open another project
           </button>
           <span class="spacer"></span>
+          <button id="editor-undo" type="button" disabled data-i18n="history.undo">Undo</button>
+          <button id="editor-redo" type="button" disabled data-i18n="history.redo">Redo</button>
           <div
             id="layout-modes"
             class="segmented"
@@ -95,8 +97,58 @@
               >
                 Open project
               </button>
+              <button
+                id="project-new-toggle"
+                type="button"
+                aria-controls="project-create-controls"
+                aria-expanded="false"
+                data-i18n="project.new"
+              >
+                New project
+              </button>
             </div>
             <p id="project-open-feedback" class="help" role="status" hidden></p>
+          </form>
+          <form id="project-create-controls" hidden>
+            <fieldset id="project-create-fields">
+              <legend data-i18n="project.new">New project</legend>
+              <p class="help" data-i18n="project.createHelp">
+                Create a game with a start screen and an adventure scene.
+              </p>
+              <label for="project-new-title" data-i18n="game.title">Game title</label>
+              <input id="project-new-title" maxlength="200" required />
+              <label for="project-new-folder" data-i18n="project.newFolder">New folder name</label>
+              <input
+                id="project-new-folder"
+                pattern="[a-zA-Z0-9_\-]+"
+                maxlength="64"
+                autocomplete="off"
+                required
+                aria-describedby="project-folder-help"
+              />
+              <p id="project-folder-help" class="help" data-i18n="project.folderHelp">
+                Use letters, digits, underscores or hyphens. A new folder will be created in the
+                workspace.
+              </p>
+              <label for="project-new-description" data-i18n="metadata.description"
+                >Description</label
+              >
+              <textarea id="project-new-description"></textarea>
+              <div class="editor-actions">
+                <button
+                  id="project-create-submit"
+                  type="submit"
+                  class="primary"
+                  data-i18n="project.create"
+                >
+                  Create project
+                </button>
+                <button id="project-create-cancel" type="button" data-i18n="project.cancelCreate">
+                  Cancel
+                </button>
+              </div>
+            </fieldset>
+            <p id="project-create-error" class="error" role="alert" hidden></p>
           </form>
           <button id="editor-reload" type="button" disabled hidden data-i18n="project.reload">
             Reload latest (keep entries)
@@ -114,6 +166,8 @@
             </header>
             <div class="editor-pane-body">
               <p id="editor-error" class="error" role="alert" hidden></p>
+              <section id="scene-controls" hidden></section>
+              <section id="component-clipboard" hidden></section>
               <fieldset id="editor-fields" disabled>
                 <legend class="sr-only" data-i18n="project.properties">Project properties</legend>
                 <form id="editor-metadata">
@@ -244,10 +298,10 @@
           </section>
         </div>
         <section class="welcome" aria-labelledby="welcome-heading">
-          <h2 id="welcome-heading" data-i18n="welcome.heading">Open a game to start editing</h2>
+          <h2 id="welcome-heading" data-i18n="welcome.heading">Open or create a game</h2>
           <p data-i18n="welcome.body">
-            Pick a game from the list on the left. Its scenes, assets and rules appear in the
-            explorer.
+            Pick a game from the list on the left, or choose New project to create one. Its scenes,
+            assets and rules appear in the explorer.
           </p>
         </section>
       </div>

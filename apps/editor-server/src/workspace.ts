@@ -1,5 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { link, lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+} from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { WorkspaceListing } from '@ancadeba/schemas'
@@ -218,6 +229,16 @@ export class FileWorkspace implements WorkspaceService {
     } finally {
       await rm(temporary, { force: true })
     }
+  }
+
+  async createDirectory(path: string): Promise<void> {
+    const target = await this.locate(path, false, true)
+    await mkdir(target)
+  }
+
+  async removeDirectory(path: string): Promise<void> {
+    const target = await this.locate(path)
+    await rmdir(target)
   }
 
   async removeCreated(path: string, contents: Uint8Array): Promise<void> {

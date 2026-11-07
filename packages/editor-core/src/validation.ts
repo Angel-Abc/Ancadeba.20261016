@@ -223,6 +223,23 @@ export function validateProject(
           })
       }
 
+      if (
+        component.type === 'button' &&
+        (component.action?.type === 'new-game' || component.action?.type === 'enter-scene')
+      ) {
+        const target = scenes.get(component.action.scene)
+
+        if (!target || (component.action.type === 'new-game' && target.type !== 'game'))
+          diagnostics.push({
+            code: 'invalid_button_target',
+            file: `scenes/${id}.json`,
+            path: ['components', index, 'action', 'scene'],
+            message: !target
+              ? 'Choose an existing target scene'
+              : 'New game buttons must target a game scene',
+          })
+      }
+
       if (component.type !== 'graphic' && component.type !== 'map-view') return
 
       try {

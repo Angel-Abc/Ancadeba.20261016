@@ -24,6 +24,14 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  history: z
+    .object({
+      canUndo: z.boolean(),
+      canRedo: z.boolean(),
+      undoLabel: z.string().optional(),
+      redoLabel: z.string().optional(),
+    })
+    .optional(),
   dialogues: z.record(gameIdSchema, dialogueSchema).optional(),
   quests: z.record(gameIdSchema, questSchema).optional(),
   leveling: z.record(gameIdSchema, levelingProfileSchema).optional(),
@@ -51,6 +59,14 @@ export const projectListSchema = z.object({
 })
 
 export type ProjectChoice = z.infer<typeof projectListSchema>['projects'][number]
+
+export const historyRequestSchema = z.strictObject({
+  path: z.string(),
+  expectedRevision: z.string().min(1),
+  direction: z.enum(['undo', 'redo']),
+})
+
+export type HistoryRequest = z.infer<typeof historyRequestSchema>
 
 export const apiErrorSchema = z.object({
   error: z.string(),

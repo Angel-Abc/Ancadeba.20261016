@@ -1,5 +1,6 @@
 import { bindLevelingEditor } from './levelingEditor.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
+import { createProjectRequestSchema } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
 import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
 import type { Translate } from '@ancadeba/utilities'
@@ -15,6 +16,9 @@ import { bindShopEditor } from './shopEditor.js'
 import { bindCombatEditor } from './combatEditor.js'
 import { bindSectionRail } from './sectionRail.js'
 import { bindComponentEditor, editableComponentTypes } from './componentEditor.js'
+import { bindSceneControls } from './sceneControls.js'
+import { bindComponentClipboard } from './componentClipboard.js'
+import { bindEditorShortcuts } from './editorShortcuts.js'
 import {
   buildProjectTree,
   dataFilesSection,
@@ -41,11 +45,16 @@ export function bindProjectPanel(
     additionalSections = [],
     onProjectChange,
     onSceneSelect,
+    confirmDiscardDrafts = () =>
+      root.ownerDocument.defaultView?.confirm(t('project.discardDrafts')) ?? false,
+    confirmDelete = (message: string) => root.ownerDocument.defaultView?.confirm(message) ?? false,
   }: {
     additionalSections?: readonly ProjectWorkspaceSection[]
     onProjectChange?: (path: string) => void
     /** Reports the scene of the explorer selection, or undefined outside the scenes section. */
     onSceneSelect?: (scene: { id: string; title: string } | undefined) => void
+    confirmDiscardDrafts?: () => boolean
+    confirmDelete?: (message: string) => boolean
   } = {},
 ): () => void {
   const find = <T extends HTMLElement>(id: string): T => {
@@ -59,6 +68,8 @@ export function bindProjectPanel(
   const folder = find<HTMLSelectElement>('editor-folder')
   const load = find<HTMLButtonElement>('editor-load')
   const reload = find<HTMLButtonElement>('editor-reload')
+  const undo = find<HTMLButtonElement>('editor-undo')
+  const redo = find<HTMLButtonElement>('editor-redo')
   const metadata = find<HTMLFormElement>('editor-metadata')
   const layout = find<HTMLFormElement>('scene-layout')
   const sceneMetadata = find<HTMLFormElement>('scene-metadata')
@@ -72,11 +83,22 @@ export function bindProjectPanel(
   const openControls = find<HTMLFormElement>('project-open-controls')
   const openToggle = find<HTMLButtonElement>('project-open-toggle')
   const openFeedback = find<HTMLElement>('project-open-feedback')
+  const newToggle = find<HTMLButtonElement>('project-new-toggle')
+  const newForm = find<HTMLFormElement>('project-create-controls')
+  const newFields = find<HTMLFieldSetElement>('project-create-fields')
+  const newSubmit = find<HTMLButtonElement>('project-create-submit')
+  const newCancel = find<HTMLButtonElement>('project-create-cancel')
+  const newError = find<HTMLElement>('project-create-error')
   const value = (id: string) => find<HTMLInputElement>(id).value
 
   const showOpenControls = (show: boolean) => {
     openControls.hidden = !show
     openToggle.setAttribute('aria-expanded', String(show))
+
+    if (!show) {
+      newForm.hidden = true
+      newToggle.setAttribute('aria-expanded', 'false')
+    }
   }
 
   const set = (id: string, text: string | number) => {
@@ -86,8 +108,11 @@ export function bindProjectPanel(
   let view: ProjectView | undefined
   const dirtyForms = new Set<string>()
   let loadedPath = ''
+  let preferredScene: string | undefined
   let busy = false
+  let historyBlocked = false
   let openingProject = false
+  let creatingProject = false
   let openError = ''
   let discoveryError: string | undefined
   let discovery: AbortController | undefined
@@ -100,6 +125,10 @@ export function bindProjectPanel(
     const disabled = busy || Boolean(discovery) || !projectChoices.length
     folder.disabled = disabled
     load.disabled = disabled
+    newToggle.disabled = busy
+    newFields.disabled = busy
+    newSubmit.disabled = busy || Boolean(discovery)
+    newSubmit.textContent = t(creatingProject ? 'project.creating' : 'project.create')
 
     let message = openError
 
@@ -184,6 +213,10 @@ export function bindProjectPanel(
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
   const componentElement = treeElement && root.querySelector<HTMLElement>('#component-editor')
   let componentEditor: ReturnType<typeof bindComponentEditor> | undefined
+  const sceneControlsElement = treeElement && root.querySelector<HTMLElement>('#scene-controls')
+  let sceneControls: ReturnType<typeof bindSceneControls> | undefined
+  const clipboardElement = treeElement && root.querySelector<HTMLElement>('#component-clipboard')
+  let componentClipboard: ReturnType<typeof bindComponentClipboard> | undefined
   const railElement = treeElement && root.querySelector<HTMLElement>('#section-rail')
   let rail: ReturnType<typeof bindSectionRail> | undefined
 
@@ -240,7 +273,24 @@ export function bindProjectPanel(
     const statusComponent = Boolean(statusPanelElement && component?.type === 'status-panel')
 
     const editableComponent = Boolean(
-      componentElement && component && editableComponentTypes.includes(component.type),
+      componentElement &&
+      (node.kind === 'new-component' ||
+        (component && editableComponentTypes.includes(component.type))),
+    )
+
+    const structureTarget =
+      node.section === 'scenes' && (node.kind === 'scene' || node.kind === 'component')
+
+    if (sceneControlsElement) sceneControlsElement.hidden = !structureTarget
+
+    if (clipboardElement) clipboardElement.hidden = !structureTarget
+    componentClipboard?.navigate(
+      structureTarget ? sceneId : undefined,
+      node.kind === 'component' ? node.id : undefined,
+    )
+    sceneControls?.navigate(
+      structureTarget ? sceneId : undefined,
+      node.kind === 'component' ? node.id : undefined,
     )
 
     const itemComponent = Boolean(
@@ -307,7 +357,8 @@ export function bindProjectPanel(
     ])
       element?.setAttribute('data-scope', node.kind === 'component' ? 'component' : 'section')
 
-    if (editableComponent) componentEditor?.navigate(sceneId, component?.id)
+    if (editableComponent)
+      componentEditor?.navigate(sceneId, component?.id, node.kind === 'new-component')
     find('component-details').hidden =
       !dataFile &&
       (node.section !== 'scenes' ||
@@ -385,6 +436,20 @@ export function bindProjectPanel(
     )
 
     if (
+      (sceneControls &&
+        !sceneControls.canNavigate(
+          node.section === 'scenes' && (node.kind === 'scene' || node.kind === 'component')
+            ? sceneId
+            : undefined,
+          node.kind === 'component' ? node.id : undefined,
+        )) ||
+      (componentClipboard &&
+        !componentClipboard.canNavigate(
+          node.section === 'scenes' && (node.kind === 'scene' || node.kind === 'component')
+            ? sceneId
+            : undefined,
+          node.kind === 'component' ? node.id : undefined,
+        )) ||
       (sceneChanges && (dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id))) ||
       ((node.section === 'items' ||
         ['item-details', 'equipment', 'inventory'].includes(componentType ?? '')) &&
@@ -396,8 +461,8 @@ export function bindProjectPanel(
         !combatEditor?.navigate(sceneId)) ||
       (node.kind === 'rule-file' && !rulesPanel?.navigate(node.id ?? '')) ||
       (componentElement &&
-        editableComponentTypes.includes(componentType ?? '') &&
-        !componentEditor?.navigate(sceneId, node.id)) ||
+        (node.kind === 'new-component' || editableComponentTypes.includes(componentType ?? '')) &&
+        !componentEditor?.navigate(sceneId, node.id, node.kind === 'new-component')) ||
       (usesAssets && assetTarget !== node.key && assetsPanel?.hasDrafts()) ||
       (usesActionBar && !actionBarPanel?.navigate(sceneId)) ||
       (usesStatusPanel &&
@@ -458,6 +523,8 @@ export function bindProjectPanel(
   let refreshLanguage = () => {}
 
   const render: ProjectEditorListener = (state, replaceFields) => {
+    componentClipboard?.render(state, replaceFields)
+    sceneControls?.render(state, replaceFields)
     assetsPanel?.render(state, replaceFields)
     rulesPanel?.render(state, replaceFields)
     actionBarPanel?.render(state, replaceFields)
@@ -475,7 +542,16 @@ export function bindProjectPanel(
 
     const ruleChange =
       replaceFields &&
-      (state.lastCommand === 'game.updateRules' ||
+      (Boolean(state.historyChange) ||
+        state.lastCommand === 'game.updateRules' ||
+        state.lastCommand === 'scene.rename' ||
+        state.lastCommand === 'scene.duplicate' ||
+        state.lastCommand === 'scene.remove' ||
+        state.lastCommand === 'game.setInitialScene' ||
+        state.lastCommand === 'scene.removeComponent' ||
+        state.lastCommand === 'scene.duplicateComponent' ||
+        state.lastCommand === 'scene.pasteComponent' ||
+        state.lastCommand === 'scene.moveComponent' ||
         state.lastCommand === 'scene.upsertRuleButton' ||
         state.lastCommand === 'inventory.setRuleInspection' ||
         state.lastCommand === 'inventory.setItemActions' ||
@@ -499,6 +575,17 @@ export function bindProjectPanel(
     if (projectChanged || ruleChange) onProjectChange?.(loadedPath)
 
     busy = state.busy
+    historyBlocked = state.conflict || state.changedElsewhere
+    undo.disabled = state.busy || historyBlocked || !view?.history?.canUndo
+    redo.disabled = state.busy || historyBlocked || !view?.history?.canRedo
+    undo.textContent = t('history.undo')
+    redo.textContent = t('history.redo')
+    undo.title = view?.history?.undoLabel
+      ? t('history.undoLabel', { change: view.history.undoLabel })
+      : t('history.undo')
+    redo.title = view?.history?.redoLabel
+      ? t('history.redoLabel', { change: view.history.redoLabel })
+      : t('history.redo')
     reload.disabled = state.busy || !view
     reload.hidden = !view
     scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
@@ -542,11 +629,25 @@ export function bindProjectPanel(
       openingProject = false
 
       if (replaceFields) {
+        if (creatingProject) {
+          projectChoices = [
+            ...projectChoices.filter(({ path }) => path !== loadedPath),
+            { path: loadedPath, title: view?.game?.title ?? loadedPath },
+          ].sort((a, b) => a.path.localeCompare(b.path))
+          renderProjectChoices(loadedPath)
+          newForm.reset()
+        }
+
         showOpenControls(false)
         openToggle.focus()
       } else {
-        openError = state.error
+        if (creatingProject) {
+          newError.textContent = state.error
+          newError.hidden = !state.error
+        } else openError = state.error
       }
+
+      creatingProject = false
     }
 
     renderOpenControls()
@@ -587,6 +688,29 @@ export function bindProjectPanel(
       return
     }
 
+    if (state.historyChange && selection.section === 'scenes') {
+      const sceneId = selection.parentId ?? selection.id
+      const current = view.scenes.find(({ id }) => id === sceneId)
+
+      if (
+        !current ||
+        (selection.kind === 'component' &&
+          !current.components.some(({ id }) => id === selection.id))
+      ) {
+        const scene = current ?? view.scenes[0]
+        selection = scene
+          ? {
+              key: `scene:${scene.id}`,
+              section: 'scenes',
+              kind: 'scene',
+              id: scene.id,
+              label: scene.title || scene.id,
+            }
+          : { key: 'game', section: 'game', kind: 'section', label: t('project.properties') }
+        preferredScene = scene?.id
+      }
+    }
+
     const formCommands: Partial<Record<EditorCommand['type'], string>> = {
       'game.updateMetadata': metadata.id,
       'scene.updateMetadata': sceneMetadata.id,
@@ -611,7 +735,8 @@ export function bindProjectPanel(
       set('editor-version', view.game.version)
     }
 
-    const selected = scenes.value
+    const selected = preferredScene ?? scenes.value
+    preferredScene = undefined
     scenes.replaceChildren(
       ...view.scenes.map((scene) => {
         const option = root.ownerDocument.createElement('option')
@@ -668,6 +793,67 @@ export function bindProjectPanel(
 
   const controller = new ProjectEditorController(client, render)
 
+  if (clipboardElement)
+    componentClipboard = bindComponentClipboard(clipboardElement, t, {
+      copy: (sceneId, componentId) => controller.copyComponent(sceneId, componentId),
+      save: (command) => {
+        void controller.save(command)
+      },
+      canChange: () => !hasDrafts(true, false),
+      onSaved(command) {
+        selection = {
+          key: `component:${command.sceneId}:${command.newId}`,
+          section: 'scenes',
+          kind: 'component',
+          parentId: command.sceneId,
+          id: command.newId,
+          label: command.newId,
+        }
+        preferredScene = command.sceneId
+      },
+    })
+
+  if (sceneControlsElement)
+    sceneControls = bindSceneControls(sceneControlsElement, t, {
+      save: (command) => {
+        void controller.save(command)
+      },
+      canChange: () => !hasDrafts(false),
+      confirmDelete,
+      onSaved(command, next) {
+        if (command.type === 'scene.duplicateComponent' || command.type === 'scene.moveComponent') {
+          const id =
+            command.type === 'scene.duplicateComponent' ? command.newId : command.componentId
+
+          selection = {
+            key: `component:${command.sceneId}:${id}`,
+            section: 'scenes',
+            kind: 'component',
+            parentId: command.sceneId,
+            id,
+            label: id,
+          }
+          preferredScene = command.sceneId
+
+          return
+        }
+
+        const id =
+          command.type === 'scene.rename' || command.type === 'scene.duplicate'
+            ? command.newId
+            : command.type === 'scene.remove'
+              ? (command.replacementScene ?? next.scenes[0]?.id)
+              : command.type === 'scene.removeComponent'
+                ? command.sceneId
+                : undefined
+
+        if (id) {
+          selection = { key: `scene:${id}`, section: 'scenes', kind: 'scene', id, label: id }
+          preferredScene = id
+        }
+      },
+    })
+
   if (rulesElement)
     rulesPanel = bindRulesPanel(rulesElement, (command) => {
       void controller.save(command)
@@ -709,9 +895,28 @@ export function bindProjectPanel(
     })
 
   if (componentElement)
-    componentEditor = bindComponentEditor(componentElement, (command) => {
-      void controller.save(command)
-    })
+    componentEditor = bindComponentEditor(
+      componentElement,
+      (command) => {
+        void controller.save(command)
+      },
+      {
+        t,
+        onCreated(sceneId, componentId) {
+          selection = {
+            key: `component:${sceneId}:${componentId}`,
+            section: 'scenes',
+            kind: 'component',
+            parentId: sceneId,
+            id: componentId,
+            label: componentId,
+          }
+        },
+        onCancel(sceneId) {
+          tree?.select(`scene:${sceneId}`)
+        },
+      },
+    )
   assetsPanel = bindAssetsPanel(
     root,
     {
@@ -758,6 +963,43 @@ export function bindProjectPanel(
 
     if (show) void refreshProjects(true)
   })
+  on(newToggle, 'click', () => {
+    newForm.hidden = !newForm.hidden
+    newToggle.setAttribute('aria-expanded', String(!newForm.hidden))
+
+    if (!newForm.hidden) find('project-new-title').focus()
+  })
+  on(newCancel, 'click', () => {
+    newForm.hidden = true
+    newToggle.setAttribute('aria-expanded', 'false')
+    newError.hidden = true
+    newToggle.focus()
+  })
+  on(newForm, 'submit', (event) => {
+    event.preventDefault()
+
+    if (busy || newSubmit.disabled) return
+
+    const request = createProjectRequestSchema.safeParse({
+      path: value('project-new-folder').trim(),
+      title: value('project-new-title'),
+      description: value('project-new-description'),
+    })
+
+    if (!request.success) {
+      newError.textContent = t('project.invalidCreation')
+      newError.hidden = false
+
+      return
+    }
+
+    if (hasDrafts() && !confirmDiscardDrafts()) return
+    openingProject = true
+    creatingProject = true
+    openError = ''
+    newError.hidden = true
+    void controller.create(request.data)
+  })
   on(folder, 'keydown', (event) => {
     if (!('key' in event) || event.key !== 'Enter') return
 
@@ -769,14 +1011,18 @@ export function bindProjectPanel(
 
     if (load.disabled || !projectChoices.some(({ path }) => path === folder.value)) return
 
+    if (hasDrafts() && !confirmDiscardDrafts()) return
+
     openingProject = true
     openError = ''
     void controller.load(folder.value)
   })
 
-  const hasDrafts = () =>
+  const hasDrafts = (includeSceneControls = true, includeClipboard = true) =>
     dirtyForms.size > 0 ||
     Boolean(
+      (includeSceneControls && sceneControls?.hasDrafts()) ||
+      (includeClipboard && componentClipboard?.hasDrafts()) ||
       assetsPanel?.hasDrafts() ||
       rulesPanel?.hasDrafts() ||
       actionBarPanel?.hasDrafts() ||
@@ -787,6 +1033,46 @@ export function bindProjectPanel(
       levelingEditor?.hasDrafts() ||
       componentEditor?.hasDrafts() ||
       storyEditor?.hasDrafts(),
+    )
+
+  const restoreHistory = (direction: 'undo' | 'redo') => {
+    if (busy || historyBlocked || !view?.history?.[direction === 'undo' ? 'canUndo' : 'canRedo'])
+      return
+
+    if (hasDrafts()) {
+      error.textContent = t('history.saveDraftsFirst')
+      error.hidden = false
+
+      return
+    }
+
+    void controller.restore(direction)
+  }
+
+  on(undo, 'click', () => restoreHistory('undo'))
+  on(redo, 'click', () => restoreHistory('redo'))
+
+  if (root.ownerDocument.defaultView)
+    listeners.push(
+      bindEditorShortcuts(root.ownerDocument.defaultView, {
+        blocked: () => busy || historyBlocked || !view,
+        copy: () => componentClipboard?.shortcut('copy') ?? false,
+        paste: () => componentClipboard?.shortcut('paste') ?? false,
+        duplicate: () => sceneControls?.shortcut('duplicate') ?? false,
+        delete: () => sceneControls?.shortcut('delete') ?? false,
+        undo: () => {
+          if (!view?.history?.canUndo) return false
+          restoreHistory('undo')
+
+          return true
+        },
+        redo: () => {
+          if (!view?.history?.canRedo) return false
+          restoreHistory('redo')
+
+          return true
+        },
+      }),
     )
 
   on(reload, 'click', () => {

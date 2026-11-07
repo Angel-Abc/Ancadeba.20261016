@@ -17,15 +17,27 @@ import {
   type CommandResult,
   type ProjectSnapshot,
   type Diagnostic,
+  type ProjectDocuments,
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
+import { createWorkspaceProject } from './projectCreation.js'
+import { saveSceneChanges } from './scenePersistence.js'
+import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
+  createDirectory?(path: string): Promise<void>
+  removeDirectory?(path: string): Promise<void>
   create(path: string, contents: Uint8Array): Promise<void>
   removeCreated(path: string, contents: Uint8Array): Promise<void>
 }
 
 export interface EditorProjectRepository {
+  readHistoryFiles?(
+    folder: string,
+    files: readonly string[],
+  ): Promise<Record<string, Uint8Array | undefined>>
+  restoreHistoryFiles?(folder: string, files: readonly HistoryFile[]): Promise<void>
+  create?(folder: string, documents: ProjectDocuments): Promise<void>
   load(folder: string): Promise<ProjectSnapshot>
   save(folder: string, change: CommandResult): Promise<void>
   validateAssets?(
@@ -42,6 +54,18 @@ export function projectPath(folder: string, file: string): string {
 
 export class WorkspaceProjectRepository implements EditorProjectRepository {
   constructor(private readonly workspace: ProjectWorkspace) {}
+
+  readHistoryFiles(folder: string, files: readonly string[]) {
+    return readHistoryFiles(this.workspace, folder, files)
+  }
+
+  restoreHistoryFiles(folder: string, files: readonly HistoryFile[]): Promise<void> {
+    return restoreHistoryFiles(this.workspace, folder, files)
+  }
+
+  create(folder: string, documents: ProjectDocuments): Promise<void> {
+    return createWorkspaceProject(this.workspace, folder, documents)
+  }
 
   async load(folder: string): Promise<ProjectSnapshot> {
     const documents: Record<string, unknown> = {}
@@ -153,6 +177,12 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   }
 
   async save(folder: string, change: CommandResult): Promise<void> {
+    if (change.createdFiles || change.removedFiles) {
+      await saveSceneChanges(this.workspace, folder, change)
+
+      return
+    }
+
     if (
       change.changedFiles.some(
         (file) =>

@@ -6,6 +6,7 @@ import {
   characterProgressionComponentSchema,
 } from '@ancadeba/schemas'
 import { z } from 'zod'
+import { componentSourceSchema } from './componentClipboard.js'
 import {
   itemUseSchema,
   combatBonusesSchema,
@@ -38,6 +39,7 @@ import {
   textComponentSchema,
   languageSelectComponentSchema,
   mapViewComponentSchema,
+  gridPlacementSchema,
 } from '@ancadeba/schemas'
 
 /** Scene components without a dedicated authoring command are saved whole. */
@@ -151,6 +153,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('scene.upsertComponent'),
     sceneId: gameIdSchema,
     component: basicComponentSchema,
+    createOnly: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal('scene.upsertStatusPanel'),
@@ -244,6 +247,43 @@ export const commandSchema = z.discriminatedUnion('type', [
     reference: combatReferenceSchema,
     localId: combatReferenceSchema.shape.id,
   }),
+  z.strictObject({ type: z.literal('scene.rename'), sceneId: gameIdSchema, newId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('scene.duplicate'),
+    sceneId: gameIdSchema,
+    newId: gameIdSchema,
+    title: z.string().trim().min(1),
+  }),
+  z.strictObject({
+    type: z.literal('scene.remove'),
+    sceneId: gameIdSchema,
+    replacementScene: gameIdSchema.optional(),
+  }),
+  z.strictObject({ type: z.literal('game.setInitialScene'), sceneId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('scene.removeComponent'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+  }),
+  z.strictObject({
+    type: z.literal('scene.duplicateComponent'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+    newId: gameIdSchema,
+  }),
+  z.strictObject({
+    type: z.literal('scene.moveComponent'),
+    sceneId: gameIdSchema,
+    componentId: gameIdSchema,
+    index: z.number().int().nonnegative(),
+  }),
+  z.strictObject({
+    type: z.literal('scene.pasteComponent'),
+    sceneId: gameIdSchema,
+    newId: gameIdSchema,
+    component: componentSourceSchema,
+    placement: gridPlacementSchema.optional(),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -278,6 +318,42 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'scene.pasteComponent',
+      example: {
+        type: 'scene.pasteComponent',
+        sceneId: 'shop',
+        newId: 'greeting',
+        component: { id: 'source', type: 'text', text: 'Hello', placement: { row: 1, column: 1 } },
+      },
+    },
+    {
+      type: 'scene.duplicateComponent',
+      example: {
+        type: 'scene.duplicateComponent',
+        sceneId: 'shop',
+        componentId: 'narrative',
+        newId: 'narrative-copy',
+      },
+    },
+    {
+      type: 'scene.moveComponent',
+      example: { type: 'scene.moveComponent', sceneId: 'shop', componentId: 'narrative', index: 0 },
+    },
+    { type: 'scene.rename', example: { type: 'scene.rename', sceneId: 'shop', newId: 'market' } },
+    {
+      type: 'scene.duplicate',
+      example: { type: 'scene.duplicate', sceneId: 'shop', newId: 'shop-copy', title: 'Shop copy' },
+    },
+    {
+      type: 'scene.remove',
+      example: { type: 'scene.remove', sceneId: 'shop', replacementScene: 'market' },
+    },
+    { type: 'game.setInitialScene', example: { type: 'game.setInitialScene', sceneId: 'shop' } },
+    {
+      type: 'scene.removeComponent',
+      example: { type: 'scene.removeComponent', sceneId: 'shop', componentId: 'unused' },
+    },
     {
       type: 'game.upsertLeveling',
       example: {

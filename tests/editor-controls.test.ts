@@ -1,12 +1,13 @@
 import { bindStoryEditor } from '../apps/editor-ui/src/storyEditor.js'
 import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 /// <reference lib="dom" />
-import { describe, expect, it } from 'vite-plus/test'
+import { describe, expect, it, vi } from 'vite-plus/test'
 import {
   applyCommand,
   inspectProject,
   object,
   projectViewSchema,
+  componentClipboardSchema,
   type EditorCommand,
   type ProjectSnapshot,
 } from '@ancadeba/editor-core'
@@ -24,6 +25,10 @@ import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm
 import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
+import { bindComponentEditor } from '../apps/editor-ui/src/componentEditor.js'
+import { bindSceneControls } from '../apps/editor-ui/src/sceneControls.js'
+import { bindComponentClipboard } from '../apps/editor-ui/src/componentClipboard.js'
+import { editorLocalization } from '../apps/editor-ui/src/localization.js'
 import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.js'
 import { bindItemEditor } from '../apps/editor-ui/src/itemEditor.js'
 import { bindCombatEditor } from '../apps/editor-ui/src/combatEditor.js'
@@ -220,6 +225,7 @@ class Control extends EventTarget {
   parent?: Control
   ownText = ''
   value = ''
+  id = ''
   type = ''
   className = ''
   disabled = false
@@ -399,8 +405,765 @@ describe('translation key fields', () => {
     expect(updates).toEqual(['shop.empty', ''])
     expect(edits).toBe(2)
 
-    expect(second.children.some((child) => child.tagName === 'datalist')).toBe(false)
-    expect(second.children[0]!.attributes.get('list')).toBe(control.attributes.get('list'))
+    expect(second.children.some((child) => child.tagName === 'datalist')).toBe(true)
+    expect(second.children[0]!.attributes.get('list')).not.toBe(control.attributes.get('list'))
+  })
+})
+
+function nearbyComponentPanel() {
+  const fixture = panel()
+  const { root, initial, commands } = fixture
+  const view = structuredClone(initial.view!)
+  view.translationKeys = ['nearby.title']
+  view.translations = { 'nearby.title': 'Nearby characters' }
+  view.scenes[0]!.components.push(
+    sceneComponentSchema.parse({
+      id: 'other-description',
+      type: 'text',
+      text: 'Other description',
+      placement: { row: 1, column: 2 },
+    }),
+    ...['first', 'second'].map((id) =>
+      sceneComponentSchema.parse({
+        id,
+        type: 'nearby',
+        label: id,
+        descriptionTarget: id === 'first' ? 'description' : 'other-description',
+        placement: { row: 2, column: id === 'first' ? 1 : 2 },
+        entries: {},
+      }),
+    ),
+  )
+  const editor = bindComponentEditor(root.asElement(), (command) => commands.push(command))
+  editor.render({ ...initial, view }, true)
+  editor.navigate('shop', 'second')
+
+  return { ...fixture, editor, view }
+}
+
+function addingComponentPanel(withResources = true) {
+  const fixture = panel()
+  const source = project()
+
+  let snapshot: ProjectSnapshot = {
+    ...source,
+    documents: {
+      ...source.documents,
+      'game.json': {
+        ...object(source.documents['game.json']),
+        ...(withResources
+          ? { maps: ['coast'], languages: { default: 'en', available: ['en', 'nl'] } }
+          : {}),
+      },
+      'scenes/other.json': {
+        ...object(source.documents['scenes/other.json']),
+        type: 'stand-alone',
+      },
+      ...(withResources
+        ? {
+            'maps/coast.json': {
+              'schema-version': '1.0.0',
+              type: 'square-grid',
+              width: 3,
+              height: 2,
+              terrain: { grass: { color: '#00ff00' } },
+              tiles: [
+                ['grass', 'grass', 'grass'],
+                ['grass', 'grass', 'grass'],
+              ],
+            },
+            'languages/en/messages.json': { 'language.name': 'English' },
+            'languages/nl/messages.json': { 'language.name': 'Nederlands' },
+          }
+        : {}),
+    },
+  }
+
+  const created: string[] = []
+  const cancelled: string[] = []
+
+  const editor = bindComponentEditor(
+    fixture.root.asElement(),
+    (command) => fixture.commands.push(command),
+    {
+      onCreated: (sceneId, componentId) => created.push(`${sceneId}:${componentId}`),
+      onCancel: (sceneId) => cancelled.push(sceneId),
+    },
+  )
+
+  const state = () => ({ ...fixture.initial, view: inspectProject(snapshot) })
+  editor.render(state(), true)
+  editor.navigate('shop', undefined, true)
+
+  return {
+    ...fixture,
+    editor,
+    created,
+    cancelled,
+    state,
+    persist: () => {
+      const command = fixture.commands.at(-1)
+
+      if (!command) throw new Error('Expected a component save')
+      snapshot = applyCommand(snapshot, command).project
+      editor.render({ ...state(), preserveDrafts: true, lastCommand: command.type }, true)
+
+      return inspectProject(snapshot)
+    },
+  }
+}
+
+function clipboardPanel() {
+  const fixture = panel()
+  let snapshot = project()
+  let allowChanges = true
+  let copyFailure = false
+  const copied: string[] = []
+  const saved: string[] = []
+
+  const controls = bindComponentClipboard(fixture.root.asElement(), editorLocalization().t, {
+    copy: async (sceneId, componentId) => {
+      copied.push(componentId)
+
+      if (copyFailure) return undefined
+      const scene = object(snapshot.documents[`scenes/${sceneId}.json`])
+
+      const component = (Array.isArray(scene.components) ? scene.components : []).find(
+        (entry) => object(entry).id === componentId,
+      )
+
+      return componentClipboardSchema.parse({ revision: snapshot.revision, component })
+    },
+    save: (command) => fixture.commands.push(command),
+    canChange: () => allowChanges,
+    onSaved: (command) => saved.push(command.newId),
+  })
+
+  const state = () => ({ ...fixture.initial, view: inspectProject(snapshot) })
+  controls.render(state(), true)
+  controls.navigate('shop', 'description')
+
+  return {
+    ...fixture,
+    controls,
+    copied,
+    saved,
+    state,
+    allow: (value: boolean) => {
+      allowChanges = value
+    },
+    failCopy: () => {
+      copyFailure = true
+    },
+    persist: () => {
+      const command = fixture.commands.at(-1)
+
+      if (!command) throw new Error('Expected paste command')
+      snapshot = applyCommand(snapshot, command).project
+      controls.render({ ...state(), preserveDrafts: true, lastCommand: command.type }, true)
+
+      return inspectProject(snapshot)
+    },
+  }
+}
+
+describe('component clipboard controls', () => {
+  it('uses the copy and paste save paths for shortcuts, with destination checks and draft protection', async () => {
+    const { controls, field, commands, allow, persist } = clipboardPanel()
+    expect(controls.shortcut('paste')).toBe(false)
+    allow(false)
+    expect(controls.shortcut('copy')).toBe(true)
+    expect(commands).toEqual([])
+    allow(true)
+    expect(controls.shortcut('copy')).toBe(true)
+    await vi.waitFor(() => expect(field('Pasted component ID').value).toBe('description-copy'))
+    controls.navigate('other')
+    expect(controls.shortcut('copy')).toBe(false)
+    allow(false)
+    expect(controls.shortcut('paste')).toBe(true)
+    expect(commands).toEqual([])
+    allow(true)
+    expect(controls.shortcut('paste')).toBe(true)
+    expect(persist().scenes[1]!.components.at(-1)?.id).toBe('description-copy')
+    expect(controls.shortcut('paste')).toBe(true)
+    expect(persist().scenes[1]!.components.at(-1)?.id).toBe('description-copy-2')
+    controls.navigate()
+    expect(controls.shortcut('paste')).toBe(false)
+  })
+
+  it('copies without saving, pastes between scenes, selects the new component, and suggests fresh IDs for repeat pastes', async () => {
+    const { controls, click, field, edit, submit, commands, saved, persist } = clipboardPanel()
+    click('Copy component')
+    await vi.waitFor(() => expect(field('Pasted component ID').value).toBe('description-copy'))
+    expect(commands).toEqual([])
+    controls.navigate('other')
+    edit('Pasted component ID', 'greeting')
+    submit('Paste component')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.pasteComponent',
+      sceneId: 'other',
+      newId: 'greeting',
+      component: { id: 'description', type: 'text', text: 'Hello' },
+    })
+    expect(persist().scenes[1]!.components.map(({ id }) => id)).toEqual(['description', 'greeting'])
+    expect(saved).toEqual(['greeting'])
+    expect(field('Pasted component ID').value).toBe('description-copy')
+    submit('Paste component')
+    persist()
+    expect(field('Pasted component ID').value).toBe('description-copy-2')
+  })
+
+  it('protects unrelated edits, retains paste drafts on failures, and clears the clipboard on project changes', async () => {
+    const { controls, click, field, edit, submit, commands, state, allow, root, copied } =
+      clipboardPanel()
+
+    allow(false)
+    click('Copy component')
+    expect(copied).toEqual([])
+    allow(true)
+    click('Copy component')
+    await vi.waitFor(() => expect(field('Pasted component ID').value).toBe('description-copy'))
+    edit('Pasted component ID', 'my-copy')
+    allow(false)
+    submit('Paste component')
+    expect(commands).toEqual([])
+    expect(controls.canNavigate('other')).toBe(false)
+    controls.render({ ...state(), error: 'Conflict', conflict: true, preserveDrafts: true }, false)
+    expect(field('Pasted component ID').value).toBe('my-copy')
+    allow(true)
+    click('Copy component')
+    expect(copied).toHaveLength(1)
+    click('Discard paste draft')
+    expect(controls.canNavigate('other')).toBe(true)
+    controls.render({ ...state(), path: 'different' }, true)
+    expect(root.textContent).not.toContain('Paste component')
+    expect(controls.hasDrafts()).toBe(false)
+  })
+
+  it('keeps the previous clipboard after a failed copy, validates inputs, and supports explicit clearing', async () => {
+    const { click, field, edit, submit, commands, failCopy, root } = clipboardPanel()
+    click('Copy component')
+    await vi.waitFor(() => expect(field('Pasted component ID').value).toBe('description-copy'))
+    failCopy()
+    click('Copy component')
+    await vi.waitFor(() =>
+      expect(root.all().find((node) => node.tagName === 'fieldset')?.disabled).toBe(false),
+    )
+    expect(field('Pasted component ID').value).toBe('description-copy')
+    edit('Paste row', '0')
+    submit('Paste component')
+    expect(commands).toEqual([])
+    expect(field('Paste row').value).toBe('0')
+    click('Clear component clipboard')
+    expect(root.textContent).not.toContain('Paste component')
+  })
+
+  it('suggests placement that fits a smaller target grid', async () => {
+    const { state } = clipboardPanel()
+    const current = state()
+    current.view.scenes[0]!.components[0]!.placement = {
+      row: 5,
+      column: 4,
+      rowSpan: 2,
+      columnSpan: 2,
+    }
+    current.view.scenes[1]!.screen.grid = { rows: 2, columns: 2 }
+    // The copied snapshot is injected separately from the destination's projected view.
+    const source = current.view.scenes[0]!.components[0]!
+    const fixture = panel()
+
+    const clipboard = bindComponentClipboard(fixture.root.asElement(), editorLocalization().t, {
+      copy: async () => componentClipboardSchema.parse({ revision: 'one', component: source }),
+      save: () => {},
+      canChange: () => true,
+      onSaved: () => {},
+    })
+
+    clipboard.render(current, true)
+    clipboard.navigate('shop', 'description')
+    fixture.click('Copy component')
+    await vi.waitFor(() =>
+      expect(fixture.field('Pasted component ID').value).toBe('description-copy'),
+    )
+    clipboard.navigate('other')
+    expect(fixture.field('Paste row').value).toBe('2')
+    expect(fixture.field('Paste column').value).toBe('2')
+    expect(fixture.field('Paste row span').value).toBe('1')
+    expect(fixture.field('Paste column span').value).toBe('1')
+  })
+})
+
+function sceneControlsPanel() {
+  const fixture = panel()
+  let snapshot = project()
+  let allowChanges = true
+  let confirm = false
+  const confirmations: string[] = []
+  const saved: string[] = []
+
+  const controls = bindSceneControls(fixture.root.asElement(), editorLocalization().t, {
+    save: (command) => fixture.commands.push(command),
+    canChange: () => allowChanges,
+    confirmDelete: (message) => {
+      confirmations.push(message)
+
+      return confirm
+    },
+    onSaved: (command) => saved.push(command.type),
+  })
+
+  const state = () => ({ ...fixture.initial, view: inspectProject(snapshot) })
+  controls.render(state(), true)
+  controls.navigate('shop')
+
+  return {
+    ...fixture,
+    controls,
+    confirmations,
+    saved,
+    state,
+    allow: (value: boolean) => {
+      allowChanges = value
+    },
+    confirm: (value: boolean) => {
+      confirm = value
+    },
+    persist: () => {
+      const command = fixture.commands.at(-1)
+
+      if (!command) throw new Error('Expected a scene command')
+      snapshot = applyCommand(snapshot, command).project
+      controls.render({ ...state(), preserveDrafts: true, lastCommand: command.type }, true)
+
+      return inspectProject(snapshot)
+    },
+  }
+}
+
+describe('scene controls', () => {
+  it('duplicates and confirms component deletion through shortcuts, protecting unrelated and local drafts', () => {
+    const { controls, commands, allow, confirm, persist, edit, click } = sceneControlsPanel()
+    expect(controls.shortcut('delete')).toBe(false)
+    controls.navigate('shop', 'description')
+    allow(false)
+    expect(controls.shortcut('duplicate')).toBe(true)
+    expect(commands).toEqual([])
+    allow(true)
+    edit('Duplicate component ID', 'Unsaved')
+    expect(controls.shortcut('duplicate')).toBe(true)
+    expect(controls.shortcut('delete')).toBe(true)
+    expect(commands).toEqual([])
+    click('Discard component-control draft')
+    expect(controls.shortcut('duplicate')).toBe(true)
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual([
+      'description',
+      'description-copy',
+    ])
+    expect(controls.shortcut('delete')).toBe(true)
+    expect(commands).toHaveLength(1)
+    confirm(true)
+    expect(controls.shortcut('delete')).toBe(true)
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual(['description'])
+  })
+
+  it('consumes singleton duplication shortcuts without writing and ignores shortcuts during saves', () => {
+    const { controls, state, commands, root } = sceneControlsPanel()
+    const current = state()
+    current.view.scenes[0]!.components.push(bar)
+    controls.render(current, true)
+    controls.navigate('shop', 'actions')
+    expect(controls.shortcut('duplicate')).toBe(true)
+    expect(commands).toEqual([])
+    expect(root.textContent).toContain('cannot be duplicated')
+    controls.render({ ...current, busy: true }, false)
+    expect(controls.shortcut('delete')).toBe(false)
+    expect(commands).toEqual([])
+  })
+
+  it('explains singleton restrictions while retaining move controls', () => {
+    const { controls, state, root, click, commands } = sceneControlsPanel()
+    const current = state()
+    current.view.scenes[0]!.components.push(bar)
+    controls.render(current, true)
+    controls.navigate('shop', 'actions')
+    expect(root.textContent).toContain('cannot be duplicated')
+    expect(root.textContent).not.toContain('Duplicate component')
+    click('Move component up')
+    expect(commands[0]).toEqual({
+      type: 'scene.moveComponent',
+      sceneId: 'shop',
+      componentId: 'actions',
+      index: 0,
+    })
+  })
+
+  it('duplicates the selected component, suggests unused IDs, and keeps the copy selected when moving', () => {
+    const { controls, field, submit, commands, persist, click, root } = sceneControlsPanel()
+    controls.navigate('shop', 'description')
+    expect(field('Duplicate component ID').value).toBe('description-copy')
+
+    const button = (label: string) =>
+      root.all().find((node) => node.tagName === 'button' && node.textContent === label)!
+
+    expect(button('Move component up').disabled).toBe(true)
+    expect(button('Move component down').disabled).toBe(true)
+    submit('Duplicate component')
+    expect(commands[0]).toEqual({
+      type: 'scene.duplicateComponent',
+      sceneId: 'shop',
+      componentId: 'description',
+      newId: 'description-copy',
+    })
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual([
+      'description',
+      'description-copy',
+    ])
+    expect(field('Duplicate component ID').value).toBe('description-copy-copy')
+    click('Move component up')
+    expect(commands[1]).toEqual({
+      type: 'scene.moveComponent',
+      sceneId: 'shop',
+      componentId: 'description-copy',
+      index: 0,
+    })
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual([
+      'description-copy',
+      'description',
+    ])
+    expect(button('Move component up').disabled).toBe(true)
+    click('Move component down')
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual([
+      'description',
+      'description-copy',
+    ])
+    controls.navigate('shop', 'description')
+    expect(field('Duplicate component ID').value).toBe('description-copy-2')
+  })
+
+  it('guards component drafts, preserves copy entries on conflicts and moves, and discards explicitly', () => {
+    const { controls, field, edit, submit, commands, allow, state, click, persist } =
+      sceneControlsPanel()
+
+    controls.navigate('shop', 'description')
+    edit('Duplicate component ID', 'copy')
+    allow(false)
+    submit('Duplicate component')
+    expect(commands).toEqual([])
+    allow(true)
+    submit('Duplicate component')
+    controls.render({ ...state(), conflict: true, error: 'Conflict', preserveDrafts: true }, false)
+    expect(field('Duplicate component ID').value).toBe('copy')
+    expect(controls.canNavigate('other')).toBe(false)
+    submit('Duplicate component')
+    persist()
+    edit('Duplicate component ID', 'unsaved')
+    click('Move component up')
+    persist()
+    expect(field('Duplicate component ID').value).toBe('unsaved')
+    click('Discard component-control draft')
+    expect(controls.hasDrafts()).toBe(false)
+    expect(controls.canNavigate('other')).toBe(true)
+  })
+
+  it('renames and duplicates scenes, keeping the new target selected and drafts clean', () => {
+    const { edit, submit, commands, controls, field, persist, saved } = sceneControlsPanel()
+    edit('New scene ID', 'market')
+    submit('Rename scene ID')
+    expect(commands[0]).toEqual({ type: 'scene.rename', sceneId: 'shop', newId: 'market' })
+    expect(persist().game?.scenes).toEqual(['market', 'other'])
+    expect(field('New scene ID').value).toBe('market')
+    expect(controls.hasDrafts()).toBe(false)
+    edit('Duplicate scene ID', 'market-copy')
+    edit('Duplicate scene title', 'Another market')
+    submit('Duplicate scene')
+    expect(commands[1]).toEqual({
+      type: 'scene.duplicate',
+      sceneId: 'market',
+      newId: 'market-copy',
+      title: 'Another market',
+    })
+    expect(persist().game?.scenes).toEqual(['market', 'other', 'market-copy'])
+    expect(field('New scene ID').value).toBe('market-copy')
+    expect(saved).toEqual(['scene.rename', 'scene.duplicate'])
+  })
+
+  it('sets the startup scene and confirms deletion with an optional replacement', () => {
+    const { controls, click, edit, commands, confirm, persist, confirmations } =
+      sceneControlsPanel()
+
+    controls.navigate('other')
+    click('Use as startup scene')
+    expect(persist().game?.['initial-scene']).toBe('other')
+    edit('Redirect links to', 'shop')
+    click('Delete scene')
+    expect(commands).toHaveLength(1)
+    expect(confirmations[0]).toContain('other')
+    confirm(true)
+    click('Delete scene')
+    expect(commands[1]).toEqual({
+      type: 'scene.remove',
+      sceneId: 'other',
+      replacementScene: 'shop',
+    })
+    expect(persist().game?.['initial-scene']).toBe('shop')
+  })
+
+  it('offers generic component deletion and makes no write when confirmation is cancelled', () => {
+    const { controls, click, commands, confirm, persist } = sceneControlsPanel()
+    controls.navigate('shop', 'description')
+    click('Delete component')
+    expect(commands).toEqual([])
+    confirm(true)
+    click('Delete component')
+    expect(commands[0]).toEqual({
+      type: 'scene.removeComponent',
+      sceneId: 'shop',
+      componentId: 'description',
+    })
+    expect(persist().scenes[0]!.components).toEqual([])
+  })
+
+  it('guards unrelated drafts and preserves scene-control entries across validation and save failures', () => {
+    const { controls, allow, edit, submit, root, commands, state, field, click } =
+      sceneControlsPanel()
+
+    edit('New scene ID', 'market')
+    allow(false)
+    submit('Rename scene ID')
+    expect(commands).toEqual([])
+    expect(root.textContent).toContain('pending edits')
+    expect(controls.canNavigate('other')).toBe(false)
+    controls.render({ ...state(), error: 'Conflict', conflict: true }, false)
+    expect(field('New scene ID').value).toBe('market')
+    allow(true)
+    edit('New scene ID', 'invalid id')
+    submit('Rename scene ID')
+    expect(commands).toEqual([])
+    expect(field('New scene ID').value).toBe('invalid id')
+    click('Discard scene-control draft')
+    expect(controls.hasDrafts()).toBe(false)
+    expect(controls.canNavigate('other')).toBe(true)
+  })
+
+  it('discards scene-control entries on an explicitly confirmed project reopen', () => {
+    const { controls, edit, field, state } = sceneControlsPanel()
+    edit('New scene ID', 'unsaved')
+    controls.render({ ...state(), preserveDrafts: false }, true)
+    expect(field('New scene ID').value).toBe('shop')
+    expect(controls.hasDrafts()).toBe(false)
+  })
+})
+
+describe('adding scene components', () => {
+  it('suggests unused IDs and placements that fit even a small scene', () => {
+    const { editor, submit, persist, field } = addingComponentPanel()
+    expect(field('Component ID').value).toBe('text')
+    submit('Create component')
+    expect(persist().diagnostics).toEqual([])
+    editor.navigate('shop', undefined, true)
+    expect(field('Component ID').value).toBe('text-2')
+    expect(Number(field('Column span').value)).toBeLessThanOrEqual(5)
+    expect(Number(field('Row span').value)).toBeLessThanOrEqual(6)
+  })
+
+  it('creates a text component, selects it after saving, and edits it without creating a duplicate', () => {
+    const { editor, edit, submit, commands, persist, created, root } = addingComponentPanel()
+    edit('Component ID', 'greeting')
+    edit('Text', 'Hello, adventurer!')
+    edit('Style', 'heading')
+    edit('Alignment', 'center')
+    edit('Row', '2')
+    submit('Create component')
+    expect(commands[0]).toMatchObject({
+      type: 'scene.upsertComponent',
+      sceneId: 'shop',
+      createOnly: true,
+      component: {
+        id: 'greeting',
+        type: 'text',
+        text: 'Hello, adventurer!',
+        presentation: { variant: 'heading', align: 'center' },
+      },
+    })
+    expect(persist().scenes[0]!.components.map(({ id }) => id)).toEqual(['description', 'greeting'])
+    expect(created).toEqual(['shop:greeting'])
+    expect(editor.hasDrafts()).toBe(false)
+    expect(root.textContent).toContain('Save component')
+    edit('Text', 'Welcome back!')
+    submit('Save component')
+    expect(commands[1]).not.toHaveProperty('createOnly')
+    expect(persist().scenes[0]!.components).toHaveLength(2)
+  })
+
+  it.each(['button', 'map-view', 'language-select', 'quest-log'])(
+    'creates a valid %s with its configured settings',
+    (type) => {
+      const { edit, submit, commands, persist, field } = addingComponentPanel()
+      edit('Component type', type)
+      edit('Component ID', 'new-component')
+      edit('Label', 'New component')
+
+      if (type === 'button') {
+        edit('Action', 'new-game')
+        expect(field('Target scene').children.map(({ value }) => value)).toEqual(['shop'])
+      }
+
+      if (type === 'map-view') {
+        expect(field('Columns', 'Visible area').value).toBe('3')
+        expect(field('Rows', 'Visible area').value).toBe('2')
+        edit('Show player', 'true')
+        edit('Player column', '1')
+        edit('Player row', '1')
+      }
+
+      submit('Create component')
+      expect(commands[0]).toMatchObject({
+        createOnly: true,
+        component: { id: 'new-component', type },
+      })
+      expect(persist().diagnostics).toEqual([])
+    },
+  )
+
+  it('rejects duplicate and invalid IDs and preserves drafts on conflicts and unrelated saves', () => {
+    const { editor, state, edit, submit, commands, field, click, root } = addingComponentPanel()
+    edit('Component ID', 'description')
+    submit('Create component')
+    expect(commands).toEqual([])
+    expect(root.textContent).toContain('unique component ID')
+    edit('Component ID', 'invalid id')
+    submit('Create component')
+    expect(commands).toEqual([])
+    edit('Component ID', 'greeting')
+    edit('Text', 'Preserve my draft')
+    editor.render({ ...state(), conflict: true, error: 'Conflict' }, false)
+    expect(field('Text').value).toBe('Preserve my draft')
+    editor.render({ ...state(), lastCommand: 'scene.upsertNearby', preserveDrafts: true }, true)
+    expect(field('Text').value).toBe('Preserve my draft')
+    expect(editor.navigate('other', undefined, true)).toBe(false)
+    edit('Component type', 'button')
+    expect(field('Component type').value).toBe('text')
+    click('Discard component draft')
+    expect(editor.hasDrafts()).toBe(false)
+    expect(editor.navigate('other', undefined, true)).toBe(true)
+  })
+
+  it('explains missing map and language resources and cancels without writing', () => {
+    const { editor, root, edit, click, commands, cancelled } = addingComponentPanel(false)
+    edit('Component type', 'map-view')
+    expect(root.textContent).toContain('No map definitions are available')
+    expect(
+      root
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Create component')
+        ?.disabled,
+    ).toBe(true)
+    edit('Component type', 'language-select')
+    expect(root.textContent).toContain('selector will be disabled')
+    edit('Label', 'Select a language')
+    click('Cancel')
+    expect(commands).toEqual([])
+    expect(editor.hasDrafts()).toBe(false)
+    expect(cancelled).toEqual(['shop'])
+  })
+
+  it('keeps invalid map dimensions and player positions available for correction', () => {
+    const { edit, submit, commands, field, root } = addingComponentPanel()
+    edit('Component type', 'map-view')
+    edit('Columns', '4', 'Visible area')
+    submit('Create component')
+    expect(commands).toEqual([])
+    expect(root.textContent).toContain('Viewport exceeds')
+    expect(field('Columns', 'Visible area').value).toBe('4')
+    edit('Columns', '3', 'Visible area')
+    edit('Show player', 'true')
+    edit('Player column', '3')
+    submit('Create component')
+    expect(commands).toEqual([])
+    expect(root.textContent).toContain('Player spawn is outside')
+  })
+})
+
+describe('nearby component editing', () => {
+  it('edits and saves the selected panel when a scene contains multiple nearby panels', () => {
+    const { editor, view, field, edit, submit, commands } = nearbyComponentPanel()
+    expect(field('Nearby title').value).toBe('second')
+    edit('Nearby title', 'Updated second panel')
+    submit('Save nearby targets')
+    expect(commands).toEqual([
+      expect.objectContaining({
+        type: 'scene.upsertNearby',
+        sceneId: 'shop',
+        component: expect.objectContaining({
+          id: 'second',
+          label: 'Updated second panel',
+          descriptionTarget: 'other-description',
+        }),
+      }),
+    ])
+    editor.render(
+      {
+        path: 'demo',
+        view,
+        busy: false,
+        error: 'Conflict',
+        conflict: true,
+        changedElsewhere: false,
+        lastCommand: null,
+        preserveDrafts: false,
+      },
+      false,
+    )
+    expect(field('Nearby title').value).toBe('Updated second panel')
+    expect(editor.hasDrafts()).toBe(true)
+    expect(view.scenes[0]!.components.find(({ id }) => id === 'first')).toMatchObject({
+      label: 'first',
+    })
+  })
+
+  it('clears the surrounding draft guard when nearby edits are discarded', () => {
+    const { editor, field, edit, click, root, commands } = nearbyComponentPanel()
+    edit('Nearby title', 'Unsaved second panel')
+    expect(editor.hasDrafts()).toBe(true)
+    expect(editor.navigate('shop', 'description')).toBe(false)
+    click('Discard nearby draft')
+    expect(field('Nearby title').value).toBe('second')
+    expect(editor.hasDrafts()).toBe(false)
+    expect(root.textContent).not.toContain('Save or discard the component draft first.')
+    expect(editor.navigate('shop', 'description')).toBe(true)
+    expect(commands).toEqual([])
+  })
+
+  it('keeps translation suggestions attached after nearby forms are rebuilt', () => {
+    const { root, edit, click } = nearbyComponentPanel()
+
+    const assertSuggestions = () => {
+      const inputs = root
+        .all()
+        .filter((node) => node.tagName === 'input' && node.attributes.has('list'))
+
+      expect(inputs.length).toBeGreaterThan(0)
+
+      for (const input of inputs) {
+        const list = root
+          .all()
+          .find((node) => node.tagName === 'datalist' && node.id === input.attributes.get('list'))
+
+        expect(list?.children.map((option) => option.value)).toEqual(['nearby.title'])
+      }
+    }
+
+    assertSuggestions()
+    edit('New nearby target ID', 'guide')
+    click('Add nearby target')
+    assertSuggestions()
+    edit('New nearby target ID', 'guard')
+    click('Add nearby target')
+    assertSuggestions()
+    click('Remove nearby target')
+    assertSuggestions()
+    click('Discard nearby draft')
+    assertSuggestions()
   })
 })
 

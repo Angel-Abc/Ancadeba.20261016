@@ -1,11 +1,13 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
-import type {
-  QuestLogComponentDefinition,
-  ButtonComponentDefinition,
-  LanguageSelectComponentDefinition,
-  MapViewComponentDefinition,
-  TextComponentDefinition,
-} from '@ancadeba/schemas'
+import { resolveMapView, type ButtonComponentDefinition } from '@ancadeba/schemas'
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
+import {
+  createComponentDraft,
+  creatableComponentTypes,
+  type BasicComponent,
+  type CreatableComponentType,
+} from './componentDrafts.js'
 import type { ProjectEditorState } from './projectController.js'
 import { nearbyForm } from './nearbyForm.js'
 import {
@@ -15,13 +17,6 @@ import {
   translationChoices,
   type RuleFormControls,
 } from './ruleFormControls.js'
-
-type BasicComponent =
-  | QuestLogComponentDefinition
-  | TextComponentDefinition
-  | ButtonComponentDefinition
-  | LanguageSelectComponentDefinition
-  | MapViewComponentDefinition
 
 type ButtonAction = NonNullable<ButtonComponentDefinition['action']>
 
@@ -39,7 +34,19 @@ const isBasic = (component: { type: string }): component is BasicComponent =>
   ['text', 'button', 'language-select', 'map-view', 'quest-log'].includes(component.type)
 
 /** Edits one scene component selected in the project explorer. */
-export function bindComponentEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindComponentEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  {
+    t = editorLocalization().t,
+    onCreated,
+    onCancel,
+  }: {
+    t?: Translate
+    onCreated?: (sceneId: string, componentId: string) => void
+    onCancel?: (sceneId: string) => void
+  } = {},
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -53,6 +60,10 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
   let draft: BasicComponent | undefined
   let dirty = false
   let busy = false
+  let creating = false
+  let newType: CreatableComponentType = 'text'
+  let submitted: { type: EditorCommand['type']; sceneId: string; componentId: string } | undefined
+  let addLabel = t('component.add')
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -68,12 +79,25 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
       ? ''
       : parsed.error.issues.map(({ path, message }) => `${path.join('.')}: ${message}`).join('\n')
 
-    if (parsed.success) save(parsed.data)
+    if (parsed.success) {
+      if (command.type === 'scene.upsertComponent' || command.type === 'scene.upsertNearby')
+        submitted = {
+          type: command.type,
+          sceneId: command.sceneId,
+          componentId: command.component.id,
+        }
+      save(parsed.data)
+    }
   }
 
   const reset = () => {
     const current = component()
-    draft = current && isBasic(current) ? structuredClone(current) : undefined
+    draft =
+      creating && view
+        ? createComponentDraft(view, sceneId, newType)
+        : current && isBasic(current)
+          ? structuredClone(current)
+          : undefined
     dirty = false
     error.textContent = ''
     render()
@@ -83,10 +107,18 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
     fields.replaceChildren()
     const current = component()
 
-    if (!view || !current) return
+    if (!view || !scene()) return
 
-    if (current.type === 'nearby') {
-      fields.append(nearbyForm(controls, view, submit, sceneId))
+    if (!creating && current?.type === 'nearby') {
+      fields.append(
+        nearbyForm(controls, view, submit, sceneId, {
+          componentId,
+          onDiscard: () => {
+            dirty = false
+            error.textContent = ''
+          },
+        }),
+      )
 
       return
     }
@@ -96,9 +128,64 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
     form.className = 'component-form'
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save component'
+    saveButton.textContent = t(creating ? 'component.create' : 'component.save')
+    saveButton.disabled = draft.type === 'map-view' && !view.game?.maps?.length
+
+    if (creating) {
+      const picker = controls.select(
+        t('component.type'),
+        newType,
+        creatableComponentTypes.map((type) => [type, t(`tree.${type}`)] as const),
+        (type) => {
+          if (dirty) {
+            picker.querySelector('select')!.value = newType
+            error.textContent = t('component.discardFirst')
+
+            return
+          }
+
+          newType = type
+          reset()
+        },
+        false,
+      )
+
+      form.append(
+        picker,
+        controls.input(t('component.id'), draft.id, (id) => {
+          draft!.id = id.trim()
+        }),
+      )
+    }
+
+    if (draft.type === 'language-select' && !view.game?.languages) {
+      const help = document.createElement('p')
+      help.className = 'help'
+      help.textContent = t('component.languageHelp')
+      form.append(help)
+    }
+
+    if (draft.type === 'map-view' && !view.game?.maps?.length) {
+      const help = document.createElement('p')
+      help.className = 'help'
+      help.textContent = t('component.mapHelp')
+      form.append(help)
+    }
+
     form.append(
-      saveBar(document, saveButton, controls.button('Discard component draft', reset)),
+      saveBar(
+        document,
+        saveButton,
+        controls.button(t('component.discard'), reset),
+        ...(creating
+          ? [
+              controls.button(t('component.cancel'), () => {
+                reset()
+                onCancel?.(sceneId)
+              }),
+            ]
+          : []),
+      ),
       ...componentFields(controls, view, sceneId, draft, render),
       controls.group(
         'Placement',
@@ -117,7 +204,42 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 
-      if (draft) submit({ type: 'scene.upsertComponent', sceneId, component: draft })
+      if (!draft) return
+      const target = scene()
+
+      if (!target) {
+        error.textContent = t('component.sceneMissing')
+
+        return
+      }
+
+      if (creating && target.components.some(({ id }) => id === draft!.id)) {
+        error.textContent = t('component.duplicateId')
+
+        return
+      }
+
+      if (draft.type === 'map-view') {
+        try {
+          resolveMapView(
+            new Map(Object.entries(view?.maps ?? {})),
+            draft.map,
+            draft.viewport,
+            draft.playerSpawn,
+          )
+        } catch (cause) {
+          error.textContent = cause instanceof Error ? cause.message : String(cause)
+
+          return
+        }
+      }
+
+      submit({
+        type: 'scene.upsertComponent',
+        sceneId,
+        component: draft,
+        ...(creating ? { createOnly: true } : {}),
+      })
     })
     fields.append(form)
   }
@@ -125,17 +247,20 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
   return {
     hasDrafts: () => dirty,
     /** Shows a component; refuses to leave another component with unsaved changes. */
-    navigate(nextScene: string | undefined, nextComponent: string | undefined) {
-      if (nextScene === sceneId && nextComponent === componentId) return true
+    navigate(nextScene: string | undefined, nextComponent: string | undefined, add = false) {
+      if (nextScene === sceneId && (nextComponent ?? '') === componentId && add === creating)
+        return true
 
       if (dirty) {
-        error.textContent = 'Save or discard the component draft first.'
+        error.textContent = t('component.discardFirst')
 
         return false
       }
 
       sceneId = nextScene ?? ''
       componentId = nextComponent ?? ''
+      creating = add
+      submitted = undefined
       reset()
 
       return true
@@ -148,13 +273,27 @@ export function bindComponentEditor(root: HTMLElement, save: (command: EditorCom
       busy = state.busy
 
       const saved =
-        replaceFields &&
-        ['scene.upsertComponent', 'scene.upsertNearby'].includes(state.lastCommand ?? '')
+        replaceFields && submitted?.type === state.lastCommand && submitted !== undefined
+
+      const created = saved && creating ? submitted : undefined
+
+      if (created) {
+        creating = false
+        componentId = created.componentId
+      }
+
+      if (!state.busy) submitted = undefined
 
       const replace = projectChanged || (replaceFields && !state.preserveDrafts)
 
+      const languageChanged = addLabel !== t('component.add')
+      addLabel = t('component.add')
+
       if (replace || saved || (changed && !dirty)) reset()
+      else if (languageChanged && draft) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
+
+      if (created) onCreated?.(created.sceneId, created.componentId)
     },
   }
 }
@@ -277,6 +416,14 @@ function componentFields(
       ...label,
       select('Map', draft.map, view.game?.maps ?? [], (value) => {
         draft.map = value
+        const map = view.maps?.[value]
+
+        if (map) {
+          viewport.columns = Math.min(viewport.columns, map.width)
+          viewport.rows = Math.min(viewport.rows, map.height)
+        }
+
+        render()
       }),
       select(
         'Interactive',
@@ -309,23 +456,54 @@ function componentFields(
           ),
         ),
       ),
+      controls.group(
+        'Player marker',
+        select(
+          'Show player',
+          String(Boolean(draft.playerSpawn)),
+          [
+            ['false', 'No, pan the map'],
+            ['true', 'Yes, move a player'],
+          ],
+          (value) => {
+            draft.playerSpawn = value === 'true' ? { x: 0, y: 0 } : undefined
+            render()
+          },
+        ),
+        ...(draft.playerSpawn
+          ? (['x', 'y'] as const).map((key) =>
+              input(
+                key === 'x' ? 'Player column' : 'Player row',
+                String(draft.playerSpawn![key]),
+                (value) => {
+                  draft.playerSpawn![key] = Number(value)
+                },
+                'number',
+              ),
+            )
+          : []),
+      ),
     ]
   }
 
   const scenes = view.scenes.map((scene) => scene.id)
+  const gameScenes = view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id)
   const actions = Object.keys(view.rules?.actions ?? {})
 
   const mapViews =
     view.scenes
       .find((scene) => scene.id === sceneId)
-      ?.components.filter((component) => component.type === 'map-view')
+      ?.components.filter(
+        (component) =>
+          component.type === 'map-view' && component.playerSpawn && component.interactive !== false,
+      )
       .map((component) => component.id) ?? []
 
   const action = draft.action
 
   const defaults = (type: string): ButtonAction | undefined =>
     type === 'new-game' || type === 'enter-scene'
-      ? { type, scene: scenes[0] ?? '' }
+      ? { type, scene: (type === 'new-game' ? gameScenes : scenes)[0] ?? '' }
       : type === 'request-action'
         ? { type, action: actions[0] ?? '' }
         : type === 'move-map'
@@ -351,9 +529,14 @@ function componentFields(
     ),
     ...(action?.type === 'new-game' || action?.type === 'enter-scene'
       ? [
-          select('Target scene', action.scene, scenes, (value) => {
-            action.scene = value
-          }),
+          select(
+            'Target scene',
+            action.scene,
+            action.type === 'new-game' ? gameScenes : scenes,
+            (value) => {
+              action.scene = value
+            },
+          ),
         ]
       : action?.type === 'request-action'
         ? [

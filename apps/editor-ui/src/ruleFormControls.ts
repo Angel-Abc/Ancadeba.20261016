@@ -76,8 +76,6 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     return label(title, control)
   }
 
-  const suggestions = new WeakMap<readonly TranslationChoice[], HTMLDataListElement>()
-
   /** A searchable key field that previews the default-language text of the chosen key. */
   const translation = (
     title: string,
@@ -89,22 +87,15 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     const preview = create('small')
     const texts = new Map(choices)
     const emptyLabel = texts.get('')
-    let list = suggestions.get(choices)
-    const created = !list
+    const list = create('datalist')
+    list.id = `translation-keys-${++suggestionLists}`
 
-    if (!list) {
-      list = create('datalist')
-      list.id = `translation-keys-${++suggestionLists}`
-
-      for (const [key, text] of choices) {
-        if (!key) continue
-        const option = create('option')
-        option.value = key
-        option.label = text
-        list.append(option)
-      }
-
-      suggestions.set(choices, list)
+    for (const [key, text] of choices) {
+      if (!key) continue
+      const option = create('option')
+      option.value = key
+      option.label = text
+      list.append(option)
     }
 
     control.value = value
@@ -132,7 +123,7 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     show()
 
     const wrapper = label(title, control)
-    wrapper.append(...(created ? [list] : []), preview)
+    wrapper.append(list, preview)
 
     return wrapper
   }

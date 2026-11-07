@@ -33,6 +33,14 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  history?:
+    | {
+        canUndo: boolean
+        canRedo: boolean
+        undoLabel?: string | undefined
+        redoLabel?: string | undefined
+      }
+    | undefined
   dialogues?: Record<string, DialogueDefinition> | undefined
   quests?: Record<string, QuestDefinition> | undefined
   leveling?: Record<string, LevelingProfile> | undefined
@@ -83,6 +91,8 @@ export function projectInventorySources(
 export interface CommandResult {
   project: ProjectSnapshot
   changedFiles: string[]
+  createdFiles?: readonly string[]
+  removedFiles?: readonly string[]
   summary: string
   diagnostics: Diagnostic[]
 }

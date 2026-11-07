@@ -285,6 +285,21 @@ describe('editor core', () => {
 
     const components = object(result.project.documents['scenes/start.json']).components
 
+    expect(() =>
+      applyCommand(withComponents, {
+        type: 'scene.upsertComponent',
+        sceneId: 'start',
+        component: {
+          id: 'title',
+          type: 'text',
+          placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+          text: 'Do not overwrite',
+          presentation: { variant: 'body', align: 'start' },
+        },
+        createOnly: true,
+      }),
+    ).toThrow('A component with this ID already exists')
+
     expect(result.changedFiles).toEqual(['scenes/start.json'])
     expect(components).toEqual([
       {
@@ -328,7 +343,7 @@ describe('editor core', () => {
   })
 
   it('publishes machine-readable requests and examples for every command', () => {
-    expect(capabilities.commands).toHaveLength(41)
+    expect(capabilities.commands).toHaveLength(49)
     expect(capabilities.requestSchema).toHaveProperty('properties')
 
     for (const command of capabilities.commands) expect(command.example.type).toBe(command.type)

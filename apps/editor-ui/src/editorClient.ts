@@ -1,5 +1,19 @@
-import type { CommandRequest, Diagnostic, ProjectChoice, ProjectView } from '@ancadeba/editor-core'
-import { apiErrorSchema, projectListSchema, projectViewSchema } from '@ancadeba/editor-core'
+import type {
+  CommandRequest,
+  CreateProjectRequest,
+  Diagnostic,
+  ProjectChoice,
+  ProjectView,
+  HistoryRequest,
+  ComponentCopyRequest,
+  ComponentClipboard,
+} from '@ancadeba/editor-core'
+import {
+  apiErrorSchema,
+  projectListSchema,
+  projectViewSchema,
+  componentClipboardSchema,
+} from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
   constructor(
@@ -12,6 +26,9 @@ export class EditorClientError extends Error {
 }
 
 export interface IEditorClient {
+  copyComponent?(request: ComponentCopyRequest): Promise<ComponentClipboard>
+  restore?(request: HistoryRequest): Promise<ProjectView>
+  create?(request: CreateProjectRequest): Promise<ProjectView>
   inspect(path: string): Promise<ProjectView>
   apply(request: CommandRequest): Promise<ProjectView>
   importAsset?(
@@ -27,6 +44,37 @@ export interface IEditorClient {
 
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
+
+  async copyComponent(request: ComponentCopyRequest): Promise<ComponentClipboard> {
+    const value = await this.request('/api/editor/components/copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    const parsed = componentClipboardSchema.safeParse(value)
+
+    if (!parsed.success)
+      throw new EditorClientError('invalid_response', 'Component copy response was malformed')
+
+    return parsed.data
+  }
+
+  restore(request: HistoryRequest): Promise<ProjectView> {
+    return this.requestProject('/api/editor/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
+
+  create(request: CreateProjectRequest): Promise<ProjectView> {
+    return this.requestProject('/api/editor/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
 
   async listProjects(signal: AbortSignal): Promise<ProjectChoice[]> {
     const value = await this.request('/api/editor/projects', { signal })

@@ -25,6 +25,159 @@ const view = (revision: string): ProjectView => ({
 })
 
 describe('project editor controller', () => {
+  it('copies the inspected saved component without replacing fields and reports copy conflicts', async () => {
+    const requests: unknown[] = []
+    const states: { state: ProjectEditorState; replace: boolean }[] = []
+    let conflict = false
+    const component = { id: 'text', type: 'text', text: 'Saved', placement: { row: 1, column: 1 } }
+
+    const client: IEditorClient = {
+      inspect: async () => view('one'),
+      apply: async () => view('two'),
+      copyComponent: async (request) => {
+        requests.push(request)
+
+        if (conflict) throw new EditorClientError('revision_conflict', 'Reload before copying')
+
+        return { revision: 'one', component }
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state, replace) =>
+      states.push({ state, replace }),
+    )
+
+    await controller.load('game')
+    expect(await controller.copyComponent('start', 'text')).toEqual({ revision: 'one', component })
+    expect(requests).toEqual([
+      { path: 'game', expectedRevision: 'one', sceneId: 'start', componentId: 'text' },
+    ])
+    expect(states.at(-1)).toMatchObject({
+      state: { view: { revision: 'one' }, busy: false },
+      replace: false,
+    })
+    conflict = true
+    expect(await controller.copyComponent('start', 'text')).toBeUndefined()
+    expect(states.at(-1)).toMatchObject({
+      state: { conflict: true, error: 'Reload before copying' },
+      replace: false,
+    })
+  })
+
+  it('disables exhausted or invalidated history after restore failures', async () => {
+    const saved = { ...view('saved'), history: { canUndo: true, canRedo: true } }
+    const states: ProjectEditorState[] = []
+
+    const client: IEditorClient = {
+      inspect: async () => saved,
+      apply: async () => saved,
+      restore: async () => {
+        throw new EditorClientError('history_restore_failed', 'History was cleared; reload')
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state) => states.push(state))
+    await controller.load('game')
+    await controller.restore('undo')
+    expect(states.at(-1)).toMatchObject({
+      view: { revision: 'saved', history: { canUndo: false, canRedo: false } },
+      error: 'History was cleared; reload',
+    })
+  })
+
+  it('refreshes shared history availability even when project bytes return to the same revision', async () => {
+    let latest = { ...view('same'), history: { canUndo: false, canRedo: false } }
+    const states: { state: ProjectEditorState; replace: boolean }[] = []
+    const client: IEditorClient = { inspect: async () => latest, apply: async () => latest }
+
+    const controller = new ProjectEditorController(client, (state, replace) =>
+      states.push({ state, replace }),
+    )
+
+    await controller.load('game')
+    latest = { ...latest, history: { canUndo: false, canRedo: true } }
+    await controller.refresh(true)
+    expect(states.at(-1)).toMatchObject({
+      state: { view: { history: { canRedo: true } }, changedElsewhere: false },
+      replace: false,
+    })
+  })
+
+  it('restores using the inspected revision and replaces saved fields without preserving drafts', async () => {
+    const saved = { ...view('saved'), history: { canUndo: true, canRedo: false } }
+    const original = { ...view('original'), history: { canUndo: false, canRedo: true } }
+    const requests: unknown[] = []
+    const states: { state: ProjectEditorState; replace: boolean }[] = []
+
+    const client: IEditorClient = {
+      inspect: async () => saved,
+      apply: async () => saved,
+      restore: async (request) => {
+        requests.push(request)
+
+        return request.direction === 'undo' ? original : saved
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state, replace) =>
+      states.push({ state, replace }),
+    )
+
+    await controller.load('game')
+    await controller.restore('undo')
+    expect(states.at(-1)).toMatchObject({
+      state: {
+        view: original,
+        historyChange: 'undo',
+        lastCommand: null,
+        preserveDrafts: false,
+        busy: false,
+      },
+      replace: true,
+    })
+    await controller.restore('undo')
+    expect(requests).toHaveLength(1)
+    await controller.restore('redo')
+    expect(requests).toEqual([
+      { path: 'game', expectedRevision: 'saved', direction: 'undo' },
+      { path: 'game', expectedRevision: 'original', direction: 'redo' },
+    ])
+  })
+
+  it('serializes history operations and preserves the original view after a failed restore', async () => {
+    const saved = { ...view('saved'), history: { canUndo: true, canRedo: false } }
+    let rejectRestore: (error: Error) => void = () => {}
+    let calls = 0
+    const states: { state: ProjectEditorState; replace: boolean }[] = []
+
+    const client: IEditorClient = {
+      inspect: async () => saved,
+      apply: async () => saved,
+      restore: () => {
+        calls++
+
+        return new Promise((_resolve, reject) => {
+          rejectRestore = reject
+        })
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state, replace) =>
+      states.push({ state, replace }),
+    )
+
+    await controller.load('game')
+    const pending = controller.restore('undo')
+    await controller.restore('undo')
+    expect(calls).toBe(1)
+    rejectRestore(new EditorClientError('revision_conflict', 'Reload before retrying'))
+    await pending
+    expect(states.at(-1)).toMatchObject({
+      state: { view: saved, conflict: true, busy: false },
+      replace: false,
+    })
+  })
+
   it('preserves draft values and the original revision across refresh and conflict until explicit reload', async () => {
     let latest = view('one')
     const requests: CommandRequest[] = []

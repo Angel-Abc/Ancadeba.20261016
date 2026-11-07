@@ -152,6 +152,11 @@ describe('extensible project explorer', () => {
       parentId: 'standard',
       kind: 'component',
     })
+    expect(scene.children!.find((node) => node.kind === 'new-component')).toMatchObject({
+      key: 'component-new:standard',
+      parentId: 'standard',
+      label: 'Add component',
+    })
     expect(nodes[2]!.children![0]!.children![0]).toMatchObject({
       key: 'asset:portrait',
       kind: 'asset',

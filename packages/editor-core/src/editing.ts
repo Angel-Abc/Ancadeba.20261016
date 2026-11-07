@@ -9,10 +9,12 @@ import { editRules } from './ruleEditing.js'
 import { editControls } from './controlEditing.js'
 import { editStatusPanel } from './statusPanelEditing.js'
 import { editComponent } from './componentEditing.js'
+import { editComponentStructure } from './componentStructureEditing.js'
 import { editItems } from './itemEditing.js'
 import { editShop } from './shopEditing.js'
 import { editCombat } from './combatEditing.js'
 import { editCombatLibrary } from './combatLibraryEditing.js'
+import { editSceneStructure, type SceneEditResult } from './sceneEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -47,8 +49,18 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const documents = { ...project.documents }
   const game = gameSchema.parse(documents['game.json'])
   const changedFiles: string[] = []
+  let structure: SceneEditResult | undefined
 
   if (
+    command.type === 'scene.rename' ||
+    command.type === 'scene.duplicate' ||
+    command.type === 'scene.remove' ||
+    command.type === 'game.setInitialScene' ||
+    command.type === 'scene.removeComponent'
+  ) {
+    structure = editSceneStructure(documents, game, command)
+    changedFiles.push(...structure.changedFiles)
+  } else if (
     command.type === 'game.upsertDialogue' ||
     command.type === 'game.removeDialogue' ||
     command.type === 'game.upsertQuest' ||
@@ -84,6 +96,12 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.removeItemView'
   ) {
     changedFiles.push(...editItems(documents, game, command))
+  } else if (
+    command.type === 'scene.duplicateComponent' ||
+    command.type === 'scene.pasteComponent' ||
+    command.type === 'scene.moveComponent'
+  ) {
+    changedFiles.push(...editComponentStructure(documents, game, command))
   } else if (command.type === 'scene.upsertComponent') {
     changedFiles.push(...editComponent(documents, game, command))
   } else if (
@@ -160,14 +178,18 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   if (resultingDiagnostics.length)
     throw new EditorError(
       422,
-      'invalid_project',
-      'Change produces an invalid project',
+      command.type === 'scene.removeComponent' ? 'component_in_use' : 'invalid_project',
+      command.type === 'scene.removeComponent'
+        ? 'Update component references before deleting'
+        : 'Change produces an invalid project',
       resultingDiagnostics,
     )
 
   return {
     project: { revision: project.revision, documents },
     changedFiles,
+    ...(structure?.createdFiles ? { createdFiles: structure.createdFiles } : {}),
+    ...(structure?.removedFiles ? { removedFiles: structure.removedFiles } : {}),
     summary:
       command.type === 'scene.create'
         ? `Created scene ${command.scene.id}`

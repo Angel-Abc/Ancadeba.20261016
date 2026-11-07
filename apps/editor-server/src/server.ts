@@ -116,6 +116,23 @@ export function createEditorServer(
 
       if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
 
+      if (request.method === 'POST' && url.pathname === '/api/editor/projects') {
+        if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json')
+          throw new WorkspaceError(415, 'Project creation requires application/json')
+        const bytes = await readBody(request)
+        let body: unknown
+
+        try {
+          body = JSON.parse(Buffer.from(bytes).toString('utf8'))
+        } catch {
+          throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
+        }
+
+        json(response, 201, await projects.create(body))
+
+        return
+      }
+
       if (request.method === 'GET' && url.pathname === '/api/editor/project') {
         json(response, 200, await projects.inspect(path))
 
@@ -128,7 +145,12 @@ export function createEditorServer(
         return
       }
 
-      if (request.method === 'POST' && url.pathname === '/api/editor/commands') {
+      if (
+        request.method === 'POST' &&
+        (url.pathname === '/api/editor/commands' ||
+          url.pathname === '/api/editor/history' ||
+          url.pathname === '/api/editor/components/copy')
+      ) {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
           throw new WorkspaceError(415, 'Editing requests must use application/json')
         }
@@ -140,6 +162,18 @@ export function createEditorServer(
           body = JSON.parse(Buffer.from(bytes).toString('utf8'))
         } catch {
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
+        }
+
+        if (url.pathname === '/api/editor/components/copy') {
+          json(response, 200, await projects.copyComponent(body))
+
+          return
+        }
+
+        if (url.pathname === '/api/editor/history') {
+          json(response, 200, await projects.restore(body))
+
+          return
         }
 
         const result = await projects.apply(body)

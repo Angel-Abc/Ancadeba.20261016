@@ -391,6 +391,12 @@ code {
 
 .editor-actions {
   display: grid;
+  gap: 0.5rem;
+}
+
+#project-create-fields {
+  display: grid;
+  gap: 0.5rem;
 }
 
 #project-open-feedback {

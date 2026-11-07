@@ -7,6 +7,15 @@ import {
   type CommandResult,
   type Diagnostic,
   assetImportMetadataSchema,
+  createProjectRequestSchema,
+  createStarterProject,
+  validateProject,
+  historyRequestSchema,
+  type ProjectSnapshot,
+  componentCopyRequestSchema,
+  componentClipboardSchema,
+  object,
+  type ComponentClipboard,
 } from '@ancadeba/editor-core'
 import { gameIdSchema, gameSchema, assetCatalogSchema, assetCatalogFile } from '@ancadeba/schemas'
 import { inspectImageSource } from '@ancadeba/game-runtime'
@@ -14,15 +23,161 @@ import { randomUUID } from 'node:crypto'
 import { applyCommand as editProject } from '@ancadeba/editor-core'
 import type { EditorProjectRepository } from './editorProjectRepository.js'
 import { EditorCoordinator } from './editorCoordinator.js'
+import { EditorHistory } from './editorHistory.js'
 
 export class EditorProjectService {
   constructor(
     private readonly repository: EditorProjectRepository,
     readonly coordinator: EditorCoordinator,
+    private readonly history = new EditorHistory(),
   ) {}
 
+  create(input: unknown): Promise<ProjectView> {
+    const parsed = createProjectRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Provide a title and a folder name using letters, digits, underscores or hyphens',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.create)
+        throw new EditorError(503, 'unsupported_creation', 'Project creation is unavailable')
+      const documents = createStarterProject(parsed.data)
+      const diagnostics = validateProject(documents)
+
+      if (diagnostics.length)
+        throw new EditorError(422, 'invalid_project', 'Invalid starter project', diagnostics)
+      await this.repository.create(parsed.data.path, documents)
+
+      try {
+        return this.view(parsed.data.path, await this.repository.load(parsed.data.path))
+      } catch {
+        throw new EditorError(
+          500,
+          'project_creation_uncertain',
+          `Project files were created in ${parsed.data.path}, but could not be reopened. Refresh the project list and inspect that folder before retrying.`,
+        )
+      }
+    })
+  }
+
   inspect(path: string): Promise<ProjectView> {
-    return this.coordinator.run(async () => inspectProject(await this.repository.load(path)))
+    return this.coordinator.run(async () => this.view(path, await this.repository.load(path)))
+  }
+
+  copyComponent(input: unknown): Promise<ComponentClipboard> {
+    const parsed = componentCopyRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(400, 'invalid_request', 'Invalid component copy request')
+    const { path, expectedRevision, sceneId, componentId } = parsed.data
+
+    return this.coordinator.run(async () => {
+      const project = await this.repository.load(path)
+
+      if (project.revision !== expectedRevision)
+        throw new EditorError(409, 'revision_conflict', 'Project changed. Reload before copying.')
+      const view = inspectProject(project)
+
+      if (view.diagnostics.length)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'Fix project diagnostics before copying',
+          view.diagnostics,
+        )
+
+      if (!view.game?.scenes.includes(sceneId))
+        throw new EditorError(404, 'scene_not_found', 'Scene does not exist')
+      const source = object(project.documents[`scenes/${sceneId}.json`])
+
+      const component = (Array.isArray(source.components) ? source.components : []).find(
+        (entry) => object(entry).id === componentId,
+      )
+
+      if (!component) throw new EditorError(404, 'component_not_found', 'Component does not exist')
+
+      return componentClipboardSchema.parse({ revision: project.revision, component })
+    })
+  }
+
+  restore(input: unknown): Promise<ProjectView> {
+    const parsed = historyRequestSchema.safeParse(input)
+
+    if (!parsed.success) throw new EditorError(400, 'invalid_request', 'Invalid undo/redo request')
+    const { path, expectedRevision, direction } = parsed.data
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.restoreHistoryFiles)
+        throw new EditorError(503, 'unsupported_history', 'Undo and redo are unavailable')
+      const current = await this.repository.load(path)
+      this.history.status(path, current.revision)
+
+      if (current.revision !== expectedRevision)
+        throw new EditorError(409, 'revision_conflict', 'Project changed. Reload before retrying.')
+      const entry = this.history.next(path, current.revision, direction)
+
+      const files =
+        direction === 'redo'
+          ? entry.files
+          : entry.files.map(({ file, before, after }) => ({ file, before: after, after: before }))
+
+      try {
+        await this.repository.restoreHistoryFiles(path, files)
+        const saved = await this.repository.load(path)
+        this.history.commit(path, direction, saved.revision)
+
+        return this.view(path, saved)
+      } catch (error) {
+        // A failed replay may be uncertain; reinspection is required before another history operation.
+        this.history.clear(path)
+
+        if (error instanceof EditorError) throw error
+
+        throw new EditorError(
+          500,
+          'history_restore_failed',
+          'Undo/redo could not be saved. History was cleared; reload and inspect before retrying.',
+        )
+      }
+    })
+  }
+
+  private view(path: string, project: ProjectSnapshot): ProjectView {
+    return { ...inspectProject(project), history: this.history.status(path, project.revision) }
+  }
+
+  private capture(path: string, files: readonly string[]) {
+    return this.repository.restoreHistoryFiles
+      ? this.repository.readHistoryFiles?.(path, files)
+      : undefined
+  }
+
+  private async remember(
+    path: string,
+    previous: ProjectSnapshot,
+    saved: ProjectSnapshot,
+    files: readonly string[],
+    before: Record<string, Uint8Array | undefined> | undefined,
+    label: string,
+  ): Promise<void> {
+    if (!before) return
+
+    try {
+      const after = await this.capture(path, files)
+
+      if (after) this.history.record(path, previous.revision, saved.revision, label, before, after)
+    } catch {
+      this.history.clear(path)
+      throw new EditorError(
+        500,
+        'history_capture_failed',
+        'Change was saved, but history could not be recorded. Reload and inspect before retrying.',
+      )
+    }
   }
 
   scene(path: string, id: string) {
@@ -75,10 +230,21 @@ export class EditorProjectService {
 
       if (assetDiagnostics.length)
         throw new EditorError(422, 'invalid_project', 'Invalid asset source', assetDiagnostics)
-      await this.repository.save(request.path, change)
-      const saved = await this.repository.load(request.path)
+      const before = await this.capture(request.path, change.changedFiles)
+      let saved: ProjectSnapshot
 
-      return { ...change, project: saved, view: inspectProject(saved) }
+      try {
+        await this.repository.save(request.path, change)
+        saved = await this.repository.load(request.path)
+      } catch (error) {
+        this.history.clear(request.path)
+
+        throw error
+      }
+
+      await this.remember(request.path, current, saved, change.changedFiles, before, change.summary)
+
+      return { ...change, project: saved, view: this.view(request.path, saved) }
     })
   }
 
@@ -151,11 +317,14 @@ export class EditorProjectService {
 
       if (diagnostics.length)
         throw new EditorError(422, 'invalid_project', 'Invalid asset source', diagnostics)
+      const changedFiles = [source, ...change.changedFiles]
+      const before = await this.capture(request.path, changedFiles)
       await this.repository.createAsset(request.path, source, bytes)
 
       try {
         await this.repository.save(request.path, change)
       } catch (error) {
+        this.history.clear(request.path)
         throw new EditorError(
           500,
           'asset_publication_failed',
@@ -164,12 +333,20 @@ export class EditorProjectService {
       }
 
       const saved = await this.repository.load(request.path)
+      await this.remember(
+        request.path,
+        current,
+        saved,
+        changedFiles,
+        before,
+        `Imported image ${request.id}`,
+      )
 
       return {
         ...change,
-        changedFiles: [source, ...change.changedFiles],
+        changedFiles,
         project: saved,
-        view: inspectProject(saved),
+        view: this.view(request.path, saved),
       }
     })
   }

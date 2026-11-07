@@ -14,6 +14,7 @@ export function nearbyForm(
   view: ProjectView,
   save: (command: EditorCommand) => void,
   initialScene?: string,
+  { componentId, onDiscard }: { componentId?: string; onDiscard?: () => void } = {},
 ): HTMLElement {
   const root = controls.group('Nearby characters and objects')
   const scenes = view.scenes.filter((scene) => scene.type === 'game')
@@ -241,7 +242,13 @@ export function nearbyForm(
     const submit = create('button')
     submit.type = 'submit'
     submit.textContent = 'Save nearby targets'
-    form.append(submit, button('Discard nearby draft', reset))
+    form.append(
+      submit,
+      button('Discard nearby draft', () => {
+        reset()
+        onDiscard?.()
+      }),
+    )
     form.addEventListener('submit', (event) => {
       event.preventDefault()
       error.textContent = ''
@@ -252,7 +259,12 @@ export function nearbyForm(
 
   function reset() {
     const scene = scenes.find((scene) => scene.id === sceneId)!
-    const previous = scene.components.find((component) => component.type === 'nearby')
+
+    const previous = scene.components.find(
+      (component): component is NearbyComponentDefinition =>
+        component.type === 'nearby' && (componentId === undefined || component.id === componentId),
+    )
+
     draft = previous
       ? structuredClone(previous)
       : {

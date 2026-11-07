@@ -47,7 +47,8 @@ Each request contains one command. Metadata commands supply all listed fields.
 | `scene.removeStatusPanel`  | `sceneId`, status `componentId`                                                      |
 
 Scene creation updates both the scene document and the manifest reference.
-Game and scene IDs cannot be changed. Scenes support text, buttons, language selectors,
+Game IDs cannot be changed. Scene IDs support revision-checked rename commands.
+Scenes support text, buttons, language selectors,
 and graphics; the focused graphic commands edit only graphic components.
 Inspection includes the referenced input definition as `input`. Input edits update
 that file. Creating the first input configuration publishes `input/<inputId>.json`
@@ -167,16 +168,176 @@ or crash-recovery journal.
 
 ## Visual editor
 
-The editor starts with only the Project explorer visible. Enter the game folder
-and select Load project. The folder and load controls collapse after opening a
+The editor starts with only the Project explorer visible. Select an existing game
+and choose Open project. The folder and load controls collapse after opening a
 project, and the navigation tree remains visible. Use Open another project to
 show the folder controls again.
+
+Choose **New project** beside **Open project** to create a game, including when the
+workspace is empty. Enter a title, a new folder name, and an optional description.
+Folder names contain up to 64 letters, digits, underscores, or hyphens; the folder
+is created directly beneath the configured workspace and is also the game's ID.
+Existing folders and files are never reused. Creation opens the project with a
+start screen, a New game button, and an editable adventure scene with a Main menu
+button. The starter game can be previewed and exported immediately. Its initial
+content is English, independently of the editor language. Its `theme.css` file
+sets readable text sizes for both editor previews and standalone exports.
+
+Opening or creating a project asks before discarding unsaved edits. Cancelling
+or a failed creation preserves the current project and its drafts. Failed storage
+operations roll back unchanged starter files; if external changes prevent cleanup,
+the error identifies the folder to inspect before retrying.
+
+`POST /api/editor/projects` accepts JSON `{ "path": "my-game", "title": "My game",
+"description": "" }` and returns the new project view with a revision and HTTP 201.
+Invalid input returns 400, an existing destination returns 409, and links remain
+inaccessible. Creation reserves a new folder exclusively and publishes `game.json`
+after both scene files. The MCP editing tools continue to target existing games.
+
 The searchable tree contains Game properties, Scenes with their components,
 and Assets grouped into Images, Parts, and Compositions. Scene types and the
 startup scene are labeled. Shared assets appear once in the asset library.
 
 Select an entry to open its editing controls. Scene branches include Add graphic;
 Scenes includes Add scene; Assets includes image import and definition creation.
+
+**Undo** and **Redo** in the project toolbar restore saved editor changes, including
+component edits, ordering and deletion, scene creation/renaming/deletion, shared
+definitions, metadata, and image imports. Each successful save is one history step.
+Undo restores exact previous file contents; redo reapplies the saved contents.
+Saving a different change after undo clears the redo branch. Failed and unchanged
+commands do not create steps. New-project creation itself is not undoable.
+
+Use Ctrl/Cmd+Z for undo, Ctrl/Cmd+Shift+Z or Ctrl+Y for redo outside text fields.
+Inside editable fields those keys retain normal text-editing behavior. Save or
+discard all pending drafts before using project history. History changes refresh
+the explorer, editing fields, and preview; if the selected entry disappears, the
+editor selects an available scene.
+
+History is shared by clients of the same editor server, kept separately per project,
+and retained while opening another project or reloading the page. It is held in
+memory for the server session, with at most 50 steps per project and a 64 MiB total
+file-content budget; older history is evicted when necessary. Restarting the server
+clears it. External changes to referenced files clear a project's history. Revision
+checks and exact-byte checks on every restored file prevent undo/redo from silently
+overwriting outside edits, including unreferenced files. A failed replay clears
+that project's history and asks for inspection if rollback cannot be confirmed.
+The restore path has guarded rollback, but no cross-process transaction or crash journal.
+
+`POST /api/editor/history` accepts `{ path, expectedRevision, direction }`, where
+`direction` is `undo` or `redo`. It replays server-owned history only and returns a
+project view. Inspected views include history availability and next-step labels.
+
+Select a scene to **Rename scene ID**, **Duplicate scene**, **Use as startup scene**,
+or **Delete scene**. The existing scene title field changes its display name.
+Renaming the ID updates the manifest, scene filename, startup selection, button
+and action-bar links, rule transitions and conditions, dialogue choices, quest
+conditions, and combat outcome destinations. It preserves source text, translation
+keys, and extension data. Case-only ID changes and existing destination files are
+rejected, including orphan files outside the manifest.
+
+Duplicating uses a new ID and title and copies all components and extension data.
+Direct self-navigation points to the copy. Inventory, combat, dialogue, quest,
+map, asset, and rule definitions remain shared game resources. The duplicate has
+its own literal title; the source title translation key is not copied. A duplicate
+becomes selected after saving, without changing the startup scene.
+
+Deletion asks for confirmation. **Redirect links to** selects an optional replacement
+for incoming links and scene conditions. Without a replacement, referenced scenes
+cannot be deleted; diagnostics identify the files and fields to update. A replacement
+must satisfy each reference's scene-type and map requirements. Deleting the startup
+scene selects the replacement or first remaining scene. The last scene cannot be
+deleted. Shared resources are retained. Select any component in the explorer to
+**Delete component**; references must be updated before a used component can be removed.
+Select a component to **Duplicate component**, **Move component up**, or
+**Move component down**. Duplication suggests an unused ID and inserts the full copy
+immediately after its source, selecting the copy after saving. Settings, translation
+keys, extension data, and grid placement are preserved; referenced game resources
+and other components remain shared. Copies initially overlap their source until
+their placement is edited. Action bars, shops, and combat components cannot be
+duplicated because each is limited to one per scene. They can still be reordered.
+Moving changes the saved component array order (and explorer/runtime render order),
+without changing grid coordinates. Move buttons are disabled at the list boundaries.
+**Discard component-control draft** resets the duplicate ID entry.
+
+Select a component and choose **Copy component**, then select a destination scene
+and choose **Paste component**. Paste is also available while another component
+in that scene is selected. The editor clipboard captures the saved source, including
+nested extension data. Later edits, renaming, or deletion of the source do not
+change the captured component. Copy does not write files or create an undo step;
+each successful paste is a normal, undoable save and selects the new component.
+
+Paste suggests the source ID when it is unused, otherwise an unused `-copy` ID.
+It appends the component to the destination list and suggests placement that fits
+the destination grid, reducing spans if necessary. Edit the ID and placement before
+pasting. The source stays unchanged. Placement extensions and all other settings
+are retained. Adjust placement if the copy overlaps an existing component.
+
+Referenced assets, maps, rules, and other game resources remain shared. Local
+component references keep their IDs and must resolve in the destination; paste
+referenced text/inventory/nearby components first if needed. Scene-type restrictions,
+singleton limits, ID collisions, grid bounds, and resource references are validated
+before saving. A rejected paste preserves the draft and reports diagnostics.
+Save or discard other edits before copying or pasting. **Discard paste draft** resets
+the destination fields; **Clear component clipboard** removes the saved snapshot.
+The clipboard stays available across scene selections, undo/redo, and saves within
+the open project, and clears when another project is opened or the page reloads.
+It is an editor clipboard, separate from the operating system's text clipboard.
+
+With a component selected, use **Ctrl/Cmd+C** to copy, **Ctrl/Cmd+D** to duplicate,
+and **Delete** or **Backspace** to delete. Deletion uses the same confirmation as
+the button. **Ctrl/Cmd+V** pastes into the selected scene or the scene containing
+the selected component, using the current suggested ID and placement (or the
+edited paste fields). Button tooltips and `aria-keyshortcuts` expose these bindings.
+The shortcuts use the same validation, draft guards, and undoable save operations
+as the buttons; duplicating or deleting also requires discarding a component-control
+draft first. Singleton components cannot be duplicated.
+
+Shortcuts leave text inputs, textareas, selectors, editable text, dialogs, project
+opening/creation forms, and the game preview alone. Selecting read-only text keeps
+native copy/delete behavior. Repeated keydown events, IME composition, busy saves,
+and unresolved project conflicts do not trigger editor shortcuts. Ordinary browser
+shortcuts remain available when no applicable editor selection or clipboard exists.
+
+`POST /api/editor/components/copy` accepts `{ path, expectedRevision, sceneId,
+componentId }` and returns `{ revision, component }`. The `scene.pasteComponent`
+command accepts `sceneId`, `newId`, the complete JSON `component`, and optional
+`placement`. Copy checks the inspected source revision; paste checks the current
+destination revision through the ordinary command endpoint.
+Save or discard other panels' drafts before structural changes. Failed commands
+preserve entries, and **Discard scene-control draft** resets the scene controls.
+
+The commands are `scene.rename` (`sceneId`, `newId`), `scene.duplicate` (`sceneId`,
+`newId`, `title`), `scene.remove` (`sceneId`, optional `replacementScene`),
+`game.setInitialScene` (`sceneId`), and `scene.removeComponent` (`sceneId`,
+`componentId`), `scene.duplicateComponent` (`sceneId`, `componentId`, `newId`), and
+`scene.moveComponent` (`sceneId`, `componentId`, zero-based final `index`). They use
+the same inspected revision as other authoring commands.
+Multi-file scene changes reserve new files exclusively, publish references and the
+manifest before deleting old scenes, and attempt byte-checked rollback on storage
+failures. An uncertain result asks for inspection before retrying. This protects
+same-server commands; it does not add a cross-process transaction or crash journal.
+
+Expand a scene and choose **Add component** to create text, buttons, map views,
+language selectors, or quest logs. Choose a type, set its unique ID, edit its
+settings, and choose **Create component**. Suggested placements fit the scene's
+grid; edit Row, Column, and spans to position the component. Saving selects the new
+component in the explorer, where **Save component** updates it in place. New saves
+use `scene.upsertComponent` with `createOnly: true`, so an ID collision cannot
+replace an existing component. Conflicts and rejected settings preserve the draft.
+Save or discard edits before switching the component type or another component.
+**Cancel** returns to the scene without saving.
+
+Text supports literal content, existing translation keys, heading/body styles,
+and alignment. Buttons support scene navigation, starting a new game, rule actions,
+and map movement. New-game targets list only game scenes. A button without an action
+is disabled during play. Map views choose existing map definitions from the game
+manifest and configure their visible area, interactivity, and optional player
+marker with zero-based coordinates. Add map files and manifest references outside
+the editor when none are registered. Invalid view dimensions and blocked or
+out-of-bounds player spawns are rejected. Language selectors use the manifest's
+configured languages and catalogs; they remain disabled in play until those exist.
+
 Asset groups display filtered thumbnail galleries. Selecting a thumbnail also
 selects and reveals the corresponding tree entry. Action-bar components open their
 slot editor. Other component types display their definitions. Engine preview is collapsible and has an
@@ -347,13 +508,9 @@ Tests are in `tests/editor-core.test.ts`,
 Run `pnpm lint`, `pnpm test`,
 `pnpm typecheck`, and `pnpm build`.
 
-V1 does not include new-project creation, scene deletion or scene ID changes,
-commands for arbitrary component editing, scripts, batches, undo history, real-time
-collaboration, live preview updates, or embedded chat. New scenes can include
-text components using the engine's shared scene schema; existing components and
-bindings are preserved by metadata and layout edits. The visual panel creates
-empty scenes. The [MCP adapter](editor-mcp.md) exposes these same HTTP operations
-to an external coding agent.
+The editor does not include scripts, command batches, real-time collaboration,
+or embedded chat. The [MCP adapter](editor-mcp.md) exposes authoring operations
+to an external coding agent; those saves share the server's project history.
 
 ## Item details and equipment
 

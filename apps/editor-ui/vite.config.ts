@@ -10,6 +10,22 @@ const config = loadAppConfig(new URL('./config.json', import.meta.url), (value, 
 })
 
 export default defineConfig({
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            // Capture validation and its dependencies before the runtime that uses them.
+            { name: 'validation', test: /[\\/]packages[\\/]schemas[\\/]/ },
+            {
+              name: 'game-runtime',
+              test: /[\\/]packages[\\/](?:game-runtime|ui-components|utilities)[\\/]/,
+            },
+          ],
+        },
+      },
+    },
+  },
   server: {
     port: config.port,
     strictPort: true,

@@ -18,6 +18,9 @@ export function editComponent(
   const index = components.findIndex((entry) => object(entry).id === component.id)
   const previous = object(components[index])
 
+  if (command.createOnly && index >= 0)
+    throw new EditorError(409, 'component_exists', 'A component with this ID already exists')
+
   if (index >= 0 && previous.type !== component.type)
     throw new EditorError(422, 'component_id_in_use', 'This ID belongs to another component')
 
