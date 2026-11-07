@@ -9,6 +9,9 @@ import {
   gameIdSchema,
   inputSchema,
   combatDefinitionSchema,
+  combatSourceSchema,
+  combatLibrarySchema,
+  combatOriginsSchema,
   languageCatalogSchema,
   mapDefinitionSchema,
 } from '@ancadeba/schemas'
@@ -23,6 +26,9 @@ export const diagnosticSchema = z.object({
 export const projectViewSchema = z.object({
   leveling: z.record(gameIdSchema, levelingProfileSchema).optional(),
   combat: z.record(gameIdSchema, combatDefinitionSchema).optional(),
+  combatSources: z.record(gameIdSchema, combatSourceSchema).optional(),
+  combatLibraries: z.record(gameIdSchema, combatLibrarySchema).optional(),
+  combatOrigins: z.record(gameIdSchema, combatOriginsSchema).optional(),
   input: inputSchema.optional(),
   rules: gameRulesSchema.optional(),
   ruleFiles: z.record(gameIdSchema, gameRulesSchema).optional(),

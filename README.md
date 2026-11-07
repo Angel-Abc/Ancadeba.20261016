@@ -1960,6 +1960,79 @@ Mana, charges, area attacks, ally targeting, revival, stacking strength,
 resistances, immunities, probabilistic effects, formulas, temporary maximum-health
 or AP changes, and statuses between completed encounters are deferred.
 
+## Shared combat libraries
+
+List optional libraries in `game.json`: `"combatLibraries": ["common"]`.
+Each ID loads `combat-libraries/<id>.json`:
+
+```json
+{
+  "schema-version": "1.0.0",
+  "id": "common",
+  "moves": {
+    "poison-strike": {
+      "type": "ability",
+      "label": "Poison strike",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [{ "id": "poison", "type": "apply-status", "status": "poison" }]
+    }
+  },
+  "statuses": {
+    "poison": { "type": "damage", "label": "Poison", "duration": 3, "amount": 2 }
+  }
+}
+```
+
+An encounter imports moves alongside its existing local definitions:
+
+```json
+{
+  "sharedMoves": [{ "library": "common", "id": "poison-strike" }],
+  "moves": {
+    "boss-slam": {
+      "type": "attack",
+      "label": "Slam",
+      "apCost": 2,
+      "damage": { "min": 8, "max": 12 }
+    }
+  }
+}
+```
+
+Imported abilities automatically include the statuses they apply or remove.
+Use `sharedStatuses` with the same reference format when a local ability needs
+a shared status directly. Libraries are self-contained: a library move can use
+only statuses declared in that library. There are no overrides, aliases, or
+cross-library dependencies. Duplicate explicit references and colliding IDs
+are rejected, including local definitions that shadow imports. Repeated
+dependencies from the same library are included once.
+
+Actors, rotations, level requirements, and action-bar commands reference the
+unchanged move IDs. Those choices remain specific to each encounter. All entries,
+including unused ones, have their translations, icons, and dependencies validated.
+Inline-only games and code-hosted resolved definitions remain supported.
+
+In **Combat**, import shared moves/statuses, inspect their origins and automatic
+dependencies, or open their library. Imported entries are read-only in the
+encounter. **Make local copy** requires a distinct ID and leaves actor and
+action-bar references unchanged. Copied abilities retain explicit imports for
+their status dependencies, so removing the original move import remains safe.
+To customize the status too, copy it and update the local ability's status ID.
+
+The library editor shows affected encounters before saving. Saves check project
+revisions, preserve extension fields and conflicting drafts, and reject deletion
+of referenced definitions. Inspection exposes `combatSources`, `combatLibraries`,
+`combatOrigins`, and resolved `combat`. Loading, preview, validation, and export
+use the same pure resolver. Saves retain references instead of flattening them.
+Saved definition changes take effect on reload; plans, status durations,
+cooldowns, RNG, and outcomes remain independent for every encounter/playthrough.
+
+Both samples use `common` in training and advanced training. **S** in training
+queues the shared Poison Strike; heavy/power strikes stay local variants.
+Automatic extraction and bulk migration of existing encounters are deferred.
+
 ## Equipment effects on combat
 
 Inventory owners may have one optional `combatStats` profile. Its owner ID is also

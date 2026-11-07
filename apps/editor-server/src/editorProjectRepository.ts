@@ -9,6 +9,7 @@ import {
   ruleFile,
   inventoryFile,
   combatFile,
+  combatLibraryFile,
 } from '@ancadeba/schemas'
 import { validateImageSource } from '@ancadeba/game-runtime'
 import {
@@ -102,6 +103,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const id of game.data.combat ?? []) await read(combatFile(id))
 
+      for (const id of game.data.combatLibraries ?? []) await read(combatLibraryFile(id))
+
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
       if (game.data.assets) {
@@ -147,7 +150,12 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
   async save(folder: string, change: CommandResult): Promise<void> {
     if (
-      change.changedFiles.some((file) => file.startsWith('combat/') || file.startsWith('leveling/'))
+      change.changedFiles.some(
+        (file) =>
+          file.startsWith('combat/') ||
+          file.startsWith('combat-libraries/') ||
+          file.startsWith('leveling/'),
+      )
     ) {
       await this.saveDefinitions(folder, change)
 
@@ -286,10 +294,13 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       for (const record of records)
         if (
-          (record.file.startsWith('combat/') || record.file.startsWith('leveling/')) &&
+          (record.file.startsWith('combat/') ||
+            record.file.startsWith('combat-libraries/') ||
+            record.file.startsWith('leveling/')) &&
           record.before &&
           ![
             ...(previous.combat ?? []).map(combatFile),
+            ...(previous.combatLibraries ?? []).map(combatLibraryFile),
             ...(previous.leveling ?? []).map(levelingFile),
           ].includes(record.file)
         )

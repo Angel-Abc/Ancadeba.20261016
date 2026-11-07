@@ -11,5 +11,6 @@
   "input": "controls",
   "rules": ["shop", "combat"],
   "combat": ["training", "advanced-training"],
-  "leveling": ["player"]
+  "leveling": ["player"],
+  "combatLibraries": ["common"]
 }

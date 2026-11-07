@@ -24,7 +24,9 @@ import {
   equipmentComponentSchema,
   shopComponentSchema,
   inventoryComponentSchema,
-  combatDefinitionSchema,
+  combatSourceSchema,
+  combatLibrarySchema,
+  combatReferenceSchema,
   combatComponentSchema,
   textComponentSchema,
   languageSelectComponentSchema,
@@ -193,7 +195,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('game.upsertCombat'),
-    encounter: combatDefinitionSchema,
+    encounter: combatSourceSchema,
     scene: z.object({ id: gameIdSchema, component: combatComponentSchema }).optional(),
   }),
   z.strictObject({ type: z.literal('game.removeCombat'), encounterId: gameIdSchema }),
@@ -219,6 +221,15 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('scene.removeLevelingView'),
     sceneId: gameIdSchema,
     componentId: gameIdSchema,
+  }),
+  z.strictObject({ type: z.literal('game.upsertCombatLibrary'), library: combatLibrarySchema }),
+  z.strictObject({ type: z.literal('game.removeCombatLibrary'), libraryId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('combat.copySharedEntry'),
+    encounterId: gameIdSchema,
+    kind: z.enum(['moves', 'statuses']),
+    reference: combatReferenceSchema,
+    localId: combatReferenceSchema.shape.id,
   }),
 ])
 
@@ -561,6 +572,27 @@ export const capabilities = {
     {
       type: 'scene.removeGraphic',
       example: { type: 'scene.removeGraphic', sceneId: 'shop', componentId: 'portrait' },
+    },
+    {
+      type: 'game.upsertCombatLibrary',
+      example: {
+        type: 'game.upsertCombatLibrary',
+        library: { 'schema-version': '1.0.0', id: 'common', moves: {}, statuses: {} },
+      },
+    },
+    {
+      type: 'game.removeCombatLibrary',
+      example: { type: 'game.removeCombatLibrary', libraryId: 'common' },
+    },
+    {
+      type: 'combat.copySharedEntry',
+      example: {
+        type: 'combat.copySharedEntry',
+        encounterId: 'training',
+        kind: 'moves',
+        reference: { library: 'common', id: 'attack' },
+        localId: 'local-attack',
+      },
     },
   ],
 }

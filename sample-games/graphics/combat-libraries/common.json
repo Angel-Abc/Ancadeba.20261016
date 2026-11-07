@@ -1,0 +1,163 @@
+{
+  "schema-version": "1.0.0",
+  "id": "common",
+  "moves": {
+    "attack": {
+      "type": "attack",
+      "label": "Attack",
+      "apCost": 1,
+      "damage": {
+        "min": 3,
+        "max": 6
+      }
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Guard",
+      "apCost": 1,
+      "guard": 5
+    },
+    "poison-strike": {
+      "type": "ability",
+      "label": "Poison Strike",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 2,
+            "max": 4
+          }
+        },
+        {
+          "id": "poison",
+          "type": "apply-status",
+          "status": "poison"
+        }
+      ]
+    },
+    "recover": {
+      "type": "ability",
+      "label": "Recover",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 10
+        }
+      ]
+    },
+    "battle-focus": {
+      "type": "ability",
+      "label": "Battle Focus",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "focus",
+          "type": "apply-status",
+          "status": "focus"
+        }
+      ]
+    },
+    "weaken": {
+      "type": "ability",
+      "label": "Weaken",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "weakness",
+          "type": "apply-status",
+          "status": "weakness"
+        }
+      ]
+    },
+    "regenerate": {
+      "type": "ability",
+      "label": "Regenerate",
+      "apCost": 1,
+      "cooldown": 2,
+      "target": "self",
+      "effects": [
+        {
+          "id": "regeneration",
+          "type": "apply-status",
+          "status": "regeneration"
+        }
+      ]
+    },
+    "stunning-blow": {
+      "type": "ability",
+      "label": "Stunning Blow",
+      "apCost": 2,
+      "cooldown": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damage": {
+            "min": 1,
+            "max": 3
+          }
+        },
+        {
+          "id": "stun",
+          "type": "apply-status",
+          "status": "stun"
+        }
+      ]
+    }
+  },
+  "statuses": {
+    "poison": {
+      "type": "damage",
+      "label": "Poison",
+      "description": "Deals damage before the affected combatant acts. Ignores defense and Guard.",
+      "duration": 3,
+      "amount": 3
+    },
+    "regeneration": {
+      "type": "regeneration",
+      "label": "Regeneration",
+      "description": "Restores health at the start of the affected turn. Does not revive.",
+      "duration": 3,
+      "amount": 4
+    },
+    "focus": {
+      "type": "modifier",
+      "label": "Battle Focus",
+      "description": "Adds attack and Guard bonuses for the next two affected turns.",
+      "duration": 2,
+      "modifiers": {
+        "attack": 3,
+        "guard": 2
+      }
+    },
+    "weakness": {
+      "type": "modifier",
+      "label": "Weakened",
+      "description": "Reduces attack and defense bonuses. Bonuses cannot fall below zero.",
+      "duration": 2,
+      "modifiers": {
+        "attack": -2,
+        "defense": -1
+      }
+    },
+    "stun": {
+      "type": "stun",
+      "label": "Stunned",
+      "description": "Skips the next turn. Periodic effects still tick.",
+      "duration": 1
+    }
+  }
+}

@@ -11,6 +11,7 @@ import { editComponent } from './componentEditing.js'
 import { editItems } from './itemEditing.js'
 import { editShop } from './shopEditing.js'
 import { editCombat } from './combatEditing.js'
+import { editCombatLibrary } from './combatLibraryEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -47,6 +48,12 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const changedFiles: string[] = []
 
   if (
+    command.type === 'game.upsertCombatLibrary' ||
+    command.type === 'game.removeCombatLibrary' ||
+    command.type === 'combat.copySharedEntry'
+  ) {
+    changedFiles.push(...editCombatLibrary(documents, game, command))
+  } else if (
     command.type === 'game.upsertLeveling' ||
     command.type === 'game.removeLeveling' ||
     command.type === 'scene.upsertLevelingView' ||

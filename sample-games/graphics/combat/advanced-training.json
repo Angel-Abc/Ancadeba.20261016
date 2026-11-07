@@ -68,15 +68,6 @@
     }
   ],
   "moves": {
-    "attack": {
-      "type": "attack",
-      "label": "Attack",
-      "apCost": 1,
-      "damage": {
-        "min": 3,
-        "max": 6
-      }
-    },
     "heavy": {
       "type": "attack",
       "label": "Heavy strike",
@@ -86,12 +77,6 @@
         "max": 12
       }
     },
-    "guard": {
-      "type": "guard",
-      "label": "Guard",
-      "apCost": 1,
-      "guard": 5
-    },
     "power-strike": {
       "type": "attack",
       "label": "Power strike",
@@ -100,106 +85,6 @@
         "min": 14,
         "max": 18
       }
-    },
-    "poison-strike": {
-      "type": "ability",
-      "label": "Poison Strike",
-      "apCost": 1,
-      "cooldown": 1,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "hit",
-          "type": "damage",
-          "damage": {
-            "min": 2,
-            "max": 4
-          }
-        },
-        {
-          "id": "poison",
-          "type": "apply-status",
-          "status": "poison"
-        }
-      ]
-    },
-    "recover": {
-      "type": "ability",
-      "label": "Recover",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "heal",
-          "type": "heal",
-          "amount": 10
-        }
-      ]
-    },
-    "battle-focus": {
-      "type": "ability",
-      "label": "Battle Focus",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "focus",
-          "type": "apply-status",
-          "status": "focus"
-        }
-      ]
-    },
-    "weaken": {
-      "type": "ability",
-      "label": "Weaken",
-      "apCost": 1,
-      "cooldown": 1,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "weakness",
-          "type": "apply-status",
-          "status": "weakness"
-        }
-      ]
-    },
-    "regenerate": {
-      "type": "ability",
-      "label": "Regenerate",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "regeneration",
-          "type": "apply-status",
-          "status": "regeneration"
-        }
-      ]
-    },
-    "stunning-blow": {
-      "type": "ability",
-      "label": "Stunning Blow",
-      "apCost": 2,
-      "cooldown": 2,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "hit",
-          "type": "damage",
-          "damage": {
-            "min": 1,
-            "max": 3
-          }
-        },
-        {
-          "id": "stun",
-          "type": "apply-status",
-          "status": "stun"
-        }
-      ]
     }
   },
   "outcomes": {
@@ -246,46 +131,38 @@
       }
     ]
   },
-  "statuses": {
-    "poison": {
-      "type": "damage",
-      "label": "Poison",
-      "description": "Deals damage before the affected combatant acts. Ignores defense and Guard.",
-      "duration": 3,
-      "amount": 3
+  "sharedMoves": [
+    {
+      "library": "common",
+      "id": "attack"
     },
-    "regeneration": {
-      "type": "regeneration",
-      "label": "Regeneration",
-      "description": "Restores health at the start of the affected turn. Does not revive.",
-      "duration": 3,
-      "amount": 4
+    {
+      "library": "common",
+      "id": "guard"
     },
-    "focus": {
-      "type": "modifier",
-      "label": "Battle Focus",
-      "description": "Adds attack and Guard bonuses for the next two affected turns.",
-      "duration": 2,
-      "modifiers": {
-        "attack": 3,
-        "guard": 2
-      }
+    {
+      "library": "common",
+      "id": "poison-strike"
     },
-    "weakness": {
-      "type": "modifier",
-      "label": "Weakened",
-      "description": "Reduces attack and defense bonuses. Bonuses cannot fall below zero.",
-      "duration": 2,
-      "modifiers": {
-        "attack": -2,
-        "defense": -1
-      }
+    {
+      "library": "common",
+      "id": "recover"
     },
-    "stun": {
-      "type": "stun",
-      "label": "Stunned",
-      "description": "Skips the next turn. Periodic effects still tick.",
-      "duration": 1
+    {
+      "library": "common",
+      "id": "battle-focus"
+    },
+    {
+      "library": "common",
+      "id": "weaken"
+    },
+    {
+      "library": "common",
+      "id": "regenerate"
+    },
+    {
+      "library": "common",
+      "id": "stunning-blow"
     }
-  }
+  ]
 }

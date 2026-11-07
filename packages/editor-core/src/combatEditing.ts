@@ -1,3 +1,4 @@
+import { mergeCombatEntries } from './combatEntryEditing.js'
 import { combatFile, type CombatActorDefinition, type GameDefinition } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { object, EditorError } from './project.js'
@@ -30,6 +31,20 @@ export function editCombat(
 
     if (!game.combat?.includes(definition.id) && Object.hasOwn(documents, file))
       throw new EditorError(409, 'combat_exists', 'An encounter file already exists')
+
+    for (const key of ['sharedMoves', 'sharedStatuses'] as const)
+      if (Array.isArray(previous[key]) && previous[key].length && definition[key] === undefined)
+        throw new EditorError(
+          422,
+          'shared_references_required',
+          `Include ${key} explicitly when saving an encounter with imports`,
+        )
+
+    const oldReferences = (key: string, library: string, id: string) =>
+      (Array.isArray(previous[key]) ? previous[key] : [])
+        .map(object)
+        .find((entry) => entry.library === library && entry.id === id)
+
     const oldEnemies = Array.isArray(previous.enemies) ? previous.enemies.map(object) : []
 
     const actor = (actor: CombatActorDefinition, old: Record<string, unknown>) => ({
@@ -63,84 +78,15 @@ export function editCombat(
       enemies: definition.enemies.map((entry) =>
         actor(entry, oldEnemies.find((old) => old.id === entry.id) ?? {}),
       ),
-      moves: Object.fromEntries(
-        Object.entries(definition.moves).map(([id, move]) => {
-          const old = object(object(previous.moves)[id])
-
-          return [
-            id,
-            {
-              ...old,
-              ...move,
-              labelKey: move.labelKey,
-              descriptionKey: move.descriptionKey,
-              damage:
-                move.type === 'attack' ? { ...object(old.damage), ...move.damage } : undefined,
-              guard: move.type === 'guard' ? move.guard : undefined,
-              cooldown: move.cooldown,
-              target: move.type === 'ability' ? move.target : undefined,
-              effects:
-                move.type === 'ability'
-                  ? move.effects.map((effect) => {
-                      const previous = (Array.isArray(old.effects) ? old.effects : [])
-                        .map(object)
-                        .find((entry) => entry.id === effect.id)
-
-                      return {
-                        ...previous,
-                        ...effect,
-                        target: effect.target,
-                        amount:
-                          effect.type === 'heal' || effect.type === 'guard'
-                            ? effect.amount
-                            : undefined,
-                        damage:
-                          effect.type === 'damage'
-                            ? { ...object(previous?.damage), ...effect.damage }
-                            : undefined,
-                        status:
-                          effect.type === 'apply-status' || effect.type === 'remove-status'
-                            ? effect.status
-                            : undefined,
-                      }
-                    })
-                  : undefined,
-            },
-          ]
-        }),
-      ),
-      statuses: definition.statuses
-        ? Object.fromEntries(
-            Object.entries(definition.statuses).map(([id, status]) => {
-              const old = object(object(previous.statuses)[id])
-
-              return [
-                id,
-                {
-                  ...old,
-                  ...status,
-                  labelKey: status.labelKey,
-                  descriptionKey: status.descriptionKey,
-                  icon: status.icon,
-                  amount:
-                    status.type === 'damage' || status.type === 'regeneration'
-                      ? status.amount
-                      : undefined,
-                  modifiers:
-                    status.type === 'modifier'
-                      ? {
-                          ...object(old.modifiers),
-                          ...status.modifiers,
-                          attack: status.modifiers.attack,
-                          defense: status.modifiers.defense,
-                          guard: status.modifiers.guard,
-                        }
-                      : undefined,
-                },
-              ]
-            }),
-          )
-        : undefined,
+      ...mergeCombatEntries(previous, definition),
+      sharedMoves: definition.sharedMoves?.map((ref) => ({
+        ...oldReferences('sharedMoves', ref.library, ref.id),
+        ...ref,
+      })),
+      sharedStatuses: definition.sharedStatuses?.map((ref) => ({
+        ...oldReferences('sharedStatuses', ref.library, ref.id),
+        ...ref,
+      })),
       rewards: definition.rewards
         ? {
             ...object(previous.rewards),

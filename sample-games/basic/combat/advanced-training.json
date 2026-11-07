@@ -65,15 +65,6 @@
     }
   ],
   "moves": {
-    "attack": {
-      "type": "attack",
-      "labelKey": "combat.attack",
-      "apCost": 1,
-      "damage": {
-        "min": 3,
-        "max": 6
-      }
-    },
     "heavy": {
       "type": "attack",
       "labelKey": "combat.heavy-strike",
@@ -83,12 +74,6 @@
         "max": 12
       }
     },
-    "guard": {
-      "type": "guard",
-      "labelKey": "combat.guard",
-      "apCost": 1,
-      "guard": 5
-    },
     "power-strike": {
       "type": "attack",
       "labelKey": "leveling.powerStrike",
@@ -97,106 +82,6 @@
         "min": 14,
         "max": 18
       }
-    },
-    "poison-strike": {
-      "type": "ability",
-      "apCost": 1,
-      "cooldown": 1,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "hit",
-          "type": "damage",
-          "damage": {
-            "min": 2,
-            "max": 4
-          }
-        },
-        {
-          "id": "poison",
-          "type": "apply-status",
-          "status": "poison"
-        }
-      ],
-      "labelKey": "abilities.move.poison-strike"
-    },
-    "recover": {
-      "type": "ability",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "heal",
-          "type": "heal",
-          "amount": 10
-        }
-      ],
-      "labelKey": "abilities.move.recover"
-    },
-    "battle-focus": {
-      "type": "ability",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "focus",
-          "type": "apply-status",
-          "status": "focus"
-        }
-      ],
-      "labelKey": "abilities.move.battle-focus"
-    },
-    "weaken": {
-      "type": "ability",
-      "apCost": 1,
-      "cooldown": 1,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "weakness",
-          "type": "apply-status",
-          "status": "weakness"
-        }
-      ],
-      "labelKey": "abilities.move.weaken"
-    },
-    "regenerate": {
-      "type": "ability",
-      "apCost": 1,
-      "cooldown": 2,
-      "target": "self",
-      "effects": [
-        {
-          "id": "regeneration",
-          "type": "apply-status",
-          "status": "regeneration"
-        }
-      ],
-      "labelKey": "abilities.move.regenerate"
-    },
-    "stunning-blow": {
-      "type": "ability",
-      "apCost": 2,
-      "cooldown": 2,
-      "target": "enemy",
-      "effects": [
-        {
-          "id": "hit",
-          "type": "damage",
-          "damage": {
-            "min": 1,
-            "max": 3
-          }
-        },
-        {
-          "id": "stun",
-          "type": "apply-status",
-          "status": "stun"
-        }
-      ],
-      "labelKey": "abilities.move.stunning-blow"
     }
   },
   "outcomes": {
@@ -284,46 +169,38 @@
       }
     ]
   },
-  "statuses": {
-    "poison": {
-      "type": "damage",
-      "duration": 3,
-      "amount": 3,
-      "labelKey": "abilities.status.poison.name",
-      "descriptionKey": "abilities.status.poison.description"
+  "sharedMoves": [
+    {
+      "library": "common",
+      "id": "attack"
     },
-    "regeneration": {
-      "type": "regeneration",
-      "duration": 3,
-      "amount": 4,
-      "labelKey": "abilities.status.regeneration.name",
-      "descriptionKey": "abilities.status.regeneration.description"
+    {
+      "library": "common",
+      "id": "guard"
     },
-    "focus": {
-      "type": "modifier",
-      "duration": 2,
-      "modifiers": {
-        "attack": 3,
-        "guard": 2
-      },
-      "labelKey": "abilities.status.focus.name",
-      "descriptionKey": "abilities.status.focus.description"
+    {
+      "library": "common",
+      "id": "poison-strike"
     },
-    "weakness": {
-      "type": "modifier",
-      "duration": 2,
-      "modifiers": {
-        "attack": -2,
-        "defense": -1
-      },
-      "labelKey": "abilities.status.weakness.name",
-      "descriptionKey": "abilities.status.weakness.description"
+    {
+      "library": "common",
+      "id": "recover"
     },
-    "stun": {
-      "type": "stun",
-      "duration": 1,
-      "labelKey": "abilities.status.stun.name",
-      "descriptionKey": "abilities.status.stun.description"
+    {
+      "library": "common",
+      "id": "battle-focus"
+    },
+    {
+      "library": "common",
+      "id": "weaken"
+    },
+    {
+      "library": "common",
+      "id": "regenerate"
+    },
+    {
+      "library": "common",
+      "id": "stunning-blow"
     }
-  }
+  ]
 }

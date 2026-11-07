@@ -1,11 +1,13 @@
+import { combatMovesForm } from './combatMovesForm.js'
 import { combatRewardsForm } from './combatRewardsForm.js'
-import { abilityEffectsForm, combatStatusesForm } from './combatAbilitiesForm.js'
+import { combatStatusesForm } from './combatAbilitiesForm.js'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   combatHealthSchema,
   combatTextSchema,
   gameBindingSchema,
-  type CombatDefinition,
+  type CombatSource,
+  resolveCombatSource,
   type CombatActorDefinition,
 } from '@ancadeba/schemas'
 import { humanizeCode, type RuleFormControls, translationChoices } from './ruleFormControls.js'
@@ -13,7 +15,7 @@ import { humanizeCode, type RuleFormControls, translationChoices } from './ruleF
 export function combatForm(
   controls: RuleFormControls,
   view: ProjectView,
-  draft: CombatDefinition,
+  draft: CombatSource,
   render: () => void,
 ): HTMLElement[] {
   const { input, select, group, button, create, translation } = controls
@@ -223,74 +225,17 @@ export function combatForm(
     }),
   )
 
-  for (const [id, move] of Object.entries(draft.moves))
-    result.push(
-      group(
-        `Move: ${id}`,
-        ...presentation('', move),
-        number('AP cost', move.apCost, (value) => {
-          move.apCost = value
-        }),
-        number('Cooldown (subsequent rounds)', move.cooldown ?? 0, (value) => {
-          move.cooldown = value || undefined
-        }),
-        ...(move.type === 'ability'
-          ? [
-              select('Ability target', move.target, ['self', 'enemy'], (value) => {
-                move.target = value
-              }),
-              ...abilityEffectsForm(controls, draft, move.effects, render),
-            ]
-          : []),
-        ...(move.type === 'attack'
-          ? [
-              number('Minimum damage', move.damage.min, (value) => {
-                move.damage.min = value
-              }),
-              number('Maximum damage', move.damage.max, (value) => {
-                move.damage.max = value
-              }),
-            ]
-          : move.type === 'guard'
-            ? [
-                number('Guard points', move.guard, (value) => {
-                  move.guard = value
-                }),
-              ]
-            : []),
-        button(`Remove move ${id}`, () => {
-          delete draft.moves[id]
-          controls.markEdited()
-          render()
-        }),
-      ),
-    )
-
-  for (const type of ['attack', 'guard', 'ability'] as const)
-    result.push(
-      button(`Add ${type} move`, () => {
-        let id: string = type
-        let index = 1
-
-        while (Object.hasOwn(draft.moves, id)) id = `${type}-${index++}`
-        draft.moves[id] =
-          type === 'attack'
-            ? { type, label: 'Attack', description: '', apCost: 1, damage: { min: 2, max: 4 } }
-            : type === 'guard'
-              ? { type, label: 'Guard', description: '', apCost: 1, guard: 4 }
-              : {
-                  type,
-                  label: 'Recover',
-                  description: '',
-                  apCost: 1,
-                  target: 'self',
-                  effects: [{ id: 'heal', type: 'heal', amount: 5 }],
-                }
-        draft.player.moves.push(id)
-        controls.markEdited()
-        render()
-      }),
-    )
+  result.push(
+    ...combatMovesForm(
+      controls,
+      view,
+      draft,
+      render,
+      (id) => draft.player.moves.push(id),
+      resolveCombatSource(draft, new Map(Object.entries(view.combatLibraries ?? {}))).definition
+        ?.statuses ?? draft.statuses,
+    ),
+  )
   result.push(
     group(
       'Outcome destinations',

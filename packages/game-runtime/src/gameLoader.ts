@@ -15,7 +15,9 @@ import {
   gameRulesSchema,
   ruleFile,
   combatFile,
-  combatDefinitionSchema,
+  combatSourceSchema,
+  combatLibrarySchema,
+  combatLibraryFile,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -90,7 +92,16 @@ export class GameLoader implements IGameLoader {
       await Promise.all(
         (definition.combat ?? []).map(
           async (id) =>
-            [id, await this.resources.load(combatFile(id), combatDefinitionSchema)] as const,
+            [id, await this.resources.load(combatFile(id), combatSourceSchema)] as const,
+        ),
+      ),
+    )
+
+    const libraries = new Map(
+      await Promise.all(
+        (definition.combatLibraries ?? []).map(
+          async (id) =>
+            [id, await this.resources.load(combatLibraryFile(id), combatLibrarySchema)] as const,
         ),
       ),
     )
@@ -117,6 +128,7 @@ export class GameLoader implements IGameLoader {
           rules,
           combat,
           leveling,
+          libraries,
         ),
         ...styling,
       }
@@ -161,6 +173,7 @@ export class GameLoader implements IGameLoader {
           rules,
           combat,
           leveling,
+          libraries,
         ),
         ...styling,
         language: tag,

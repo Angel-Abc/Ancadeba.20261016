@@ -20,6 +20,7 @@ const paths = [
   'game.json',
   'rules/shop.json',
   'rules/combat.json',
+  'combat-libraries/common.json',
   'combat/training.json',
   'combat/advanced-training.json',
   'leveling/player.json',

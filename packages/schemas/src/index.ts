@@ -47,3 +47,5 @@ export * from './leveling.js'
 export * from './combatStats.js'
 
 export * from './combatAbilities.js'
+
+export * from './combatLibraries.js'

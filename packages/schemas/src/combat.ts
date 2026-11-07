@@ -147,91 +147,88 @@ export const combatTextSchema = z.object({
   rewardInventory: z.string().default('Loot could not be created or transferred.'),
 })
 
-export const combatDefinitionSchema = z
-  .object({
-    'schema-version': z.literal('1.0.0'),
-    id,
-    ...label,
-    player: combatActorSchema,
-    enemies: z.array(combatActorSchema).min(1).max(32),
-    moves: z.record(id, combatMoveSchema),
-    statuses: z
-      .record(id, combatStatusSchema)
-      .refine(
-        (statuses) => Object.keys(statuses).length <= 100,
-        'At most 100 statuses are supported',
-      )
-      .optional(),
-    seed: z.number().int().min(1).max(0xffffffff).default(1),
-    allowEscape: z.boolean().default(false),
-    roundTimeMs: amount.default(0),
-    rewards: victoryRewardsSchema.optional(),
-    logCapacity: z.number().int().positive().max(1000).default(100),
-    outcomes: z
-      .object({ victory: id.optional(), defeat: id.optional(), escaped: id.optional() })
-      .default({}),
-    messages: combatTextSchema.prefault({}),
-    messageKeys: z
-      .partialRecord(z.enum(combatTextSchema.keyof().options), translationKeySchema)
-      .default({}),
-  })
-  .superRefine((combat, context) => {
-    if (!combat.label && !combat.labelKey)
-      context.addIssue({
-        code: 'custom',
-        path: ['label'],
-        message: 'An encounter label or translation is required',
-      })
-    const actors = [combat.player, ...combat.enemies]
+export const combatFieldsSchema = z.object({
+  'schema-version': z.literal('1.0.0'),
+  id,
+  ...label,
+  player: combatActorSchema,
+  enemies: z.array(combatActorSchema).min(1).max(32),
+  moves: z.record(id, combatMoveSchema),
+  statuses: z
+    .record(id, combatStatusSchema)
+    .refine((statuses) => Object.keys(statuses).length <= 100, 'At most 100 statuses are supported')
+    .optional(),
+  seed: z.number().int().min(1).max(0xffffffff).default(1),
+  allowEscape: z.boolean().default(false),
+  roundTimeMs: amount.default(0),
+  rewards: victoryRewardsSchema.optional(),
+  logCapacity: z.number().int().positive().max(1000).default(100),
+  outcomes: z
+    .object({ victory: id.optional(), defeat: id.optional(), escaped: id.optional() })
+    .default({}),
+  messages: combatTextSchema.prefault({}),
+  messageKeys: z
+    .partialRecord(z.enum(combatTextSchema.keyof().options), translationKeySchema)
+    .default({}),
+})
 
-    for (const [moveId, move] of Object.entries(combat.moves))
-      if (move.type === 'ability')
-        for (const [index, effect] of move.effects.entries()) {
-          if (
-            (effect.type === 'apply-status' || effect.type === 'remove-status') &&
-            !Object.hasOwn(combat.statuses ?? {}, effect.status)
-          )
-            context.addIssue({
-              code: 'custom',
-              path: ['moves', moveId, 'effects', index, 'status'],
-              message: 'Unknown combat status',
-            })
-        }
+export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, context) => {
+  if (!combat.label && !combat.labelKey)
+    context.addIssue({
+      code: 'custom',
+      path: ['label'],
+      message: 'An encounter label or translation is required',
+    })
+  const actors = [combat.player, ...combat.enemies]
 
-    if (new Set(actors.map((actor) => actor.id)).size !== actors.length)
-      context.addIssue({
-        code: 'custom',
-        path: ['enemies'],
-        message: 'Combat actor IDs must be unique',
-      })
-
-    if (new Set(actors.map((actor) => JSON.stringify(actor.health.path))).size !== actors.length)
-      context.addIssue({
-        code: 'custom',
-        path: ['enemies'],
-        message: 'Combat health fields must be distinct',
-      })
-
-    for (const actor of actors) {
-      for (const move of actor.moves)
-        if (!Object.hasOwn(combat.moves, move))
+  for (const [moveId, move] of Object.entries(combat.moves))
+    if (move.type === 'ability')
+      for (const [index, effect] of move.effects.entries()) {
+        if (
+          (effect.type === 'apply-status' || effect.type === 'remove-status') &&
+          !Object.hasOwn(combat.statuses ?? {}, effect.status)
+        )
           context.addIssue({
             code: 'custom',
-            path: ['moves'],
-            message: `Unknown combat move: ${move}`,
+            path: ['moves', moveId, 'effects', index, 'status'],
+            message: 'Unknown combat status',
           })
+      }
 
-      if (
-        actor !== combat.player &&
-        (!actor.rotation.length || actor.rotation.some((move) => !actor.moves.includes(move)))
-      )
+  if (new Set(actors.map((actor) => actor.id)).size !== actors.length)
+    context.addIssue({
+      code: 'custom',
+      path: ['enemies'],
+      message: 'Combat actor IDs must be unique',
+    })
+
+  if (new Set(actors.map((actor) => JSON.stringify(actor.health.path))).size !== actors.length)
+    context.addIssue({
+      code: 'custom',
+      path: ['enemies'],
+      message: 'Combat health fields must be distinct',
+    })
+
+  for (const actor of actors) {
+    for (const move of actor.moves)
+      if (!Object.hasOwn(combat.moves, move))
         context.addIssue({
           code: 'custom',
-          path: ['enemies'],
-          message: 'Enemy rotations must use that actor’s available moves',
+          path: ['moves'],
+          message: `Unknown combat move: ${move}`,
         })
-    }
-  })
+
+    if (
+      actor !== combat.player &&
+      (!actor.rotation.length || actor.rotation.some((move) => !actor.moves.includes(move)))
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['enemies'],
+        message: 'Enemy rotations must use that actor’s available moves',
+      })
+  }
+})
 
 export type CombatDefinition = z.infer<typeof combatDefinitionSchema>
 

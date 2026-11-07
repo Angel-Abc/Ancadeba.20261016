@@ -403,6 +403,66 @@ describe('translation key fields', () => {
 })
 
 describe('action bar editor controls', () => {
+  it('edits shared libraries without flattening imports and preserves both conflicting drafts', () => {
+    const { initial, root, edit, click, submit, commands, field } = panel()
+    const editor = bindCombatEditor(root.asElement(), (command) => commands.push(command))
+    editor.render(initial, true)
+    click('Add combat library')
+    edit('New status ID', 'poison')
+    click('Add status')
+    edit('New move ID', 'poison-strike')
+    click('Add ability move')
+    edit('Ability target', 'enemy', 'Move: poison-strike')
+    edit('Effect type', 'apply-status', 'Effect 1')
+    edit('Status', 'poison', 'Effect 1')
+    edit('Duration (affected turns)', '5', 'Status: poison')
+    click('Add encounter')
+    edit('Encounter name', 'Local encounter draft')
+    editor.render(
+      {
+        ...initial,
+        view: { ...initial.view!, revision: 'conflicting' },
+        preserveDrafts: true,
+        conflict: true,
+      },
+      false,
+    )
+    expect(field('Encounter name').value).toBe('Local encounter draft')
+    expect(field('Duration (affected turns)', 'Status: poison').value).toBe('5')
+    click('Discard combat draft')
+    expect(field('Duration (affected turns)', 'Status: poison').value).toBe('5')
+    submit('Save combat library')
+    const command = commands[0]!
+    expect(command).toMatchObject({
+      type: 'game.upsertCombatLibrary',
+      library: { id: 'common', moves: { 'poison-strike': { effects: [{ status: 'poison' }] } } },
+    })
+
+    if (command.type !== 'game.upsertCombatLibrary') throw new Error('Expected library save')
+    const view = { ...initial.view!, combatLibraries: { common: command.library } }
+    editor.render({ ...initial, view, lastCommand: command.type, preserveDrafts: true }, true)
+    expect(editor.hasDrafts()).toBe(false)
+    click('Add encounter')
+    edit('Shared moves to import', 'common/poison-strike')
+    click('Import shared moves')
+    expect(root.textContent).toContain('automatic ability dependency')
+    expect(field('Available moves (IDs)', 'Player').value).toBe('attack, guard')
+    submit('Save combat encounter')
+    expect(commands[1]).toMatchObject({
+      type: 'game.upsertCombat',
+      encounter: { sharedMoves: [{ library: 'common', id: 'poison-strike' }] },
+    })
+    expect(object(commands[1]).encounter).not.toHaveProperty('statuses')
+    expect(object(object(commands[1]).encounter).moves).not.toHaveProperty('poison-strike')
+    click('Edit library common')
+    edit('Duration (affected turns)', '7', 'Status: poison')
+    click('Edit library common')
+    expect(field('Duration (affected turns)', 'Status: poison').value).toBe('7')
+    click('Discard combat draft')
+    expect(editor.hasDrafts()).toBe(true)
+    click('Discard library draft')
+    expect(editor.hasDrafts()).toBe(false)
+  })
   it('authors level tables, gains, health policies and progression views without losing drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)
@@ -579,6 +639,7 @@ describe('action bar editor controls', () => {
 
     if (saved.type !== 'game.upsertCombat' || !saved.scene) throw new Error('Expected encounter')
     view.combat = { [saved.encounter.id]: saved.encounter }
+    view.combatSources = { [saved.encounter.id]: saved.encounter }
     view.scenes[0]!.components.push(saved.scene.component)
     editor.render(
       {

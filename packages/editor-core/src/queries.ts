@@ -13,7 +13,10 @@ import {
   inputFile,
   inventoryFile,
   combatFile,
-  combatDefinitionSchema,
+  combatSourceSchema,
+  combatLibrarySchema,
+  combatLibraryFile,
+  resolveCombatSource,
   mapDefinitionSchema,
   mapFile,
 } from '@ancadeba/schemas'
@@ -77,7 +80,27 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     language &&
     languageCatalogSchema.safeParse(project.documents[`languages/${language}/messages.json`])
 
+  const combatLibraries = parsedFiles(
+    game.data?.combatLibraries,
+    combatLibraryFile,
+    (value) => combatLibrarySchema.safeParse(value).data,
+  )
+
+  const combatSources = parsedFiles(
+    game.data?.combat,
+    combatFile,
+    (value) => combatSourceSchema.safeParse(value).data,
+  )
+
+  const resolved = Object.entries(combatSources).map(
+    ([id, source]) =>
+      [id, resolveCombatSource(source, new Map(Object.entries(combatLibraries)))] as const,
+  )
+
   return {
+    combatLibraries,
+    combatSources,
+    combatOrigins: Object.fromEntries(resolved.map(([id, result]) => [id, result.origins])),
     ...(game.data?.leveling?.length
       ? {
           leveling: parsedFiles(
@@ -90,11 +113,9 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     ...(game.data?.combat?.length
       ? {
           combat: Object.fromEntries(
-            game.data.combat.flatMap((id) => {
-              const result = combatDefinitionSchema.safeParse(project.documents[combatFile(id)])
-
-              return result.success ? [[id, result.data]] : []
-            }),
+            resolved.flatMap(([id, result]) =>
+              result.definition ? [[id, result.definition]] : [],
+            ),
           ),
         }
       : {}),

@@ -1,4 +1,9 @@
 import {
+  combatLibrarySchema,
+  combatLibraryFile,
+  combatLibraryIssues,
+  combatSourceSchema,
+  resolveCombatSource,
   combatStatsIssues,
   levelingFile,
   levelingProfileSchema,
@@ -34,7 +39,6 @@ import {
   gameRulesSchema,
   actionBarIssues,
   combatFile,
-  combatDefinitionSchema,
   combatIssues,
   localizeCombat,
 } from '@ancadeba/schemas'
@@ -92,11 +96,32 @@ export function validateProject(
 
   const input = game.data.input ? check(inputFile(game.data.input), inputSchema).data : undefined
 
-  const combats = new Map(
-    (game.data.combat ?? []).flatMap((id) => {
-      const result = check(combatFile(id), combatDefinitionSchema)
+  const libraries = new Map(
+    (game.data.combatLibraries ?? []).flatMap((id) => {
+      const result = check(combatLibraryFile(id), combatLibrarySchema)
+
+      if (result.success && result.data.id !== id)
+        diagnostics.push({
+          code: 'invalid_combat_library',
+          file: combatLibraryFile(id),
+          path: ['id'],
+          message: `Expected library ID ${id}`,
+        })
 
       return result.success ? [[id, result.data] as const] : []
+    }),
+  )
+
+  const combats = new Map(
+    (game.data.combat ?? []).flatMap((id) => {
+      const result = check(combatFile(id), combatSourceSchema)
+
+      if (!result.success) return []
+      const resolved = resolveCombatSource(result.data, libraries, combatFile(id))
+
+      for (const issue of resolved.issues) diagnostics.push({ code: 'invalid_combat', ...issue })
+
+      return resolved.definition ? [[id, resolved.definition] as const] : []
     }),
   )
 
@@ -228,6 +253,14 @@ export function validateProject(
       }
     }
   }
+
+  for (const library of libraries.values())
+    for (const issue of combatLibraryIssues(
+      library,
+      assets?.data,
+      defaultMessages ? { fallback: defaultMessages, messages: defaultMessages } : undefined,
+    ))
+      diagnostics.push({ code: 'invalid_combat_library', ...issue })
 
   const sources = projectRuleSources(game.data.rules, (file) => check(file, gameRulesSchema).data)
 

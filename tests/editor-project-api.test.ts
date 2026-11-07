@@ -194,6 +194,80 @@ describe('shared editor project API', () => {
       }
     },
   )
+  it.each(['success', 'before-manifest', 'after-manifest', 'concurrent'] as const)(
+    'publishes a combat library and manifest consistently: %s',
+    async (failure) => {
+      const before = await inspect()
+      const originalManifest = await readFile(join(root, 'basic/game.json'), 'utf8')
+      let failed = false
+
+      const failing: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        removeCreated: (path, bytes) => workspace.removeCreated(path, bytes),
+        write: async (path, bytes) => {
+          if (!failed && path.endsWith('game.json') && failure !== 'success') {
+            failed = true
+
+            if (failure === 'after-manifest') await workspace.write(path, bytes)
+
+            if (failure === 'concurrent')
+              await workspace.write(path, Buffer.from('external library edit'))
+            throw new Error('Library publication failed')
+          }
+
+          return workspace.write(path, bytes)
+        },
+      }
+
+      const service = new EditorProjectService(
+        new WorkspaceProjectRepository(failing),
+        new EditorCoordinator(),
+      )
+
+      const operation = {
+        type: 'game.upsertCombatLibrary',
+        library: { 'schema-version': '1.0.0', id: 'common', moves: {}, statuses: {} },
+      }
+
+      const saving = service.apply({
+        path: 'basic',
+        expectedRevision: before.revision,
+        command: operation,
+      })
+
+      if (failure === 'success' || failure === 'after-manifest') {
+        const saved = await saving
+        expect(saved.view.game!.combatLibraries).toEqual(['common'])
+        expect(saved.view.combatLibraries!.common!.moves).toEqual({})
+        await expect(
+          service.apply({ path: 'basic', expectedRevision: before.revision, command: operation }),
+        ).rejects.toMatchObject({ status: 409 })
+        await writeFile(
+          join(root, 'basic/combat-libraries/common.json'),
+          JSON.stringify({ ...saved.view.combatLibraries!.common!, extension: 'external' }),
+        )
+        await expect(
+          service.apply({
+            path: 'basic',
+            expectedRevision: saved.view.revision,
+            command: operation,
+          }),
+        ).rejects.toMatchObject({ status: 409 })
+      } else if (failure === 'before-manifest') {
+        await expect(saving).rejects.toThrow('Library publication failed')
+        expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(originalManifest)
+        await expect(
+          readFile(join(root, 'basic/combat-libraries/common.json')),
+        ).rejects.toHaveProperty('code', 'ENOENT')
+        expect((await inspect()).revision).toBe(before.revision)
+      } else {
+        await expect(saving).rejects.toMatchObject({ code: 'combat_publication_failed' })
+        expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe('external library edit')
+      }
+    },
+  )
   it('saves reward configuration with revision checks and protects referenced fields', async () => {
     await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'rewards'), {
       recursive: true,
@@ -206,7 +280,7 @@ describe('shared editor project API', () => {
 
     const current = await service.inspect('rewards')
     expect(current.diagnostics).toEqual([])
-    const encounter = current.combat!.training!
+    const encounter = current.combatSources!.training!
 
     const updated = await service.apply({
       path: 'rewards',
@@ -862,7 +936,7 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(34)
+    expect((await capabilities.json()).commands).toHaveLength(37)
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

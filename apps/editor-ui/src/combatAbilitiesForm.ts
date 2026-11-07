@@ -9,7 +9,7 @@ import { translationChoices, type RuleFormControls } from './ruleFormControls.js
 
 export function abilityEffectsForm(
   controls: RuleFormControls,
-  draft: CombatDefinition,
+  draft: Pick<CombatDefinition, 'statuses'>,
   effects: AbilityEffect[],
   render: () => void,
 ): HTMLElement[] {
@@ -116,7 +116,7 @@ export function abilityEffectsForm(
 export function combatStatusesForm(
   controls: RuleFormControls,
   view: ProjectView,
-  draft: CombatDefinition,
+  draft: Pick<CombatDefinition, 'statuses'>,
   render: () => void,
 ): HTMLElement {
   const { input, select, button, group, translation } = controls

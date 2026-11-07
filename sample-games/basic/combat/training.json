@@ -18,7 +18,7 @@
       "path": ["player", "maximumHealth"]
     },
     "ap": 3,
-    "moves": ["attack", "heavy", "guard", "power-strike"],
+    "moves": ["attack", "heavy", "guard", "power-strike", "poison-strike"],
     "leveling": "player",
     "moveLevels": {
       "power-strike": 2
@@ -52,15 +52,6 @@
     }
   ],
   "moves": {
-    "attack": {
-      "type": "attack",
-      "labelKey": "combat.attack",
-      "apCost": 1,
-      "damage": {
-        "min": 3,
-        "max": 6
-      }
-    },
     "heavy": {
       "type": "attack",
       "labelKey": "combat.heavy-strike",
@@ -69,12 +60,6 @@
         "min": 8,
         "max": 12
       }
-    },
-    "guard": {
-      "type": "guard",
-      "labelKey": "combat.guard",
-      "apCost": 1,
-      "guard": 5
     },
     "power-strike": {
       "type": "attack",
@@ -154,5 +139,19 @@
         "chance": 5000
       }
     ]
-  }
+  },
+  "sharedMoves": [
+    {
+      "library": "common",
+      "id": "attack"
+    },
+    {
+      "library": "common",
+      "id": "guard"
+    },
+    {
+      "library": "common",
+      "id": "poison-strike"
+    }
+  ]
 }

@@ -1,4 +1,9 @@
 import {
+  combatLibraryIssues,
+  freezeCombatDefinition,
+  resolveCombatSource,
+  type CombatSource,
+  type CombatLibrary,
   combatStatsIssues,
   levelingIssues,
   localizeLeveling,
@@ -147,8 +152,9 @@ export function assembleGameData(
   inventoryDefinitions: ReadonlyMap<string, InventoryDefinition> = new Map(),
   ruleTranslation?: GameTranslation,
   ruleDefinitions: ReadonlyMap<string, GameRulesDefinition> = new Map(),
-  combatDefinitions: ReadonlyMap<string, CombatDefinition> = new Map(),
+  combatDefinitions: ReadonlyMap<string, CombatSource> = new Map(),
   levelingDefinitions: ReadonlyMap<string, LevelingProfile> = new Map(),
+  combatLibraries: ReadonlyMap<string, CombatLibrary> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
 
@@ -183,13 +189,37 @@ export function assembleGameData(
 
   if (issue) throw new Error(`${issue.file} (${issue.path.join('.')}): ${issue.message}`)
 
+  for (const id of definition.combatLibraries ?? []) {
+    const library = combatLibraries.get(id)
+
+    if (!library || library.id !== id)
+      throw new Error(`Missing or mismatched combat library: ${id}`)
+    const problem = combatLibraryIssues(library, assets, ruleTranslation)[0]
+
+    if (problem) throw new Error(`${problem.file} (${problem.path.join('.')}): ${problem.message}`)
+  }
+
+  const declaredLibraries = new Map(
+    [...combatLibraries].filter(([id]) => definition.combatLibraries?.includes(id)),
+  )
+
   const combat = new Map<string, CombatDefinition>()
 
   for (const id of definition.combat ?? []) {
-    const encounter = combatDefinitions.get(id)
+    const source = combatDefinitions.get(id)
 
-    if (!encounter || encounter.id !== id)
+    if (!source || source.id !== id)
       throw new Error(`Missing or mismatched combat definition: ${id}`)
+
+    const resolved = resolveCombatSource(source, declaredLibraries)
+
+    if (!resolved.definition)
+      throw new Error(
+        resolved.issues
+          .map((issue) => `${issue.file} (${issue.path.join('.')}): ${issue.message}`)
+          .join('\n'),
+      )
+    const encounter = resolved.definition
 
     const problem = combatIssues(
       encounter,
@@ -208,7 +238,7 @@ export function assembleGameData(
       )
     )
       throw new Error('Each encounter requires a distinct loot owner')
-    combat.set(id, localizeCombat(encounter, ruleTranslation))
+    combat.set(id, freezeCombatDefinition(localizeCombat(encounter, ruleTranslation)))
   }
 
   const leveling = new Map<string, LevelingProfile>()

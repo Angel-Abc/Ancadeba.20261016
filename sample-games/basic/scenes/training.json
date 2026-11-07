@@ -148,18 +148,19 @@
           }
         },
         "7": {
-          "labelKey": "combat.previous-target",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "previous-target"
+              "type": "queue-move",
+              "move": "poison-strike"
             }
           },
           "inputBinding": {
             "context": "gameplay",
             "input": "slot-7"
-          }
+          },
+          "labelKey": "abilities.move.poison-strike"
         },
         "8": {
           "labelKey": "combat.escape",

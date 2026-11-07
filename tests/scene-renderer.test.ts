@@ -1865,9 +1865,15 @@ describe('editor scene picker', () => {
         readText: async (path: string) => {
           const text = await source.readText(path)
 
+          if (path === 'combat-libraries/common.json') {
+            const library = JSON.parse(text)
+            library.statuses.poison.duration = 2
+
+            return JSON.stringify(library)
+          }
+
           if (path === 'combat/advanced-training.json') {
             const combat = JSON.parse(text)
-            combat.statuses.poison.duration = 2
 
             for (const enemy of combat.enemies) enemy.rotation = ['guard']
 
@@ -1948,7 +1954,7 @@ describe('editor scene picker', () => {
         readText: async (path: string) => {
           const text = await source.readText(path)
 
-          if (path === 'combat/training.json') {
+          if (path === 'combat-libraries/common.json') {
             const combat = JSON.parse(text)
             combat.moves.attack.damage = { min: 30, max: 30 }
 

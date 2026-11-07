@@ -148,18 +148,19 @@
           }
         },
         "7": {
-          "label": "Previous target",
           "action": {
             "type": "combat-action",
             "combat": "combat",
             "command": {
-              "type": "previous-target"
+              "type": "queue-move",
+              "move": "poison-strike"
             }
           },
           "inputBinding": {
             "context": "wardrobe",
             "input": "slot-7"
-          }
+          },
+          "label": "Poison strike"
         },
         "8": {
           "label": "Escape",

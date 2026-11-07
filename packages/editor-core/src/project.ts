@@ -11,6 +11,9 @@ import {
   type RuleSource,
   type InputDefinition,
   type CombatDefinition,
+  type CombatSource,
+  type CombatLibrary,
+  type CombatOrigins,
   type MapDefinition,
 } from '@ancadeba/schemas'
 
@@ -32,6 +35,9 @@ export interface Diagnostic {
 export interface ProjectView {
   leveling?: Record<string, LevelingProfile> | undefined
   combat?: Record<string, CombatDefinition> | undefined
+  combatSources?: Record<string, CombatSource> | undefined
+  combatLibraries?: Record<string, CombatLibrary> | undefined
+  combatOrigins?: Record<string, CombatOrigins> | undefined
   input?: InputDefinition | undefined
   rules?: GameRulesDefinition | undefined
   ruleFiles?: Record<string, GameRulesDefinition> | undefined

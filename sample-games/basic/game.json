@@ -28,5 +28,6 @@
   "inventory": ["museum", "harbour"],
   "rules": ["rules", "museum-puzzle", "harbour-route", "shop", "combat"],
   "combat": ["training", "advanced-training"],
-  "leveling": ["player"]
+  "leveling": ["player"],
+  "combatLibraries": ["common"]
 }

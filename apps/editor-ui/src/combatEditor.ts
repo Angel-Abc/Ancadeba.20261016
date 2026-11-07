@@ -1,9 +1,7 @@
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
-import {
-  combatDefinitionSchema,
-  combatComponentSchema,
-  type CombatDefinition,
-} from '@ancadeba/schemas'
+import { combatDefinitionSchema, combatComponentSchema, type CombatSource } from '@ancadeba/schemas'
+import { bindCombatLibraryEditor } from './combatLibraryEditor.js'
+import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
 import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
@@ -14,12 +12,14 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
   error.className = 'error'
   error.setAttribute('role', 'alert')
   const fields = document.createElement('fieldset')
-  root.replaceChildren(error, fields)
+  const libraryRoot = document.createElement('section')
+  root.replaceChildren(error, fields, libraryRoot)
+  const libraryEditor = bindCombatLibraryEditor(libraryRoot, save)
   let view: ProjectView | undefined
   let path: string | undefined
   let sceneId = ''
   let encounterId = ''
-  let draft: CombatDefinition | undefined
+  let draft: CombatSource | undefined
   let component: ReturnType<typeof combatComponentSchema.parse> | undefined
   let dirty = false
   let busy = false
@@ -33,8 +33,8 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     const found = scene?.components.find((component) => component.type === 'combat')
     encounterId = encounterId || (found?.type === 'combat' ? found.encounter : '')
     draft =
-      encounterId && view?.combat?.[encounterId]
-        ? structuredClone(view.combat[encounterId])
+      encounterId && view?.combatSources?.[encounterId]
+        ? structuredClone(view.combatSources[encounterId])
         : undefined
     component = draft
       ? found?.type === 'combat'
@@ -185,6 +185,22 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     button.textContent = 'Save combat encounter'
     form.append(
       saveBar(document, button),
+      sharedCombatForm(
+        controls,
+        view,
+        draft,
+        render,
+        (library) => libraryEditor.navigate(library),
+        (command) => {
+          if (dirty) {
+            error.textContent = 'Save or discard the combat draft before making a local copy.'
+
+            return
+          }
+
+          submit(command)
+        },
+      ),
       ...combatForm(controls, view, draft, render),
       controls.group(
         'Combat view',
@@ -253,8 +269,9 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
 
   return {
     navigate,
-    hasDrafts: () => dirty,
+    hasDrafts: () => dirty || libraryEditor.hasDrafts(),
     render(state: ProjectEditorState, replaceFields: boolean) {
+      libraryEditor.render(state, replaceFields)
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -263,9 +280,12 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
 
       const saved =
         replaceFields &&
-        ['game.upsertCombat', 'game.removeCombat', 'scene.setCombat'].includes(
-          state.lastCommand ?? '',
-        )
+        [
+          'game.upsertCombat',
+          'game.removeCombat',
+          'scene.setCombat',
+          'combat.copySharedEntry',
+        ].includes(state.lastCommand ?? '')
 
       const resetFields = projectChanged || (replaceFields && !state.preserveDrafts)
 
