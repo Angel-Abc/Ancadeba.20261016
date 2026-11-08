@@ -15,6 +15,17 @@ export function translationChoices(
   ]
 }
 
+/** A readable name for a definition: its literal label, else its translated text, else its ID. */
+export function displayLabel(
+  view: ProjectView,
+  id: string,
+  definition: { label?: string | undefined; labelKey?: string | undefined },
+): string {
+  const translated = definition.labelKey ? view.translations?.[definition.labelKey] : undefined
+
+  return definition.label?.trim() || translated || id
+}
+
 let suggestionLists = 0
 
 export function ruleFormControls(document: Document, onEdit: () => void) {

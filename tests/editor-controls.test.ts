@@ -22,7 +22,7 @@ import { bindActionBarPanel } from '../apps/editor-ui/src/actionBarPanel.js'
 import { createInputDraft, readInputDraft } from '../apps/editor-ui/src/inputDefinitionForm.js'
 import type { ProjectEditorState } from '../apps/editor-ui/src/projectController.js'
 import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm.js'
-import { ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
+import { displayLabel, ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 import { bindComponentEditor } from '../apps/editor-ui/src/componentEditor.js'
@@ -359,6 +359,22 @@ function panel(withInput = true) {
 }
 
 describe('translation key fields', () => {
+  it('names definitions by literal label, then translated label, then ID', () => {
+    const view = projectViewSchema.parse({
+      revision: 'one',
+      game: null,
+      scenes: [],
+      diagnostics: [],
+      translations: { 'shop.postcard': 'Postcard' },
+    })
+
+    expect(displayLabel(view, 'letter', { label: 'Folded letter' })).toBe('Folded letter')
+    expect(displayLabel(view, 'postcard', { label: '', labelKey: 'shop.postcard' })).toBe(
+      'Postcard',
+    )
+    expect(displayLabel(view, 'token', { label: ' ', labelKey: 'missing' })).toBe('token')
+  })
+
   it('previews the chosen key and only accepts listed keys or the empty choice', () => {
     const document = new ControlDocument()
     const updates: string[] = []
@@ -1323,13 +1339,13 @@ describe('action bar editor controls', () => {
     editor.render({ ...initial, view }, true)
     click('Add leveling profile')
     edit('Profile label', 'Progression draft')
-    edit('Level 2 total XP threshold', '5')
+    edit('Total XP needed', '5', 'Level 2')
     click('Add level 2 stat gain')
-    edit('Level 2 gain 1 amount', '6')
-    edit('Configure health recovery', 'yes')
-    edit('Level-up health policy', 'increase')
-    edit('Progression main text target', 'description')
-    expect(root.textContent).toContain('Level 2: 5 XP')
+    edit('Amount added', '6', 'Level 2 · stat gain 1')
+    edit('Health on level-up', 'yes')
+    edit('Current health after a level-up', 'increase')
+    edit('Show level-up messages in', 'description')
+    expect(root.textContent).toContain('Level 2 · 5 XP · Maximum health +6')
     edit('Leveling game scene', 'other')
     expect(field('Leveling game scene').value).toBe('shop')
     editor.render(
@@ -1345,8 +1361,8 @@ describe('action bar editor controls', () => {
       },
       true,
     )
-    expect(field('Level 2 gain 1 amount').value).toBe('6')
-    submit('Save character progression')
+    expect(field('Amount added', 'Level 2 · stat gain 1').value).toBe('6')
+    submit('Save character levels')
     const saved = commands[0]!
     expect(saved).toMatchObject({
       type: 'game.upsertLeveling',

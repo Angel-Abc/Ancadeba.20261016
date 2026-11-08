@@ -1,6 +1,7 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
 import {
+  displayLabel,
   parseStatePath,
   placementFields,
   type RuleFormControls,
@@ -215,7 +216,7 @@ export function ruleTriggerForms(
       select(
         'Item type',
         itemType,
-        itemTypes.map(([id, { label }]) => [id, label] as const),
+        itemTypes.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
         (next) => {
           itemType = next
           render()

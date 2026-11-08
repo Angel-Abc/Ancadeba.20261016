@@ -166,8 +166,6 @@
             </header>
             <div class="editor-pane-body">
               <p id="editor-error" class="error" role="alert" hidden></p>
-              <section id="scene-controls" hidden></section>
-              <section id="component-clipboard" hidden></section>
               <fieldset id="editor-fields" disabled>
                 <legend class="sr-only" data-i18n="project.properties">Project properties</legend>
                 <form id="editor-metadata">
@@ -237,6 +235,9 @@
                 </p>
                 <pre id="component-json"></pre>
               </section>
+              <!-- Structural actions follow the selected editor so its fields come first. -->
+              <section id="scene-controls" hidden></section>
+              <section id="component-clipboard" hidden></section>
             </div>
           </section>
           <div

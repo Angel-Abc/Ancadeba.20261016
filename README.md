@@ -2302,7 +2302,7 @@ The status-panel editor lists these sources. For a full summary add a
 an optional same-scene `textTarget` for its latest receipt. Linked combat logs
 also include the latest level-up receipt.
 
-Use the editor's **Character progression** section for profiles, thresholds,
+Use the editor's **Character levels** section for profiles, thresholds,
 stat gains, health policy, translated text and view placement. The form previews
 the level table before saving. The Combat player group configures its profile
 and minimum move levels. Saves use the inspected revision and retain conflicting

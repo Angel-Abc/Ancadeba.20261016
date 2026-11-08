@@ -1,6 +1,6 @@
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, type GameBindingDefinition } from '@ancadeba/schemas'
-import { statePath, type RuleFormControls } from './ruleFormControls.js'
+import { displayLabel, statePath, type RuleFormControls } from './ruleFormControls.js'
 
 /** Item action IDs are resolved by reserved inventory slots in the scene's bar. */
 export function inventoryActionsForm(
@@ -116,7 +116,7 @@ export function inventoryActionsForm(
   const picker = select(
     'Item type',
     selected,
-    types.map(([id, type]) => [id, type.label] as const),
+    types.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
     (value) => {
       if (dirty) {
         picker.querySelector('select')!.value = selected

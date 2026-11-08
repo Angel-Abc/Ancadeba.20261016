@@ -26,6 +26,17 @@ export function sceneTitle(view: ProjectView, scene: ProjectView['scenes'][numbe
   )
 }
 
+/** The tree label for a scene; the ID is added when another scene shows the same title. */
+export function sceneTreeLabel(view: ProjectView, scene: ProjectView['scenes'][number]): string {
+  const title = sceneTitle(view, scene)
+
+  const shared = view.scenes.some(
+    (other) => other.id !== scene.id && sceneTitle(view, other) === title,
+  )
+
+  return shared && title !== scene.id ? `${title} (${scene.id})` : title
+}
+
 /** Rule files open in the rules editor; selecting one switches the file being edited. */
 export const ruleFileNodes = (view: ProjectView): ProjectTreeNode[] =>
   (view.game?.rules ?? []).map((id) => ({
@@ -37,22 +48,94 @@ export const ruleFileNodes = (view: ProjectView): ProjectTreeNode[] =>
   }))
 
 /** Game data without an editor yet is listed for reference and shown read-only. */
+/** One group of game files listed under Data files, with the section that edits them. */
+interface DataFileGroup {
+  id: string
+  ids: (game: NonNullable<ProjectView['game']>) => readonly string[] | undefined
+  content: (view: ProjectView, id: string) => unknown
+  editSection?: string
+}
+
+const dataFileGroups: readonly DataFileGroup[] = [
+  { id: 'maps', ids: (game) => game.maps, content: (view, id) => view.maps?.[id] },
+  {
+    id: 'inventories',
+    ids: (game) => game.inventory,
+    content: (view, id) => view.inventoryFiles?.[id],
+    editSection: 'items',
+  },
+  {
+    id: 'leveling',
+    ids: (game) => game.leveling,
+    content: (view, id) => view.leveling?.[id],
+    editSection: 'leveling',
+  },
+  {
+    id: 'combat',
+    ids: (game) => game.combat,
+    content: (view, id) => view.combatSources?.[id] ?? view.combat?.[id],
+    editSection: 'combat',
+  },
+  {
+    id: 'combatLibraries',
+    ids: (game) => game.combatLibraries,
+    content: (view, id) => view.combatLibraries?.[id],
+    editSection: 'combat',
+  },
+  {
+    id: 'dialogues',
+    ids: (game) => game.dialogues,
+    content: (view, id) => view.dialogues?.[id],
+    editSection: 'story',
+  },
+  {
+    id: 'quests',
+    ids: (game) => game.quests,
+    content: (view, id) => view.quests?.[id],
+    editSection: 'story',
+  },
+]
+
+/** The parsed file behind a Data files node, and the section that edits it, if any. */
+export function dataFileContent(
+  view: ProjectView,
+  node: ProjectTreeNode,
+): { content: unknown; editSection?: string | undefined } | undefined {
+  const group = dataFileGroups.find(({ id }) => id === node.parentId)
+
+  if (node.kind !== 'data-file' || !group || !node.id) return undefined
+  const content = group.content(view, node.id)
+
+  return content === undefined ? undefined : { content, editSection: group.editSection }
+}
+
+/** Read-only game files that have no dedicated tree entries elsewhere. */
 export const dataFilesSection: ProjectTreeSection = {
   id: 'data',
   labelKey: 'tree.data',
   nodes: (view, t) =>
-    (
-      [
-        ['maps', 'map', view.game?.maps ?? []],
-        ['inventories', 'inventory-file', view.game?.inventory ?? []],
-      ] as const
-    ).map(([group, kind, ids]) => ({
-      key: `data:${group}`,
-      section: 'data',
-      kind: 'data-group',
-      label: t(`tree.${group}`),
-      children: ids.map((id) => ({ key: `${kind}:${id}`, section: 'data', kind, id, label: id })),
-    })),
+    dataFileGroups.flatMap((group): ProjectTreeNode[] => {
+      const ids = (view.game && group.ids(view.game)) ?? []
+
+      return ids.length
+        ? [
+            {
+              key: `data:${group.id}`,
+              section: 'data',
+              kind: 'data-group',
+              label: t(`tree.files.${group.id}`),
+              children: ids.map((id) => ({
+                key: `data-file:${group.id}:${id}`,
+                section: 'data',
+                kind: 'data-file',
+                id,
+                parentId: group.id,
+                label: id,
+              })),
+            },
+          ]
+        : []
+    }),
 }
 
 export const projectTreeSections: readonly ProjectTreeSection[] = [
@@ -70,7 +153,7 @@ export const projectTreeSections: readonly ProjectTreeSection[] = [
         section: 'scenes',
         kind: 'scene',
         id: scene.id,
-        label: sceneTitle(view, scene),
+        label: sceneTreeLabel(view, scene),
         detail: `${t(scene.type === 'game' ? 'scene.game' : 'scene.standalone')}${view.game?.['initial-scene'] === scene.id ? ` · ${t('tree.startup')}` : ''}`,
         children: [
           ...scene.components.map((component): ProjectTreeNode => ({

@@ -21,6 +21,7 @@ import { bindComponentClipboard } from './componentClipboard.js'
 import { bindEditorShortcuts } from './editorShortcuts.js'
 import {
   buildProjectTree,
+  dataFileContent,
   dataFilesSection,
   flattenProjectTree,
   ruleFileNodes,
@@ -252,12 +253,8 @@ export function bindProjectPanel(
             ?.components.find((component) => component.id === node.id)
         : undefined
 
-    const dataFile =
-      node.kind === 'map'
-        ? view?.maps?.[node.id ?? '']
-        : node.kind === 'inventory-file'
-          ? view?.inventoryFiles?.[node.id ?? '']
-          : undefined
+    const dataFile = view ? dataFileContent(view, node) : undefined
+    const dataGroup = node.kind === 'data-group'
 
     const graphic =
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
@@ -361,6 +358,7 @@ export function bindProjectPanel(
       componentEditor?.navigate(sceneId, component?.id, node.kind === 'new-component')
     find('component-details').hidden =
       !dataFile &&
+      !dataGroup &&
       (node.section !== 'scenes' ||
         node.kind !== 'component' ||
         graphic ||
@@ -371,9 +369,15 @@ export function bindProjectPanel(
         combatComponent ||
         levelingComponent ||
         editableComponent)
-    find('component-help').textContent = t(dataFile ? 'tree.readOnlyFile' : 'tree.readOnly')
+    const editSection = sections.find((section) => section.id === dataFile?.editSection)
+
+    find('component-help').textContent = dataGroup
+      ? t('tree.dataGroup')
+      : editSection
+        ? t('tree.editFileIn', { section: t(editSection.labelKey) })
+        : t(dataFile ? 'tree.readOnlyFile' : 'tree.readOnly')
     find('component-json').textContent = dataFile
-      ? JSON.stringify(dataFile, null, 2)
+      ? JSON.stringify(dataFile.content, null, 2)
       : component && !graphic
         ? JSON.stringify(component, null, 2)
         : ''
@@ -383,14 +387,22 @@ export function bindProjectPanel(
     )
 
     // The eyebrow names where the selection lives; top-level sections belong to the project.
-    const parentScene = view?.scenes.find((scene) => scene.id === node.parentId)
+    const parentScene =
+      node.section === 'scenes'
+        ? view?.scenes.find((scene) => scene.id === node.parentId)
+        : undefined
+
+    const parentLabel =
+      parentScene && view
+        ? sceneTitle(view, parentScene)
+        : node.kind === 'data-file'
+          ? t(`tree.files.${node.parentId}`)
+          : node.parentId
 
     find('editor-heading').textContent =
       node.kind === 'section'
         ? t('project.heading')
-        : [sectionLabel, parentScene && view ? sceneTitle(view, parentScene) : node.parentId]
-            .filter(Boolean)
-            .join(' › ')
+        : [sectionLabel, parentLabel].filter(Boolean).join(' › ')
     find('workspace-heading').textContent = node.kind === 'section' ? sectionLabel : node.label
     rail?.render(view ? node.section : undefined)
 
@@ -481,6 +493,7 @@ export function bindProjectPanel(
       fillScene()
     }
 
+    const moved = selection.key !== node.key
     selection = node
 
     if (usesAssets) {
@@ -489,6 +502,11 @@ export function bindProjectPanel(
     }
 
     showSelection()
+
+    // A new selection opens at the top instead of inheriting the previous editor's scroll offset.
+    const body = root.querySelector<HTMLElement>('.editor-pane-body')
+
+    if (moved && body) body.scrollTop = 0
 
     return true
   }

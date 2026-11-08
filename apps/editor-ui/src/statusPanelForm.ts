@@ -83,11 +83,16 @@ export function statusPanelForm(
       ),
     ...(expected === 'boolean'
       ? []
-      : ['turn', 'worldTimeMs'].map(
-          (key) =>
+      : (
+          [
+            ['turn', 'Turn'],
+            ['worldTimeMs', 'World time (ms)'],
+          ] as const
+        ).map(
+          ([key, name]) =>
             [
               JSON.stringify({ source: 'game.progression', path: [key] }),
-              `Progression · ${key}`,
+              `Game time · ${name}`,
             ] as const,
         )),
   ]

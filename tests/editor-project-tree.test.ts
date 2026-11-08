@@ -1,13 +1,16 @@
 /// <reference lib="dom" />
 import { describe, expect, it } from 'vite-plus/test'
 import { projectViewSchema } from '@ancadeba/editor-core'
+import { levelingProfileSchema, sceneComponentSchema } from '@ancadeba/schemas'
 import {
   buildProjectTree,
+  dataFileContent,
   dataFilesSection,
   filterProjectTree,
   flattenProjectTree,
   ruleFileNodes,
   sceneTitle,
+  sceneTreeLabel,
   type ProjectTreeNode,
 } from '../apps/editor-ui/src/projectTree.js'
 import { bindProjectTree } from '../apps/editor-ui/src/projectTreeView.js'
@@ -182,9 +185,66 @@ describe('extensible project explorer', () => {
       'rule-file:rules',
       'rule-file:puzzle',
     ])
-    expect(
-      flattenProjectTree(dataFilesSection.nodes(translated, t)).map((node) => node.key),
-    ).toEqual(['data:maps', 'map:museum', 'data:inventories', 'inventory-file:shop'])
+    const files = flattenProjectTree(dataFilesSection.nodes(translated, t))
+
+    expect(files.map((node) => node.key)).toEqual([
+      'data:maps',
+      'data-file:maps:museum',
+      'data:inventories',
+      'data-file:inventories:shop',
+    ])
+    expect(files[0]!.label).toBe('Maps')
+    expect(dataFileContent(translated, files[1]!)).toBeUndefined()
+  })
+
+  it('labels every scene component type in each editor language', () => {
+    const types = sceneComponentSchema.options.map((option) => option.shape.type.value)
+
+    for (const language of ['en', 'nl']) {
+      const translate = editorLocalization([language]).t
+
+      for (const type of types) expect(translate(`tree.${type}`)).not.toBe(`tree.${type}`)
+    }
+  })
+
+  it('adds the scene ID only when another scene shows the same title', () => {
+    const first = { ...view.scenes[0]!, id: 'ember', title: 'Wardrobe' }
+    const second = { ...view.scenes[0]!, id: 'gallery', title: 'Wardrobe' }
+    const third = { ...view.scenes[0]!, id: 'shop', title: 'Shop' }
+    const scenes = { ...view, scenes: [first, second, third] }
+
+    expect(sceneTreeLabel(scenes, first)).toBe('Wardrobe (ember)')
+    expect(sceneTreeLabel(scenes, second)).toBe('Wardrobe (gallery)')
+    expect(sceneTreeLabel(scenes, third)).toBe('Shop')
+  })
+
+  it('lists every referenced data file and names the section that edits it', () => {
+    const profile = levelingProfileSchema.parse({
+      'schema-version': '1.0.0',
+      id: 'player',
+      label: 'Player',
+      xp: { source: 'game.state', path: ['xp'] },
+      level: { source: 'game.state', path: ['level'] },
+      levels: [{ xp: 0 }],
+    })
+
+    const data = {
+      ...view,
+      game: { ...view.game!, leveling: ['player'], quests: ['harbour'] },
+      leveling: { player: profile },
+    }
+
+    const files = flattenProjectTree(dataFilesSection.nodes(data, t))
+
+    expect(files.map((node) => node.key)).toEqual([
+      'data:leveling',
+      'data-file:leveling:player',
+      'data:quests',
+      'data-file:quests:harbour',
+    ])
+    expect(dataFileContent(data, files[1]!)).toEqual({ content: profile, editSection: 'leveling' })
+    expect(dataFileContent(data, files[3]!)).toBeUndefined()
+    expect(dataFileContent(data, files[0]!)).toBeUndefined()
   })
 
   it('accepts an additional system without changes to the tree renderer', () => {

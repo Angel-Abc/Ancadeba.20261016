@@ -7,7 +7,25 @@ import {
   type LevelingProfile,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import {
+  displayLabel,
+  placementFields,
+  ruleFormControls,
+  saveBar,
+  translationChoices,
+} from './ruleFormControls.js'
+
+/** Readable names for the profile's display texts, keyed by schema key. */
+const textNames = {
+  level: 'Level label',
+  xp: 'XP label',
+  next: 'Next level label',
+  capped: 'Maximum level label',
+  unavailable: 'Unavailable message',
+  gained: 'Level-up message',
+  stat: 'Stat gain message',
+  unlocked: 'Unlocked move message',
+} satisfies Record<string, string>
 
 export function bindLevelingEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
   const document = root.ownerDocument
@@ -106,6 +124,8 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
       false,
     )
 
+    picker.className = 'context-picker'
+
     const profiles = select(
       'Leveling profile',
       profileId,
@@ -116,45 +136,47 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
       false,
     )
 
-    fields.append(
-      picker,
-      profiles,
-      button('Add leveling profile', () => {
-        if (dirty) {
-          error.textContent = 'Save or discard the leveling draft first.'
+    profiles.className = 'context-picker'
 
-          return
-        }
+    const addProfile = button('Add leveling profile', () => {
+      if (dirty) {
+        error.textContent = 'Save or discard the leveling draft first.'
 
-        let id = 'player'
-        let index = 1
+        return
+      }
 
-        while (view?.leveling?.[id]) id = `player-${index++}`
+      let id = 'player'
+      let index = 1
 
-        const path = (name: string) =>
-          view?.rules?.state.find((field) => field.path.at(-1)?.toLowerCase() === name)?.path ?? [
-            name,
-          ]
+      while (view?.leveling?.[id]) id = `player-${index++}`
 
-        draft = levelingProfileSchema.parse({
-          'schema-version': '1.0.0',
-          id,
-          label: 'Player progression',
-          xp: { source: 'game.state', path: path('experience') },
-          level: { source: 'game.state', path: path('level') },
-          levels: [{ xp: 0 }, { xp: 10 }],
-        })
-        profileId = id
-        component = characterProgressionComponentSchema.parse({
-          id: `progression-${id}`,
-          type: 'character-progression',
-          profile: id,
-          placement: { row: 1, column: 1 },
-        })
-        dirty = true
-        render()
-      }),
-    )
+      const path = (name: string) =>
+        view?.rules?.state.find((field) => field.path.at(-1)?.toLowerCase() === name)?.path ?? [
+          name,
+        ]
+
+      draft = levelingProfileSchema.parse({
+        'schema-version': '1.0.0',
+        id,
+        label: 'Player progression',
+        xp: { source: 'game.state', path: path('experience') },
+        level: { source: 'game.state', path: path('level') },
+        levels: [{ xp: 0 }, { xp: 10 }],
+      })
+      profileId = id
+      component = characterProgressionComponentSchema.parse({
+        id: `progression-${id}`,
+        type: 'character-progression',
+        profile: id,
+        placement: { row: 1, column: 1 },
+      })
+      dirty = true
+      render()
+    })
+
+    addProfile.className = 'context-picker'
+
+    fields.append(picker, profiles, addProfile)
 
     if (!draft || !component || !scene) return
     const current = draft
@@ -170,7 +192,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
           ] as const,
       )
 
-    const keys = ['', ...(view.translationKeys ?? [])]
+    const keys = translationChoices(view, 'Use the literal text')
 
     const field = (
       title: string,
@@ -184,7 +206,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
     const form = document.createElement('form')
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save character progression'
+    saveButton.textContent = 'Save character levels'
     form.append(
       saveBar(document, saveButton, button('Discard leveling draft', reset)),
       input('Profile ID', current.id, (value) => {
@@ -193,7 +215,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
       input('Profile label', current.label, (value) => {
         current.label = value
       }),
-      select('Profile label translation', current.labelKey ?? '', keys, (value) => {
+      controls.translation('Profile label translation', current.labelKey ?? '', keys, (value) => {
         current.labelKey = value || undefined
       }),
       field('Total XP field', current.xp, (value) => {
@@ -203,57 +225,68 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
         current.level = value
       }),
     )
-    const preview = document.createElement('p')
+    const preview = document.createElement('ol')
+    preview.className = 'level-table'
+    preview.setAttribute('aria-label', 'Level table')
 
     const updatePreview = () => {
-      preview.textContent = current.levels
-        .map(
-          (row, index) =>
-            `Level ${index + 1}: ${row.xp} XP${row.gains.length ? ` · ${row.gains.map((gain) => `${gain.label || gain.id} +${gain.amount}`).join(', ')}` : ''}`,
-        )
-        .join(' | ')
+      preview.replaceChildren(
+        ...current.levels.map((row, index) => {
+          const item = document.createElement('li')
+
+          const gains = row.gains.map(
+            (gain) => `${displayLabel(view!, gain.id, gain)} +${gain.amount}`,
+          )
+
+          item.textContent = [`Level ${index + 1}`, `${row.xp} XP`, ...gains].join(' · ')
+
+          return item
+        }),
+      )
     }
 
     updatePreview()
     form.append(preview)
     current.levels.forEach((row, index) => {
+      const start = document.createElement('p')
+      start.className = 'help'
+      start.textContent = 'The first level always starts at 0 XP and has no stat gains.'
+
       const box = group(
         `Level ${index + 1}`,
-        input(
-          `Level ${index + 1} total XP threshold`,
-          String(row.xp),
-          (value) => {
-            row.xp = Number(value)
-            updatePreview()
-          },
-          'number',
-        ),
+        index === 0
+          ? start
+          : input(
+              'Total XP needed',
+              String(row.xp),
+              (value) => {
+                row.xp = Number(value)
+                updatePreview()
+              },
+              'number',
+            ),
       )
 
       row.gains.forEach((gain, position) =>
         box.append(
           group(
-            `Stat gain ${position + 1}`,
-            input(`Level ${index + 1} gain ${position + 1} ID`, gain.id, (value) => {
+            `Level ${index + 1} · stat gain ${position + 1}`,
+            input('Stat ID', gain.id, (value) => {
               gain.id = value.trim()
             }),
-            input(`Level ${index + 1} gain ${position + 1} label`, gain.label, (value) => {
+            input('Stat label', gain.label, (value) => {
               gain.label = value
               updatePreview()
             }),
-            select(
-              `Level ${index + 1} gain ${position + 1} translation`,
-              gain.labelKey ?? '',
-              keys,
-              (value) => {
-                gain.labelKey = value || undefined
-              },
-            ),
-            field(`Level ${index + 1} gain ${position + 1} field`, gain.field, (value) => {
+            controls.translation('Stat label translation', gain.labelKey ?? '', keys, (value) => {
+              gain.labelKey = value || undefined
+              updatePreview()
+            }),
+            field('Increases state field', gain.field, (value) => {
               gain.field = value
             }),
             input(
-              `Level ${index + 1} gain ${position + 1} amount`,
+              'Amount added',
               String(gain.amount),
               (value) => {
                 gain.amount = Number(value)
@@ -308,25 +341,33 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
         },
         current.levels.length <= 1,
       ),
-      select('Configure health recovery', current.health ? 'yes' : 'no', ['no', 'yes'], (value) => {
-        current.health =
-          value === 'yes'
-            ? {
-                current: {
-                  source: 'game.state',
-                  path: view?.rules?.state.find((field) => field.path.at(-1) === 'health')
-                    ?.path ?? ['health'],
-                },
-                maximum: {
-                  source: 'game.state',
-                  path: view?.rules?.state.find((field) => field.path.at(-1) === 'maximumHealth')
-                    ?.path ?? ['maximumHealth'],
-                },
-                policy: 'preserve',
-              }
-            : undefined
-        render()
-      }),
+      select(
+        'Health on level-up',
+        current.health ? 'yes' : 'no',
+        [
+          ['no', 'Leave health unchanged'],
+          ['yes', 'Adjust health when maximum health grows'],
+        ],
+        (value) => {
+          current.health =
+            value === 'yes'
+              ? {
+                  current: {
+                    source: 'game.state',
+                    path: view?.rules?.state.find((field) => field.path.at(-1) === 'health')
+                      ?.path ?? ['health'],
+                  },
+                  maximum: {
+                    source: 'game.state',
+                    path: view?.rules?.state.find((field) => field.path.at(-1) === 'maximumHealth')
+                      ?.path ?? ['maximumHealth'],
+                  },
+                  policy: 'preserve',
+                }
+              : undefined
+          render()
+        },
+      ),
     )
 
     if (current.health) {
@@ -339,9 +380,13 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
           health.maximum = value
         }),
         select(
-          'Level-up health policy',
+          'Current health after a level-up',
           health.policy,
-          ['preserve', 'increase', 'restore'],
+          [
+            ['preserve', 'Keep current health'],
+            ['increase', 'Add the maximum health gain'],
+            ['restore', 'Restore to full health'],
+          ],
           (value) => {
             health.policy = value
           },
@@ -351,15 +396,15 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
 
     form.append(
       group(
-        'Progression view',
-        input('Progression component ID', currentView.id, (value) => {
+        'Level display in this scene',
+        input('Display component ID', currentView.id, (value) => {
           currentView.id = value.trim()
         }),
         select(
-          'Progression main text target',
+          'Show level-up messages in',
           currentView.textTarget ?? '',
           [
-            '',
+            ['', 'Only the level display'],
             ...scene.components
               .filter((component) => component.type === 'text')
               .map((component) => component.id),
@@ -368,9 +413,9 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
             currentView.textTarget = value || undefined
           },
         ),
-        ...(['row', 'column', 'rowSpan', 'columnSpan'] as const).map((key) =>
+        ...placementFields.map(([key, label]) =>
           input(
-            `Progression ${key}`,
+            label,
             String(currentView.placement[key]),
             (value) => {
               currentView.placement[key] = Number(value)
@@ -382,18 +427,21 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
     )
     const messages = document.createElement('details')
     const heading = document.createElement('summary')
-    heading.textContent = 'Progression text and translations'
+    heading.textContent = 'Display text and translations'
     messages.append(heading)
 
     for (const key of levelingTextSchema.keyof().options)
       messages.append(
-        input(`${key} progression text`, current.messages[key], (value) => {
-          current.messages[key] = value
-        }),
-        select(`${key} progression translation`, current.messageKeys[key] ?? '', keys, (value) => {
-          if (value) current.messageKeys[key] = value
-          else delete current.messageKeys[key]
-        }),
+        group(
+          textNames[key],
+          input('Text', current.messages[key], (value) => {
+            current.messages[key] = value
+          }),
+          controls.translation('Translation', current.messageKeys[key] ?? '', keys, (value) => {
+            if (value) current.messageKeys[key] = value
+            else delete current.messageKeys[key]
+          }),
+        ),
       )
     form.append(messages)
     form.addEventListener('submit', (event) => {
@@ -406,7 +454,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
     })
     fields.append(
       form,
-      button('Remove progression view', () =>
+      button('Remove level display from scene', () =>
         submit({ type: 'scene.removeLevelingView', sceneId, componentId: currentView.id }),
       ),
       button('Delete leveling profile', () =>

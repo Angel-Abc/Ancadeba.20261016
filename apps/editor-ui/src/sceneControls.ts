@@ -128,6 +128,9 @@ export function bindSceneControls(
 
     if (!current) return
     fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
+    const legend = document.createElement('legend')
+    legend.textContent = t(componentId ? 'component.actions' : 'scene.actions')
+    fields.append(legend)
 
     if (componentId) {
       const index = current.components.findIndex(({ id }) => id === componentId)
