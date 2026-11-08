@@ -3,7 +3,11 @@ import type { GameRulesDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { rulesDefinitionForm } from './rulesDefinitionForm.js'
-import { ruleTriggerForms } from './ruleTriggerForms.js'
+import {
+  ruleTriggerForms,
+  ruleTriggerSections,
+  type RuleTriggerSection,
+} from './ruleTriggerForms.js'
 
 const defaultRuleId = 'rules'
 
@@ -22,10 +26,11 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
   let draft: GameRulesDefinition = { state: [], actions: {} }
   let ruleId = defaultRuleId
   let newRuleId = ''
-  let submittedRuleId = ''
+  let submitted: EditorCommand | undefined
   let selected = ''
   let rulesDirty = false
-  let triggersDirty = false
+  const dirtyTriggers = new Set<RuleTriggerSection>()
+  let triggerForms = new Map<RuleTriggerSection, HTMLElement>()
   let busy = false
 
   const submit = (command: EditorCommand) => {
@@ -35,16 +40,17 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       ? ''
       : parsed.error.issues.map(({ path, message }) => `${path.join('.')}: ${message}`).join('\n')
 
-    if (parsed.success) save(parsed.data)
+    if (parsed.success) {
+      submitted = structuredClone(parsed.data)
+      save(parsed.data)
+    }
   }
 
   const rulesControls = ruleFormControls(document, () => {
     rulesDirty = true
   })
 
-  const triggerControls = ruleFormControls(document, () => {
-    triggersDirty = true
-  })
+  const triggerControls = ruleFormControls(document, () => {})
 
   const definitions = rulesControls.button('Rule definitions', () => showTriggers(false))
   const triggers = rulesControls.button('Trigger links', () => showTriggers(true))
@@ -145,23 +151,38 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
         return
       }
 
-      submittedRuleId = ruleId || newRuleId
-      submit({ type: 'game.updateRules', ruleId: submittedRuleId, rules: draft })
+      submit({ type: 'game.updateRules', ruleId: ruleId || newRuleId, rules: draft })
     })
     rulesFields.append(form)
   }
 
   function renderTriggers() {
-    triggerFields.replaceChildren()
+    if (!view?.game) {
+      triggerFields.replaceChildren()
+      triggerForms.clear()
 
-    if (!view?.game) return
-    triggerFields.append(
+      return
+    }
+
+    const retained = new Map([...triggerForms].filter(([section]) => dirtyTriggers.has(section)))
+
+    const forms = ruleTriggerForms(triggerControls, view, submit, {
+      retained,
+      controls: (section) => ruleFormControls(document, () => dirtyTriggers.add(section)),
+      discarded: (section) => {
+        dirtyTriggers.delete(section)
+        renderTriggers()
+      },
+    })
+
+    triggerForms = new Map(ruleTriggerSections.map((section, index) => [section, forms[index]!]))
+    triggerFields.replaceChildren(
       triggerControls.button('Discard trigger draft', () => {
-        triggersDirty = false
+        dirtyTriggers.clear()
         error.textContent = ''
         renderTriggers()
       }),
-      ...ruleTriggerForms(triggerControls, view, submit),
+      ...forms,
     )
   }
 
@@ -185,38 +206,53 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       view = state.view
       loadedPath = state.path
       busy = state.busy
-      const rulesSaved = replaceFields && state.lastCommand === 'game.updateRules'
 
-      const triggerSaved =
-        replaceFields &&
-        (state.lastCommand === 'scene.upsertRuleButton' ||
-          state.lastCommand === 'inventory.setRuleInspection' ||
-          state.lastCommand === 'inventory.setItemActions' ||
-          state.lastCommand === 'scene.upsertNearby')
+      const saved =
+        submitted && !busy && replaceFields && !state.error && state.lastCommand === submitted.type
+          ? submitted
+          : undefined
+
+      if (!busy) submitted = undefined
+      const rulesSaved = saved?.type === 'game.updateRules'
+
+      const triggerSection: RuleTriggerSection | undefined =
+        saved?.type === 'scene.upsertRuleButton'
+          ? 'buttons'
+          : saved?.type === 'inventory.setRuleInspection'
+            ? 'inspection'
+            : saved?.type === 'inventory.setItemActions'
+              ? 'actions'
+              : saved?.type === 'scene.upsertNearby'
+                ? 'nearby'
+                : undefined
 
       const reset = projectChanged || (replaceFields && !state.preserveDrafts)
 
       if (reset) {
         ruleId = view?.game?.rules?.[0] ?? defaultRuleId
         newRuleId = ''
+        dirtyTriggers.clear()
+        triggerForms.clear()
+        submitted = undefined
       }
 
-      if (rulesSaved) ruleId = submittedRuleId
+      if (saved?.type === 'game.updateRules') ruleId = saved.ruleId
+
+      if (triggerSection) dirtyTriggers.delete(triggerSection)
 
       if (reset || rulesSaved || (viewChanged && !rulesDirty)) {
         resetRules()
       }
 
-      if (reset || triggerSaved || (viewChanged && !triggersDirty)) {
-        triggersDirty = false
+      if (reset || triggerSection || viewChanged) {
         renderTriggers()
       }
 
-      if (reset || rulesSaved || triggerSaved) error.textContent = ''
+      if (reset || rulesSaved || triggerSection) error.textContent = ''
       rulesFields.disabled = busy || !view?.game
       triggerFields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
-    hasDrafts: () => rulesDirty || triggersDirty,
+    hasDrafts: () => rulesDirty || dirtyTriggers.size > 0,
     /** Opens a rule file's definitions; refuses while the current file has a draft. */
     navigate(id: string) {
       if (id === ruleId) {

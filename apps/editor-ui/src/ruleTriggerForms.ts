@@ -7,6 +7,7 @@ import {
   type RuleFormControls,
   statePath,
   translationChoices,
+  ruleFormControls,
 } from './ruleFormControls.js'
 import { inventoryActionsForm } from './inventoryActionsForm.js'
 import { nearbyForm } from './nearbyForm.js'
@@ -16,41 +17,47 @@ const binding = (path: string): GameBindingDefinition => ({
   path: parseStatePath(path),
 })
 
-export function ruleTriggerForms(
-  controls: RuleFormControls,
+export const ruleTriggerSections = ['buttons', 'inspection', 'actions', 'nearby'] as const
+
+export type RuleTriggerSection = (typeof ruleTriggerSections)[number]
+
+function submit(form: HTMLFormElement, title: string, action: () => void) {
+  const button = form.ownerDocument.createElement('button')
+  button.textContent = title
+  button.type = 'submit'
+  form.append(button)
+  form.addEventListener('submit', (event) => {
+    event.preventDefault()
+    action()
+  })
+}
+
+function buttonTriggers(
+  owner: RuleFormControls,
   view: ProjectView,
   save: (command: EditorCommand) => void,
-): HTMLElement[] {
-  const { create, input, select, group, translation } = controls
-  const rules = view.rules
-  const actions = Object.keys(rules?.actions ?? {})
-  const state = rules?.state ?? []
-  const details = state.map(({ path }) => statePath(path))
+): HTMLElement {
+  const buttons = owner.group('Scene buttons')
+  let dirty = false
 
-  if (rules?.clock) details.push(statePath(rules.clock.path))
+  const controls = ruleFormControls(buttons.ownerDocument, () => {
+    dirty = true
+    owner.markEdited()
+  })
 
-  if (rules?.log) details.push(statePath(rules.log.path))
+  const { create, input, select, translation } = controls
+  const actions = Object.keys(view.rules?.actions ?? {})
 
-  const enabledFields = state
+  const enabledFields = (view.rules?.state ?? [])
     .filter(({ value }) => typeof value === 'boolean')
     .map(({ path }) => statePath(path))
 
   const scenes = view.scenes.filter(({ type }) => type === 'game')
-  const itemTypes = Object.entries(view.inventory?.itemTypes ?? {})
   const noAction = ['', 'No action'] as const
-
-  const submit = (form: HTMLFormElement, title: string, action: () => void) => {
-    const button = create('button')
-    button.textContent = title
-    button.type = 'submit'
-    form.append(button)
-    form.addEventListener('submit', (event) => {
-      event.preventDefault()
-      action()
-    })
-  }
-
-  const buttons = group('Scene buttons')
+  const error = create('p')
+  error.className = 'error'
+  error.setAttribute('role', 'alert')
+  buttons.append(error)
 
   if (scenes.length) {
     let scene = scenes[0]!
@@ -80,17 +87,30 @@ export function ruleTriggerForms(
         : { row: 1, column: 1, rowSpan: 1, columnSpan: 1 }
 
       const form = create('form')
+
+      const picker = select(
+        'Button',
+        target,
+        [['', 'New button'], ...available.map(({ id }) => id)],
+        (next) => {
+          if (next === target) return
+
+          if (dirty) {
+            picker.querySelector('select')!.value = target
+            error.textContent = 'Save or discard the trigger draft before switching buttons.'
+
+            return
+          }
+
+          target = next
+          error.textContent = ''
+          render()
+        },
+        false,
+      )
+
       form.append(
-        select(
-          'Button',
-          target,
-          [['', 'New button'], ...available.map(({ id }) => id)],
-          (next) => {
-            target = next
-            render()
-          },
-          false,
-        ),
+        picker,
         ...(current
           ? []
           : [
@@ -151,24 +171,61 @@ export function ruleTriggerForms(
       formArea.replaceChildren(form)
     }
 
-    buttons.append(
-      select(
-        'Game scene',
-        scene.id,
-        scenes.map(({ id }) => id),
-        (next) => {
-          scene = scenes.find(({ id }) => id === next)!
-          target = ''
-          render()
-        },
-        false,
-      ),
-      formArea,
+    const scenePicker = select(
+      'Game scene',
+      scene.id,
+      scenes.map(({ id }) => id),
+      (next) => {
+        if (next === scene.id) return
+
+        if (dirty) {
+          scenePicker.querySelector('select')!.value = scene.id
+          error.textContent = 'Save or discard the trigger draft before switching scenes.'
+
+          return
+        }
+
+        scene = scenes.find(({ id }) => id === next)!
+        target = ''
+        error.textContent = ''
+        render()
+      },
+      false,
     )
+
+    buttons.append(scenePicker, formArea)
     render()
   } else buttons.append('Add a game scene before linking a button.')
 
-  const inspection = group('Inventory inspection')
+  return buttons
+}
+
+function inspectionTriggers(
+  owner: RuleFormControls,
+  view: ProjectView,
+  save: (command: EditorCommand) => void,
+): HTMLElement {
+  const inspection = owner.group('Inventory inspection')
+  let dirty = false
+
+  const controls = ruleFormControls(inspection.ownerDocument, () => {
+    dirty = true
+    owner.markEdited()
+  })
+
+  const { create, select } = controls
+  const itemTypes = Object.entries(view.inventory?.itemTypes ?? {})
+  const actions = Object.keys(view.rules?.actions ?? {})
+  const details = (view.rules?.state ?? []).map(({ path }) => statePath(path))
+
+  if (view.rules?.clock) details.push(statePath(view.rules.clock.path))
+
+  if (view.rules?.log) details.push(statePath(view.rules.log.path))
+  const noAction = ['', 'No action'] as const
+  const error = create('p')
+  error.className = 'error'
+  error.setAttribute('role', 'alert')
+  inspection.append(error)
 
   if (itemTypes.length) {
     let itemType = itemTypes[0]![0]
@@ -212,26 +269,62 @@ export function ruleTriggerForms(
       formArea.replaceChildren(form)
     }
 
-    inspection.append(
-      select(
-        'Item type',
-        itemType,
-        itemTypes.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
-        (next) => {
-          itemType = next
-          render()
-        },
-        false,
-      ),
-      formArea,
+    const picker = select(
+      'Item type',
+      itemType,
+      itemTypes.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
+      (next) => {
+        if (next === itemType) return
+
+        if (dirty) {
+          picker.querySelector('select')!.value = itemType
+          error.textContent = 'Save or discard the trigger draft before switching item types.'
+
+          return
+        }
+
+        itemType = next
+        error.textContent = ''
+        render()
+      },
+      false,
     )
+
+    inspection.append(picker, formArea)
     render()
   } else inspection.append('Add inventory item types before linking an inspection.')
 
-  return [
-    buttons,
-    inspection,
-    inventoryActionsForm(controls, view, save),
-    nearbyForm(controls, view, save),
-  ]
+  return inspection
+}
+
+/** Retain dirty sections independently when another trigger form saves or the project refreshes. */
+export function ruleTriggerForms(
+  controls: RuleFormControls,
+  view: ProjectView,
+  save: (command: EditorCommand) => void,
+  options: {
+    controls?: (section: RuleTriggerSection) => RuleFormControls
+    retained?: ReadonlyMap<RuleTriggerSection, HTMLElement>
+    discarded?: (section: RuleTriggerSection) => void
+  } = {},
+): HTMLElement[] {
+  return ruleTriggerSections.map((section) => {
+    const retained = options.retained?.get(section)
+
+    if (retained) return retained
+    const scoped = options.controls?.(section) ?? controls
+
+    switch (section) {
+      case 'buttons':
+        return buttonTriggers(scoped, view, save)
+      case 'inspection':
+        return inspectionTriggers(scoped, view, save)
+      case 'actions':
+        return inventoryActionsForm(scoped, view, save, () => options.discarded?.(section))
+      case 'nearby':
+        return nearbyForm(scoped, view, save, undefined, {
+          onDiscard: () => options.discarded?.(section),
+        })
+    }
+  })
 }

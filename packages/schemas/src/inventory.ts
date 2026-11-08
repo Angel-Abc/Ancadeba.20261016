@@ -73,7 +73,7 @@ export const itemPresentationSchema = z
     })
   })
 
-const itemTypeSchema = itemPresentationSchema.safeExtend({
+export const inventoryItemTypeSchema = itemPresentationSchema.safeExtend({
   combatBonuses: combatBonusesSchema.optional(),
   use: itemUseSchema.optional(),
   container: z.boolean().default(false),
@@ -90,25 +90,23 @@ const itemTypeSchema = itemPresentationSchema.safeExtend({
   actions: z.record(gameIdSchema, inventoryItemActionSchema).optional(),
 })
 
+export const inventoryOwnerSchema = z.object({
+  label: labelSchema,
+  combatStats: combatStatsProfileSchema.optional(),
+  equipmentSlots: z.record(gameIdSchema, labelSchema).default({}),
+})
+
+export const inventoryStartingItemSchema = z.object({
+  itemType: gameIdSchema,
+  placement: inventoryPlacementSchema,
+  colors: colorsSchema.default({}),
+})
+
 export const inventorySchema = z.object({
   'schema-version': z.literal('1.0.0'),
-  itemTypes: z.record(gameIdSchema, itemTypeSchema),
-  owners: z.record(
-    gameIdSchema,
-    z.object({
-      label: labelSchema,
-      combatStats: combatStatsProfileSchema.optional(),
-      equipmentSlots: z.record(gameIdSchema, labelSchema).default({}),
-    }),
-  ),
-  items: z.record(
-    gameIdSchema,
-    z.object({
-      itemType: gameIdSchema,
-      placement: inventoryPlacementSchema,
-      colors: colorsSchema.default({}),
-    }),
-  ),
+  itemTypes: z.record(gameIdSchema, inventoryItemTypeSchema),
+  owners: z.record(gameIdSchema, inventoryOwnerSchema),
+  items: z.record(gameIdSchema, inventoryStartingItemSchema),
 })
 
 export const inventoryPreviewSchema = z.object({

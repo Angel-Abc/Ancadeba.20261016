@@ -382,6 +382,9 @@ export function bindProjectPanel(
 
     if (itemComponent) itemEditor?.navigate(sceneId, component?.id)
 
+    if (node.kind === 'data-file' && node.parentId === 'inventories' && node.id)
+      itemEditor?.navigateInventory(node.id)
+
     if (actionBar) actionBarPanel?.navigate(sceneId)
 
     if (statusComponent) statusPanel?.navigate(sceneId, component?.id)

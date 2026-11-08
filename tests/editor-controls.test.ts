@@ -33,6 +33,10 @@ import { bindStatusPanelEditor } from '../apps/editor-ui/src/statusPanelEditor.j
 import { bindItemEditor } from '../apps/editor-ui/src/itemEditor.js'
 import { bindCombatEditor } from '../apps/editor-ui/src/combatEditor.js'
 import { bindShopEditor } from '../apps/editor-ui/src/shopEditor.js'
+import { bindRulesPanel } from '../apps/editor-ui/src/rulesPanel.js'
+import { ProjectEditorController } from '../apps/editor-ui/src/projectController.js'
+import { EditorClientError } from '../apps/editor-ui/src/editorClient.js'
+import { bindInventoryEditor } from '../apps/editor-ui/src/inventoryEditor.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -2154,6 +2158,473 @@ describe('action bar editor controls', () => {
     })
     click('Discard input draft')
     expect(field('Physical key code').value).toBe('KeyQ')
+  })
+})
+
+describe('editor draft workflows', () => {
+  async function connected(
+    bind:
+      | typeof bindRulesPanel
+      | typeof bindStoryEditor
+      | typeof bindInventoryEditor
+      | typeof bindItemEditor,
+    source = project(),
+  ) {
+    const ui = panel()
+    let pending = Promise.resolve()
+    let rejectNext = false
+    let revision = 0
+
+    const controller = new ProjectEditorController(
+      {
+        inspect: async () => inspectProject(source),
+        apply: async ({ command }) => {
+          if (rejectNext) {
+            rejectNext = false
+            throw new EditorClientError('revision_conflict', 'Conflict')
+          }
+
+          source = { ...applyCommand(source, command).project, revision: String(++revision) }
+
+          return inspectProject(source)
+        },
+      },
+      (state, replace) => editor.render(state, replace),
+    )
+
+    const editor = bind(ui.root.asElement(), (command) => {
+      ui.commands.push(structuredClone(command))
+      pending = controller.save(command)
+    })
+
+    await controller.load('demo')
+
+    return {
+      ...ui,
+      editor,
+      controller,
+      flush: () => pending,
+      rejectNext: () => {
+        rejectNext = true
+      },
+      read: () => inspectProject(source),
+    }
+  }
+
+  function triggerProject() {
+    let source = project()
+    source = {
+      ...source,
+      documents: {
+        ...source.documents,
+        'game.json': {
+          ...object(source.documents['game.json']),
+          inventory: ['items'],
+          rules: ['rules'],
+        },
+        'inventory/items.json': inventorySchema.parse({
+          'schema-version': '1.0.0',
+          owners: {},
+          items: {},
+          itemTypes: {
+            letter: {
+              label: 'Letter',
+              inspection: {
+                action: 'inspect',
+                details: { source: 'game.state', path: ['result'] },
+              },
+            },
+            book: { label: 'Book' },
+          },
+        }),
+        'rules/rules.json': {
+          state: [{ path: ['result'], value: '' }],
+          actions: { inspect: [{ when: [], effects: [] }] },
+        },
+      },
+    }
+
+    for (const id of ['one', 'two'])
+      source = applyCommand(source, {
+        type: 'scene.upsertRuleButton',
+        sceneId: 'shop',
+        component: {
+          id,
+          type: 'button',
+          label: id,
+          placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+        },
+      }).project
+
+    return source
+  }
+
+  it('protects button and scene selectors until a trigger draft is saved or discarded', async () => {
+    const ui = await connected(bindRulesPanel, triggerProject())
+    ui.click('Trigger links')
+    ui.edit('Button', 'one')
+    ui.edit('Label', 'Changed label')
+    ui.edit('Button', 'two')
+    expect(ui.field('Button').value).toBe('one')
+    expect(ui.field('Label').value).toBe('Changed label')
+    expect(ui.root.textContent).toContain('before switching buttons')
+    ui.edit('Game scene', 'other')
+    expect(ui.field('Game scene').value).toBe('shop')
+    expect(ui.field('Label').value).toBe('Changed label')
+    ui.submit('Save button')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Button', 'two')
+    ui.edit('Label', 'Discard me')
+    ui.click('Discard trigger draft')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Button', 'one')
+    expect(ui.field('Label').value).toBe('Changed label')
+    ui.edit('Game scene', 'other')
+    expect(ui.field('Game scene').value).toBe('other')
+  })
+
+  it('protects inspection targets and retains another trigger draft through saves, conflicts and refreshes', async () => {
+    const ui = await connected(bindRulesPanel, triggerProject())
+    ui.edit('Button', 'one')
+    ui.edit('Label', 'Keep this label')
+    ui.edit('Show inspection in inventory', 'no')
+    ui.edit('Item type', 'book', 'Inventory inspection')
+    expect(ui.field('Item type', 'Inventory inspection').value).toBe('letter')
+    expect(ui.field('Show inspection in inventory').value).toBe('no')
+    ui.submit('Save inspection')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.field('Label').value).toBe('Keep this label')
+    ui.edit('Item type', 'book', 'Inventory inspection')
+    expect(ui.field('Item type', 'Inventory inspection').value).toBe('book')
+    ui.rejectNext()
+    ui.submit('Save button')
+    await ui.flush()
+    expect(ui.field('Label').value).toBe('Keep this label')
+    ui.edit('Button', 'two')
+    expect(ui.field('Button').value).toBe('one')
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Updated',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Label').value).toBe('Keep this label')
+    ui.submit('Save button')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('clears locally discarded item-action and nearby drafts without losing other trigger edits', async () => {
+    const ui = await connected(bindRulesPanel, triggerProject())
+    ui.edit('Button', 'one')
+    ui.edit('Label', 'Keep button')
+    ui.click('Add item action')
+    ui.click('Discard item-action draft')
+    expect(ui.field('Label').value).toBe('Keep button')
+    ui.edit('Nearby title', 'Changed nearby')
+    ui.click('Discard nearby draft')
+    expect(ui.field('Label').value).toBe('Keep button')
+    ui.submit('Save button')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it.each(['dialogue', 'quest'] as const)(
+    'clears a saved %s draft through the real controller and allows create, edit and delete',
+    async (kind) => {
+      const ui = await connected(bindStoryEditor)
+      ui.click(`Add ${kind}`)
+      ui.edit('Definition ID', `new-${kind}`)
+      ui.edit('Name', 'Saved definition')
+      ui.submit(`Save ${kind}`)
+      await ui.flush()
+      expect(ui.editor.hasDrafts()).toBe(false)
+      expect(ui.field('Dialogue or quest').value).toBe(`${kind}:new-${kind}`)
+      ui.click(kind === 'dialogue' ? 'Add quest' : 'Add dialogue')
+      expect(ui.field('Definition ID').value).toBe(kind === 'dialogue' ? 'quest' : 'dialogue')
+      ui.click('Discard story draft')
+      ui.edit('Dialogue or quest', `${kind}:new-${kind}`)
+      ui.edit('Name', 'Updated definition')
+      ui.submit(`Save ${kind}`)
+      await ui.flush()
+      expect(ui.editor.hasDrafts()).toBe(false)
+      expect(ui.field('Name').value).toBe('Updated definition')
+      ui.click('Delete definition')
+      await ui.flush()
+      expect(ui.editor.hasDrafts()).toBe(false)
+      expect(ui.field('Dialogue or quest').value).toBe('')
+    },
+  )
+
+  it.each(['story', 'journal'] as const)(
+    'preserves independent story and journal edits when saving %s first',
+    async (first) => {
+      const ui = await connected(bindStoryEditor)
+      ui.click('Add dialogue')
+      ui.edit('Name', 'Keep conversation')
+      ui.edit('Journal scene', 'shop')
+      ui.edit('Journal label', 'Keep journal')
+      const firstSave = first === 'story' ? 'Save dialogue' : 'Save quest journal'
+      const secondSave = first === 'story' ? 'Save quest journal' : 'Save dialogue'
+      ui.submit(firstSave)
+      await ui.flush()
+      expect(ui.editor.hasDrafts()).toBe(true)
+      expect(ui.field('Name').value).toBe('Keep conversation')
+      expect(ui.field('Journal label').value).toBe('Keep journal')
+      ui.submit(secondSave)
+      await ui.flush()
+      expect(ui.editor.hasDrafts()).toBe(false)
+      ui.edit('Journal scene', 'other')
+      expect(ui.field('Journal scene').value).toBe('other')
+    },
+  )
+
+  it('retains a failed story draft through an unrelated save of the same command type, then clears it on retry', async () => {
+    const ui = await connected(bindStoryEditor)
+    ui.click('Add dialogue')
+    ui.edit('Name', 'Retry conversation')
+    ui.rejectNext()
+    ui.submit('Save dialogue')
+    await ui.flush()
+    const failed = ui.commands[0]!
+
+    if (failed.type !== 'game.upsertDialogue') throw new Error('Expected dialogue save')
+    await ui.controller.save({
+      ...failed,
+      dialogue: { ...failed.dialogue, id: 'external', label: 'Another conversation' },
+    })
+    expect(ui.field('Name').value).toBe('Retry conversation')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.submit('Save dialogue')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('retains a failed journal draft until its own retry succeeds', async () => {
+    const ui = await connected(bindStoryEditor)
+    ui.edit('Journal scene', 'shop')
+    ui.edit('Journal label', 'Retry journal')
+    ui.rejectNext()
+    ui.submit('Save quest journal')
+    await ui.flush()
+    const failed = ui.commands[0]!
+
+    if (failed.type !== 'scene.upsertComponent') throw new Error('Expected journal save')
+    await ui.controller.save({ ...failed, sceneId: 'other' })
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.field('Journal label').value).toBe('Retry journal')
+    ui.edit('Journal scene', 'other')
+    expect(ui.field('Journal scene').value).toBe('shop')
+    ui.submit('Save quest journal')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('creates types, owners, slots and starting placements together from an empty project', async () => {
+    const ui = await connected(bindInventoryEditor)
+    ui.edit('Inventory entry kind', 'owners')
+    ui.edit('New entry ID', 'player')
+    ui.click('Add owner')
+    ui.edit('Owner name', 'Hero')
+    ui.edit('New slot ID', 'hand')
+    ui.edit('New slot name', 'Hand')
+    ui.click('Add equipment slot')
+    ui.edit('Inventory entry kind', 'itemTypes')
+    ui.edit('New entry ID', 'bag')
+    ui.click('Add item type')
+    ui.edit('Can contain items', 'true')
+    ui.edit('New entry ID', 'sword')
+    ui.click('Add item type')
+    ui.edit('Fits slot hand', 'true')
+    ui.edit('Item name', 'Iron sword')
+    ui.edit('Inventory entry kind', 'items')
+    ui.edit('New entry ID', 'pack')
+    ui.click('Add starting item')
+    ui.edit('New entry ID', 'blade')
+    ui.click('Add starting item')
+    ui.edit('Starting item type', 'sword')
+    ui.edit('Starting placement', 'equipped')
+    ui.edit('New entry ID', 'spare')
+    ui.click('Add starting item')
+    ui.edit('Starting item type', 'sword')
+    ui.edit('Starting placement', 'inside')
+    ui.edit('Starting container', 'pack')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().inventory).toMatchObject({
+      owners: { player: { label: 'Hero', equipmentSlots: { hand: 'Hand' } } },
+      itemTypes: {
+        bag: { container: true },
+        sword: { label: 'Iron sword', equipmentSlots: ['hand'] },
+      },
+      items: {
+        pack: { placement: { type: 'carried', owner: 'player' } },
+        blade: { placement: { type: 'equipped', owner: 'player', slot: 'hand' } },
+        spare: { placement: { type: 'inside', container: 'pack' } },
+      },
+    })
+    await ui.controller.load('demo')
+    expect(ui.field('Starting container').value).toBe('pack')
+    expect(ui.field('Inventory ID').value).toBe('items')
+  })
+
+  it('keeps invalid containment edits available and allows related fixes before a single save', async () => {
+    const data = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { bag: { label: 'Bag', container: true } },
+      owners: { player: { label: 'Player' } },
+      items: {
+        bag1: { itemType: 'bag', placement: { type: 'carried', owner: 'player' } },
+        bag2: { itemType: 'bag', placement: { type: 'carried', owner: 'player' } },
+      },
+    })
+
+    const source = applyCommand(project(), {
+      type: 'game.upsertInventory',
+      inventoryId: 'items',
+      inventory: data,
+    }).project
+
+    const ui = await connected(bindInventoryEditor, source)
+    ui.edit('Inventory entry kind', 'items')
+    ui.edit('Inventory entry', 'bag1')
+    ui.edit('Starting placement', 'inside')
+    ui.edit('Starting container', 'bag2')
+    ui.edit('Inventory entry', 'bag2')
+    ui.edit('Starting placement', 'inside')
+    ui.edit('Starting container', 'bag1')
+    ui.submit('Save inventory')
+    expect(ui.root.textContent).toContain('containment cycle')
+    expect(ui.commands).toEqual([])
+    expect(ui.field('Starting container').value).toBe('bag1')
+    ui.edit('Starting placement', 'carried')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().inventory!.items.bag1!.placement).toEqual({
+      type: 'inside',
+      container: 'bag2',
+    })
+  })
+
+  it('rejects duplicate IDs and deleting referenced owners, then saves a coherent cleanup', async () => {
+    const data = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: { coin: { label: 'Coin' } },
+      owners: { player: { label: 'Player' } },
+      items: { coin1: { itemType: 'coin', placement: { type: 'carried', owner: 'player' } } },
+    })
+
+    const source = applyCommand(project(), {
+      type: 'game.upsertInventory',
+      inventoryId: 'items',
+      inventory: data,
+    }).project
+
+    const ui = await connected(bindInventoryEditor, source)
+    ui.edit('New entry ID', 'Coin')
+    ui.click('Add item type')
+    expect(ui.root.textContent).toContain('unused entry ID')
+    ui.edit('New entry ID', '')
+    ui.edit('Inventory entry kind', 'owners')
+    ui.edit('Inventory entry', 'player')
+    ui.click('Remove owner')
+    ui.submit('Save inventory')
+    expect(ui.root.textContent).toContain('Unknown inventory owner')
+    ui.edit('Inventory entry kind', 'items')
+    ui.edit('Inventory entry', 'coin1')
+    ui.click('Remove starting item')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().inventory!.owners).toEqual({})
+    expect(ui.read().inventory!.items).toEqual({})
+  })
+
+  it('retains a failed inventory draft through unrelated saves and guards file and pending-slot navigation', async () => {
+    const ui = await connected(bindInventoryEditor)
+    ui.edit('New entry ID', 'coin')
+    ui.click('Add item type')
+    ui.edit('Item name', 'Gold coin')
+    ui.rejectNext()
+    ui.submit('Save inventory')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Other save',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Item name').value).toBe('Gold coin')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Inventory file', '')
+    ui.edit('Inventory entry kind', 'owners')
+    ui.edit('New entry ID', 'merchant')
+    ui.click('Add owner')
+    ui.edit('Inventory file', 'items')
+    expect(ui.field('Inventory file').value).toBe('')
+    ui.edit('New slot ID', 'hand')
+    ui.edit('Inventory entry kind', 'itemTypes')
+    expect(ui.field('Inventory entry kind').value).toBe('owners')
+    ui.submit('Save inventory')
+    expect(ui.root.textContent).toContain('pending entry or equipment slot')
+    ui.click('Discard inventory draft')
+    ui.edit('Inventory file', 'items')
+    expect(ui.field('Inventory file').value).toBe('items')
+  })
+
+  it('creates an inventory panel and equipment view without JSON and guards mode switches with drafts', async () => {
+    const ui = await connected(bindItemEditor)
+    ui.click('Item views and advanced settings')
+    ui.click('Add equipment')
+    expect(ui.root.textContent).toContain('Add an inventory panel')
+    ui.click('Inventory definitions')
+    ui.edit('Inventory entry kind', 'owners')
+    ui.edit('New entry ID', 'player')
+    ui.click('Add owner')
+    ui.click('Item views and advanced settings')
+    expect(ui.root.textContent).toContain('before switching editors')
+    ui.submit('Save inventory')
+    await ui.flush()
+    ui.click('Item views and advanced settings')
+    ui.click('Add inventory')
+    ui.edit('View ID', 'items')
+    ui.edit('View label', 'Backpack')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.click('Add equipment')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'items',
+          type: 'inventory',
+          owners: ['player'],
+          label: 'Backpack',
+        }),
+        expect.objectContaining({ type: 'equipment', inventory: 'items', owner: 'player' }),
+      ]),
+    )
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('discards both story and journal drafts when explicitly reloading the project', async () => {
+    const ui = await connected(bindStoryEditor)
+    ui.click('Add dialogue')
+    ui.edit('Journal scene', 'shop')
+    ui.edit('Journal label', 'Discard journal')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    await ui.controller.load('demo')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.field('Journal label').value).toBe('Quests')
   })
 })
 

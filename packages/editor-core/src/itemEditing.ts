@@ -151,7 +151,7 @@ export function editItems(
       throw new EditorError(422, 'invalid_inventory_panel', 'Select an inventory panel')
     components[index] = { ...previous, descriptionTarget: command.descriptionTarget ?? undefined }
   } else if (command.type === 'scene.removeItemView') {
-    if (!['item-details', 'equipment'].includes(String(previous.type)))
+    if (!['item-details', 'equipment', 'inventory'].includes(String(previous.type)))
       throw new EditorError(422, 'invalid_item_view', 'Select an item view')
     components.splice(index, 1)
   } else {
@@ -167,6 +167,7 @@ export function editItems(
       labelKey: component.labelKey,
       placement: { ...object(previous.placement), ...component.placement },
       ...(component.type === 'item-details' ? { emptyTextKey: component.emptyTextKey } : {}),
+      ...(component.type === 'inventory' ? { descriptionTarget: component.descriptionTarget } : {}),
     }
 
     if (index < 0) components.push(next)

@@ -3,10 +3,12 @@ import {
   combatStatsProfileSchema,
   type CombatStatsProfile,
   equipmentComponentSchema,
+  inventoryComponentSchema,
   itemDetailsComponentSchema,
   type InventoryDefinition,
   type ItemDetailsComponentDefinition,
   type EquipmentComponentDefinition,
+  type InventoryComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import {
@@ -18,6 +20,7 @@ import {
 import { itemUseForm } from './itemUseForm.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
+import { bindInventoryEditor } from './inventoryEditor.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
 export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -26,14 +29,24 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   error.className = 'error'
   error.setAttribute('role', 'alert')
   const fields = document.createElement('fieldset')
-  root.replaceChildren(error, fields)
+  const inventoryRoot = document.createElement('section')
+  const navigation = document.createElement('div')
+  navigation.className = 'editor-mode-controls'
+  root.replaceChildren(navigation, error, inventoryRoot, fields)
+  const inventoryEditor = bindInventoryEditor(inventoryRoot, save)
+  let definitions = true
   let view: ProjectView | undefined
   let path: string | undefined
   let sceneId = ''
   let target = ''
   let item: InventoryDefinition['itemTypes'][string] | undefined
-  let component: ItemDetailsComponentDefinition | EquipmentComponentDefinition | undefined
-  let descriptionTarget: string | undefined
+
+  let component:
+    | ItemDetailsComponentDefinition
+    | EquipmentComponentDefinition
+    | InventoryComponentDefinition
+    | undefined
+
   let slots: [string, string][] | undefined
   let combatStats: CombatStatsProfile | undefined
   let dirty = false
@@ -42,6 +55,33 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   const controls = ruleFormControls(document, () => {
     dirty = true
   })
+
+  const showDefinitions = (value: boolean) => {
+    if (value !== definitions && (dirty || inventoryEditor.hasDrafts())) {
+      error.textContent =
+        'Save or discard the current inventory or item draft before switching editors.'
+
+      return false
+    }
+
+    definitions = value
+    error.textContent = ''
+    fields.hidden = value
+    inventoryRoot.hidden = !value
+    definitionButton.setAttribute('aria-pressed', String(value))
+    viewButton.setAttribute('aria-pressed', String(!value))
+
+    return true
+  }
+
+  const definitionButton = controls.button('Inventory definitions', () => showDefinitions(true))
+
+  const viewButton = controls.button('Item views and advanced settings', () =>
+    showDefinitions(false),
+  )
+
+  navigation.append(definitionButton, viewButton)
+  showDefinitions(true)
 
   const submit = (command: EditorCommand) => {
     if (busy) return
@@ -72,10 +112,11 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       ?.components.find((entry) => entry.id === target.slice(5))
 
     component =
-      source?.type === 'item-details' || source?.type === 'equipment'
+      source?.type === 'item-details' ||
+      source?.type === 'equipment' ||
+      source?.type === 'inventory'
         ? structuredClone(source)
         : undefined
-    descriptionTarget = source?.type === 'inventory' ? source.descriptionTarget : undefined
     dirty = false
     error.textContent = ''
     render()
@@ -83,6 +124,8 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
   const navigate = (nextScene?: string, nextComponent?: string) => {
     const nextTarget = nextComponent ? `view:${nextComponent}` : target
+
+    if (nextComponent && !showDefinitions(false)) return false
 
     if ((!nextScene || nextScene === sceneId) && nextTarget === target) return true
 
@@ -154,7 +197,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     fields.append(scenePicker, picker)
 
     if (scene)
-      for (const type of ['item-details', 'equipment'] as const)
+      for (const type of ['inventory', 'item-details', 'equipment'] as const)
         fields.append(
           controls.button(`Add ${type}`, () => {
             if (dirty) {
@@ -169,6 +212,16 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             while (scene.components.some((component) => component.id === id))
               id = `${type}-${number++}`
             const inventory = scene.components.find((component) => component.type === 'inventory')
+            const owner = Object.keys(view?.inventory?.owners ?? {})[0]
+
+            if ((type === 'inventory' && !owner) || (type !== 'inventory' && !inventory)) {
+              error.textContent =
+                type === 'inventory'
+                  ? 'Create and save an inventory owner first.'
+                  : 'Add an inventory panel to this scene first.'
+
+              return
+            }
 
             const data = {
               id,
@@ -179,9 +232,16 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             }
 
             component =
-              type === 'equipment'
-                ? equipmentComponentSchema.parse(data)
-                : itemDetailsComponentSchema.parse(data)
+              type === 'inventory'
+                ? inventoryComponentSchema.parse({
+                    id,
+                    type,
+                    owners: [owner],
+                    placement: { row: 1, column: 1 },
+                  })
+                : type === 'equipment'
+                  ? equipmentComponentSchema.parse(data)
+                  : itemDetailsComponentSchema.parse(data)
             item = undefined
             slots = undefined
             target = `view:${id}`
@@ -253,34 +313,21 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
     const source = scene?.components.find((entry) => entry.id === target.slice(5))
 
-    if (source?.type === 'inventory')
-      form.append(
-        controls.select(
-          'Main text details target',
-          descriptionTarget ?? '',
-          [
-            ['', 'No main text details'],
-            ...(scene?.components
-              .filter((entry) => entry.type === 'text')
-              .map((entry) => entry.id) ?? []),
-          ],
-          (value) => {
-            descriptionTarget = value || undefined
-          },
-        ),
-      )
-
     if (component && scene) {
       const draft = component
       form.append(
-        controls.select(
-          'Show equipment stats',
-          String(draft.showCombatStats ?? false),
-          ['false', 'true'],
-          (value) => {
-            draft.showCombatStats = value === 'true'
-          },
-        ),
+        ...(draft.type !== 'inventory'
+          ? [
+              controls.select(
+                'Show equipment stats',
+                String(draft.showCombatStats ?? false),
+                ['false', 'true'],
+                (value) => {
+                  draft.showCombatStats = value === 'true'
+                },
+              ),
+            ]
+          : []),
         controls.input('View ID', draft.id, (value) => {
           draft.id = value.trim()
         }),
@@ -295,15 +342,21 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             draft.labelKey = value || undefined
           },
         ),
-        controls.select(
-          'Source inventory',
-          draft.inventory,
-          scene.components.filter((entry) => entry.type === 'inventory').map((entry) => entry.id),
-          (value) => {
-            draft.inventory = value
-            render()
-          },
-        ),
+        ...(draft.type !== 'inventory'
+          ? [
+              controls.select(
+                'Source inventory',
+                draft.inventory,
+                scene.components
+                  .filter((entry) => entry.type === 'inventory')
+                  .map((entry) => entry.id),
+                (value) => {
+                  draft.inventory = value
+                  render()
+                },
+              ),
+            ]
+          : []),
         ...placementFields.map(([key, label]) =>
           controls.input(
             label,
@@ -345,7 +398,42 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             },
           ),
         )
-      else {
+      else if (draft.type === 'inventory') {
+        form.append(
+          ...Object.entries(view.inventory?.owners ?? {}).map(([id, owner]) =>
+            controls.select(
+              `Show owner ${owner.label}`,
+              String(draft.owners.includes(id)),
+              ['false', 'true'],
+              (value) => {
+                draft.owners =
+                  value === 'true'
+                    ? [...new Set([...draft.owners, id])]
+                    : draft.owners.filter((owner) => owner !== id)
+              },
+            ),
+          ),
+          controls.select(
+            'Inventory read only',
+            String(draft.readOnly ?? false),
+            ['false', 'true'],
+            (value) => {
+              draft.readOnly = value === 'true'
+            },
+          ),
+          controls.select(
+            'Main text details target',
+            draft.descriptionTarget ?? '',
+            [
+              '',
+              ...scene.components.filter((value) => value.type === 'text').map((value) => value.id),
+            ],
+            (value) => {
+              draft.descriptionTarget = value || undefined
+            },
+          ),
+        )
+      } else {
         const inventory = scene.components.find(
           (entry) => entry.id === draft.inventory && entry.type === 'inventory',
         )
@@ -390,7 +478,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       }
     }
 
-    if (!item && !slots && !component && source?.type !== 'inventory') return
+    if (!item && !slots && !component) return
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 
@@ -416,13 +504,6 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           combatStats: combatStats ?? null,
         })
       } else if (component) submit({ type: 'scene.upsertItemView', sceneId, component })
-      else
-        submit({
-          type: 'scene.setInventoryDetails',
-          sceneId,
-          componentId: target.slice(5),
-          descriptionTarget: descriptionTarget ?? null,
-        })
     })
     fields.append(form, controls.button('Discard item draft', reset))
 
@@ -436,8 +517,14 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
   return {
     navigate,
-    hasDrafts: () => dirty,
+    navigateInventory(id: string) {
+      if (!showDefinitions(true)) return false
+
+      return inventoryEditor.navigate(id)
+    },
+    hasDrafts: () => dirty || inventoryEditor.hasDrafts(),
     render(state: ProjectEditorState, replaceFields: boolean) {
+      inventoryEditor.render(state, replaceFields)
       const changed = view !== state.view
       const projectChanged = path !== state.path
       path = state.path

@@ -198,6 +198,12 @@ or a failed creation preserves the current project and its drafts. Failed storag
 operations roll back unchanged starter files; if external changes prevent cleanup,
 the error identifies the folder to inspect before retrying.
 
+In **Rules → Trigger links**, save or discard edited button links before switching
+buttons or scenes, and edited inspections before switching item types. Saving
+one trigger form preserves drafts in the other forms. **Discard trigger draft**
+resets all trigger forms; item-action and nearby forms also offer their own
+discard buttons. Conflicts and unrelated saves retain pending trigger edits.
+
 `POST /api/editor/projects` accepts JSON `{ "path": "my-game", "title": "My game",
 "description": "" }` and returns the new project view with a revision and HTTP 201.
 Invalid input returns 400, an existing destination returns 409, and links remain
@@ -697,9 +703,61 @@ The editor does not include scripts, command batches, real-time collaboration,
 or embedded chat. The [MCP adapter](editor-mcp.md) exposes authoring operations
 to an external coding agent; those saves share the server's project history.
 
+## Inventory authoring
+
+Choose **Items & equipment → Inventory definitions** to create or edit an inventory
+without editing JSON. Choose an **Inventory file**, or **New inventory** and an
+unused **Inventory ID**. The first save creates `inventory/<id>.json` and adds its
+reference to the game. IDs for item types, owners and starting items must be
+unique across all referenced inventory files.
+
+Choose **Inventory entry kind → Owners**, enter a **New entry ID**, and choose
+**Add owner**. Set **Owner name** and add named equipment slots with **New slot
+ID**, **New slot name**, and **Add equipment slot**. Optional owner combat stats
+use the numeric health fields declared in Rules.
+
+Choose **Item types**, enter an ID, and choose **Add item type**. Set its name,
+description, properties, artwork, icon and optional equipped graphic part.
+**Can contain items** makes this type a container. **Fits slot …** selects its
+compatible equipment slots. Existing equipment bonuses, shared item-use abilities,
+and translation fields are available in the same form; item actions and inspection
+links remain under Rules.
+
+Choose **Starting items**, enter a unique instance ID, and choose **Add starting
+item**. Select its type and a **Starting placement**: carried by an owner,
+equipped in a compatible slot, or inside another container. Optional color
+overrides use the selected type's icon and equipped-part color names. Every
+starting item is an individual instance; create additional IDs for more copies.
+
+**Save inventory** saves all entries in the current file together, so related
+changes can be made before validation. Unknown references, containment cycles,
+duplicate IDs, occupied or incompatible slots, invalid colors, and deletions
+that leave references behind are rejected. The draft remains editable after an
+error or conflict. Entry changes stay in the draft when switching kinds or
+entries. Add or clear pending entry/slot inputs before saving. Save or discard
+before switching files or editor modes. **Remove item type/owner/starting item**
+changes the draft; **Discard inventory draft** restores the saved file. Existing
+extension fields are retained at stable entry and property IDs. Saved inventory
+changes support shared project Undo/Redo.
+
+Starting definitions initialize new games. Editing them does not change a running
+playthrough, and existing save slots can become incompatible after definition
+changes. Restart the preview to play with the new definitions.
+
+Under **Item views and advanced settings**, select a game scene and choose
+**Add inventory** to place a panel showing saved owners. Configure its label,
+placement, shown owners, read-only setting and main-text details target, then
+choose **Save items and equipment**. Add inventory panels before equipment or
+item-details views; missing prerequisites report an actionable message.
+
+The revision-checked `game.upsertInventory` command accepts `inventoryId`, a full
+`inventory` definition and optional `createOnly`. New files are published before
+the manifest reference, existing unlisted files are protected, and whole-project
+validation checks references across files, rules, quests, shops and scenes.
+
 ## Item details and equipment
 
-Choose **Items & equipment** to edit an item type's name, description, large
+Choose **Items & equipment → Item views and advanced settings** to edit an existing item type's name, description, large
 artwork, and ordered display properties. Each string can use a language-catalog
 key. Properties accept literal text, finite numbers, or existing scalar state
 bindings; they do not calculate stats or change game state. Artwork accepts an
@@ -717,8 +775,8 @@ Add an **equipment** view, choose its source inventory and owner, and set its
 grid columns and optional ordered slot IDs. Unlisted owner slots follow in their
 declared order. The owner must appear in the source inventory. **Owner slots**
 edits their names and declarations; reference checks prevent removing occupied
-or referenced slots. Item compatibility remains declared by `equipmentSlots` on
-item types in the inventory file.
+or referenced slots. Configure item compatibility with **Fits slot …** under
+**Inventory definitions**.
 
 ```json
 {
@@ -855,6 +913,9 @@ Definitions live in `dialogues/<id>.json` and `quests/<id>.json`. Each has
 Labels, descriptions, dialogue text and speakers, rewards, and feedback support
 the game's language catalogs. Editor saves check the inspected revision and
 preserve extension properties. Conflicting drafts remain available to review.
+Successful dialogue, quest, and quest-journal saves clear only the submitted
+draft, so another pending story or journal edit stays available. After saving,
+you can switch definitions or journal scenes without discarding the saved work.
 
 ### Conversations
 

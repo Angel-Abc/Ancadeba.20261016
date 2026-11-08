@@ -41,6 +41,7 @@ import {
   mapViewComponentSchema,
   gridPlacementSchema,
   mapDefinitionSchema,
+  inventorySchema,
 } from '@ancadeba/schemas'
 
 /** Scene components without a dedicated authoring command are saved whole. */
@@ -188,7 +189,11 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('scene.upsertItemView'),
     sceneId: gameIdSchema,
-    component: z.discriminatedUnion('type', [itemDetailsComponentSchema, equipmentComponentSchema]),
+    component: z.discriminatedUnion('type', [
+      itemDetailsComponentSchema,
+      equipmentComponentSchema,
+      inventoryComponentSchema,
+    ]),
   }),
   z.strictObject({
     type: z.literal('scene.removeItemView'),
@@ -292,6 +297,12 @@ export const commandSchema = z.discriminatedUnion('type', [
     createOnly: z.boolean().optional(),
   }),
   z.strictObject({ type: z.literal('game.removeMap'), mapId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('game.upsertInventory'),
+    inventoryId: gameIdSchema,
+    inventory: inventorySchema,
+    createOnly: z.boolean().optional(),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -326,6 +337,20 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.upsertInventory',
+      example: {
+        type: 'game.upsertInventory',
+        inventoryId: 'items',
+        createOnly: true,
+        inventory: {
+          'schema-version': '1.0.0',
+          itemTypes: { coin: { label: 'Coin' } },
+          owners: { player: { label: 'Player' } },
+          items: { coin1: { itemType: 'coin', placement: { type: 'carried', owner: 'player' } } },
+        },
+      },
+    },
     {
       type: 'game.upsertMap',
       example: {

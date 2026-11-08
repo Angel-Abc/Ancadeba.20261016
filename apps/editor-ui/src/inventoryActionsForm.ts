@@ -7,6 +7,7 @@ export function inventoryActionsForm(
   controls: RuleFormControls,
   view: ProjectView,
   save: (command: EditorCommand) => void,
+  onDiscard: () => void = () => {},
 ): HTMLElement {
   const { create, select, input, button, group } = controls
   const root = group('Selected-item actions')
@@ -79,7 +80,13 @@ export function inventoryActionsForm(
     const submit = create('button')
     submit.type = 'submit'
     submit.textContent = 'Save item actions'
-    form.append(submit, button('Discard item-action draft', reset))
+    form.append(
+      submit,
+      button('Discard item-action draft', () => {
+        reset()
+        onDiscard()
+      }),
+    )
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 

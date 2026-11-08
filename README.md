@@ -2197,6 +2197,12 @@ targeting, persistent outside-combat statuses and world-time cooldowns are defer
 
 ## Equipment effects on combat
 
+Use **Items & equipment → Inventory definitions** to create item types, owners,
+equipment slots and starting item instances without JSON edits. Items can start
+carried, equipped, or inside containers. Save the inventory draft together, then
+use **Item views and advanced settings → Add inventory** to show it in a scene.
+See the [inventory authoring guide](docs/editor-authoring.md#inventory-authoring).
+
 Inventory owners may have one optional `combatStats` profile. Its owner ID is also
 the profile ID used by combat and bindings. All encounters for that owner share
 the same equipment and health. Item types declare additive `combatBonuses`

@@ -33,8 +33,9 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
   let dirty = false
   let journalDirty = false
   let busy = false
-  let submitted = false
+  let submitted: EditorCommand | undefined
   let journalScene = ''
+  let journalId = ''
   let journal: QuestLogComponentDefinition | undefined
 
   const controls = ruleFormControls(document, () => {
@@ -44,6 +45,27 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
   const journalControls = ruleFormControls(document, () => {
     journalDirty = true
   })
+
+  const resetJournal = () => {
+    const existing = view?.scenes
+      .find((scene) => scene.id === journalScene)
+      ?.components.find(
+        (component) => component.type === 'quest-log' && (!journalId || component.id === journalId),
+      )
+
+    journalId = existing?.id ?? ''
+    journal =
+      existing?.type === 'quest-log'
+        ? structuredClone(existing)
+        : journalScene
+          ? questLogComponentSchema.parse({
+              id: 'quests',
+              type: 'quest-log',
+              placement: { row: 1, column: 1 },
+            })
+          : undefined
+    journalDirty = false
+  }
 
   const reset = () => {
     const [kind, id] = selection.split(':')
@@ -66,7 +88,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       : parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')
 
     if (parsed.success) {
-      submitted = true
+      submitted = structuredClone(parsed.data)
       save(parsed.data)
     }
   }
@@ -176,19 +198,8 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
           }
 
           journalScene = value
-
-          const existing = view?.scenes
-            .find((scene) => scene.id === value)
-            ?.components.find((component) => component.type === 'quest-log')
-
-          journal =
-            existing?.type === 'quest-log'
-              ? structuredClone(existing)
-              : questLogComponentSchema.parse({
-                  id: 'quests',
-                  type: 'quest-log',
-                  placement: { row: 1, column: 1 },
-                })
+          journalId = ''
+          resetJournal()
           render()
         },
         false,
@@ -269,14 +280,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       journals.append(
         form,
         journalControls.button('Discard journal draft', () => {
-          const existing = view?.scenes
-            .find((scene) => scene.id === journalScene)
-            ?.components.find(
-              (component) => component.type === 'quest-log' && component.id === current.id,
-            )
-
-          journal = existing?.type === 'quest-log' ? structuredClone(existing) : undefined
-          journalDirty = false
+          resetJournal()
           error.textContent = ''
           render()
         }),
@@ -350,46 +354,46 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       busy = state.busy
 
       const saved =
-        submitted &&
-        replaceFields &&
-        [
-          'game.upsertDialogue',
-          'game.upsertQuest',
-          'game.removeDialogue',
-          'game.removeQuest',
-        ].includes(state.lastCommand ?? '') &&
-        !state.preserveDrafts
+        submitted && !busy && replaceFields && !state.error && state.lastCommand === submitted.type
+          ? submitted
+          : undefined
 
-      if (
-        submitted &&
-        replaceFields &&
-        state.lastCommand === 'scene.upsertComponent' &&
-        !state.preserveDrafts
-      ) {
-        journalDirty = false
-        submitted = false
-      }
+      if (!busy) submitted = undefined
 
-      if (saved) {
-        if (draft) selection = `${draft.kind}:${draft.data.id}`
-        submitted = false
+      const storySaved =
+        saved?.type === 'game.upsertDialogue' ||
+        saved?.type === 'game.upsertQuest' ||
+        saved?.type === 'game.removeDialogue' ||
+        saved?.type === 'game.removeQuest'
+
+      const journalSaved =
+        saved?.type === 'scene.upsertComponent' && saved.component.type === 'quest-log'
+
+      if (saved?.type === 'game.upsertDialogue') selection = `dialogue:${saved.dialogue.id}`
+      else if (saved?.type === 'game.upsertQuest') selection = `quest:${saved.quest.id}`
+      else if (saved?.type === 'game.removeDialogue' || saved?.type === 'game.removeQuest')
+        selection = ''
+
+      if (saved?.type === 'scene.upsertComponent' && journalSaved) {
+        journalScene = saved.sceneId
+        journalId = saved.component.id
       }
 
       if (projectChanged) {
         selection = ''
         journalScene = ''
+        journalId = ''
         journal = undefined
         journalDirty = false
+        submitted = undefined
       }
 
-      if (
-        projectChanged ||
-        saved ||
-        (replaceFields && !state.preserveDrafts && !dirty) ||
-        (changed && !dirty)
-      )
-        reset()
-      else if (changed) render()
+      const resetFields = projectChanged || (replaceFields && !state.preserveDrafts)
+
+      if (resetFields || journalSaved || (changed && !journalDirty)) resetJournal()
+
+      if (resetFields || storySaved || (changed && !dirty)) reset()
+      else if (changed || journalSaved) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

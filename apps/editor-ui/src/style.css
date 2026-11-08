@@ -1214,6 +1214,7 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   gap: 0.25rem;
 }
 
+.editor-mode-controls,
 .map-editor-dimensions,
 .map-window-controls {
   display: flex;
@@ -1224,6 +1225,27 @@ input[aria-invalid='true'] + datalist + .translation-preview {
 
 .map-editor-dimensions input {
   width: 7rem;
+}
+
+.inventory-editor-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inventory-editor-form label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.inventory-editor-form > fieldset {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.editor-mode-controls button[aria-pressed='true'] {
+  border-color: var(--ed-accent);
+  background: var(--ed-selected);
 }
 
 .map-painter {
