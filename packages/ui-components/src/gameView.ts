@@ -1,9 +1,11 @@
-import type { GameData, IGameLifecycle, SceneData } from '@ancadeba/game-runtime'
+import type { GameData, IGameLifecycle, SceneData, IGameSaves } from '@ancadeba/game-runtime'
+import { mountGameSaveControls, gameSaveMessages } from './gameSaveControls.js'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
 import { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
 import { mountGameStylesheet } from './gameStylesheet.js'
 
 export interface GameViewSession {
+  readonly saves?: IGameSaves | undefined
   readonly lifecycle: IGameLifecycle
   readonly input: KeyboardInputSink | undefined
 }
@@ -70,6 +72,13 @@ export function mountGameView(
 
   try {
     if (localization) cleanups.push(localization.subscribe(syncMetadata))
+
+    if (session.saves)
+      cleanups.push(
+        mountGameSaveControls(root, game, session.saves, () =>
+          Boolean(session.lifecycle.currentGame),
+        ),
+      )
 
     if (options.scenePicker) {
       const label = document.createElement('label')
@@ -138,6 +147,15 @@ export function mountGameView(
 
     const renderer = new SceneRenderer(viewport, session.lifecycle, {
       ...options,
+      saves: session.saves,
+      onLoadGame: () => {
+        if (
+          session.lifecycle.currentGame &&
+          document.defaultView?.confirm(gameSaveMessages(game).confirm) !== true
+        )
+          return
+        session.saves?.load()
+      },
       input: session.input,
       onActionBarFocusLost: () => root.focus(),
       assets: game.assets,

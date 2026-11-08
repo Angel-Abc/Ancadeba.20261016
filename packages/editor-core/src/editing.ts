@@ -15,6 +15,7 @@ import { editShop } from './shopEditing.js'
 import { editCombat } from './combatEditing.js'
 import { editCombatLibrary } from './combatLibraryEditing.js'
 import { editSceneStructure, type SceneEditResult } from './sceneEditing.js'
+import { editMap } from './mapEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -59,6 +60,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.removeComponent'
   ) {
     structure = editSceneStructure(documents, game, command)
+    changedFiles.push(...structure.changedFiles)
+  } else if (command.type === 'game.upsertMap' || command.type === 'game.removeMap') {
+    structure = editMap(documents, game, command)
     changedFiles.push(...structure.changedFiles)
   } else if (
     command.type === 'game.upsertDialogue' ||
@@ -185,11 +189,13 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
       resultingDiagnostics,
     )
 
+  const removedFiles = changedFiles.filter((file) => !Object.hasOwn(documents, file))
+
   return {
     project: { revision: project.revision, documents },
     changedFiles,
     ...(structure?.createdFiles ? { createdFiles: structure.createdFiles } : {}),
-    ...(structure?.removedFiles ? { removedFiles: structure.removedFiles } : {}),
+    ...(removedFiles.length ? { removedFiles } : {}),
     summary:
       command.type === 'scene.create'
         ? `Created scene ${command.scene.id}`

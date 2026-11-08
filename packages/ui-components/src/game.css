@@ -10,3 +10,21 @@
   color: var(--ge-game-color);
   background: var(--ge-game-background);
 }
+
+.ancadeba-save-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.ancadeba-save-controls button {
+  font: inherit;
+  padding: 0.35rem 0.65rem;
+}
+
+.ancadeba-save-controls [role='status'] {
+  flex: 1 1 15rem;
+}

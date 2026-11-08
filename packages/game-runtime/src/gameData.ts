@@ -51,6 +51,7 @@ import {
   ruleFile,
   validateRuleSources,
   resolveMapView,
+  mapVisualIssues,
   actionBarIssues,
   statusPanelIssues,
   localizeInventory,
@@ -133,6 +134,8 @@ export interface SceneData {
 }
 
 export interface GameData {
+  /** Content fingerprint supplied by the loader, independent of the selected language. */
+  readonly saveCompatibility?: string
   readonly dialogues?: ReadonlyMap<string, DialogueDefinition> | undefined
   readonly quests?: ReadonlyMap<string, QuestDefinition> | undefined
   readonly leveling?: ReadonlyMap<string, LevelingProfile> | undefined
@@ -173,6 +176,13 @@ export function assembleGameData(
   questDefinitions: ReadonlyMap<string, QuestDefinition> = new Map(),
 ): GameData {
   assertGameLanguages(definition, sceneDefinitions)
+
+  for (const [id, map] of maps) {
+    const issues = mapVisualIssues(map, assets)
+
+    if (issues.length)
+      throw new Error(`Invalid map ${id}: ${issues.map((issue) => issue.message).join('; ')}`)
+  }
 
   const inventorySources = (definition.inventory ?? []).map((id) => {
     const file = inventoryFile(id)

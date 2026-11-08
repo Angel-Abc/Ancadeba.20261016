@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import type { Server } from 'node:http'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createStarterProject, type EditorCommand } from '@ancadeba/editor-core'
+import { commandSchema, createStarterProject, type EditorCommand } from '@ancadeba/editor-core'
 import { dialogueSchema, questSchema } from '@ancadeba/schemas'
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 import { EditorCoordinator } from '../apps/editor-server/src/editorCoordinator.js'
@@ -83,6 +83,192 @@ describe('saved editor history', () => {
 
     return result
   }
+
+  const greeting = dialogueSchema.parse({
+    'schema-version': '1.0.0',
+    id: 'guide',
+    label: 'Guide',
+    entry: 'start',
+    nodes: { start: { terminal: true, lines: [{ text: 'Hello' }] } },
+  })
+
+  const field = (name: string) => ({ source: 'game.state', path: [name] })
+
+  const definitions = [
+    {
+      file: 'dialogues/guide.json',
+      create: { type: 'game.upsertDialogue', dialogue: greeting },
+      remove: { type: 'game.removeDialogue', dialogueId: 'guide' },
+    },
+    {
+      file: 'quests/visit.json',
+      create: {
+        type: 'game.upsertQuest',
+        quest: {
+          'schema-version': '1.0.0',
+          id: 'visit',
+          label: 'Visit',
+          stages: [
+            {
+              id: 'visit',
+              objectives: [
+                { id: 'arrive', label: 'Arrive', when: [{ type: 'scene-is', scene: 'adventure' }] },
+              ],
+            },
+          ],
+        },
+      },
+      remove: { type: 'game.removeQuest', questId: 'visit' },
+    },
+    {
+      file: 'leveling/player.json',
+      create: {
+        type: 'game.upsertLeveling',
+        profile: {
+          'schema-version': '1.0.0',
+          id: 'player',
+          label: 'Player',
+          xp: field('xp'),
+          level: field('level'),
+          levels: [{ xp: 0 }],
+        },
+      },
+      remove: { type: 'game.removeLeveling', profileId: 'player' },
+    },
+    {
+      file: 'combat/training.json',
+      create: {
+        type: 'game.upsertCombat',
+        encounter: {
+          'schema-version': '1.0.0',
+          id: 'training',
+          label: 'Training',
+          player: {
+            id: 'player',
+            label: 'Player',
+            health: field('hp'),
+            maximumHealth: 20,
+            moves: ['attack'],
+          },
+          enemies: [
+            {
+              id: 'enemy',
+              label: 'Enemy',
+              health: field('enemy'),
+              maximumHealth: 20,
+              moves: ['attack'],
+              rotation: ['attack'],
+            },
+          ],
+          moves: {
+            attack: { type: 'attack', label: 'Attack', apCost: 1, damage: { min: 1, max: 2 } },
+          },
+        },
+      },
+      remove: { type: 'game.removeCombat', encounterId: 'training' },
+    },
+    {
+      file: 'combat-libraries/common.json',
+      create: {
+        type: 'game.upsertCombatLibrary',
+        library: { 'schema-version': '1.0.0', id: 'common' },
+      },
+      remove: { type: 'game.removeCombatLibrary', libraryId: 'common' },
+    },
+  ]
+
+  it.each(definitions)(
+    'deletes $file, restores its exact bytes through history, and allows recreating its ID',
+    async ({ file, create, remove }) => {
+      await apply({
+        type: 'game.updateRules',
+        ruleId: 'values',
+        rules: {
+          state: Object.entries({ xp: 0, level: 1, hp: 20, enemy: 20 }).map(([name, value]) => ({
+            path: [name],
+            value,
+          })),
+          actions: {},
+        },
+      })
+      const createCommand = commandSchema.parse(create)
+      const removeCommand = commandSchema.parse(remove)
+      await apply(createCommand)
+
+      // Preserve authored formatting and extension data when undoing deletion.
+      const bytes = Buffer.from(
+        `${JSON.stringify({ ...JSON.parse(Buffer.from(await workspace.read(`game/${file}`)).toString()), extension: 'keep' })}\n\n`,
+      )
+
+      await workspace.write(`game/${file}`, bytes)
+      const before = await tree()
+      await apply(removeCommand)
+      await expect(workspace.read(`game/${file}`)).rejects.toHaveProperty('code', 'ENOENT')
+      const deleted = await tree()
+      await restore('undo')
+      expect(await tree()).toEqual(before)
+      await restore('redo')
+      expect(await tree()).toEqual(deleted)
+      await expect(apply(createCommand)).resolves.toMatchObject({ diagnostics: [] })
+    },
+  )
+
+  it.each(['before-delete', 'after-delete', 'external'] as const)(
+    'keeps definition deletion consistent after a storage failure: %s',
+    async (failure) => {
+      await apply({ type: 'game.upsertDialogue', dialogue: greeting })
+      const before = await tree()
+      let failed = false
+
+      const injected: ProjectWorkspace = {
+        list: (path) => workspace.list(path),
+        read: (path) => workspace.read(path),
+        create: (path, bytes) => workspace.create(path, bytes),
+        write: (path, bytes) => workspace.write(path, bytes),
+        removeCreated: async (path, bytes) => {
+          if (!failed) {
+            failed = true
+
+            if (failure === 'after-delete') await workspace.removeCreated(path, bytes)
+
+            if (failure === 'external') await workspace.write(path, Buffer.from('outside edit'))
+            throw new Error('Injected deletion failure')
+          }
+
+          await workspace.removeCreated(path, bytes)
+        },
+      }
+
+      const failing = new EditorProjectService(
+        new WorkspaceProjectRepository(injected),
+        new EditorCoordinator(),
+      )
+
+      const saving = failing.apply({
+        path: 'game',
+        expectedRevision: (await failing.inspect('game')).revision,
+        command: { type: 'game.removeDialogue', dialogueId: 'guide' },
+      })
+
+      if (failure === 'after-delete') {
+        await expect(saving).resolves.toMatchObject({
+          view: { diagnostics: [], game: { dialogues: [] } },
+        })
+        await expect(workspace.read('game/dialogues/guide.json')).rejects.toHaveProperty(
+          'code',
+          'ENOENT',
+        )
+      } else if (failure === 'external') {
+        await expect(saving).rejects.toMatchObject({ code: 'definition_publication_failed' })
+        expect(Buffer.from(await workspace.read('game/dialogues/guide.json')).toString()).toBe(
+          'outside edit',
+        )
+      } else {
+        await expect(saving).rejects.toThrow('Injected deletion failure')
+        expect(await tree()).toEqual(before)
+      }
+    },
+  )
 
   it('copies exact saved component data without saving and pastes a snapshot after its source is removed, with undo and redo', async () => {
     const file = 'game/scenes/adventure.json'

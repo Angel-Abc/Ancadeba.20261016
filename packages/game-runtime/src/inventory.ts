@@ -117,6 +117,37 @@ export class GameInventory implements IGameInventory {
     }
   }
 
+  /** Restore only into a fresh playthrough, before equipment policies or reservations exist. */
+  restore(items: InventoryDefinition['items']): void {
+    if (this.equipmentPolicy || this.reservations.size || this.disposed)
+      throw new Error('Inventory restore requires a fresh inventory')
+    const candidate = inventorySchema.parse({ ...this.definition, items })
+
+    const staged = new Map(
+      Object.entries(candidate.items).map(([id, item]) => [
+        id,
+        Object.freeze({
+          ...item,
+          id,
+          placement: Object.freeze({ ...item.placement }),
+          colors: Object.freeze({ ...item.colors }),
+        }),
+      ]),
+    )
+
+    for (const [id, item] of staged) {
+      if (
+        !Object.hasOwn(candidate.itemTypes, item.itemType) ||
+        inventoryPlacementIssue(candidate, staged, id, item.placement)
+      )
+        throw new Error('Invalid saved inventory')
+    }
+
+    this.items.clear()
+
+    for (const [id, item] of staged) this.items.set(id, item)
+  }
+
   get snapshot(): readonly InventoryItemSnapshot[] {
     return Object.freeze([...this.items.values()])
   }

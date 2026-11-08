@@ -5,6 +5,7 @@ import {
 } from '@ancadeba/schemas'
 import type { ITaskScheduler } from '@ancadeba/utilities'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
+import { GameSaveError } from './gameSaves.js'
 
 export type MapDirection = Extract<
   NonNullable<ButtonComponentDefinition['action']>,
@@ -38,6 +39,24 @@ export class GameMapMovement implements IGameMapMovement {
   private readonly listeners = new Set<() => void>()
   private readonly unsubscribe: () => void
   private disposed = false
+
+  save(): Record<string, MapPosition> {
+    if ([...this.maps.values()].some((state) => state.pending)) throw new GameSaveError('busy')
+
+    return Object.fromEntries([...this.maps].map(([id, state]) => [id, { ...state.position }]))
+  }
+
+  restore(scene: SceneInstance, positions: Readonly<Record<string, MapPosition>>): void {
+    for (const [id, position] of Object.entries(positions)) {
+      const resolved = this.resolve(scene, id)
+
+      if (!resolved || getMapMovementCostMs(resolved.component.map, position) === undefined)
+        throw new Error('Invalid saved map position')
+      resolved.state.position = Object.freeze({ ...position })
+    }
+
+    this.notify()
+  }
 
   constructor(
     private readonly lifecycle: IGameLifecycle,

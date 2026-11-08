@@ -194,6 +194,36 @@ function panel(
 }
 
 describe('project panel form reconciliation', () => {
+  it('refreshes preview for saved revisions and clean external changes without restarting for unchanged reads or drafts', async () => {
+    const { control, setLatest, submitProject, onProjectChange, window, dispose, setLanguage } =
+      panel()
+
+    try {
+      await submitProject('basic')
+      await vi.waitFor(() => expect(onProjectChange).toHaveBeenCalledTimes(1))
+      setLatest(project('saved'))
+      control('editor-title').value = 'Changed'
+      control('editor-metadata').fire('input')
+      control('editor-metadata').fire('submit')
+      await vi.waitFor(() => expect(onProjectChange).toHaveBeenCalledTimes(2))
+      control('editor-reload').fire('click')
+      await vi.waitFor(() => expect(control('editor-reload').disabled).toBe(false))
+      setLanguage('nl')
+      expect(onProjectChange).toHaveBeenCalledTimes(2)
+      setLatest(project('external'))
+      window.dispatchEvent(new Event('focus'))
+      await vi.waitFor(() => expect(onProjectChange).toHaveBeenCalledTimes(3))
+      control('scene-title').value = 'Draft'
+      control('scene-metadata').fire('input')
+      setLatest(project('newer'))
+      window.dispatchEvent(new Event('focus'))
+      await vi.waitFor(() => expect(control('editor-status').textContent).toContain('gewijzigd'))
+      expect(onProjectChange).toHaveBeenCalledTimes(3)
+    } finally {
+      dispose()
+    }
+  })
+
   it('undoes and redoes saved changes, refreshes fields and preview, and keeps toolbar availability in sync', async () => {
     const { control, setLatest, submitProject, historyRequests, onProjectChange, dispose } = panel()
 
@@ -426,7 +456,7 @@ describe('project panel form reconciliation', () => {
         expect(confirmDiscardDrafts).toHaveBeenCalledTimes(2)
         expect(control('scene-title').value).toBe('shop')
         expect(control('editor-scenes').disabled).toBe(false)
-        expect(onProjectChange.mock.calls).toEqual(path ? [[''], [path]] : [['']])
+        expect(onProjectChange.mock.calls).toEqual([[''], [path]])
       } finally {
         dispose()
       }

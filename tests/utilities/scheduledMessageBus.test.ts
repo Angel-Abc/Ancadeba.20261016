@@ -29,6 +29,23 @@ function setup(
 }
 
 describe('scheduled message bus', () => {
+  it('settles followup batches for checkpoints, bounds infinite publications, and rejects reentrant checkpoints', () => {
+    const { bus } = setup()
+    const calls: number[] = []
+    const nested: boolean[] = []
+    bus.subscribe('work', (value) => {
+      calls.push(value)
+      nested.push(bus.settle())
+
+      if (value < 5) bus.publish('work', value + 1)
+    })
+    bus.publish('work', 1)
+    expect(bus.settle(2)).toBe(false)
+    expect(calls).toEqual([1, 2])
+    expect(bus.settle()).toBe(true)
+    expect(calls).toEqual([1, 2, 3, 4, 5])
+    expect(nested).toEqual([false, false, false, false, false])
+  })
   it('defers delivery, coalesces publications, and stays idle after one snapshot batch', () => {
     const { bus, tasks } = setup()
     const calls: (number | string)[] = []

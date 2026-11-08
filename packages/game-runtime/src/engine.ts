@@ -18,10 +18,13 @@ import { AuthoredPlaythrough } from './authoredRules.js'
 import type { ITradeState } from './tradeState.js'
 import type { IStoryStateTransactions } from './storyState.js'
 import type { IStateTransactions } from './stateTransactions.js'
+import type { GameSaves, GameSaveStore, IGameSaves } from './gameSaves.js'
+import { bindAuthoredGameSaves } from './authoredGameSaves.js'
 
 export type EngineState = 'stopped' | 'starting' | 'running'
 
 export interface EngineRuntimeServices {
+  readonly saveStore?: GameSaveStore
   readonly createStoryStateTransactions?: (
     game: GameInstance,
   ) => IStoryStateTransactions | undefined
@@ -35,6 +38,7 @@ export interface EngineRuntimeServices {
 }
 
 export interface EngineHostSession {
+  readonly saves?: IGameSaves | undefined
   readonly lifecycle: IGameLifecycle
   readonly actions: IGameActions | undefined
   readonly input: IGameInput | undefined
@@ -48,6 +52,7 @@ export interface IEngineHost {
 }
 
 export interface IEngine {
+  readonly saves?: IGameSaves | undefined
   readonly lifecycle: IGameLifecycle | undefined
   readonly actions: IGameActions | undefined
   readonly state: EngineState
@@ -62,6 +67,8 @@ export interface IEngine {
 }
 
 interface EngineSession {
+  saves?: GameSaves
+  releaseSaves?: () => void
   cancelled: Promise<undefined>
   cancel(): void
   messages: ScheduledMessageBus<EngineMessages>
@@ -78,6 +85,10 @@ export class Engine implements IEngine {
   private session: EngineSession | undefined
   private latestMessages: IMessageBus<EngineMessages> | undefined
   private startup: Promise<void> = Promise.resolve()
+
+  get saves(): IGameSaves | undefined {
+    return this.session?.saves
+  }
 
   constructor(
     private readonly loader: IGameLoader,
@@ -164,6 +175,8 @@ export class Engine implements IEngine {
 
     this.session = undefined
     session.cancel()
+    session.releaseSaves?.()
+    session.saves?.dispose()
     session.input?.dispose()
     session.timers?.dispose()
 
@@ -267,6 +280,31 @@ export class Engine implements IEngine {
         return runtime
       })
 
+      if (
+        this.runtime.saveStore &&
+        !this.runtime.createGameLifecycle &&
+        !this.runtime.createGameRules &&
+        !this.runtime.createTradeState &&
+        !this.runtime.createStateTransactions &&
+        !this.runtime.createStoryStateTransactions
+      ) {
+        const persistence = bindAuthoredGameSaves({
+          game,
+          lifecycle,
+          store: this.runtime.saveStore,
+          isRunning: () => this.session === session && session.game !== undefined,
+          settleMessages: () => session.messages.settle(),
+          runtimeFor: (instance) => session.gameRuntimes.get(instance),
+          playthroughFor: (instance) =>
+            instance.state instanceof Map ? playthroughs.get(instance.state) : undefined,
+          input: () => session.input,
+          onObserverError: (error) => this.logger.error('GameSaves', 'Save observer failed', error),
+        })
+
+        session.saves = persistence.saves
+        session.releaseSaves = persistence.dispose
+      }
+
       if (game.input) {
         // A release/cancellation belongs to the same context as its original press.
         const inputOwners = new Map<string, GameActionRuntime | undefined>()
@@ -310,6 +348,7 @@ export class Engine implements IEngine {
       }
 
       const cleanup = this.host.mount(game, {
+        ...(session.saves ? { saves: session.saves } : {}),
         lifecycle,
         get actions() {
           return lifecycle.currentGame?.actions
@@ -327,6 +366,7 @@ export class Engine implements IEngine {
 
       session.cleanup = cleanup
       session.game = game
+      session.saves?.notify()
       const currentGame = lifecycle.currentGame
 
       if (currentGame) session.gameRuntimes.get(currentGame)?.start()

@@ -40,6 +40,7 @@ import {
   languageSelectComponentSchema,
   mapViewComponentSchema,
   gridPlacementSchema,
+  mapDefinitionSchema,
 } from '@ancadeba/schemas'
 
 /** Scene components without a dedicated authoring command are saved whole. */
@@ -284,6 +285,13 @@ export const commandSchema = z.discriminatedUnion('type', [
     component: componentSourceSchema,
     placement: gridPlacementSchema.optional(),
   }),
+  z.strictObject({
+    type: z.literal('game.upsertMap'),
+    mapId: gameIdSchema,
+    map: mapDefinitionSchema,
+    createOnly: z.boolean().optional(),
+  }),
+  z.strictObject({ type: z.literal('game.removeMap'), mapId: gameIdSchema }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -318,6 +326,26 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.upsertMap',
+      example: {
+        type: 'game.upsertMap',
+        mapId: 'garden',
+        createOnly: true,
+        map: {
+          'schema-version': '1.0.0',
+          type: 'square-grid',
+          width: 2,
+          height: 2,
+          terrain: { grass: { color: '#608c4f' } },
+          tiles: [
+            ['grass', 'grass'],
+            ['grass', 'grass'],
+          ],
+        },
+      },
+    },
+    { type: 'game.removeMap', example: { type: 'game.removeMap', mapId: 'garden' } },
     {
       type: 'scene.pasteComponent',
       example: {

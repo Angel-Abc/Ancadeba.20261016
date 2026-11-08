@@ -6,13 +6,17 @@ function same(a: Uint8Array | undefined, b: Uint8Array | undefined): boolean {
   return a === undefined ? b === undefined : b !== undefined && Buffer.from(a).equals(b)
 }
 
-/** Publishes scene references and the manifest before removing old files, with guarded rollback. */
-export async function saveSceneChanges(
+/** Publishes references and the manifest before removing old files, with guarded rollback. */
+export async function saveProjectStructureChanges(
   workspace: ProjectWorkspace,
   folder: string,
   change: CommandResult,
 ): Promise<void> {
   const path = (file: string) => (folder ? `${folder}/${file}` : file)
+
+  const kind = change.changedFiles.some((file) => file.startsWith('scenes/'))
+    ? 'scene'
+    : 'definition'
 
   const read = async (file: string) => {
     try {
@@ -29,10 +33,10 @@ export async function saveSceneChanges(
     const before = await read(file)
 
     if (change.createdFiles?.includes(file) && before !== undefined)
-      throw new EditorError(409, 'scene_exists', 'A file already exists for that scene ID')
+      throw new EditorError(409, `${kind}_exists`, `A file already exists for that ${kind} ID`)
 
     if (change.removedFiles?.includes(file) && before === undefined)
-      throw new EditorError(404, 'scene_not_found', 'Scene file no longer exists')
+      throw new EditorError(404, `${kind}_not_found`, `The ${kind} file no longer exists`)
     records.push({
       file,
       before,
@@ -68,7 +72,7 @@ export async function saveSceneChanges(
       )
         throw new Error('Files changed outside this save')
 
-      // Restore originals and their references before removing any newly published scene.
+      // Restore originals and their references before removing any newly published file.
       const originals = records
         .filter(({ before }) => before !== undefined)
         .sort((a, b) => Number(a.file === 'game.json') - Number(b.file === 'game.json'))
@@ -91,8 +95,8 @@ export async function saveSceneChanges(
     } catch {
       throw new EditorError(
         500,
-        'scene_publication_failed',
-        'Could not confirm scene rollback. Reload and inspect the project before retrying.',
+        `${kind}_publication_failed`,
+        `Could not confirm ${kind} rollback. Reload and inspect the project before retrying.`,
       )
     }
 

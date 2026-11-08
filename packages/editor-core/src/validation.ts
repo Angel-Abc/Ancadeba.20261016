@@ -36,6 +36,7 @@ import {
   assertGraphicReference,
   mapDefinitionSchema,
   resolveMapView,
+  mapVisualIssues,
   type MapDefinition,
   inventorySchema,
   validateInventorySources,
@@ -156,6 +157,10 @@ export function validateProject(
   const assets = game.data.assets
     ? check(assetCatalogFile(game.data.assets), assetCatalogSchema)
     : undefined
+
+  for (const [id, map] of maps)
+    for (const issue of mapVisualIssues(map, assets?.data))
+      diagnostics.push({ code: 'invalid_map_visual', file: `maps/${id}.json`, ...issue })
 
   const inventorySources = projectInventorySources(
     game.data.inventory,

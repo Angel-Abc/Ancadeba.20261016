@@ -26,7 +26,10 @@ export function editLeveling(
       leveling: game.leveling.filter((id) => id !== command.profileId),
     }
 
-    return ['game.json']
+    const file = levelingFile(command.profileId)
+    delete documents[file]
+
+    return ['game.json', file]
   }
 
   if (command.type === 'game.upsertLeveling') {

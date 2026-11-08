@@ -77,7 +77,7 @@ export const requestActionSchema = z.object({
   enabledWhen: gameBindingSchema.optional(),
 })
 
-export const buttonActionSchema = z.discriminatedUnion('type', [
+const gameplayButtonActions = [
   z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
   z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
   requestActionSchema,
@@ -86,6 +86,12 @@ export const buttonActionSchema = z.discriminatedUnion('type', [
     mapView: gameIdSchema,
     direction: z.enum(['north', 'east', 'south', 'west']),
   }),
+] as const
+
+export const buttonActionSchema = z.discriminatedUnion('type', [
+  ...gameplayButtonActions,
+  z.object({ type: z.literal('save-game') }),
+  z.object({ type: z.literal('load-game') }),
 ])
 
 export const buttonComponentSchema = z
@@ -108,7 +114,7 @@ export const actionBarSlotSchema = z
     label: z.string().trim().default(''),
     labelKey: translationKeySchema.optional(),
     action: z.discriminatedUnion('type', [
-      ...buttonActionSchema.options,
+      ...gameplayButtonActions,
       z.object({
         type: z.literal('dialogue-action'),
         nearby: gameIdSchema,

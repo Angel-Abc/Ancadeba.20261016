@@ -17,7 +17,7 @@ export function bindProjectTree(
   sections: readonly ProjectTreeSection[] = projectTreeSections,
 ) {
   const document = container.ownerDocument
-  const expanded = new Set(['scenes', 'assets'])
+  const expanded = new Set(['scenes', 'assets', 'maps'])
   const abort = new AbortController()
   let nodes: ProjectTreeNode[] = []
   let selected = 'game'

@@ -39,7 +39,10 @@ export function editCombatLibrary(
       combatLibraries: game.combatLibraries.filter((id) => id !== command.libraryId),
     }
 
-    return ['game.json']
+    const file = combatLibraryFile(command.libraryId)
+    delete documents[file]
+
+    return ['game.json', file]
   }
 
   if (command.type === 'game.upsertCombatLibrary') {

@@ -15,6 +15,8 @@ import {
 import { isRewardOperation } from '@ancadeba/schemas'
 import type { GameCombatRewards } from './combatRewards.js'
 import type { CombatDefinition, CombatCommand, CombatBonuses } from '@ancadeba/schemas'
+import type { GameData } from './gameData.js'
+import { savedCombatSchema, type GameSave } from '@ancadeba/schemas'
 import type { IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { IGameBindings } from './gameBindings.js'
 import type { IMessageBus } from '@ancadeba/utilities'
@@ -129,6 +131,93 @@ export class GameCombat implements IGameCombat {
   private readonly cleanups: (() => void)[]
   private disposed = false
   private publishing = false
+
+  save(): GameSave['combat'] {
+    return Object.fromEntries(
+      [...this.sessions].map(([id, session]) => [
+        id,
+        savedCombatSchema.parse({
+          statuses: session.statuses,
+          cooldowns: session.cooldowns,
+          started: session.started ?? false,
+          round: session.round,
+          seed: session.seed,
+          guard: session.guard,
+          plan: session.plan,
+          enemies: session.enemies,
+          escape: session.escape,
+          outcome: session.outcome,
+          target: session.target?.id,
+          log: session.log,
+        }),
+      ]),
+    )
+  }
+
+  restore(save: GameSave['combat'], data: GameData): void {
+    for (const [id, saved] of Object.entries(save)) {
+      const definition = data.combat?.get(id)
+
+      if (!definition || saved.log.length > definition.logCapacity)
+        throw new Error('Unknown saved encounter')
+      const actors = new Set([definition.player, ...definition.enemies].map((actor) => actor.id))
+
+      for (const entry of [
+        ...saved.plan,
+        ...Object.values(saved.enemies).flatMap((enemy) => enemy.moves),
+      ])
+        if (!definition.moves[entry.move] || !actors.has(entry.target))
+          throw new Error('Invalid saved combat plan')
+
+      for (const [actor, statuses] of Object.entries(saved.statuses))
+        if (
+          !actors.has(actor) ||
+          statuses.some((status) => !definition.statuses?.[status.id] || !actors.has(status.source))
+        )
+          throw new Error('Invalid saved combat status')
+
+      for (const [actor, moves] of Object.entries(saved.cooldowns))
+        if (!actors.has(actor) || Object.keys(moves).some((move) => !definition.moves[move]))
+          throw new Error('Invalid saved cooldown')
+
+      if (saved.target && !definition.enemies.some((enemy) => enemy.id === saved.target))
+        throw new Error('Invalid saved target')
+
+      const session: Session = {
+        ...saved,
+        captures: new Map(),
+        itemReservation: { encounter: id },
+        itemVersions: new Map(),
+        reservations: new Map(),
+        token: {},
+        outcome: saved.outcome,
+        target: saved.target ? { id: saved.target } : undefined,
+        issue: undefined,
+      }
+
+      this.sessions.set(id, session)
+
+      if (saved.started && !saved.outcome && this.stats && !this.stats.acquire(definition))
+        throw new Error('Invalid saved equipment lock')
+
+      for (const entry of session.plan) {
+        if (entry.item) {
+          const item = this.inventory?.snapshot.find((item) => item.id === entry.item)
+
+          if (
+            !item ||
+            item.itemType !== entry.itemType ||
+            !this.inventory?.reserveItem ||
+            this.inventory.reserveItem(entry.item, session.itemReservation)
+          )
+            throw new Error('Invalid saved item reservation')
+          session.itemVersions.set(entry.item, {})
+        }
+
+        if (definition.moves[entry.move]?.cooldown) session.reservations.set(entry.move, {})
+      }
+    }
+  }
   constructor(
     private readonly lifecycle: IGameLifecycle,
     private readonly bindings: IGameBindings,

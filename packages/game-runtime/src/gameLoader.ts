@@ -29,6 +29,7 @@ import {
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
 import { GameLocalization, type GameLanguagePreferences } from './gameLocalization.js'
+import { saveCompatibility } from './saveCompatibility.js'
 
 interface LocalizedGameData extends GameData {
   readonly language: string
@@ -138,8 +139,25 @@ export class GameLoader implements IGameLoader {
       ),
     )
 
+    const saveSource = JSON.stringify([
+      definition,
+      scenes,
+      [...maps],
+      input,
+      assets,
+      [...inventory],
+      [...rules],
+      [...combat],
+      [...leveling],
+      [...libraries],
+      [...dialogues],
+      [...quests],
+      styling,
+    ])
+
     if (!definition.languages)
       return {
+        saveCompatibility: saveCompatibility(saveSource),
         ...assembleGameData(
           definition,
           new Map(scenes),
@@ -216,6 +234,7 @@ export class GameLoader implements IGameLoader {
 
     return {
       ...variants.get(language)!,
+      saveCompatibility: saveCompatibility(saveSource + JSON.stringify([...catalogs])),
       localization,
       get language() {
         return localization.current.language

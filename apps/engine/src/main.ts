@@ -1,7 +1,11 @@
 import './styling/main.css'
 import '@ancadeba/ui-components/game.css'
 import type { IEngine } from '@ancadeba/game-runtime'
-import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
+import {
+  createBrowserTiming,
+  BrowserGameLanguagePreferences,
+  BrowserGameSaveStore,
+} from '@ancadeba/ui-components'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import { loadRuntimeConfig } from './config'
 import { DomEngineHost } from './engineHost'
@@ -44,7 +48,13 @@ try {
       applicationUrl,
       fetch,
       new DomEngineHost(app, new HttpGameResources(config.gameUrl, applicationUrl, fetch)),
-      createBrowserTiming(window),
+      {
+        ...createBrowserTiming(window),
+        saveStore: new BrowserGameSaveStore(
+          () => window.localStorage,
+          applicationUrl + config.gameUrl,
+        ),
+      },
       preferredLanguages,
       new BrowserGameLanguagePreferences(() => window.localStorage),
     ).build()

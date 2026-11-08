@@ -143,7 +143,9 @@ export function editStory(
       [key]: game[key]?.filter((entry) => entry !== id),
     }
 
-    return ['game.json']
+    delete documents[file]
+
+    return ['game.json', file]
   }
 
   if (!game[key]?.includes(id) && Object.hasOwn(documents, file))

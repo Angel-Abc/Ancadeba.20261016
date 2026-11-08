@@ -502,13 +502,15 @@ function componentFields(
   const action = draft.action
 
   const defaults = (type: string): ButtonAction | undefined =>
-    type === 'new-game' || type === 'enter-scene'
-      ? { type, scene: (type === 'new-game' ? gameScenes : scenes)[0] ?? '' }
-      : type === 'request-action'
-        ? { type, action: actions[0] ?? '' }
-        : type === 'move-map'
-          ? { type, mapView: mapViews[0] ?? '', direction: 'north' }
-          : undefined
+    type === 'save-game' || type === 'load-game'
+      ? { type }
+      : type === 'new-game' || type === 'enter-scene'
+        ? { type, scene: (type === 'new-game' ? gameScenes : scenes)[0] ?? '' }
+        : type === 'request-action'
+          ? { type, action: actions[0] ?? '' }
+          : type === 'move-map'
+            ? { type, mapView: mapViews[0] ?? '', direction: 'north' }
+            : undefined
 
   return [
     ...label,
@@ -521,6 +523,8 @@ function componentFields(
         ['enter-scene', 'Go to a scene'],
         ['request-action', 'Run a rule action'],
         ['move-map', 'Move on a map'],
+        ['save-game', 'Save progress'],
+        ['load-game', 'Load saved progress'],
       ],
       (value) => {
         draft.action = defaults(value)

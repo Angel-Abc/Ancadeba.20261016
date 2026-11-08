@@ -1,6 +1,8 @@
 import type { MapViewComponentData, MapDirection } from '@ancadeba/game-runtime'
 import { getMapMovementCostMs, type MapPosition } from '@ancadeba/schemas'
 import { createBrowserTiming } from './browserTiming.js'
+import { mapTileImages } from './mapTileAppearance.js'
+import { applyMapCellAppearance } from './mapCellAppearance.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -28,7 +30,7 @@ function clampCoordinate(value: number, maximum: number): number {
 export class MapViewComponentRenderer implements IComponentRenderer<MapViewComponentData> {
   render(
     component: MapViewComponentData,
-    { document, scene }: ComponentRenderContext,
+    { document, scene, assets, graphics }: ComponentRenderContext,
   ): RenderedComponent {
     const { map, viewport } = component
     const movement = scene?.type === 'game' ? scene.game.mapMovement : undefined
@@ -52,12 +54,29 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     grid.setAttribute('aria-hidden', 'true')
     grid.style.setProperty('--ge-map-columns', String(map.width))
     grid.style.setProperty('--ge-map-rows', String(map.height))
+    const cells: { element: HTMLElement; x: number; y: number }[] = []
 
-    for (const row of map.tiles) {
-      for (const id of row) {
+    const images = mapTileImages(
+      map,
+      assets,
+      graphics,
+      () => {
+        for (const cell of cells)
+          applyMapCellAppearance(cell.element, map, cell.x, cell.y, assets, images.url)
+      },
+      (message) => {
+        root.dataset.mapDiagnostics = message
+      },
+    )
+
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const id = map.tiles[y]![x]!
         const tile = document.createElement('div')
         tile.className = 'ancadeba-map-tile'
-        tile.style.setProperty('--ge-map-tile-color', map.terrain[id]!.color)
+        tile.style.setProperty('--ge-map-tile-color', map.terrain[id]!.color ?? 'transparent')
+        applyMapCellAppearance(tile, map, x, y, assets, images.url)
+        cells.push({ element: tile, x, y })
         grid.append(tile)
       }
     }
@@ -167,6 +186,7 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     return {
       element: root,
       dispose() {
+        images.dispose()
         cancelStep?.()
         unsubscribeMovement?.()
         root.removeEventListener('keydown', onKeyDown)

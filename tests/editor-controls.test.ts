@@ -1067,7 +1067,7 @@ describe('adding scene components', () => {
   it('explains missing map and language resources and cancels without writing', () => {
     const { editor, root, edit, click, commands, cancelled } = addingComponentPanel(false)
     edit('Component type', 'map-view')
-    expect(root.textContent).toContain('No map definitions are available')
+    expect(root.textContent).toContain('Create one in the Maps workspace')
     expect(
       root
         .all()

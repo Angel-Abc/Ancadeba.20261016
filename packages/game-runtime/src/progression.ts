@@ -56,6 +56,12 @@ export class GameProgression {
     return this.snapshot
   }
 
+  restore(snapshot: ProgressionSnapshot): void {
+    if (this.started || this.disposed)
+      throw new Error('Progression restore requires a fresh playthrough')
+    this.snapshot = Object.freeze({ ...snapshot })
+  }
+
   start(): void {
     if (this.disposed || this.started) return
     this.started = true

@@ -18,6 +18,14 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     let active = true
 
     const update = () => {
+      if (action?.type === 'save-game' || action?.type === 'load-game') {
+        element.disabled = !(action.type === 'save-game'
+          ? context.saves?.canSave
+          : context.saves?.canLoad)
+
+        return
+      }
+
       if (action?.type === 'move-map') {
         element.disabled = !scene || !movement?.canMove(scene, action.mapView, action.direction)
 
@@ -39,6 +47,19 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     const onClick = () => {
       if (!active || element.disabled || !action) return
 
+      if (action.type === 'save-game') {
+        context.saves?.save()
+
+        return
+      }
+
+      if (action.type === 'load-game') {
+        if (context.onLoadGame) context.onLoadGame()
+        else context.saves?.load()
+
+        return
+      }
+
       if (action.type === 'move-map') {
         if (scene) movement?.move(scene, action.mapView, action.direction)
 
@@ -59,6 +80,8 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
     const unsubscribeMovement =
       action?.type === 'move-map' ? movement?.subscribeChanges(update) : undefined
 
+    const unsubscribeSaves = context.saves?.subscribe(update)
+
     if (action) element.addEventListener('click', onClick)
 
     return {
@@ -68,6 +91,7 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
         active = false
         unsubscribe?.()
         unsubscribeMovement?.()
+        unsubscribeSaves?.()
         element.removeEventListener('click', onClick)
         element.remove()
       },

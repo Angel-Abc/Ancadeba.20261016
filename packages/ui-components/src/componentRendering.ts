@@ -6,6 +6,7 @@ import type {
   TextResolutionOptions,
   IGameLocalization,
   IGameInventory,
+  IGameSaves,
   SceneInstance,
 } from '@ancadeba/game-runtime'
 import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
@@ -18,6 +19,8 @@ type SceneNavigation = Extract<
 >
 
 export interface ComponentRendererOptions {
+  readonly saves?: IGameSaves | undefined
+  readonly onLoadGame?: (() => void) | undefined
   readonly input?: KeyboardInputSink | undefined
   readonly assets?: AssetCatalog | undefined
   readonly graphics?: IGraphicResources | undefined

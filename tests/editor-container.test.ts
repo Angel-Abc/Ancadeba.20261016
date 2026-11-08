@@ -18,6 +18,7 @@ function gameDefinition(title: string) {
 
 function gameData(title: string) {
   return {
+    saveCompatibility: expect.any(String),
     id: 'test-game',
     title,
     description: 'Test game',

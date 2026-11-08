@@ -1,7 +1,8 @@
 # Shared editor layer v1
 
-The visual editor and external agents edit an existing game through the same
-revision-checked HTTP API. The editor core depends on the existing schemas and
+The visual editor creates starter games and edits projects through a
+revision-checked HTTP API. External agents use the same API for supported edits;
+the MCP adapter exposes a subset of its commands. The editor core depends on the schemas and
 Zod. It does not import the engine runtime, browser APIs, or Node APIs.
 
 ## Packages and services
@@ -20,12 +21,13 @@ Zod. It does not import the engine runtime, browser APIs, or Node APIs.
 
 The editable project retains source definitions, including schema versions and
 extension properties. Runtime GameData and mutable playthrough state remain
-separate. The engine, game schemas, preview controller, and export controller are
-unchanged.
+separate. Preview and export load saved source files through the game data pipeline.
 
 ## Supported operations
 
 Each request contains one command. Metadata commands supply all listed fields.
+The table below highlights core operations; `GET /api/editor/capabilities` supplies
+the complete command list, schemas, and examples, including gameplay authoring.
 
 | Command                    | Fields                                                                               |
 | -------------------------- | ------------------------------------------------------------------------------------ |
@@ -48,8 +50,8 @@ Each request contains one command. Metadata commands supply all listed fields.
 
 Scene creation updates both the scene document and the manifest reference.
 Game IDs cannot be changed. Scene IDs support revision-checked rename commands.
-Scenes support text, buttons, language selectors,
-and graphics; the focused graphic commands edit only graphic components.
+Scenes support the runtime's component types, including inventory, maps, combat,
+dialogue interactions, and quests; the focused graphic commands edit only graphic components.
 Inspection includes the referenced input definition as `input`. Input edits update
 that file. Creating the first input configuration publishes `input/<inputId>.json`
 before adding its manifest reference, with the same guarded rollback used for
@@ -137,8 +139,9 @@ project; repair invalid source files externally before retrying.
 
 ## Revisions and persistence
 
-Revisions hash the exact bytes of the manifest, referenced scenes, and referenced
-input file. They survive server restarts and detect direct file edits, including
+Revisions hash the exact bytes of the manifest and its referenced scene, map, input,
+inventory, rule, story, combat, leveling, language, and stylesheet files.
+They survive server restarts and detect direct file edits, including
 formatting changes. Unreferenced files do not affect the revision. Asset catalogues
 and all registered image source bytes do affect it. Inspection validates source
 bounds, format, SVG profile, and color-slot declarations. Replacing or unregistering
@@ -165,6 +168,13 @@ retained and the error asks the caller to reload before retrying. A process cras
 before manifest publication can also leave an orphan. The manifest must never
 reference a partially created scene. This is not a general multi-file transaction
 or crash-recovery journal.
+
+Removing an unused dialogue, quest, combat encounter, combat library, or leveling
+profile removes both its manifest reference and its definition file. The manifest
+is published before file removal, and failures use guarded rollback without
+overwriting outside edits. Undo restores the exact original bytes and references;
+redo removes them again. Once removed, the ID can be used for a new definition.
+Referenced definitions must have their incoming links removed before deletion.
 
 ## Visual editor
 
@@ -209,8 +219,9 @@ Saving a different change after undo clears the redo branch. Failed and unchange
 commands do not create steps. New-project creation itself is not undoable.
 
 Use Ctrl/Cmd+Z for undo, Ctrl/Cmd+Shift+Z or Ctrl+Y for redo outside text fields.
-Inside editable fields those keys retain normal text-editing behavior. Save or
-discard all pending drafts before using project history. History changes refresh
+Inside editable fields those keys retain normal text-editing behavior. While a
+map has local edit history, these controls and shortcuts undo or redo its unsaved
+edits. Save or discard all pending drafts before using saved project history. History changes refresh
 the explorer, editing fields, and preview; if the selected entry disappears, the
 editor selects an available scene.
 
@@ -333,8 +344,8 @@ and alignment. Buttons support scene navigation, starting a new game, rule actio
 and map movement. New-game targets list only game scenes. A button without an action
 is disabled during play. Map views choose existing map definitions from the game
 manifest and configure their visible area, interactivity, and optional player
-marker with zero-based coordinates. Add map files and manifest references outside
-the editor when none are registered. Invalid view dimensions and blocked or
+marker with zero-based coordinates. Create map definitions in the **Maps**
+workspace before selecting them here. Invalid view dimensions and blocked or
 out-of-bounds player spawns are rejected. Language selectors use the manifest's
 configured languages and catalogs; they remain disabled in play until those exist.
 
@@ -355,6 +366,166 @@ Save pending scene edits before selecting a different scene, and asset/graphic
 edits before selecting another asset/graphic target. Blocked navigation preserves
 the current selection and form entries and explains which action is needed.
 Unrelated panels can be visited without discarding drafts.
+
+### Maps and terrain
+
+Use the **Edit** or **Split** layout and choose **Maps** in the section rail or
+explorer. Choose **New map**, enter a unique map ID, and set its width and height
+in tiles. **Apply size** preserves overlapping tiles and fills new cells with the
+selected terrain. Reducing either dimension asks before cropping the draft.
+Maps can contain up to 65,536 tiles.
+Crop, fill, and delete confirmations open inside the editor. Choose **Cancel**
+or press Escape to leave the map unchanged; **Confirm** applies the action.
+
+In **Terrain palette**, select the paint terrain or add one using **New terrain
+ID** and **Add terrain**. Set its color, walkability, and movement time in
+milliseconds. Removing a terrain replaces its painted cells with the selected
+replacement terrain; the last terrain cannot be removed.
+
+For image tiles, import a PNG, WebP, JPEG, or SVG image in **Assets**, then return
+to **Maps**. In **Tilesets**, enter a **New tileset ID** and choose **Add tileset**.
+Select its **Tileset image** and set **Tile width (pixels)** and **Tile height
+(pixels)**. Margin is the border around the sheet; spacing is the gap between
+tiles. For a single image per tile, use the image's full width and height with
+zero margin and spacing. Use a transparent PNG, WebP, or SVG for overlays.
+
+Choose a paint terrain, then click an image in the tileset picker to assign it.
+The selected tile is outlined; the picker pages through large sheets. Keep **Use
+base color** enabled for an image over a color, or switch it off for image-only
+terrain. **Terrain tileset → Color only** removes the image and restores a base
+color. Paint, save, and undo/redo work the same for all three appearances. A
+tileset cannot be removed while a terrain still uses it. Missing images and
+out-of-bounds image selections are rejected when saving, including unused maps.
+
+Map files store reusable `tilesets` entries with `image` asset IDs, `tileWidth`,
+`tileHeight`, and optional `margin` and `spacing`. Terrain `tile` selections
+contain `tileset`, `column`, and `row` (zero-based in saved data). Terrain may
+have a `color`, a `tile`, or both. Transparent image pixels reveal the base color;
+image cropping and rendering are shared by the editor, preview, and exported game.
+
+Click or drag to paint tiles. Arrow keys move tile focus, and Enter or Space
+paints. Large maps show a movable window of up to 24 columns by 16 rows; use the
+row/column controls or arrow keys at the window edges to reach other tiles.
+Displayed coordinates start at 1. Stripes indicate blocked terrain and a dot
+marks a scene's player spawn. **Fill map with selected terrain** asks before
+replacing every tile in the draft.
+
+Use **Layers → Paint layer** to switch between **Ground** and independent object
+layers. Enter a **New layer ID** and choose **Add overlay layer**, then name it
+Trees, Buildings, or another useful group. Paint terrain or image tiles on that
+layer; empty cells reveal the ground and objects below. Turn off **Use base
+color** on transparent object terrain so the ground image remains visible.
+**Paint tool → Erase** removes only the selected layer's objects. Ground cannot
+be erased. **Fill selected layer** affects only that layer; **Clear layer** and
+**Remove layer** ask for confirmation. Removing an overlay keeps the ground.
+The visible map area stays in place when switching layers or paint terrain.
+
+The map canvas has **Zoom in**, **Zoom out**, and **Map zoom** (50–400%) controls.
+Zooming out shows more tiles; zooming in enlarges tiles for detail work. Use
+**Pan left/right/up/down** to move one tile, or the existing Previous/Next
+columns and rows buttons to move one visible page. **Pan map** enables dragging
+the view with the left mouse button; turn it off or press Escape to return to
+the selected editing tool. Dragging with the middle mouse button temporarily
+pans in any tool. Panning stops at the map edges and never paints or changes a
+selection. In Pan mode, arrow keys pan the view. With focus on a grid cell,
+**+ / −** changes zoom and **0** returns to 100%. **Ctrl/Cmd+wheel** zooms around
+the pointer; ordinary wheel scrolling remains available for the page.
+
+**Reset view** restores 100%, the top-left corner, and the editing tool. Zoom and
+position survive brush/layer changes, edit undo/redo, and saving in the current
+map, and reset on switching maps or reloading the browser. View controls do not
+create unsaved changes or edit-history steps and are not stored in map JSON.
+The visible grid stays bounded (up to 48 × 32 tiles at 50%) on large maps.
+
+The **Minimap** shows the entire current map with terrain colors, image tiles,
+visible overlay layers, and spawn markers. Its amber outline marks the main
+grid's visible area and follows zoom and pan. Click a location to center the
+view there at the current zoom; clicks near an edge stop at the map boundary.
+The overview includes unsaved painting, erasing and tile-group edits, and updates
+after undo/redo, resizing and layer visibility changes. Clicking it navigates
+without painting, pasting, changing the selection, or creating an undo step.
+
+With the minimap focused, arrow keys pan one tile, Shift+arrows moves one visible
+page, and Home/End visits the top-left/bottom-right corner. Enter returns focus
+to the main grid without painting. Click the **Minimap** heading to collapse or
+expand it. Narrow editor panes let the navigation controls scroll with the page
+so the overview does not cover the editing area.
+
+In **Tile tools**, choose **Paint tool → Select tiles** and drag a rectangular
+group on the active layer. Shift-click extends from the selection's first cell.
+For keyboard selection, focus the grid, press Enter to select a tile, and use
+Shift+arrow keys to extend the rectangle, including across the map's paged view.
+The selection outline and dimensions identify the exact cells being copied.
+
+Choose **Copy selection** (Ctrl/Cmd+C with grid focus), then click the top-left
+destination cell to paste. The preview follows the pointer or arrow-key focus;
+Enter pastes at the focused cell. Paste again to reuse a building several times,
+or choose **Paste tiles** / Ctrl/Cmd+V to return to paste mode later. Copies can
+be placed on another layer in the same map. **Skip empty clipboard cells → Yes**
+preserves objects beneath holes in a copied shape; choose No to replace those
+overlay cells with empty cells. Ground always skips empty clipboard cells.
+
+**Cut selection** (Ctrl/Cmd+X) prepares a move. Source tiles stay in place until
+the full group fits at a valid destination; source clearing and placement happen
+together, including when source and destination overlap. For ground selections,
+choose **Ground replacement for cut** to fill the cells left behind. Escape or
+**Cancel paste** cancels the pending move without removing the source. The
+captured group remains available as a copy. Changed or deleted cut sources and
+missing terrain definitions are rejected before any tiles are changed.
+
+Selection, clipboard, and preview controls do not save map changes themselves.
+Use **Undo map edit** and **Redo map edit** to revise the draft before saving.
+Each paint or erase drag is one step; each paste or move is one step, including
+both source clearing and placement. Fills, applied resizes, layer changes,
+terrain and tileset edits also participate. A continuous edit in a focused input
+is grouped until focus leaves it. Selections, copying, canceled moves and
+unchanged strokes do not create steps or clear redo. A new edit after undo
+clears redo. Undo/redo cancels a pending paste or cut preview while retaining
+the copied tiles for reuse.
+
+Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl+Y redoes outside text fields.
+The project toolbar uses the same draft history while the map is selected,
+including when only redo steps remain. Pending dimension inputs are applied
+with **Apply size** before they become a map history step; editable fields keep
+their native text undo. Draft history stays in this browser session for the
+current map, retains up to 100 steps with a 16 MiB change budget (always keeping
+the latest action), and survives failed saves, conflicts, language changes and
+unrelated saves. **Save map**, **Discard map draft**, switching maps, or reloading
+the browser clears it. After saving, shared project Undo/Redo restores the saved
+tile grids. Copies remain available through saves in the current editor
+session; switching maps or reloading the browser clears this internal clipboard.
+Text fields keep their normal copy/paste shortcuts.
+
+Layers are listed from bottom to top after Ground. **Move layer up** brings it
+above other object layers; **Move layer down** sends it behind them. The player
+marker appears above the map layers. **Layer visible → No** hides the layer in
+both the editor and game and excludes it from movement checks; show it before
+painting. **Layer affects movement → No** keeps a visible decoration passable.
+Otherwise, blocked terrain in any visible layer blocks movement, and the slowest
+terrain under a cell determines its movement time. Walkable objects cannot make
+blocked ground passable. Resizing preserves overlapping cells in every layer and
+adds empty overlay cells. When resizing from an overlay, new ground cells use the
+existing top-left ground tile. Save, reload, Undo, and Redo include all layers.
+
+Saved maps retain their original `tiles` grid as Ground. Optional `layers` store
+up to 32 overlays in draw order, each with a unique `id`, optional `name`,
+`visible` and `collision` flags, and a matching grid of terrain IDs or `null`
+for empty cells. Existing single-layer maps need no conversion.
+
+Choose **Create map** or **Save map** to persist the draft. Pending dimensions are
+applied during saving too. Save or discard a draft before switching maps or
+leaving this workspace. Conflicts and validation errors preserve the draft.
+Saved changes support the shared **Undo** and **Redo** controls. The editor
+rejects changes that invalidate a scene's map viewport or player spawn.
+**Delete map** removes an unused map; maps still referenced by scenes must first
+be removed from those scenes. To display a map, add a map-view component to a scene
+and select the saved map in its settings.
+
+The revision-checked commands are `game.upsertMap` (`mapId`, `map`, optional
+`createOnly`) and `game.removeMap` (`mapId`). Creation reserves a new
+`maps/<id>.json` file and updates the manifest through the guarded multi-file
+persistence path. Deletion and history use that same path. Existing source
+extensions are retained when updating a map or its terrain definitions.
 
 ### Status panels
 
@@ -459,7 +630,7 @@ has no browser dependencies and stores definitions rather than runtime instances
 `projectTreeView.ts` handles searching, expansion, focus, and selection independently
 of resource types.
 
-To add a system such as maps, actors, items, dialogs, or scripts, supply a
+To add another system such as actors or scripts, supply a
 `ProjectWorkspaceSection` to the final `bindProjectPanel` argument. It extends the
 tree provider with `show(node, view)` and `hide()` callbacks for that system's
 workspace. The workspace must preserve its drafts across show/hide calls and use
@@ -480,8 +651,22 @@ original revision and show that saved files changed. Draft state is checked when
 the background read completes, so text entered during that read is preserved.
 Background reads do not block saves and cannot replace a newer save or project load.
 
-The existing preview and export continue reading saved files. Restart preview
-to see edits. Neither a running preview nor export is pinned to an editor revision.
+Preview and export read saved files. Accepting a changed revision through a save,
+undo/redo, reload, or clean background refresh restarts a running or loading preview
+with a fresh playthrough. This applies to every authored resource, including story,
+leveling, and combat libraries. Unchanged reads and external changes held back by
+unsaved drafts leave the preview running. Neither preview loading nor export is
+pinned to an editor revision across its individual file reads.
+
+The preview's **Save progress** and **Load progress** controls use a durable browser
+slot scoped to the project folder and game ID. They preserve progress across preview
+restarts and page reloads. An accepted change to game content makes older saves
+incompatible; loading reports this before replacing the current playthrough.
+The component editor also offers **Save progress** and **Load saved progress** as
+ordinary button actions (`save-game` and `load-game`), without a scene target.
+The Basic Game's main-menu Load Game button is enabled when a slot exists.
+See [Save and load](../README.md#save-and-load) for saved systems, storage behavior,
+compatibility checks, and limitations.
 
 ## Development and verification
 

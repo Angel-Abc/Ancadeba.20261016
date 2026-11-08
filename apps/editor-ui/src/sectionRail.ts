@@ -5,6 +5,7 @@ const svgNamespace = 'http://www.w3.org/2000/svg'
 
 /** Outline icon paths on a 24-unit grid, keyed by tree section. */
 const sectionIcons = new Map([
+  ['maps', 'M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16'],
   ['game', 'M4 7h16M4 12h16M4 17h10'],
   ['scenes', 'M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5'],
   ['assets', 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5'],

@@ -38,21 +38,21 @@ export interface CombatLogEntry {
     | 'stunned'
     | CombatOutcome
   readonly item?: string | undefined
-  readonly actor?: string
-  readonly target?: string
-  readonly damage?: number
-  readonly blocked?: number
-  readonly defended?: number
-  readonly guard?: number
-  readonly status?: string
-  readonly amount?: number
-  readonly duration?: number
+  readonly actor?: string | undefined
+  readonly target?: string | undefined
+  readonly damage?: number | undefined
+  readonly blocked?: number | undefined
+  readonly defended?: number | undefined
+  readonly guard?: number | undefined
+  readonly status?: string | undefined
+  readonly amount?: number | undefined
+  readonly duration?: number | undefined
 }
 
 export interface EnemyPlan {
   readonly moves: readonly PlannedMove[]
   readonly cursor: number
-  readonly startCursor?: number
+  readonly startCursor?: number | undefined
 }
 
 export function planEnemies(

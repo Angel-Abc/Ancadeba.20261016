@@ -1,4 +1,8 @@
 import { bindLevelingEditor } from './levelingEditor.js'
+import { bindMapEditor } from './mapEditor.js'
+import { mapConfirmation } from './mapConfirmation.js'
+import { BrowserGraphicResources, createGraphicPlatform } from '@ancadeba/ui-components'
+import { EditorWorkspaceResources } from './workspaceResources.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
 import { createProjectRequestSchema } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
@@ -25,6 +29,7 @@ import {
   dataFilesSection,
   flattenProjectTree,
   ruleFileNodes,
+  mapFileNodes,
   sceneTitle,
   projectTreeSections,
   type ProjectTreeNode,
@@ -199,6 +204,38 @@ export function bindProjectPanel(
   const rulesElement = treeElement && root.querySelector<HTMLElement>('#rules-panel')
   const storyElement = treeElement && root.querySelector<HTMLElement>('#story-editor')
   let storyEditor: ReturnType<typeof bindStoryEditor> | undefined
+  const mapElement = treeElement && root.querySelector<HTMLElement>('#map-editor')
+  const mapConfirm = mapElement ? mapConfirmation(root.ownerDocument, t) : undefined
+  let mapEditor: ReturnType<typeof bindMapEditor> | undefined
+
+  const mapHistory = () =>
+    selection.section === 'maps' ||
+    (selection.kind === 'data-file' && selection.parentId === 'maps')
+      ? mapEditor?.draftHistory()
+      : undefined
+
+  const renderHistoryControls = () => {
+    const local = mapHistory()
+    undo.textContent = t('history.undo')
+    redo.textContent = t('history.redo')
+
+    if (local?.active) {
+      undo.disabled = local.blocked || !local.canUndo
+      redo.disabled = local.blocked || !local.canRedo
+      undo.title = t('maps.undoDraft')
+      redo.title = t('maps.redoDraft')
+    } else {
+      undo.disabled = busy || historyBlocked || !view?.history?.canUndo
+      redo.disabled = busy || historyBlocked || !view?.history?.canRedo
+      undo.title = view?.history?.undoLabel
+        ? t('history.undoLabel', { change: view.history.undoLabel })
+        : t('history.undo')
+      redo.title = view?.history?.redoLabel
+        ? t('history.redoLabel', { change: view.history.redoLabel })
+        : t('history.redo')
+    }
+  }
+
   const actionBarElement = treeElement && root.querySelector<HTMLElement>('#action-bar-panel')
   const statusPanelElement = treeElement && root.querySelector<HTMLElement>('#status-panel-editor')
   let rulesPanel: ReturnType<typeof bindRulesPanel> | undefined
@@ -223,6 +260,7 @@ export function bindProjectPanel(
 
   const sections = [
     ...projectTreeSections,
+    ...(mapElement ? [{ id: 'maps', labelKey: 'maps.heading', nodes: mapFileNodes }] : []),
     ...(storyElement ? [{ id: 'story', labelKey: 'story.heading', nodes: () => [] }] : []),
     ...(rulesElement ? [{ id: 'rules', labelKey: 'rules.heading', nodes: ruleFileNodes }] : []),
     ...(actionBarElement
@@ -255,6 +293,13 @@ export function bindProjectPanel(
 
     const dataFile = view ? dataFileContent(view, node) : undefined
     const dataGroup = node.kind === 'data-group'
+
+    const usesMapEditor =
+      node.section === 'maps' || (node.kind === 'data-file' && node.parentId === 'maps')
+
+    if (mapElement) mapElement.hidden = !usesMapEditor
+
+    if (usesMapEditor) mapEditor?.navigate(node.id, node.kind === 'new-map')
 
     const graphic =
       node.section === 'scenes' && (node.kind === 'new-graphic' || component?.type === 'graphic')
@@ -357,18 +402,19 @@ export function bindProjectPanel(
     if (editableComponent)
       componentEditor?.navigate(sceneId, component?.id, node.kind === 'new-component')
     find('component-details').hidden =
-      !dataFile &&
-      !dataGroup &&
-      (node.section !== 'scenes' ||
-        node.kind !== 'component' ||
-        graphic ||
-        actionBar ||
-        statusComponent ||
-        itemComponent ||
-        shopComponent ||
-        combatComponent ||
-        levelingComponent ||
-        editableComponent)
+      usesMapEditor ||
+      (!dataFile &&
+        !dataGroup &&
+        (node.section !== 'scenes' ||
+          node.kind !== 'component' ||
+          graphic ||
+          actionBar ||
+          statusComponent ||
+          itemComponent ||
+          shopComponent ||
+          combatComponent ||
+          levelingComponent ||
+          editableComponent))
     const editSection = sections.find((section) => section.id === dataFile?.editSection)
 
     find('component-help').textContent = dataGroup
@@ -405,6 +451,7 @@ export function bindProjectPanel(
         : [sectionLabel, parentLabel].filter(Boolean).join(' › ')
     find('workspace-heading').textContent = node.kind === 'section' ? sectionLabel : node.label
     rail?.render(view ? node.section : undefined)
+    renderHistoryControls()
 
     const selectedScene = view?.scenes.find(
       (scene) => scene.id === (node.kind === 'scene' ? node.id : node.parentId),
@@ -447,7 +494,12 @@ export function bindProjectPanel(
       statusPanelElement && (node.section === 'status' || componentType === 'status-panel'),
     )
 
+    const usesMapEditor =
+      node.section === 'maps' || (node.kind === 'data-file' && node.parentId === 'maps')
+
     if (
+      (usesMapEditor && mapEditor && !mapEditor.navigate(node.id, node.kind === 'new-map')) ||
+      (!usesMapEditor && mapEditor?.hasDrafts()) ||
       (sceneControls &&
         !sceneControls.canNavigate(
           node.section === 'scenes' && (node.kind === 'scene' || node.kind === 'component')
@@ -553,57 +605,21 @@ export function bindProjectPanel(
     levelingEditor?.render(state, replaceFields)
     componentEditor?.render(state, replaceFields)
     storyEditor?.render(state, replaceFields)
+    mapEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
+    const previousRevision = view?.revision
     view = state.view
     loadedPath = state.path
 
-    const ruleChange =
-      replaceFields &&
-      (Boolean(state.historyChange) ||
-        state.lastCommand === 'game.updateRules' ||
-        state.lastCommand === 'scene.rename' ||
-        state.lastCommand === 'scene.duplicate' ||
-        state.lastCommand === 'scene.remove' ||
-        state.lastCommand === 'game.setInitialScene' ||
-        state.lastCommand === 'scene.removeComponent' ||
-        state.lastCommand === 'scene.duplicateComponent' ||
-        state.lastCommand === 'scene.pasteComponent' ||
-        state.lastCommand === 'scene.moveComponent' ||
-        state.lastCommand === 'scene.upsertRuleButton' ||
-        state.lastCommand === 'inventory.setRuleInspection' ||
-        state.lastCommand === 'inventory.setItemActions' ||
-        state.lastCommand === 'scene.upsertNearby' ||
-        state.lastCommand === 'game.upsertCombat' ||
-        state.lastCommand === 'game.removeCombat' ||
-        state.lastCommand === 'scene.setCombat' ||
-        state.lastCommand === 'scene.upsertShop' ||
-        state.lastCommand === 'scene.removeShop' ||
-        state.lastCommand === 'inventory.setItemPresentation' ||
-        state.lastCommand === 'inventory.setEquipmentSlots' ||
-        state.lastCommand === 'scene.setInventoryDetails' ||
-        state.lastCommand === 'scene.upsertItemView' ||
-        state.lastCommand === 'scene.removeItemView' ||
-        state.lastCommand === 'scene.upsertStatusPanel' ||
-        state.lastCommand === 'scene.removeStatusPanel' ||
-        state.lastCommand === 'scene.setActionBar' ||
-        state.lastCommand === 'scene.upsertComponent' ||
-        state.lastCommand === 'game.updateInput')
+    // Revisions cover every authored resource, including changes made by other clients.
+    const projectUpdated = replaceFields && view && view.revision !== previousRevision
 
-    if (projectChanged || ruleChange) onProjectChange?.(loadedPath)
+    if (projectChanged || projectUpdated) onProjectChange?.(loadedPath)
 
     busy = state.busy
     historyBlocked = state.conflict || state.changedElsewhere
-    undo.disabled = state.busy || historyBlocked || !view?.history?.canUndo
-    redo.disabled = state.busy || historyBlocked || !view?.history?.canRedo
-    undo.textContent = t('history.undo')
-    redo.textContent = t('history.redo')
-    undo.title = view?.history?.undoLabel
-      ? t('history.undoLabel', { change: view.history.undoLabel })
-      : t('history.undo')
-    redo.title = view?.history?.redoLabel
-      ? t('history.redoLabel', { change: view.history.redoLabel })
-      : t('history.redo')
+    renderHistoryControls()
     reload.disabled = state.busy || !view
     reload.hidden = !view
     scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
@@ -672,6 +688,18 @@ export function bindProjectPanel(
 
     const updateTree = () => {
       if (!tree) return
+
+      if (
+        selection.section === 'maps' &&
+        selection.kind === 'map' &&
+        !view?.game?.maps?.includes(selection.id ?? '') &&
+        !mapEditor?.hasDrafts()
+      ) {
+        const id = view?.game?.maps?.[0]
+        selection = id
+          ? { key: `map:${id}`, section: 'maps', kind: 'map', id, label: id }
+          : { key: 'map-new', section: 'maps', kind: 'new-map', label: t('maps.new') }
+      }
 
       if (
         replaceFields &&
@@ -877,6 +905,36 @@ export function bindProjectPanel(
       void controller.save(command)
     })
 
+  if (mapElement)
+    mapEditor = bindMapEditor(
+      mapElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+      {
+        confirm: (message) => mapConfirm!.ask(message),
+        onHistoryChange: renderHistoryControls,
+        createGraphics: (path) =>
+          new BrowserGraphicResources(
+            new EditorWorkspaceResources(path, fetcher),
+            createGraphicPlatform(root.ownerDocument),
+          ),
+        onNavigate(id) {
+          selection = id
+            ? { key: `map:${id}`, section: 'maps', kind: 'map', id, label: id }
+            : { key: 'map-new', section: 'maps', kind: 'new-map', label: t('maps.new') }
+          showSelection()
+          tree?.render(view, busy, selection.key)
+        },
+        onSaved(id) {
+          selection = id
+            ? { key: `map:${id}`, section: 'maps', kind: 'map', id, label: id }
+            : { key: 'map-new', section: 'maps', kind: 'new-map', label: t('maps.new') }
+        },
+      },
+    )
+
   if (actionBarElement)
     actionBarPanel = bindActionBarPanel(actionBarElement, (command) => {
       void controller.save(command)
@@ -1050,10 +1108,18 @@ export function bindProjectPanel(
       combatEditor?.hasDrafts() ||
       levelingEditor?.hasDrafts() ||
       componentEditor?.hasDrafts() ||
-      storyEditor?.hasDrafts(),
+      storyEditor?.hasDrafts() ||
+      mapEditor?.hasDrafts(),
     )
 
   const restoreHistory = (direction: 'undo' | 'redo') => {
+    if (mapHistory()?.active) {
+      mapEditor?.restoreDraft(direction)
+      renderHistoryControls()
+
+      return
+    }
+
     if (busy || historyBlocked || !view?.history?.[direction === 'undo' ? 'canUndo' : 'canRedo'])
       return
 
@@ -1073,19 +1139,19 @@ export function bindProjectPanel(
   if (root.ownerDocument.defaultView)
     listeners.push(
       bindEditorShortcuts(root.ownerDocument.defaultView, {
-        blocked: () => busy || historyBlocked || !view,
+        blocked: () => busy || (historyBlocked && !mapHistory()?.active) || !view,
         copy: () => componentClipboard?.shortcut('copy') ?? false,
         paste: () => componentClipboard?.shortcut('paste') ?? false,
         duplicate: () => sceneControls?.shortcut('duplicate') ?? false,
         delete: () => sceneControls?.shortcut('delete') ?? false,
         undo: () => {
-          if (!view?.history?.canUndo) return false
+          if (!mapHistory()?.active && !view?.history?.canUndo) return false
           restoreHistory('undo')
 
           return true
         },
         redo: () => {
-          if (!view?.history?.canRedo) return false
+          if (!mapHistory()?.active && !view?.history?.canRedo) return false
           restoreHistory('redo')
 
           return true
@@ -1168,6 +1234,8 @@ export function bindProjectPanel(
     discovery?.abort()
     controller.dispose()
     assetsPanel?.dispose()
+    mapEditor?.dispose()
+    mapConfirm?.dispose()
     tree?.dispose()
     rail?.dispose()
     unsubscribeLanguage?.()

@@ -21,6 +21,7 @@ import { GameCombat } from './combat.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
+import { getMapMovementCostMs, type GameSave } from '@ancadeba/schemas'
 
 /** Owns actions, bindings, and private host timers for one playthrough. */
 export class GameActionRuntime implements IGameRuntime {
@@ -42,6 +43,47 @@ export class GameActionRuntime implements IGameRuntime {
   private readonly timers: TimerService
   private started = false
   private disposed = false
+
+  save(): Pick<GameSave, 'combat' | 'rewards' | 'quests' | 'dialogue' | 'maps' | 'leveling'> {
+    return {
+      combat: this.combat?.save() ?? {},
+      rewards: this.combatRewards?.save() ?? {},
+      quests: this.quests?.save() ?? { records: {} },
+      dialogue: this.dialogue?.save() ?? {},
+      maps: this.mapMovement?.save() ?? {},
+      leveling: this.leveling.save(),
+    }
+  }
+
+  restore(save: GameSave, game: GameInstance): void {
+    const scene = game.data.scenes.get(save.scene)
+
+    if (scene?.type !== 'game') throw new Error('Invalid saved scene')
+
+    for (const [id, position] of Object.entries(save.maps)) {
+      const view = scene.components.find((component) => component.id === id)
+
+      if (
+        view?.type !== 'map-view' ||
+        !view.playerSpawn ||
+        view.interactive === false ||
+        getMapMovementCostMs(view.map, position) === undefined
+      )
+        throw new Error('Invalid saved map position')
+    }
+
+    if (
+      (!this.quests && (Object.keys(save.quests.records).length || save.quests.tracked)) ||
+      (!this.dialogue && Object.keys(save.dialogue).length)
+    )
+      throw new Error('Incompatible saved story')
+    this.actions.restoreProgression(save.progression)
+    this.leveling.restore(save.leveling)
+    this.quests?.restore(save.quests)
+    this.dialogue?.restore(save.dialogue)
+    this.combatRewards?.restore(save.rewards)
+    this.combat?.restore(save.combat, game.data)
+  }
 
   constructor(
     game: GameInstance,

@@ -18,6 +18,7 @@ export class ContainerBuilder implements IContainerBuilder {
       onPreviewStateChange: () => this.dependencies.onPreviewStateChange,
       getPreferredGameLanguages: () => this.dependencies.getPreferredGameLanguages,
       gameLanguagePreferences: () => this.dependencies.gameLanguagePreferences,
+      createGameSaveStore: () => this.dependencies.createGameSaveStore,
       download: () => this.dependencies.download,
       onExportStateChange: () => this.dependencies.onExportStateChange,
     })

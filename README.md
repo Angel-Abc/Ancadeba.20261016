@@ -1,7 +1,7 @@
 # Ancadeba
 
-A pnpm workspace using Vite+ 1.3 and TypeScript 7.0.2. The layout follows
-`Ancadeba.20261013`; application and library source starts with a minimal scaffold.
+A pnpm workspace using Vite+ 1.3 and TypeScript 7.0.2, with a browser game engine,
+visual editor, revision-checked editor API, and standalone game exports.
 
 ## Getting started
 
@@ -220,7 +220,9 @@ scene in the browser hosts.
 `GameLoader` uses an injected `IJsonResourceLoader` to load `game.json`, then
 `scenes/<id>.json` for each reference. The current scene format supports
 `stand-alone` and `game` scenes with a `grid` screen, positive integer rows and columns,
-and a `components` array of text, button, language selector, and graphic components (or an empty array).
+and a `components` array (which may be empty). Components include text, buttons,
+language selectors, graphics, maps, inventory and equipment views, action bars,
+status panels, shops, combat, character progression, nearby interactions, and quest logs.
 Every scene must declare the ID used by its manifest reference.
 
 `assembleGameData` combines validated definitions without I/O. `GameData` contains
@@ -350,7 +352,30 @@ South, and West action-bar buttons, WASD, or arrow keys to move one tile at a ti
 follows the player and shows 9 columns and 6 rows of a
 16 by 10 map. For a standalone copy, run `pnpm export:game sample-games/square-map`.
 
-List reusable map IDs in `game.json` under `maps`, with a definition at
+Choose **Maps** in the editor's Edit or Split layout to create and edit maps
+visually. **New map** sets its ID and size; the terrain palette controls colors,
+walkability, and movement time. Import image sheets in Assets and add them in
+**Tilesets** to paint image tiles or transparent overlays over base colors.
+Use **Layers** to paint ground, trees, and buildings independently, erase objects,
+and control layer order, visibility, and collision.
+Use **Map zoom** (50–400%) for an overview or detailed painting. **Pan map** lets
+you drag the view; middle-button dragging pans from any tool. Pan arrows, page
+buttons, and **Reset view** navigate larger maps without editing them.
+The **Minimap** shows the whole map and outlines the visible area. Click it to
+jump to another area at the current zoom; unsaved tile edits appear there too.
+Use **Tile tools → Select tiles** to copy, cut, and paste rectangular groups such
+as buildings. Paste previews, keyboard shortcuts, and overlapping moves work on
+the selected layer.
+Click or drag across tiles to paint, or use arrow
+keys and Enter/Space. Save the map, then add a map-view component to a scene and
+select it. **Undo map edit** and **Redo map edit** work before saving: each paint
+or erase drag, paste, or move is one step. Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or
+Ctrl+Y) work outside text fields. Save or discard clears the map's draft history;
+saved changes then use project Undo/Redo. See the
+[map authoring guide](docs/editor-authoring.md#maps-and-terrain) for resizing,
+terrain replacement, and deletion.
+
+The editor lists reusable map IDs in `game.json` under `maps`, with a definition at
 `maps/<id>.json` for each. A `square-grid` map defines `width`, `height`, a
 `terrain` table of named colors, and `tiles` in row order. Set `walkable: false`
 on a terrain type to block player movement and spawning on its tiles. Set
@@ -394,8 +419,8 @@ remain valid and produce an empty surface. The renderer itself follows the activ
 scene without choosing one or owning game state.
 
 `SceneRenderer` delegates component content to an injected `IComponentRenderer`
-(its fourth constructor argument). The default `ComponentRenderer` dispatches to
-`TextComponentRenderer` and `ButtonComponentRenderer`; its constructor accepts a
+(its fourth constructor argument). The default `ComponentRenderer` dispatches to a renderer for each supported
+component type; its constructor accepts a
 typed renderer map for overrides. Each renderer returns an element and an
 idempotent `dispose()` method that releases its listeners or binding subscriptions.
 The scene renderer owns grid placement and disposes all components when the scene
@@ -407,9 +432,9 @@ between them. **No active scene** leaves the screen while retaining the current
 game. Standalone play starts in `start-screen`, with **New game**, **Load Game**,
 and **Settings** buttons. New game creates a fresh playthrough and opens `standard`;
 Settings opens the independent settings scene, whose Back button returns to the
-menu. Load Game is disabled until save/load support is available. The two game scenes share health and
-progression bindings; Settings stays independent. Inventory interactions, narrative
-passage selection, and action-choice components are future work.
+menu. Load Game resumes the browser's saved playthrough when one is available. The two game scenes share health and
+progression bindings; Settings stays independent. Inventory interactions, authored
+actions, dialogue choices, and quests are supported through their respective components.
 
 An authored text component looks like this:
 
@@ -739,7 +764,8 @@ view's spawn tile to charge world time.
 
 Each new game starts with fresh state. Rule text can use a literal or a catalog
 key resolved in the playthrough's starting language. A running editor preview
-restarts when rules or their trigger links are saved. Standalone export uses the
+restarts when an updated project revision is accepted, including saved rules and
+their trigger links. Standalone export uses the
 same manifest and runtime. Hosts can supply custom TypeScript behavior by
 providing a lifecycle or rules factory.
 
@@ -754,7 +780,11 @@ uses a fresh instance and reads the latest saved files; unsaved edits are not ye
 part of the resource source. Failures appear beside the controls and allow retrying.
 The preview renders the active scene and offers a selector for switching scenes.
 If the preview is running or loading when you switch projects, it starts over
-with the newly opened project.
+with the newly opened project. Accepting a changed project revision through a save,
+undo/redo, reload, or a clean background refresh also restarts it with the latest
+saved content, including dialogue, quests, leveling, and combat libraries. This
+starts a fresh playthrough. Unchanged reads and external changes awaiting review
+because of unsaved drafts do not restart the preview.
 
 The editor UI composes its services in `apps/editor-ui/src/ioc/containerBuilder.ts`.
 The `factories/` folder registers console logging, preview engine creation, and
@@ -906,7 +936,8 @@ recreated on re-entry; entering the already active scene is a no-op. `leaveScene
 retains the current game. Invalid scene entry and state factory failures leave the
 existing contexts intact. Invalid rules or runtime startup failure also preserve
 the previous game and scene. No transition modifies the loaded definitions, and no
-save/restore or general gameplay-state notifications are added here. Scene changes
+general gameplay-state notifications are added here. Save/restore is provided by
+the separate [save and load service](#save-and-load). Scene changes
 have the dedicated subscription described above.
 
 Disposed instances expose `disposed: true` and release their `state`; callers must
@@ -992,6 +1023,54 @@ The exposed bus is the scheduled decorator rather than that raw instance; use
 `engine.messages` for publications and subscriptions. Lifecycle topic contracts
 live in game-runtime; utilities remain generic.
 
+## Save and load
+
+The standalone engine, exported games, and editor preview provide **Save progress**
+and **Load progress** controls. Saving replaces one manual slot for the current
+game on this browser and device. Reloading the page or closing and reopening it
+preserves the slot. Loading resumes the saved gameplay scene; the Basic Game's
+main-menu **Load Game** button uses the same slot. Loading while a playthrough is
+open asks before replacing unsaved progress. Starting **New game** leaves the
+saved slot intact until the player explicitly saves again.
+
+Snapshots include authored state and activity logs, inventory placements and
+consumed/generated items, equipment, gold, XP and level receipts, turn/world-time
+progression, combat plans and RNG, statuses and cooldowns, item reservations,
+equipment locks, one-time rewards and remaining loot, quest stages and tracking,
+conversations and captured transcript values, current map positions, language,
+input context, and nearby/inventory selections. Loading reconstructs fresh runtime
+instances and subscriptions without replaying rewards or level gains. Pending
+message batches settle before saving. If a map step is still running, saving
+reports that the player should wait for movement to finish; the existing slot is
+preserved. Scene-local state otherwise follows the normal scene-lifetime rules.
+
+The save format is versioned and validated before replacing the current game.
+Saves must match the game ID, game version, and a fingerprint of its loaded
+definitions, translations, and stylesheet. Editing those resources invalidates an
+older slot, including in the preview, even if the manifest version is unchanged.
+Invalid, damaged, incompatible, or oversized saves show an error and preserve the
+current playthrough. Storage failures, including blocked storage and quota errors,
+never report success. Slots are separated by browser origin and game location;
+preview slots are additionally separated by project folder. Exports use their own
+hosting location. Clearing browser storage removes saved progress. There is no
+cloud sync, automatic save, or cross-version migration.
+
+Authors can add ordinary buttons with `"action": { "type": "save-game" }` or
+`"action": { "type": "load-game" }` through the component editor. These actions
+need no target scene and use the same browser controls and status messages.
+Save is unavailable until there is a current playthrough and a gameplay scene to
+resume. Hosts supply an optional `EngineRuntimeServices.saveStore` implementing
+`GameSaveStore.read(gameId)` and `write(gameId, serializedSave)`; browser hosts inject
+`BrowserGameSaveStore`. Headless hosts can inject their own durable store. The
+engine exposes `engine.saves` and passes it to its host session. `save()` and
+`load()` return a boolean; `status`, `error`, and `subscribe()` expose feedback.
+
+Built-in persistence supports the default authored runtime, including games
+without rules. Custom lifecycle, rules, and state-transaction factories disable
+the built-in service because their arbitrary state and scheduled callbacks cannot
+be safely serialized by it. Custom hosts can supply their own persistence controls.
+The runtime and save schemas remain independent of browser and Node globals.
+
 ## One-shot timers
 
 Every loaded session creates a `TimerService`, exposed through `engine.timers`
@@ -1037,14 +1116,16 @@ TypeScript rules for each new playthrough. The second argument is the new game
 instance, whose application state is already initialized. Return fresh handler closures or
 instances for each call so positions, inventory, weather, and other domain state
 are game-owned. The action processor owns only routing and progression.
-Without a factory, a started game has empty rules and action-driven world time.
+Without a custom lifecycle or rules factory, a started game uses its authored JSON
+rules, or empty rules if none are declared, with action-driven world time.
 Loading content alone creates no action processor or world-time polling.
 
-Custom handler code must currently be supplied by application composition. Game
-JSON schemas do not define executable rules, and the loader does not import game
-scripts. Both application containers forward the supplied runtime services to
-their engines, including the editor's fresh preview instances. Scene text remains
-static and does not yet bind to gameplay state.
+The JSON rule format supports conditions and effects described under
+[Authored gameplay rules](#authored-gameplay-rules). Custom TypeScript handlers
+are supplied by application composition; the loader does not import game scripts.
+Both application containers forward the supplied runtime services to their engines,
+including the editor's fresh preview instances. Scene text can bind to gameplay
+state through the [current-game data binding](#current-game-data-binding) system.
 
 ```ts
 import {
@@ -1553,9 +1634,10 @@ mapped bindings have their browser defaults prevented; mapped held repeats also
 prevent defaults without generating inputs. Cleanup removes owned listeners.
 
 This version supplies game defaults, press/release state, and one active named
-context. Player remapping, persistence, chords, repeat policies, additional devices,
-and JSON-defined executable rules are not implemented yet. Hosts do not flush the bus on keyboard
-events; the session dispatcher schedules delivery.
+context. Player remapping, persistence, chords, repeat policies, and additional
+devices are not implemented yet. Authored scene action bars route these inputs to
+gameplay actions, including JSON-defined rules. Hosts do not flush the bus on
+keyboard events; the session dispatcher schedules delivery.
 
 ## Scene action bars
 
@@ -2392,9 +2474,11 @@ Errors return `{ "error": "message" }`: `400` for invalid paths, `403` for
 traversal or link access, `404` for missing resources, `409` for file/directory
 conflicts, and `413` for oversized writes. Filesystem permission failures return
 `403`; unexpected failures return `500`. Absolute paths, `..`, backslashes,
-Windows device names, and alternate data streams are rejected. No rename,
-delete, or concurrent-edit detection is provided. The editor UI does not yet
-include a file browser or editor.
+Windows device names, and alternate data streams are rejected. The raw file API
+does not provide rename, delete, or concurrent-edit detection. The higher-level
+editor API provides revision checks, scene management, definition removal, and
+undo/redo. The editor UI includes a project explorer and specialized forms;
+arbitrary file editing still requires an external editor.
 
 Export requests must use `Content-Type: application/json`. An empty `path` selects
 the workspace root. Sources use the same path and link restrictions as the file

@@ -2,7 +2,11 @@ import './style.css'
 import '@ancadeba/ui-components/game.css'
 import { bindProjectPanel } from './projectPanel.js'
 import type { EngineState } from '@ancadeba/game-runtime'
-import { createBrowserTiming, BrowserGameLanguagePreferences } from '@ancadeba/ui-components'
+import {
+  createBrowserTiming,
+  BrowserGameLanguagePreferences,
+  BrowserGameSaveStore,
+} from '@ancadeba/ui-components'
 import { EditorPreviewHost } from './previewHost'
 import { ContainerBuilder } from './ioc/containerBuilder'
 import type { Translate } from '@ancadeba/utilities'
@@ -139,6 +143,8 @@ const container = new ContainerBuilder({
     return gameLanguage.value.trim() ? [gameLanguage.value.trim()] : []
   },
   runtime: createBrowserTiming(window),
+  createGameSaveStore: (folder) =>
+    new BrowserGameSaveStore(() => window.localStorage, `editor-preview:${folder}`),
   download: (archive, fileName) => {
     clearDownload()
     downloadUrl = URL.createObjectURL(archive)

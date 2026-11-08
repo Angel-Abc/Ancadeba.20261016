@@ -46,3 +46,9 @@ export * from './shopComponentRenderer.js'
 export * from './combatComponentRenderer.js'
 
 export * from './characterProgressionComponentRenderer.js'
+
+export * from './browserGameSaveStore.js'
+
+export * from './mapTileAppearance.js'
+
+export * from './mapCellAppearance.js'

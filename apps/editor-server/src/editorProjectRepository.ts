@@ -21,7 +21,7 @@ import {
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
 import { createWorkspaceProject } from './projectCreation.js'
-import { saveSceneChanges } from './scenePersistence.js'
+import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
@@ -178,7 +178,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
   async save(folder: string, change: CommandResult): Promise<void> {
     if (change.createdFiles || change.removedFiles) {
-      await saveSceneChanges(this.workspace, folder, change)
+      await saveProjectStructureChanges(this.workspace, folder, change)
 
       return
     }

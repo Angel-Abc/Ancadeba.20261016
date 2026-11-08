@@ -159,3 +159,5 @@ export * from './dialogue.js'
 export * from './storyState.js'
 
 export * from './storyConditions.js'
+
+export * from './gameSaves.js'

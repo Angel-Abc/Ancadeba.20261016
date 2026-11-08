@@ -80,8 +80,9 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
 
       if (selected === undefined) return
 
-      if (edit) onEdit()
       update(typeof selected === 'string' ? selected : selected[0])
+
+      if (edit) onEdit()
     })
 
     return label(title, control)

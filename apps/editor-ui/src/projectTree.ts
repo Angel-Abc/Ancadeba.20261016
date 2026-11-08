@@ -47,6 +47,18 @@ export const ruleFileNodes = (view: ProjectView): ProjectTreeNode[] =>
     label: id,
   }))
 
+export const mapFileNodes = (view: ProjectView, t: Translate): ProjectTreeNode[] => [
+  ...(view.game?.maps ?? []).map((id): ProjectTreeNode => ({
+    key: `map:${id}`,
+    section: 'maps',
+    kind: 'map',
+    id,
+    label: id,
+    detail: view.maps?.[id] ? `${view.maps[id].width} × ${view.maps[id].height}` : '',
+  })),
+  { key: 'map-new', section: 'maps', kind: 'new-map', label: t('maps.new') },
+]
+
 /** Game data without an editor yet is listed for reference and shown read-only. */
 /** One group of game files listed under Data files, with the section that edits them. */
 interface DataFileGroup {
@@ -57,7 +69,12 @@ interface DataFileGroup {
 }
 
 const dataFileGroups: readonly DataFileGroup[] = [
-  { id: 'maps', ids: (game) => game.maps, content: (view, id) => view.maps?.[id] },
+  {
+    id: 'maps',
+    ids: (game) => game.maps,
+    content: (view, id) => view.maps?.[id],
+    editSection: 'maps',
+  },
   {
     id: 'inventories',
     ids: (game) => game.inventory,

@@ -100,7 +100,11 @@ export interface IGameLifecycle<TGameState = unknown, TSceneState = unknown> {
   subscribeSceneChanges(handler: SceneChangeHandler<TGameState, TSceneState>): () => void
   /** Bind once, before starting a playthrough. The lifecycle owns each returned runtime. */
   bindGameRuntime(factory: GameRuntimeFactory): void
-  startGame(): GameInstance<TGameState>
+  /** Preparation runs before runtime creation; restoration runs before replacing the current game. */
+  startGame(
+    prepare?: (game: GameInstance<TGameState>) => void,
+    restore?: (game: GameInstance<TGameState>) => void,
+  ): GameInstance<TGameState>
   enterScene(id: string): SceneInstance<TGameState, TSceneState>
   leaveScene(): void
   endGame(): void
@@ -201,8 +205,12 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
     return this.runtime?.bindings
   }
 
-  initialize(factory: GameRuntimeFactory | undefined): void {
+  initialize(
+    factory: GameRuntimeFactory | undefined,
+    prepare?: (game: GameInstance<TState>) => void,
+  ): void {
     if (this.data.inventory) this.inventoryState = new GameInventory(this.data.inventory)
+    prepare?.(this)
     this.runtime = factory?.(this)
   }
 
@@ -302,7 +310,10 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     })
   }
 
-  startGame(): GameInstance<TGameState> {
+  startGame(
+    prepare?: (game: GameInstance<TGameState>) => void,
+    restore?: (game: GameInstance<TGameState>) => void,
+  ): GameInstance<TGameState> {
     return this.transition(() => {
       const next = new OwnedGameInstance(
         this.data,
@@ -311,7 +322,8 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
       )
 
       try {
-        next.initialize(this.runtimeFactory)
+        next.initialize(this.runtimeFactory, prepare)
+        restore?.(next)
       } catch (error) {
         try {
           next.dispose()

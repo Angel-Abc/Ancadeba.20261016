@@ -15,6 +15,7 @@ import type { IMessageBus } from '@ancadeba/utilities'
 import type { EngineMessages } from './messages.js'
 import type { ActionOrigin } from './actions.js'
 import { matchesConditions, notifyStory } from './storyConditions.js'
+import type { GameSave } from '@ancadeba/schemas'
 
 export interface QuestSnapshot {
   readonly id: string
@@ -88,6 +89,23 @@ export class GameQuests implements IGameQuests {
   private inventoryVersion = 0
   private lastPublished = ''
   private readonly evaluating = new Set<string>()
+
+  save(): GameSave['quests'] {
+    return { records: Object.fromEntries(this.records), tracked: this.tracked }
+  }
+
+  restore(save: GameSave['quests']): void {
+    for (const [id, record] of Object.entries(save.records)) {
+      const quest = this.definition(id)
+
+      if (!quest || record.index >= quest.stages.length)
+        throw new Error('Invalid saved quest stage')
+    }
+
+    if (save.tracked && !this.definition(save.tracked)) throw new Error('Invalid tracked quest')
+    this.records = new Map(Object.entries(save.records))
+    this.tracked = save.tracked
+  }
 
   constructor(
     private readonly game: GameInstance,

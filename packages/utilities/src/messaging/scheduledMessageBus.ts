@@ -54,6 +54,15 @@ export class ScheduledMessageBus<Topics> implements IMessageBus<Topics> {
     }
   }
 
+  /** Drain deferred batches up to a bounded checkpoint, without reentering an active dispatch. */
+  settle(maxBatches = 1000): boolean {
+    if (this.flushing) return false
+
+    for (let batch = 0; this.pending && batch < maxBatches; batch++) this.flush()
+
+    return this.pending === undefined
+  }
+
   /** Reject future publications while preserving queued messages and their pending delivery. */
   seal(): void {
     this.sealed = true

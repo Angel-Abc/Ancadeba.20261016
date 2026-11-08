@@ -21,7 +21,10 @@ export function editCombat(
       combat: game.combat.filter((id) => id !== command.encounterId),
     }
 
-    return ['game.json']
+    const file = combatFile(command.encounterId)
+    delete documents[file]
+
+    return ['game.json', file]
   }
 
   if (command.type === 'game.upsertCombat') {

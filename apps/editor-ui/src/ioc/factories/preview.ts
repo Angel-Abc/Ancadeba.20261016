@@ -6,6 +6,7 @@ import {
   type IEngineHost,
   type EngineRuntimeServices,
   type GameLanguagePreferences,
+  type GameSaveStore,
 } from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
@@ -27,6 +28,7 @@ export interface PreviewDependencies {
   onPreviewStateChange: PreviewStateListener
   getPreferredGameLanguages?: () => readonly string[]
   gameLanguagePreferences?: GameLanguagePreferences
+  createGameSaveStore?: (folder: string) => GameSaveStore
 }
 
 export interface PreviewServices {
@@ -58,7 +60,12 @@ export const previewFactories = {
         resolver.resolve('createHost')?.(source) ?? host,
         logger,
         createMessageBus,
-        runtime,
+        {
+          ...runtime,
+          ...(resolver.resolve('createGameSaveStore')
+            ? { saveStore: resolver.resolve('createGameSaveStore')!(folder) }
+            : {}),
+        },
       )
     }
   },

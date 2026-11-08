@@ -8,11 +8,12 @@ import type { EngineMessages } from './messages.js'
 import type { ActionOrigin } from './actions.js'
 import { resolveText } from './textBindings.js'
 import { matchesConditions, notifyStory } from './storyConditions.js'
+import type { GameSave } from '@ancadeba/schemas'
 
 interface TranscriptEntry {
   readonly node: string
-  readonly line?: number
-  readonly choice?: string
+  readonly line?: number | undefined
+  readonly choice?: string | undefined
   readonly values: ReadonlyMap<string, BindingValue>
 }
 
@@ -72,6 +73,65 @@ export class GameDialogue implements IGameDialogue {
   private readonly selections = new WeakMap<NearbySelection, number>()
   private nextSelection = 0
   private disposed = false
+
+  save(): GameSave['dialogue'] {
+    return Object.fromEntries(
+      [...this.conversations].map(([key, conversation]) => [
+        key,
+        {
+          ...conversation,
+          transcript: conversation.transcript.map((entry) => ({
+            ...entry,
+            values: [...entry.values],
+          })),
+        },
+      ]),
+    )
+  }
+
+  restore(save: GameSave['dialogue']): void {
+    for (const [key, conversation] of Object.entries(save)) {
+      const definition = this.game.data.dialogues?.get(conversation.dialogue)
+
+      if (
+        !definition?.nodes[conversation.node] ||
+        conversation.transcript.length > definition.transcriptCapacity
+      )
+        throw new Error('Invalid saved conversation')
+
+      for (const entry of conversation.transcript) {
+        const node = definition.nodes[entry.node]
+
+        if (
+          !node ||
+          (entry.line !== undefined && !node.lines[entry.line]) ||
+          (entry.choice !== undefined && !node.choices.some(({ id }) => id === entry.choice))
+        )
+          throw new Error('Invalid saved transcript')
+      }
+
+      this.conversations.set(key, {
+        ...conversation,
+        transcript: conversation.transcript.map((entry) => ({
+          ...entry,
+          values: new Map(entry.values),
+        })),
+      })
+    }
+  }
+
+  activePanel(): string | undefined {
+    return this.active?.panel
+  }
+
+  resume(scene: SceneInstance, panel: string): void {
+    const participant = this.participant(scene, panel)
+
+    if (!participant || !this.conversations.has(participant.key)) return
+    this.active = participant
+    this.displayed.set(scene, new Map([[panel, participant.key]]))
+    notifyStory(this.listeners)
+  }
 
   constructor(
     private readonly game: GameInstance,

@@ -151,6 +151,12 @@ export class ActionProcessor implements IGameActions {
     return this.progressionState.current
   }
 
+  restoreProgression(snapshot: ProgressionSnapshot): void {
+    if (this.turns || this.scheduled.size)
+      throw new Error('Custom action state requires a persistence adapter')
+    this.progressionState.restore(snapshot)
+  }
+
   /** Encounter transactions advance the game counter without replacing game actor turns. */
   prepareProgression(worldTimeCostMs: number) {
     this.progressionState.synchronize()

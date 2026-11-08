@@ -12,6 +12,7 @@ import type { IGameInventory } from './inventory.js'
 import { matchesConditions } from './storyConditions.js'
 import { MapStoryState } from './storyState.js'
 import { MapTradeState } from './tradeState.js'
+import type { GameSave } from '@ancadeba/schemas'
 
 type Scalar = string | number | boolean
 
@@ -76,6 +77,43 @@ function completeCommittedEffect<T>(
 export class AuthoredPlaythrough {
   readonly state: State = new Map()
   private readonly entries: string[] = []
+
+  save(): Pick<GameSave, 'state' | 'log'> {
+    return {
+      state: this.rules.state.map(({ path }) => {
+        const value = read(this.state, path)
+
+        if (value === undefined || value instanceof Map) throw new Error('Invalid authored state')
+
+        return { path: [...path], value }
+      }),
+      log: [...this.entries],
+    }
+  }
+
+  restore(save: Pick<GameSave, 'state' | 'log' | 'progression'>): void {
+    if (
+      save.state.length !== this.rules.state.length ||
+      save.log.length > (this.rules.log?.capacity ?? 0)
+    )
+      throw new Error('Incompatible authored state')
+    const fields = new Map(save.state.map((field) => [JSON.stringify(field.path), field]))
+
+    if (fields.size !== save.state.length) throw new Error('Duplicate saved state field')
+
+    for (const field of this.rules.state) {
+      const saved = fields.get(JSON.stringify(field.path))
+
+      if (!saved || typeof saved.value !== typeof this.resolve(field.value))
+        throw new Error('Incompatible state field')
+      set(this.state, field.path, saved.value)
+    }
+
+    this.entries.splice(0, this.entries.length, ...save.log)
+
+    if (this.rules.log) set(this.state, this.rules.log.path, this.entries.join('\n'))
+    this.updateClock(save.progression.worldTimeMs)
+  }
 
   get tradeState(): MapTradeState {
     return new MapTradeState(

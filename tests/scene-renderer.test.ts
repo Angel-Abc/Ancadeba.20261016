@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
-import { gameSchema, languageCatalogSchema } from '@ancadeba/schemas'
+import { gameSchema, languageCatalogSchema, mapDefinitionSchema } from '@ancadeba/schemas'
 import {
   Engine,
   GameLifecycle,
@@ -25,6 +25,7 @@ import {
   mountGameView,
   SceneRenderer,
   type IComponentRenderer,
+  applyMapCellAppearance,
 } from '@ancadeba/ui-components'
 import { DomEngineHost } from '../apps/engine/src/engineHost.js'
 import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
@@ -32,6 +33,8 @@ import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
 // A DOM surface harness verifies renderer ownership and real event listener cleanup.
 // Actual CSS layout is also checked in a browser using this same sample game.
 class TestStyle {
+  backgroundColor = ''
+  backgroundImage = ''
   private readonly properties = new Map<string, string>()
 
   setProperty(name: string, value: string): void {
@@ -168,6 +171,7 @@ class TestElement extends EventTarget {
 
 class TestDocument extends EventTarget {
   readonly defaultView = Object.assign(new EventTarget(), {
+    confirm: vi.fn(() => true),
     setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
     clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
   })
@@ -320,6 +324,117 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it('composites visible object layers above unchanged ground in the saved draw order', () => {
+    const document = new TestDocument()
+    const cell = new TestElement(document, 'DIV')
+
+    const map = mapDefinitionSchema.parse({
+      'schema-version': '1.0.0',
+      type: 'square-grid',
+      width: 1,
+      height: 1,
+      terrain: {
+        grass: { color: '#336633' },
+        tree: { color: '#114411' },
+        roof: { color: '#aa3333' },
+      },
+      tiles: [['grass']],
+      layers: [
+        { id: 'trees', tiles: [['tree']] },
+        { id: 'buildings', tiles: [['roof']] },
+      ],
+    })
+
+    const paint = () =>
+      applyMapCellAppearance(cell.asElement(), map, 0, 0, undefined, () => undefined)
+
+    paint()
+    expect(cell.style.backgroundColor).toBe('#336633')
+    expect(cell.children.map((child) => child.dataset.mapLayer)).toEqual(['trees', 'buildings'])
+    expect(cell.children[1]!.style.backgroundColor).toBe('#aa3333')
+    map.layers!.reverse()
+    paint()
+    expect(cell.children.map((child) => child.dataset.mapLayer)).toEqual(['buildings', 'trees'])
+    map.layers![1]!.visible = false
+    paint()
+    expect(cell.children.map((child) => child.dataset.mapLayer)).toEqual(['buildings'])
+    map.layers![0]!.tiles[0]![0] = null
+    paint()
+    expect(cell.children).toHaveLength(0)
+    expect(cell.style.backgroundColor).toBe('#336633')
+  })
+
+  it('saves from the browser controls, confirms replacement, and resumes through the menu after remounting', async () => {
+    const storage = new Map<string, string>()
+
+    const saveStore = {
+      read: (id: string) => storage.get(id),
+      write: (id: string, value: string) => {
+        storage.set(id, value)
+      },
+    }
+
+    const document = new TestDocument()
+    const target = new TestElement(document, 'DIV')
+
+    const create = () =>
+      new Engine(
+        loader,
+        new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        { ...timing, saveStore },
+      )
+
+    const first = create()
+    onTestFinished(() => first.stop())
+    await first.start()
+
+    const button = (label: string) => {
+      const found = target.find((node) => node.tagName === 'BUTTON' && node.textContent === label)
+
+      if (!found) throw new Error(`Missing button: ${label}`)
+
+      return found
+    }
+
+    expect(button('Save progress').disabled).toBe(true)
+    const menuLoad = target.find((node) => node.dataset.componentId === 'load-game')!
+    expect(menuLoad.disabled).toBe(true)
+    target
+      .find((node) => node.dataset.componentId === 'new-game')!
+      .dispatchEvent(new Event('click'))
+    expect(button('Save progress').disabled).toBe(false)
+    button('Save progress').dispatchEvent(new Event('click'))
+    expect(target.find((node) => node.attributes.get('role') === 'status')!.textContent).toBe(
+      'Progress saved on this device.',
+    )
+    first.actions!.request('walk-east')
+
+    for (let count = 0; count < 20; count++) first.flushMessages()
+    expect(first.lifecycle!.activeScene!.data.id).toBe('gallery')
+    document.defaultView.confirm.mockReturnValueOnce(false)
+    button('Load progress').dispatchEvent(new Event('click'))
+    expect(first.lifecycle!.activeScene!.data.id).toBe('gallery')
+    button('Load progress').dispatchEvent(new Event('click'))
+    expect(first.lifecycle!.activeScene!.data.id).toBe('standard')
+    const oldSave = button('Save progress')
+    first.stop()
+    const saved = storage.get('basic-game')
+    oldSave.dispatchEvent(new Event('click'))
+    expect(storage.get('basic-game')).toBe(saved)
+    const second = create()
+    onTestFinished(() => second.stop())
+    await second.start()
+    const load = target.find((node) => node.dataset.componentId === 'load-game')!
+    expect(load.disabled).toBe(false)
+    load.dispatchEvent(new Event('click'))
+    expect(second.lifecycle!.activeScene!.data.id).toBe('standard')
+    expect(target.find((node) => node.attributes.get('role') === 'status')!.textContent).toBe(
+      'Saved progress loaded.',
+    )
+  })
+
   it.each(['preview', 'standalone'])(
     'updates status resources and keyboard-accessible effects in %s',
     async (host) => {

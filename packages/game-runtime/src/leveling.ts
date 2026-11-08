@@ -2,6 +2,7 @@ import { levelForXp, type CombatDefinition } from '@ancadeba/schemas'
 import type { GameInstance } from './gameLifecycle.js'
 import type { IGameBindings } from './gameBindings.js'
 import type { IStateTransactions, StateWrite, PreparedStateWrites } from './stateTransactions.js'
+import type { GameSave } from '@ancadeba/schemas'
 
 interface LevelReceipt {
   readonly from: number
@@ -43,6 +44,25 @@ export class GameLeveling implements IGameLeveling, IStateTransactions {
   private readonly versions = new Map<string, { signature: string; token: object }>()
   private readonly unsubscribe: () => void
   private disposed = false
+
+  save(): GameSave['leveling'] {
+    return Object.fromEntries(
+      [...this.receipts].map(([id, receipt]) => [
+        id,
+        { ...receipt, gains: receipt.gains.map((gain) => ({ ...gain })) },
+      ]),
+    )
+  }
+
+  restore(save: GameSave['leveling']): void {
+    for (const [id, receipt] of Object.entries(save)) {
+      const profile = this.game.data.leveling?.get(id)
+
+      if (!profile || receipt.from > receipt.to || receipt.to > profile.levels.length)
+        throw new Error('Invalid saved level receipt')
+      this.receipts.set(id, receipt)
+    }
+  }
   constructor(
     private readonly game: GameInstance,
     private readonly bindings: IGameBindings,

@@ -5,6 +5,7 @@ import type { IStateTransactions, StateWrite } from './stateTransactions.js'
 import type { IGameInventory, InventoryItemSnapshot } from './inventory.js'
 import type { IGameInventorySelection } from './inventoryContext.js'
 import type { CombatCapture } from './combat.js'
+import type { GameSave } from '@ancadeba/schemas'
 
 type RewardIssue = 'rewardUnavailable' | 'rewardInvalidAmount' | 'rewardInventory'
 
@@ -53,6 +54,35 @@ export class GameCombatRewards implements IGameCombatRewards {
   private inventoryToken = {}
   private disposed = false
   private publishing = false
+
+  save(): GameSave['rewards'] {
+    return Object.fromEntries(
+      [...this.bundles].map(([id, bundle]) => [
+        id,
+        {
+          numeric: bundle.numeric.map((entry) => ({ ...entry, path: [...entry.path] })),
+          items: Object.fromEntries(bundle.items.map(({ id, ...item }) => [id, item])),
+          delivered: bundle.delivered,
+          taken: [...bundle.taken],
+        },
+      ]),
+    )
+  }
+
+  restore(save: GameSave['rewards']): void {
+    for (const [id, bundle] of Object.entries(save)) {
+      const definition = this.game.data.combat?.get(id)
+
+      if (!definition?.rewards) throw new Error('Unknown saved reward bundle')
+      this.bundles.set(id, {
+        ...bundle,
+        numeric: bundle.numeric,
+        items: Object.entries(bundle.items).map(([id, item]) => ({ ...item, id })),
+        token: {},
+        issue: undefined,
+      })
+    }
+  }
   constructor(
     private readonly game: GameInstance,
     private readonly lifecycle: IGameLifecycle,

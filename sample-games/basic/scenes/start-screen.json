@@ -42,6 +42,7 @@
     {
       "id": "load-game",
       "type": "button",
+      "action": { "type": "load-game" },
       "placement": {
         "row": 7,
         "column": 5,
