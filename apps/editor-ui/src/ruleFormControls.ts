@@ -173,6 +173,25 @@ export function saveBar(document: Document, ...actions: HTMLElement[]) {
   return bar
 }
 
+/** Readable choices for pickers that store `true`/`false`. */
+export const yesNoChoices = [
+  ['false', 'No'],
+  ['true', 'Yes'],
+] as const
+
+/** Readable choices for optional features stored as `enabled`/`disabled`. */
+export const onOffChoices = [
+  ['disabled', 'Off'],
+  ['enabled', 'On'],
+] as const
+
+const valueTypeLabels = new Map<string, string>([
+  ['text', 'Literal text'],
+  ['number', 'Number'],
+  ['boolean', 'Yes or no'],
+  ['translation', 'Translation key'],
+])
+
 /** Grid placement fields in form order, with their field labels. */
 export const placementFields = [
   ['row', 'Row'],
@@ -181,9 +200,12 @@ export const placementFields = [
   ['columnSpan', 'Column span'],
 ] as const
 
-/** Turns a camelCase schema code such as `insufficientPlayerFunds` into a sentence-case label. */
+/** Turns a camelCase or kebab-case code such as `insufficientPlayerFunds` into a sentence-case label. */
 export const humanizeCode = (code: string) => {
-  const words = code.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  const words = code
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .toLowerCase()
 
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
@@ -227,7 +249,11 @@ export function ruleValueControls(
             type === 'number' ? 'number' : 'text',
           )
 
-  const chooseType = select('Value type', type, types, (next) => {
+  const typeChoices = types.map(
+    (choice) => [choice, valueTypeLabels.get(choice) ?? choice] as const,
+  )
+
+  const chooseType = select('Value type', type, typeChoices, (next) => {
     if (next === 'translation') update({ textKey: keys.find(([key]) => key)?.[0] ?? '' })
     else if (next === 'boolean') update(false)
     else if (next === 'number') update(0)

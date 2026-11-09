@@ -28,7 +28,8 @@ export function mapMinimap(
 ) {
   const element = document.createElement('details')
   element.className = 'map-minimap'
-  element.open = true
+  // A map that fits the view needs no overview, so it starts folded.
+  element.open = camera.columns < map.width || camera.rows < map.height
   const summary = document.createElement('summary')
   summary.textContent = t('maps.minimap')
   const button = document.createElement('button')

@@ -21,6 +21,7 @@ import type { Translate } from '@ancadeba/utilities'
 import type { ProjectEditorState } from './projectController.js'
 import { EditorWorkspaceResources } from './workspaceResources.js'
 import { bindGraphicDefinitionsEditor } from './graphicDefinitionsEditor.js'
+import { sceneChoices } from './choiceLabels.js'
 
 export interface AssetPanelActions {
   save(command: EditorCommand): Promise<void>
@@ -71,7 +72,7 @@ export function bindAssetsPanel(
       <label for="asset-preset-name" data-i18n="assets.presetName"></label><input id="asset-preset-name" pattern="[a-zA-Z0-9_-]+" />
       <div class="preview-actions"><button type="button" id="asset-save-defaults" data-i18n="assets.saveDefaults"></button><button type="submit" data-i18n="assets.savePreset"></button><button type="button" id="asset-remove-preset" data-i18n="assets.removePreset"></button></div>
     </form>
-    </div><form id="asset-image"><h4 data-i18n="assets.import"></h4>
+    </div><form id="asset-image"><h4 id="asset-image-heading" data-i18n="assets.import"></h4>
       <label for="asset-image-id" data-i18n="metadata.id"></label><input id="asset-image-id" required pattern="[a-zA-Z0-9_-]+" />
       <label for="asset-format" data-i18n="assets.format"></label><select id="asset-format"><option>svg</option><option>png</option><option>jpeg</option><option>webp</option></select>
       <label for="asset-file" data-i18n="assets.file"></label><input id="asset-file" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" />
@@ -591,6 +592,10 @@ export function bindAssetsPanel(
       find('asset-workshop').hidden = kind !== 'asset' || Boolean(structured)
       find('asset-image').hidden =
         kind !== 'import' && !(kind === 'asset' && id && catalog().images[id])
+      // An existing image edits its file; only the import node starts a new one.
+      const imageHeading = find('asset-image-heading')
+      imageHeading.dataset.i18n = kind === 'import' ? 'assets.import' : 'assets.imageFile'
+      imageHeading.textContent = t(imageHeading.dataset.i18n)
       const definition = find('asset-definition').parentElement!
       definition.hidden = Boolean(structured) || (kind !== 'asset' && kind !== 'new-asset')
       definition.toggleAttribute('open', kind === 'new-asset')
@@ -685,7 +690,7 @@ export function bindAssetsPanel(
       selected = value('asset-select')
       selectOptions(
         'graphic-scene',
-        next.view.scenes.map((scene) => [scene.id, scene.title]),
+        sceneChoices(next.view).map(([id, name]) => [id, name]),
       )
 
       if (resourceRevision !== `${next.path}:${next.view.revision}`) {

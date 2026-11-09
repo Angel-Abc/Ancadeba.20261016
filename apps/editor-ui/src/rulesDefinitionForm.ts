@@ -14,6 +14,16 @@ import {
   statePath,
   translationChoices,
 } from './ruleFormControls.js'
+import {
+  combatOutcomeLabels,
+  comparisonLabels,
+  conditionTypeLabels,
+  effectTypeLabels,
+  labelled,
+  questChoices,
+  questStatusLabels,
+  sceneChoices,
+} from './choiceLabels.js'
 
 type ConditionType = RuleCondition['type']
 
@@ -322,17 +332,20 @@ export function rulesDefinitionForm(
           select(
             'Condition',
             entry.type,
-            [
-              ['scene-is', 'Active scene'],
-              ['state-is', 'State equals'],
-              ['state-compare', 'Compare numeric state'],
-              ['quest-state', 'Quest status'],
-              ['combat-outcome', 'Recorded combat outcome'],
-              ['item-owned-by', 'Item owned, including containers'],
-              ['item-carried-by', 'Item carried by owner'],
-              ['payload-is-item', 'Request is for item'],
-              ['payload-is-target', 'Request is for nearby target'],
-            ],
+            labelled(
+              [
+                'scene-is',
+                'state-is',
+                'state-compare',
+                'quest-state',
+                'combat-outcome',
+                'item-owned-by',
+                'item-carried-by',
+                'payload-is-item',
+                'payload-is-target',
+              ] as const,
+              conditionTypeLabels,
+            ),
             (next) =>
               change(() => {
                 branch.when[position] = condition(next)
@@ -342,7 +355,7 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'scene-is')
           field.append(
-            select('Scene', entry.scene, sceneIds, (next) => {
+            select('Scene', entry.scene, sceneChoices(view, 'game'), (next) => {
               entry.scene = next
             }),
           )
@@ -354,9 +367,14 @@ export function rulesDefinitionForm(
             select('State field', statePath(entry.path), fields, (value) => {
               entry.path = parseStatePath(value)
             }),
-            select('Comparison', entry.operator, ['eq', 'gte', 'lte', 'gt', 'lt'], (value) => {
-              entry.operator = value
-            }),
+            select(
+              'Comparison',
+              entry.operator,
+              labelled(['eq', 'gte', 'lte', 'gt', 'lt'] as const, comparisonLabels),
+              (value) => {
+                entry.operator = value
+              },
+            ),
             input(
               'Required amount',
               String(entry.value),
@@ -369,13 +387,13 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'quest-state')
           field.append(
-            select('Quest', entry.quest, Object.keys(view.quests ?? {}), (value) => {
+            select('Quest', entry.quest, questChoices(view), (value) => {
               entry.quest = value
             }),
             select(
               'Quest status',
               entry.status,
-              ['not-started', 'active', 'ready', 'completed'],
+              labelled(['not-started', 'active', 'ready', 'completed'] as const, questStatusLabels),
               (value) => {
                 entry.status = value
               },
@@ -390,9 +408,14 @@ export function rulesDefinitionForm(
             select('Encounter', entry.encounter, Object.keys(view.combat ?? {}), (value) => {
               entry.encounter = value
             }),
-            select('Outcome', entry.outcome, ['victory', 'defeat', 'escaped'], (value) => {
-              entry.outcome = value
-            }),
+            select(
+              'Outcome',
+              entry.outcome,
+              labelled(['victory', 'defeat', 'escaped'] as const, combatOutcomeLabels),
+              (value) => {
+                entry.outcome = value
+              },
+            ),
           )
 
         if (entry.type === 'payload-is-target')
@@ -452,14 +475,17 @@ export function rulesDefinitionForm(
           select(
             'Effect',
             entry.type,
-            [
-              ['set-state', 'Set state'],
-              ['move-item', 'Move carried item'],
-              ['enter-scene', 'Enter game scene'],
-              ['append-log', 'Append to activity log'],
-              ['start-quest', 'Start quest'],
-              ['complete-quest', 'Complete ready quest'],
-            ],
+            labelled(
+              [
+                'set-state',
+                'move-item',
+                'enter-scene',
+                'append-log',
+                'start-quest',
+                'complete-quest',
+              ] as const,
+              effectTypeLabels,
+            ),
             (next) =>
               change(() => {
                 branch.effects[position] = effect(next)
@@ -471,7 +497,7 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'start-quest' || entry.type === 'complete-quest')
           field.append(
-            select('Quest', entry.quest, Object.keys(view.quests ?? {}), (value) => {
+            select('Quest', entry.quest, questChoices(view), (value) => {
               entry.quest = value
             }),
           )
@@ -496,7 +522,7 @@ export function rulesDefinitionForm(
               .map(({ id }) => id) ?? []
 
           field.append(
-            select('Destination scene', entry.scene, sceneIds, (next) => {
+            select('Destination scene', entry.scene, sceneChoices(view, 'game'), (next) => {
               entry.scene = next
               delete entry.mapView
               rerender()

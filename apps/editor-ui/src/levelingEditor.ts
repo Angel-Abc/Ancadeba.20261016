@@ -14,6 +14,7 @@ import {
   saveBar,
   translationChoices,
 } from './ruleFormControls.js'
+import { sceneChoices } from './choiceLabels.js'
 
 /** Readable names for the profile's display texts, keyed by schema key. */
 const textNames = {
@@ -124,7 +125,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
     const picker = select(
       'Leveling game scene',
       sceneId,
-      view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id),
+      sceneChoices(view, 'game'),
       (value) => {
         if (!navigate(value)) picker.querySelector('select')!.value = sceneId
       },

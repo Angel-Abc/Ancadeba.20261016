@@ -18,6 +18,7 @@ import {
   translationChoices,
   type RuleFormControls,
 } from './ruleFormControls.js'
+import { sceneChoices } from './choiceLabels.js'
 
 type ButtonAction = NonNullable<ButtonComponentDefinition['action']>
 
@@ -564,7 +565,7 @@ function componentFields(
           select(
             'Target scene',
             action.scene,
-            action.type === 'new-game' ? gameScenes : scenes,
+            sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
             (value) => {
               action.scene = value
             },

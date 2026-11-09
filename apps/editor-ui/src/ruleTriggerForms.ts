@@ -11,6 +11,7 @@ import {
 } from './ruleFormControls.js'
 import { inventoryActionsForm } from './inventoryActionsForm.js'
 import { nearbyForm } from './nearbyForm.js'
+import { sceneChoices } from './choiceLabels.js'
 
 const binding = (path: string): GameBindingDefinition => ({
   source: 'game.state',
@@ -174,7 +175,7 @@ function buttonTriggers(
     const scenePicker = select(
       'Game scene',
       scene.id,
-      scenes.map(({ id }) => id),
+      sceneChoices(view, 'game'),
       (next) => {
         if (next === scene.id) return
 

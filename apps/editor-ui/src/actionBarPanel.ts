@@ -9,6 +9,7 @@ import {
   readInputDraft,
   type InputDraft,
 } from './inputDefinitionForm.js'
+import { sceneChoices } from './choiceLabels.js'
 
 function defaultInput(): InputDefinition {
   const slots = Array.from({ length: 15 }, (_, index) => `slot-${index + 1}`)
@@ -103,7 +104,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     const picker = barControls.select(
       'Game scene',
       sceneId,
-      view.scenes.filter(({ type }) => type === 'game').map(({ id }) => id),
+      sceneChoices(view, 'game'),
       (next) => {
         if (!navigate(next)) picker.querySelector('select')!.value = sceneId
       },

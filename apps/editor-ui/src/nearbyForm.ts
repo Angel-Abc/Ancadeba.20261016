@@ -7,6 +7,7 @@ import {
   statePath,
   translationChoices,
 } from './ruleFormControls.js'
+import { sceneChoices } from './choiceLabels.js'
 
 /** Edits scene targets separately from the action-bar slots that display their commands. */
 export function nearbyForm(
@@ -291,7 +292,7 @@ export function nearbyForm(
   const picker = controls.select(
     'Nearby game scene',
     sceneId,
-    scenes.map(({ id }) => id),
+    sceneChoices(view, 'game'),
     (value) => {
       if (dirty) {
         picker.querySelector('select')!.value = sceneId

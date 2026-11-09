@@ -5,7 +5,7 @@ import {
   type TextComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { yesNoChoices, type RuleFormControls } from './ruleFormControls.js'
 import { previewTextBindings, textBindingChoices, textBindingId } from './textBindingChoices.js'
 
 export interface TextBindingPending {
@@ -18,7 +18,7 @@ const sourceNames = {
   'game.progression': 'Game time',
   'game.quests': 'Quest progress',
   'game.leveling': 'Character levels',
-  'game.combatStats': 'Equipment stats',
+  'game.combatStats': 'Combat stats',
 } as const
 
 /** Text placeholders opt into binding explicitly; removing a row never silently makes them literal. */
@@ -179,15 +179,11 @@ export function textBindingsForm(
       }
 
       box.append(
-        select(
-          'Use fallback text',
-          String(binding.fallback !== undefined),
-          ['false', 'true'],
-          (value) =>
-            change(() => {
-              if (value === 'true') binding.fallback = ''
-              else delete binding.fallback
-            }),
+        select('Use fallback text', String(binding.fallback !== undefined), yesNoChoices, (value) =>
+          change(() => {
+            if (value === 'true') binding.fallback = ''
+            else delete binding.fallback
+          }),
         ),
         ...(binding.fallback !== undefined
           ? [

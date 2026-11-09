@@ -5,7 +5,7 @@ import {
   inventoryIcon,
   type InventoryDefinition,
 } from '@ancadeba/schemas'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { yesNoChoices, onOffChoices, type RuleFormControls } from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { itemUseForm } from './itemUseForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
@@ -45,7 +45,7 @@ export function inventoryDefinitionForms(
 
     const equipment = group(
       'Item behavior',
-      select('Can contain items', String(type.container), ['false', 'true'], (value) => {
+      select('Can contain items', String(type.container), yesNoChoices, (value) => {
         type.container = value === 'true'
       }),
       select(
@@ -68,7 +68,7 @@ export function inventoryDefinitionForms(
         select(
           `Fits slot ${id}`,
           String(type.equipmentSlots.includes(id)),
-          ['false', 'true'],
+          yesNoChoices,
           (value) => {
             type.equipmentSlots =
               value === 'true'
@@ -131,7 +131,7 @@ export function inventoryDefinitionForms(
       select(
         'Owner combat stats',
         owner.combatStats ? 'enabled' : 'disabled',
-        ['disabled', 'enabled'],
+        onOffChoices,
         (value) => {
           if (value === 'disabled') delete owner.combatStats
           else {
@@ -245,7 +245,7 @@ export function inventoryDefinitionForms(
         select(
           `Override ${name}`,
           String(Object.hasOwn(item.colors, name)),
-          ['false', 'true'],
+          yesNoChoices,
           (value) => {
             if (value === 'true') item.colors[name] = defaults[name] ?? '#ffffff'
             else delete item.colors[name]

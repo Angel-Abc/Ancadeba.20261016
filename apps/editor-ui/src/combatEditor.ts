@@ -5,6 +5,7 @@ import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
 import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
+import { sceneChoices } from './choiceLabels.js'
 
 export function bindCombatEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
   const document = root.ownerDocument
@@ -93,7 +94,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     const picker = controls.select(
       'Combat game scene',
       sceneId,
-      view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id),
+      sceneChoices(view, 'game'),
       (value) => {
         if (!navigate(value)) picker.querySelector('select')!.value = sceneId
       },

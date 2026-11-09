@@ -3,6 +3,7 @@ import type { StatusPanelComponentDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { statusPanelForm } from './statusPanelForm.js'
+import { sceneChoices } from './choiceLabels.js'
 
 /** Owns status-panel drafts independently of scene metadata and other component editors. */
 export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -77,7 +78,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     const picker = controls.select(
       'Status game scene',
       sceneId,
-      view.scenes.filter((scene) => scene.type === 'game').map(({ id }) => id),
+      sceneChoices(view, 'game'),
       (value) => {
         if (!navigate(value)) picker.querySelector('select')!.value = sceneId
       },

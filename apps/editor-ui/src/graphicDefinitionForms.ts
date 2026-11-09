@@ -65,7 +65,7 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
       group(
         `Color ${id}`,
         input(
-          `Default color ${id}`,
+          'Default color',
           part.colors[id]!,
           (value) => {
             part.colors[id] = value
@@ -101,9 +101,13 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
         `Palette ${id}`,
         ...colors.flatMap((color) => [
           select(
-            `Palette ${id} overrides ${color}`,
+            // The palette group names the palette; each row only names its color.
+            color,
             String(Object.hasOwn(palette, color)),
-            ['false', 'true'],
+            [
+              ['false', 'Use default color'],
+              ['true', 'Custom color'],
+            ],
             (value) =>
               change(() => {
                 if (value === 'true') palette[color] = part.colors[color]!
@@ -113,7 +117,7 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
           ...(Object.hasOwn(palette, color)
             ? [
                 input(
-                  `Palette ${id} color ${color}`,
+                  `${color} color`,
                   palette[color]!,
                   (value) => {
                     palette[color] = value

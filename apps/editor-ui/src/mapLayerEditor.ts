@@ -30,23 +30,23 @@ export function mapLayerEditor(
     state.erasing = false
   }
 
-  element.append(
-    legend,
-    controls.select(
-      t('maps.paintLayer'),
-      state.selected,
-      [
-        ['', t('maps.groundLayer')],
-        ...layers.map((layer) => [layer.id, layer.name ?? layer.id] as const),
-      ],
-      (id) => {
-        state.selected = id
-        state.erasing = false
-        render()
-      },
-      false,
-    ),
+  // The paint layer picker sits beside the grid; the fieldset holds layer settings.
+  const picker = controls.select(
+    t('maps.paintLayer'),
+    state.selected,
+    [
+      ['', t('maps.groundLayer')],
+      ...layers.map((layer) => [layer.id, layer.name ?? layer.id] as const),
+    ],
+    (id) => {
+      state.selected = id
+      state.erasing = false
+      render()
+    },
+    false,
   )
+
+  element.append(legend)
   const help = document.createElement('p')
   help.className = 'help'
   help.textContent = t('maps.layerHelp')
@@ -120,5 +120,5 @@ export function mapLayerEditor(
     ),
   )
 
-  return element
+  return { element, picker }
 }

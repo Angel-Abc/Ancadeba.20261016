@@ -8,6 +8,7 @@ import {
 import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls, saveBar } from './ruleFormControls.js'
 import { shopForm } from './shopForm.js'
+import { sceneChoices } from './choiceLabels.js'
 
 export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
   const document = root.ownerDocument
@@ -78,7 +79,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     const picker = controls.select(
       'Shop game scene',
       sceneId,
-      view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id),
+      sceneChoices(view, 'game'),
       (value) => {
         if (!navigate(value)) picker.querySelector('select')!.value = sceneId
       },

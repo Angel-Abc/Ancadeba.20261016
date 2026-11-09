@@ -5,7 +5,7 @@ import {
   gameBindingSchema,
   type InventoryDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, translationChoices } from './ruleFormControls.js'
+import { onOffChoices, type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function itemPresentationForm(
   controls: RuleFormControls,
@@ -27,7 +27,7 @@ export function itemPresentationForm(
     select(
       'Combat equipment effects',
       draft.combatBonuses ? 'enabled' : 'disabled',
-      ['disabled', 'enabled'],
+      onOffChoices,
       (value) => {
         draft.combatBonuses = value === 'enabled' ? combatBonusesSchema.parse({}) : undefined
         render()
@@ -76,21 +76,29 @@ export function itemPresentationForm(
       translation('Property label translation', property.labelKey ?? '', keys, (value) => {
         property.labelKey = value || undefined
       }),
-      select('Property value type', type, ['string', 'number', 'binding'], (value) => {
-        property.value =
-          value === 'binding'
-            ? {
-                source: 'game.state',
-                path: view.rules?.state.find((field) => typeof field.value !== 'boolean')?.path ?? [
-                  'value',
-                ],
-              }
-            : value === 'number'
-              ? 0
-              : ''
-        delete property.valueKey
-        render()
-      }),
+      select(
+        'Property value type',
+        type,
+        [
+          ['string', 'Text'],
+          ['number', 'Number'],
+          ['binding', 'Game value'],
+        ],
+        (value) => {
+          property.value =
+            value === 'binding'
+              ? {
+                  source: 'game.state',
+                  path: view.rules?.state.find((field) => typeof field.value !== 'boolean')
+                    ?.path ?? ['value'],
+                }
+              : value === 'number'
+                ? 0
+                : ''
+          delete property.valueKey
+          render()
+        },
+      ),
     )
 
     if (typeof property.value === 'object') {

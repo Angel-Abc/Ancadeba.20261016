@@ -126,7 +126,7 @@ export function mapViewportControls(
   const help = document.createElement('p')
   help.className = 'help'
   help.textContent = t('maps.viewHelp')
-  element.append(zoomControls, pages, help)
+  element.append(zoomControls, pages)
 
   const refresh = () => {
     zoom.value = String(camera.zoom)
@@ -143,5 +143,5 @@ export function mapViewportControls(
 
   refresh()
 
-  return { element, refresh }
+  return { element, help, refresh }
 }

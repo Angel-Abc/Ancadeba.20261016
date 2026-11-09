@@ -20,6 +20,8 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
   let selected = ''
   let newLanguage = 'en'
   let newKey = ''
+  let keyFilter = ''
+  let onlyMissing = false
   let dirty = false
   let busy = false
   let submitted: LocalizationCommand | undefined
@@ -29,6 +31,100 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
   })
 
   const keys = () => [...new Set(Object.values(catalogs).flatMap(Object.keys))].sort()
+
+  /** Non-default languages that have no own text for a key and fall back to the default. */
+  const missing = (key: string) =>
+    languages.available.filter(
+      (language) => language !== languages.default && !Object.hasOwn(catalogs[language] ?? {}, key),
+    )
+
+  const matches = (key: string) => {
+    if (onlyMissing && !missing(key).length) return false
+    const text = keyFilter.toLowerCase()
+
+    return (
+      !text ||
+      key.toLowerCase().includes(text) ||
+      Object.values(catalogs).some((catalog) => catalog[key]?.toLowerCase().includes(text))
+    )
+  }
+
+  /** The key picker filters as you type without redrawing, so the search field keeps focus. */
+  const keyPicker = () => {
+    const label = document.createElement('label')
+    const picker = document.createElement('select')
+    const count = document.createElement('p')
+    count.className = 'help'
+
+    const fill = () => {
+      const shown = keys().filter((key) => matches(key) || key === selected)
+
+      const options = [
+        ['', 'Choose a key'] as const,
+        ...shown.map((key) => {
+          const absent = missing(key)
+
+          return [key, absent.length ? `${key} · no ${absent.join(', ')} text` : key] as const
+        }),
+      ]
+
+      picker.replaceChildren(
+        ...options.map(([value, text]) => {
+          const option = document.createElement('option')
+          option.value = value
+          option.textContent = text
+
+          return option
+        }),
+      )
+      picker.value = selected
+      const gaps = keys().filter((key) => missing(key).length).length
+
+      const status = gaps
+        ? `${gaps} use the ${languages.default} text because a translation is missing.`
+        : 'Every key is translated.'
+
+      count.textContent = `Showing ${keys().filter(matches).length} of ${keys().length} keys. ${status}`
+    }
+
+    const search = document.createElement('input')
+    search.type = 'search'
+    search.value = keyFilter
+    search.placeholder = 'Key or text'
+    search.addEventListener('input', () => {
+      keyFilter = search.value.trim()
+      fill()
+    })
+    const searchLabel = document.createElement('label')
+    searchLabel.append('Find translation key', search)
+    const scope = document.createElement('select')
+
+    for (const [value, text] of [
+      ['all', 'All keys'],
+      ['missing', 'Keys missing a translation'],
+    ] as const) {
+      const option = document.createElement('option')
+      option.value = value
+      option.textContent = text
+      scope.append(option)
+    }
+
+    scope.value = onlyMissing ? 'missing' : 'all'
+    scope.addEventListener('change', () => {
+      onlyMissing = scope.value === 'missing'
+      fill()
+    })
+    const scopeLabel = document.createElement('label')
+    scopeLabel.append('Show', scope)
+    picker.addEventListener('change', () => {
+      selected = picker.value
+      render()
+    })
+    label.append('Translation key', picker)
+    fill()
+
+    return [searchLabel, scopeLabel, label, count]
+  }
 
   const reset = () => {
     languages = structuredClone(view?.game?.languages ?? { default: '', available: [] })
@@ -123,6 +219,7 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
       ),
       group(
         'Translation keys',
+        ...keyPicker(),
         input('New translation key', newKey, (value) => {
           newKey = value.trim()
         }),
@@ -143,16 +240,6 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
             })
           },
           !languages.available.length,
-        ),
-        select(
-          'Translation key',
-          selected,
-          [['', 'Choose a key'], ...keys()],
-          (value) => {
-            selected = value
-            render()
-          },
-          false,
         ),
       ),
     )

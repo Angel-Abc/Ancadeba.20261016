@@ -165,6 +165,38 @@ export function bindGraphicDefinitionsEditor(
       false,
     )
 
+    const newDefinition = input('New graphic definition ID', newId, (value) => {
+      newId = value.trim()
+    })
+
+    const add = button(kind === 'parts' ? 'Add part' : 'Add composition', () =>
+      change(() => {
+        requireDefinitionId(newId, [
+          ...Object.keys(catalog.images),
+          ...Object.keys(catalog.parts),
+          ...Object.keys(catalog.compositions),
+        ])
+        const bounds = { x: 0, y: 0, width: 100, height: 100 }
+
+        if (kind === 'parts')
+          catalog.parts[newId] = { bounds, pieces: [], colors: {}, palettes: {} }
+        else
+          catalog.compositions[newId] = {
+            bounds,
+            layers: ['body'],
+            anchors: { origin: { x: 0, y: 0 } },
+            slots: {},
+          }
+        selected = newId
+        newId = ''
+        palette = ''
+      }),
+    )
+
+    // A definition chosen in the explorer needs no kind, definition or new-ID pickers.
+    if (selected && Object.hasOwn(catalog[kind], selected))
+      for (const control of [type, picker, newDefinition, add])
+        control.setAttribute('data-explorer-chosen', '')
     const help = document.createElement('p')
     help.className = 'help'
     help.textContent =
@@ -174,32 +206,8 @@ export function bindGraphicDefinitionsEditor(
       help,
       type,
       picker,
-      input('New graphic definition ID', newId, (value) => {
-        newId = value.trim()
-      }),
-      button(kind === 'parts' ? 'Add part' : 'Add composition', () =>
-        change(() => {
-          requireDefinitionId(newId, [
-            ...Object.keys(catalog.images),
-            ...Object.keys(catalog.parts),
-            ...Object.keys(catalog.compositions),
-          ])
-          const bounds = { x: 0, y: 0, width: 100, height: 100 }
-
-          if (kind === 'parts')
-            catalog.parts[newId] = { bounds, pieces: [], colors: {}, palettes: {} }
-          else
-            catalog.compositions[newId] = {
-              bounds,
-              layers: ['body'],
-              anchors: { origin: { x: 0, y: 0 } },
-              slots: {},
-            }
-          selected = newId
-          newId = ''
-          palette = ''
-        }),
-      ),
+      newDefinition,
+      add,
     )
     const layout = document.createElement('div')
     layout.className = 'graphic-definitions-layout'
@@ -214,7 +222,7 @@ export function bindGraphicDefinitionsEditor(
         select(
           'Preview palette',
           palette,
-          ['', ...Object.keys(part.palettes)],
+          [['', 'Default colors'], ...Object.keys(part.palettes).map((id) => [id, id] as const)],
           (value) => {
             palette = value
             updatePreview()

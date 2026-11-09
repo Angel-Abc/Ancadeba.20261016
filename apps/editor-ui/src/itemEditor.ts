@@ -12,6 +12,8 @@ import {
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import {
+  yesNoChoices,
+  onOffChoices,
   placementFields,
   ruleFormControls,
   saveBar,
@@ -21,6 +23,7 @@ import { itemUseForm } from './itemUseForm.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
 import { bindInventoryEditor } from './inventoryEditor.js'
+import { sceneChoices } from './choiceLabels.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
 export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
@@ -151,7 +154,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     const scenePicker = controls.select(
       'Items game scene',
       sceneId,
-      view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id),
+      sceneChoices(view, 'game'),
       (value) => {
         if (!navigate(value)) scenePicker.querySelector('select')!.value = sceneId
       },
@@ -266,7 +269,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         controls.select(
           'Combat stat profile',
           combatStats ? 'enabled' : 'disabled',
-          ['disabled', 'enabled'],
+          onOffChoices,
           (value) => {
             const fields =
               view?.rules?.state.filter((field) => typeof field.value === 'number') ?? []
@@ -321,7 +324,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
               controls.select(
                 'Show equipment stats',
                 String(draft.showCombatStats ?? false),
-                ['false', 'true'],
+                yesNoChoices,
                 (value) => {
                   draft.showCombatStats = value === 'true'
                 },
@@ -404,7 +407,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             controls.select(
               `Show owner ${owner.label}`,
               String(draft.owners.includes(id)),
-              ['false', 'true'],
+              yesNoChoices,
               (value) => {
                 draft.owners =
                   value === 'true'
@@ -416,7 +419,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           controls.select(
             'Inventory read only',
             String(draft.readOnly ?? false),
-            ['false', 'true'],
+            yesNoChoices,
             (value) => {
               draft.readOnly = value === 'true'
             },

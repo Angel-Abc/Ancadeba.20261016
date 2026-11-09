@@ -9,7 +9,7 @@ import {
   inventoryIssues,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { displayLabel, ruleFormControls, saveBar } from './ruleFormControls.js'
 import {
   inventoryDefinitionForms,
   type InventoryEntrySelection,
@@ -186,12 +186,27 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
 
     const merged = context().inventory
 
+    // Entries show their names; a starting item shows its instance ID and item type.
+    const entryLabel = (entryId: string) => {
+      if (selected.kind === 'items') {
+        const itemType = draft.items[entryId]?.itemType ?? ''
+        const type = merged.itemTypes[itemType]
+
+        return `${entryId} · ${type ? displayLabel(current, itemType, type) : itemType}`
+      }
+
+      const definition = draft[selected.kind][entryId]
+      const name = definition ? displayLabel(current, entryId, definition) : entryId
+
+      return name === entryId ? entryId : `${name} (${entryId})`
+    }
+
     const entry = controls.select(
       'Inventory entry',
       selected.id,
       [
         ['', 'Choose an entry'],
-        ...Object.keys(draft[selected.kind]).map((id) => [id, id] as const),
+        ...Object.keys(draft[selected.kind]).map((id) => [id, entryLabel(id)] as const),
       ],
       (value) => {
         if (value === selected.id) return
@@ -215,6 +230,11 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
       help,
       kind,
       entry,
+    )
+
+    // Creating an entry comes after the selected entry, so the picker sits next to its form.
+    const adding = controls.group(
+      `New ${labels[selected.kind]}`,
       controls.input('New entry ID', newId, (value) => {
         newId = value.trim()
       }),
@@ -280,6 +300,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
       )
     }
 
+    form.append(adding)
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 

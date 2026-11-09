@@ -12,6 +12,7 @@ import {
   type CombatActorDefinition,
 } from '@ancadeba/schemas'
 import { humanizeCode, type RuleFormControls, translationChoices } from './ruleFormControls.js'
+import { sceneChoices } from './choiceLabels.js'
 
 export function combatForm(
   controls: RuleFormControls,
@@ -249,7 +250,7 @@ export function combatForm(
         select(
           `${humanizeCode(outcome)} destination`,
           draft.outcomes[outcome] ?? '',
-          ['', ...view.scenes.map((scene) => scene.id)],
+          [['', 'Not set'], ...sceneChoices(view)],
           (value) => {
             draft.outcomes[outcome] = value || undefined
           },

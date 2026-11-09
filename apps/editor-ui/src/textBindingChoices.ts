@@ -6,7 +6,7 @@ import {
   type TextComponentDefinition,
 } from '@ancadeba/schemas'
 import { resolveText, type IGameBindings } from '@ancadeba/game-runtime'
-import { displayLabel } from './ruleFormControls.js'
+import { displayLabel, humanizeCode } from './ruleFormControls.js'
 
 export interface TextBindingChoice {
   id: string
@@ -20,6 +20,37 @@ export function textBindingId(binding: {
   path: readonly (string | number)[]
 }) {
   return JSON.stringify([binding.source, binding.path])
+}
+
+const valueNames = new Map<string, string>([
+  ['xp', 'Total XP'],
+  ['maximumLevel', 'Maximum level'],
+  ['nextLevelXp', 'XP for next level'],
+  ['xpIntoLevel', 'XP into this level'],
+  ['xpToNextLevel', 'XP still needed'],
+  ['capped', 'At maximum level'],
+  ['maximumHealth', 'Maximum health'],
+])
+
+/** A readable name for a leveling field or combat stat, such as `xpToNextLevel`. */
+export function bindingFieldLabel(field: string): string {
+  return valueNames.get(field) ?? humanizeCode(field)
+}
+
+/** A combat stat owner's name; the ID is added when another owner shares that name. */
+export function combatOwnerLabel(view: ProjectView, id: string): string {
+  const owners = Object.entries(view.inventory?.owners ?? {}).filter(
+    ([, owner]) => owner.combatStats,
+  )
+
+  const name = (ownerId: string, owner: { label?: string; labelKey?: string | undefined }) =>
+    displayLabel(view, ownerId, owner)
+
+  const owner = view.inventory?.owners[id]
+  const label = owner ? name(id, owner) : id
+  const shared = owners.some(([other, entry]) => other !== id && name(other, entry) === label)
+
+  return shared && label !== id ? `${label} (${id})` : label
 }
 
 /** Authorable scalar values; gold uses its declared game-state path like any other number. */
@@ -72,15 +103,19 @@ export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
         choice(
           'game.leveling',
           [id, field],
-          `Character · ${displayLabel(view, id, profile)} · ${field}`,
+          `Character · ${displayLabel(view, id, profile)} · ${bindingFieldLabel(field)}`,
         ),
       ),
     ),
     ...Object.entries(view.inventory?.owners ?? {})
       .filter(([, owner]) => owner.combatStats)
-      .flatMap(([id, owner]) =>
+      .flatMap(([id]) =>
         [...combatStatNames, 'health', 'available', 'locked'].map((field) =>
-          choice('game.combatStats', [id, field], `Equipment · ${owner.label} · ${field}`),
+          choice(
+            'game.combatStats',
+            [id, field],
+            `Combat stats · ${combatOwnerLabel(view, id)} · ${bindingFieldLabel(field)}`,
+          ),
         ),
       ),
   ]

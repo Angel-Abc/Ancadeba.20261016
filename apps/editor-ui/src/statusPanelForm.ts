@@ -7,11 +7,13 @@ import {
   type StatusValueDefinition,
 } from '@ancadeba/schemas'
 import {
+  displayLabel,
   placementFields,
   type RuleFormControls,
   statePath,
   translationChoices,
 } from './ruleFormControls.js'
+import { bindingFieldLabel, combatOwnerLabel } from './textBindingChoices.js'
 
 function reorder<T>(entries: T[], index: number, delta: number): void {
   const target = index + delta
@@ -53,18 +55,18 @@ export function statusPanelForm(
           (stat) =>
             [
               JSON.stringify({ source: 'game.combatStats', path: [id, stat] }),
-              `Equipment · ${id} · ${stat}`,
+              `Combat stats · ${combatOwnerLabel(view, id)} · ${bindingFieldLabel(stat)}`,
             ] as const,
         ),
       ),
-    ...Object.keys(view.leveling ?? {}).flatMap((id) =>
+    ...Object.entries(view.leveling ?? {}).flatMap(([id, profile]) =>
       Object.entries(levelingBindingFields)
         .filter(([, type]) => (expected === 'value' ? type !== 'boolean' : type === expected))
         .map(
           ([key]) =>
             [
               JSON.stringify({ source: 'game.leveling', path: [id, key] }),
-              `Character · ${id} · ${key}`,
+              `Character · ${displayLabel(view, id, profile)} · ${bindingFieldLabel(key)}`,
             ] as const,
         ),
     ),

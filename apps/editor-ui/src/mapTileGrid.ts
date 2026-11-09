@@ -175,7 +175,7 @@ export function mapTileGrid(
 
   const navigation = document.createElement('div')
   navigation.className = 'map-navigation'
-  navigation.append(controls.element, minimap.element)
+  navigation.append(controls.element)
 
   const render = () => {
     const columns = camera.columns
@@ -454,7 +454,8 @@ export function mapTileGrid(
   document.addEventListener('pointercancel', stop, { signal: abort.signal })
   document.defaultView?.addEventListener('blur', stop, { signal: abort.signal })
   surface.append(grid)
-  element.append(navigation, surface)
+  // The grid comes first; the overview and view tips follow it.
+  element.append(navigation, surface, minimap.element, controls.help)
   render()
 
   return {

@@ -5,6 +5,7 @@ import {
   requireDefinitionId,
   type GraphicDefinitionControls,
 } from './graphicDefinitionForms.js'
+import { yesNoChoices } from './ruleFormControls.js'
 
 /** Include the chosen part's attachment requirements without moving existing anchors. */
 function includePart(composition: GraphicComposition, id: string, catalog: AssetCatalog) {
@@ -107,21 +108,17 @@ export function compositionDefinitionForm(
         group(
           `Slot ${id}`,
           ...parts.map((part) =>
-            select(
-              `Allow part ${part}`,
-              String(slot.parts.includes(part)),
-              ['false', 'true'],
-              (value) =>
-                change(() => {
-                  if (value === 'true') {
-                    slot.parts = [...new Set([...slot.parts, part])]
-                    includePart(composition, part, catalog)
-                  } else {
-                    slot.parts = slot.parts.filter((value) => value !== part)
+            select(`Allow part ${part}`, String(slot.parts.includes(part)), yesNoChoices, (value) =>
+              change(() => {
+                if (value === 'true') {
+                  slot.parts = [...new Set([...slot.parts, part])]
+                  includePart(composition, part, catalog)
+                } else {
+                  slot.parts = slot.parts.filter((value) => value !== part)
 
-                    if (slot.default === part) slot.default = null
-                  }
-                }),
+                  if (slot.default === part) slot.default = null
+                }
+              }),
             ),
           ),
           select('Default part', slot.default ?? '', [['', 'None'], ...slot.parts], (value) => {

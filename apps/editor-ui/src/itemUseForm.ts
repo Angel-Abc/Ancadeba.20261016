@@ -5,7 +5,7 @@ import {
   type InventoryDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
-import { type RuleFormControls, translationChoices } from './ruleFormControls.js'
+import { onOffChoices, type RuleFormControls, translationChoices } from './ruleFormControls.js'
 
 export function itemUseForm(
   controls: RuleFormControls,
@@ -22,22 +22,17 @@ export function itemUseForm(
   )
 
   const rows: HTMLElement[] = [
-    select(
-      'Built-in item use',
-      item.use ? 'enabled' : 'disabled',
-      ['disabled', 'enabled'],
-      (value) => {
-        const [library, id] = (abilities[0] ?? '/').split('/')
-        item.use =
-          value === 'enabled'
-            ? itemUseSchema.parse({
-                ability: { library: library || 'common', id: id || 'ability' },
-                contexts: ['combat'],
-              })
-            : undefined
-        render()
-      },
-    ),
+    select('Built-in item use', item.use ? 'enabled' : 'disabled', onOffChoices, (value) => {
+      const [library, id] = (abilities[0] ?? '/').split('/')
+      item.use =
+        value === 'enabled'
+          ? itemUseSchema.parse({
+              ability: { library: library || 'common', id: id || 'ability' },
+              contexts: ['combat'],
+            })
+          : undefined
+      render()
+    }),
   ]
 
   const use = item.use

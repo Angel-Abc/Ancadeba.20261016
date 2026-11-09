@@ -10,7 +10,22 @@ import {
   type RuleText,
   type TextBindingsDefinition,
 } from '@ancadeba/schemas'
-import { type RuleFormControls, translationChoices, ruleValueControls } from './ruleFormControls.js'
+import {
+  yesNoChoices,
+  type RuleFormControls,
+  translationChoices,
+  ruleValueControls,
+} from './ruleFormControls.js'
+import {
+  combatOutcomeLabels,
+  comparisonLabels,
+  conditionTypeLabels,
+  effectTypeLabels,
+  labelled,
+  questChoices,
+  questStatusLabels,
+  sceneChoices,
+} from './choiceLabels.js'
 
 type Presentation = Pick<QuestDefinition, 'label' | 'labelKey' | 'description' | 'descriptionKey'>
 
@@ -52,15 +67,18 @@ export function storyConditions(
       controls.select(
         'Condition type',
         condition.type,
-        [
-          'scene-is',
-          'state-is',
-          'state-compare',
-          'item-carried-by',
-          'item-owned-by',
-          'quest-state',
-          'combat-outcome',
-        ],
+        labelled(
+          [
+            'scene-is',
+            'state-is',
+            'state-compare',
+            'item-carried-by',
+            'item-owned-by',
+            'quest-state',
+            'combat-outcome',
+          ] as const,
+          conditionTypeLabels,
+        ),
         (type) => {
           conditions[index] =
             type === 'scene-is'
@@ -85,14 +103,9 @@ export function storyConditions(
 
     if (condition.type === 'scene-is')
       row.append(
-        controls.select(
-          'Scene',
-          condition.scene,
-          view.scenes.map((scene) => scene.id),
-          (value) => {
-            condition.scene = value
-          },
-        ),
+        controls.select('Scene', condition.scene, sceneChoices(view), (value) => {
+          condition.scene = value
+        }),
       )
 
     if (condition.type === 'state-is' || condition.type === 'state-compare') {
@@ -130,7 +143,7 @@ export function storyConditions(
           controls.select(
             'Comparison',
             condition.operator,
-            ['eq', 'gte', 'lte', 'gt', 'lt'],
+            labelled(['eq', 'gte', 'lte', 'gt', 'lt'] as const, comparisonLabels),
             (value) => {
               condition.operator = value
             },
@@ -163,13 +176,13 @@ export function storyConditions(
 
     if (condition.type === 'quest-state')
       row.append(
-        controls.select('Quest', condition.quest, Object.keys(view.quests ?? {}), (value) => {
+        controls.select('Quest', condition.quest, questChoices(view), (value) => {
           condition.quest = value
         }),
         controls.select(
           'Quest status',
           condition.status,
-          ['not-started', 'active', 'ready', 'completed'],
+          labelled(['not-started', 'active', 'ready', 'completed'] as const, questStatusLabels),
           (value) => {
             condition.status = value
           },
@@ -189,9 +202,14 @@ export function storyConditions(
             condition.encounter = value
           },
         ),
-        controls.select('Outcome', condition.outcome, ['victory', 'defeat', 'escaped'], (value) => {
-          condition.outcome = value
-        }),
+        controls.select(
+          'Outcome',
+          condition.outcome,
+          labelled(['victory', 'defeat', 'escaped'] as const, combatOutcomeLabels),
+          (value) => {
+            condition.outcome = value
+          },
+        ),
       )
     row.append(
       controls.button('Remove condition', () => {
@@ -255,7 +273,10 @@ function effectsForm(
       controls.select(
         'Effect type',
         effect.type,
-        ['set-state', 'append-log', 'start-quest', 'complete-quest'],
+        labelled(
+          ['set-state', 'append-log', 'start-quest', 'complete-quest'] as const,
+          effectTypeLabels,
+        ),
         (type) => {
           effects[index] =
             type === 'set-state'
@@ -273,7 +294,7 @@ function effectsForm(
 
     if (effect.type === 'start-quest' || effect.type === 'complete-quest')
       row.append(
-        controls.select('Effect quest', effect.quest, Object.keys(view.quests ?? {}), (value) => {
+        controls.select('Effect quest', effect.quest, questChoices(view), (value) => {
           effect.quest = value
         }),
       )
@@ -382,6 +403,33 @@ function lineBindings(
   return root
 }
 
+/** Open or closed state per node or choice, kept across redraws of the same draft. */
+type DialogueNode = DialogueDefinition['nodes'][string]
+
+type Foldable = DialogueNode | DialogueNode['choices'][number]
+
+const folds = new WeakMap<Foldable, boolean>()
+
+function fold(
+  controls: RuleFormControls,
+  key: Foldable,
+  summary: string,
+  openByDefault: boolean,
+  ...children: HTMLElement[]
+): HTMLElement {
+  const details = controls.create('details')
+  const title = controls.create('summary')
+  title.textContent = summary
+  details.open = folds.get(key) ?? openByDefault
+  details.append(title, ...children)
+  details.addEventListener('toggle', () => folds.set(key, details.open))
+
+  return details
+}
+
+const count = (amount: number, single: string, plural: string) =>
+  `${amount} ${amount === 1 ? single : plural}`
+
 export function dialogueForm(
   controls: RuleFormControls,
   view: ProjectView,
@@ -393,7 +441,7 @@ export function dialogueForm(
   for (const [id, node] of Object.entries(draft.nodes)) {
     const section = controls.group(`Node ${id}`)
     section.append(
-      controls.select('Terminal node', String(node.terminal), ['false', 'true'], (value) => {
+      controls.select('Terminal node', String(node.terminal), yesNoChoices, (value) => {
         node.terminal = value === 'true'
       }),
       controls.button('Remove node', () => {
@@ -467,24 +515,35 @@ export function dialogueForm(
         controls.select(
           'Scene after ending',
           choice.scene ?? '',
-          ['', ...view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id)],
+          [['', 'Stay in the current scene'], ...sceneChoices(view, 'game')],
           (value) => {
             choice.scene = value || undefined
           },
         ),
-        textField(
+        // Conditions and effects fold away so a node's choices can be scanned.
+        fold(
           controls,
-          view,
-          'Unavailable explanation',
-          choice.unavailableText ?? '',
-          (value) => {
-            choice.unavailableText = value
-          },
-          render,
+          choice,
+          `Conditions and effects · ${count(
+            choice.visibleWhen.length + choice.when.length,
+            'condition',
+            'conditions',
+          )}, ${count(choice.effects.length, 'effect', 'effects')}`,
+          false,
+          textField(
+            controls,
+            view,
+            'Unavailable explanation',
+            choice.unavailableText ?? '',
+            (value) => {
+              choice.unavailableText = value
+            },
+            render,
+          ),
+          storyConditions(controls, view, 'Visible when (all)', choice.visibleWhen, render),
+          storyConditions(controls, view, 'Enabled when (all)', choice.when, render),
+          effectsForm(controls, view, choice.effects, render),
         ),
-        storyConditions(controls, view, 'Visible when (all)', choice.visibleWhen, render),
-        storyConditions(controls, view, 'Enabled when (all)', choice.when, render),
-        effectsForm(controls, view, choice.effects, render),
         controls.button(
           'Move choice earlier',
           () => {
@@ -517,7 +576,20 @@ export function dialogueForm(
         render()
       }),
     )
-    root.append(section)
+    const start = id === draft.entry ? ' · start' : ''
+    root.append(
+      fold(
+        controls,
+        node,
+        `Node ${id}${start} · ${count(node.lines.length, 'line', 'lines')}, ${count(
+          node.choices.length,
+          'choice',
+          'choices',
+        )}`,
+        id === draft.entry,
+        section,
+      ),
+    )
   }
 
   let id = ''

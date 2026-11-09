@@ -9,12 +9,15 @@ import {
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
 import {
+  displayLabel,
+  yesNoChoices,
   ruleFormControls,
   saveBar,
   translationChoices,
   placementFields,
 } from './ruleFormControls.js'
 import { dialogueForm, questForm } from './storyForms.js'
+import { questChoices, questStatusLabels, sceneChoices } from './choiceLabels.js'
 
 type Draft =
   | { kind: 'dialogue'; data: DialogueDefinition }
@@ -151,16 +154,18 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
     fields.replaceChildren()
 
     if (!view?.game) return
+    const project = view
 
     const picker = controls.select(
       'Dialogue or quest',
       selection,
       [
         ['', 'Choose a definition'],
-        ...Object.keys(view.dialogues ?? {}).map(
-          (id) => [`dialogue:${id}`, `Dialogue: ${id}`] as const,
+        ...Object.entries(view.dialogues ?? {}).map(
+          ([id, dialogue]) =>
+            [`dialogue:${id}`, `Dialogue: ${displayLabel(project, id, dialogue)}`] as const,
         ),
-        ...Object.keys(view.quests ?? {}).map((id) => [`quest:${id}`, `Quest: ${id}`] as const),
+        ...questChoices(view).map(([id, name]) => [`quest:${id}`, `Quest: ${name}`] as const),
       ],
       (value) => {
         if (dirty) {
@@ -186,7 +191,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       journalControls.select(
         'Journal scene',
         journalScene,
-        ['', ...view.scenes.filter((scene) => scene.type === 'game').map((scene) => scene.id)],
+        [['', 'No quest journal'], ...sceneChoices(view, 'game')],
         (value) => {
           if (journalDirty && value !== journalScene) {
             const picker = journals.querySelector('select')
@@ -251,9 +256,9 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
         ),
         ...(['not-started', 'active', 'ready', 'completed'] as const).map((status) =>
           journalControls.select(
-            `Journal show ${status}`,
+            `Show ${questStatusLabels.get(status)?.toLowerCase()} quests`,
             String(current.statuses.includes(status)),
-            ['true', 'false'],
+            yesNoChoices,
             (value) => {
               current.statuses =
                 value === 'true'
@@ -287,9 +292,13 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       )
     }
 
-    fields.append(journals)
+    // The journal applies to quests, so it follows the chosen definition.
+    if (!draft) {
+      fields.append(journals)
 
-    if (!draft) return
+      return
+    }
+
     const current = draft
     const form = document.createElement('form')
     const button = document.createElement('button')
@@ -341,6 +350,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
             : { type: 'game.removeQuest', questId: current.data.id },
         ),
       ),
+      journals,
     )
   }
 

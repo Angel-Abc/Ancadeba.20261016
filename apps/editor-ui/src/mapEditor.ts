@@ -328,12 +328,14 @@ export function bindMapEditor(
       false,
     )
 
+    // The explorer lists every map and New map, so this picker only backs keyboard tests.
+    picker.setAttribute('data-explorer-chosen', '')
+
     const name = controls.input(t('maps.id'), id, (value) => {
       id = value.trim()
     })
 
     name.querySelector('input')!.readOnly = !creating
-    form.append(picker, name)
     const dimensions = document.createElement('div')
     dimensions.className = 'map-editor-dimensions'
     dimensions.append(
@@ -386,29 +388,34 @@ export function bindMapEditor(
       : t('maps.placeHelp')
     const terrain = document.createElement('fieldset')
     const legend = document.createElement('legend')
-    legend.textContent = t('maps.terrain')
-    terrain.append(
-      legend,
-      controls.select(
-        t('maps.brush'),
-        brush,
-        Object.keys(draft.data.terrain),
-        (value) => {
-          brush = value
-          const tile = draft.data.terrain[brush]?.tile
+    legend.textContent = t('maps.terrainSettings', { terrain: brush })
+    terrain.append(legend)
+    // The brush pickers sit directly above the grid they paint.
+    const brushes = document.createElement('div')
+    brushes.className = 'map-brushes'
 
-          if (tile) {
-            tilesetState.selected = tile.tileset
-            tilesetState.column = tile.column
-            tilesetState.row = tile.row
-          }
+    const brushPicker = controls.select(
+      t('maps.brush'),
+      brush,
+      Object.keys(draft.data.terrain),
+      (value) => {
+        brush = value
+        const tile = draft.data.terrain[brush]?.tile
 
-          render()
-        },
-        false,
-      ),
+        if (tile) {
+          tilesetState.selected = tile.tileset
+          tilesetState.column = tile.column
+          tilesetState.row = tile.row
+        }
+
+        render()
+      },
+      false,
     )
+
     const definition = draft.data.terrain[brush]
+
+    if (!definition) legend.textContent = t('maps.terrain')
     let tileChoice: HTMLSelectElement | undefined
 
     if (definition) {
@@ -533,7 +540,16 @@ export function bindMapEditor(
       ),
     )
 
-    const layers = mapLayerEditor(document, draft, controls, t, layerState, render, change, confirm)
+    const { element: layers, picker: layerPicker } = mapLayerEditor(
+      document,
+      draft,
+      controls,
+      t,
+      layerState,
+      render,
+      change,
+      confirm,
+    )
 
     const gridDisabled = () =>
       busy ||
@@ -626,16 +642,11 @@ export function bindMapEditor(
           dirty,
         ),
       )
-    form.append(
-      dimensions,
-      help,
-      layers,
-      terrain,
-      tilesetEditor.element,
-      instructions,
-      tileTools.element,
-      board.element,
-      controls.button(t(layerState.selected ? 'maps.fillLayer' : 'maps.fill'), async () => {
+    brushes.append(layerPicker, brushPicker)
+
+    const fill = controls.button(
+      t(layerState.selected ? 'maps.fillLayer' : 'maps.fill'),
+      async () => {
         if (busy || confirming) return
 
         const message = layerState.selected
@@ -649,8 +660,24 @@ export function bindMapEditor(
 
         if (await confirm(message))
           change(() => draft.fill(layerState.erasing ? null : brush, layerState.selected))
-      }),
+      },
+    )
+
+    // Paint first: the grid follows its brushes; settings come after it.
+    form.append(
       actions,
+      picker,
+      name,
+      brushes,
+      board.element,
+      instructions,
+      fill,
+      tileTools.element,
+      terrain,
+      layers,
+      tilesetEditor.element,
+      dimensions,
+      help,
     )
     form.addEventListener('submit', async (event) => {
       event.preventDefault()

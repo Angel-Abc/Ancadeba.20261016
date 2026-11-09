@@ -12,6 +12,7 @@ import {
   statePath,
   translationChoices,
 } from './ruleFormControls.js'
+import { questChoices, sceneChoices } from './choiceLabels.js'
 
 function shortcut(view: ProjectView, binding: ActionBarSlotDefinition['inputBinding']): string {
   if (!binding || !view.input) return ''
@@ -236,7 +237,7 @@ export function actionBarForm(
 
       if (action.quest !== undefined)
         detail.append(
-          select('Fixed quest', action.quest, Object.keys(view.quests ?? {}), (value) => {
+          select('Fixed quest', action.quest, questChoices(view), (value) => {
             action.quest = value
           }),
         )
@@ -434,7 +435,7 @@ export function actionBarForm(
         select(
           'Target scene',
           action.scene,
-          action.type === 'new-game' ? gameScenes : view.scenes.map(({ id }) => id),
+          sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
           (value) => {
             action.scene = value
           },

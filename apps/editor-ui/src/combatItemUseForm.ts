@@ -1,6 +1,6 @@
 import type { CombatSource } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
-import type { RuleFormControls } from './ruleFormControls.js'
+import { onOffChoices, type RuleFormControls } from './ruleFormControls.js'
 
 export function combatItemUseForm(
   controls: RuleFormControls,
@@ -11,24 +11,19 @@ export function combatItemUseForm(
   const { group, select, input, create } = controls
 
   const rows: HTMLElement[] = [
-    select(
-      'Combat item use',
-      draft.itemUse ? 'enabled' : 'disabled',
-      ['disabled', 'enabled'],
-      (value) => {
-        draft.itemUse =
-          value === 'enabled'
-            ? {
-                owner:
-                  draft.player.equipmentOwner ?? Object.keys(view.inventory?.owners ?? {})[0] ?? '',
-                itemTypes: Object.entries(view.inventory?.itemTypes ?? {})
-                  .filter(([, item]) => item.use?.contexts.includes('combat'))
-                  .map(([id]) => id),
-              }
-            : undefined
-        render()
-      },
-    ),
+    select('Combat item use', draft.itemUse ? 'enabled' : 'disabled', onOffChoices, (value) => {
+      draft.itemUse =
+        value === 'enabled'
+          ? {
+              owner:
+                draft.player.equipmentOwner ?? Object.keys(view.inventory?.owners ?? {})[0] ?? '',
+              itemTypes: Object.entries(view.inventory?.itemTypes ?? {})
+                .filter(([, item]) => item.use?.contexts.includes('combat'))
+                .map(([id]) => id),
+            }
+          : undefined
+      render()
+    }),
   ]
 
   const use = draft.itemUse
