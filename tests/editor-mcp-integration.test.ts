@@ -597,6 +597,21 @@ describe('MCP and shared editor integration', () => {
       error: { code: 'component_exists', outcome: 'not_applied' },
     })
     expect((await inspect()).revision).toBe(data.revision)
+
+    const duplicateMap = await client.callTool({
+      name: 'ancadeba_apply_command',
+      arguments: {
+        expectedRevision: data.revision,
+        command: commands.find((entry) => entry.type === 'game.upsertMap'),
+      },
+    })
+
+    // The server declares the outcome, so the adapter needs no per-code rejection list.
+    expect(duplicateMap.structuredContent).toMatchObject({
+      ok: false,
+      error: { code: 'map_exists', status: 409, outcome: 'not_applied' },
+    })
+    expect((await inspect()).revision).toBe(data.revision)
   })
 
   it('round-trips bound text scenes and rejects layout changes that would clip their components', async () => {

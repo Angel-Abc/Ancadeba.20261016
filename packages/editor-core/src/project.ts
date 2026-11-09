@@ -102,6 +102,12 @@ export interface CommandResult {
   diagnostics: Diagnostic[]
 }
 
+export type EditorWriteOutcome = 'not_applied' | 'unknown'
+
+/**
+ * A 4xx rejection or a 503 unavailable feature must be raised before any project file is
+ * written, or after a confirmed rollback. Failures that may leave saved changes use another 5xx.
+ */
 export class EditorError extends Error {
   constructor(
     readonly status: number,
@@ -110,6 +116,10 @@ export class EditorError extends Error {
     readonly diagnostics: Diagnostic[] = [],
   ) {
     super(message)
+  }
+
+  get outcome(): EditorWriteOutcome {
+    return this.status < 500 || this.status === 503 ? 'not_applied' : 'unknown'
   }
 }
 

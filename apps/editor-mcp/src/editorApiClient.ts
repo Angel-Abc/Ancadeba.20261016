@@ -1,4 +1,9 @@
-import { commandRequestSchema, type EditorCommand, type Diagnostic } from '@ancadeba/editor-core'
+import {
+  commandRequestSchema,
+  type EditorCommand,
+  type Diagnostic,
+  type EditorWriteOutcome,
+} from '@ancadeba/editor-core'
 import type { z } from 'zod'
 import type { AdapterConfig } from './config.js'
 import { assetUploadInputSchema, historyInputSchema, maxUploadBytes } from './operationSupport.js'
@@ -12,22 +17,17 @@ import {
 
 // These editor errors are raised before persistence. Other failures may come from
 // the server's reread after saving, including legacy workspace errors with a 4xx status.
-const rejectedCommandStatuses = new Map<string, number>([
-  ['invalid_request', 400],
-  ['invalid_json', 400],
-  ['invalid_command', 400],
-  ['invalid_project', 422],
-  ['revision_conflict', 409],
-  ['scene_exists', 409],
-  ['scene_not_found', 404],
-  ['asset_not_found', 404],
-  ['component_not_found', 404],
-  ['component_exists', 409],
-  ['history_empty', 409],
-  ['unsupported_history', 503],
-  ['unsupported_import', 503],
-  ['invalid_asset', 422],
-])
+/**
+ * Trust the editor's declared rejection only with a status that cannot follow a write.
+ * Request-size and content-type failures are raised before the body is read.
+ */
+function writeFailureOutcome(status: number, declared: EditorWriteOutcome | undefined) {
+  if (status === 413 || status === 415) return 'not_applied'
+
+  return declared === 'not_applied' && ((status >= 400 && status < 500) || status === 503)
+    ? 'not_applied'
+    : 'unknown'
+}
 
 interface RequestBody {
   body: string | ArrayBuffer
@@ -44,7 +44,7 @@ export class EditorApiError extends Error {
     readonly code: string,
     message: string,
     readonly diagnostics: Diagnostic[] = [],
-    readonly outcome: 'not_applied' | 'unknown' = 'not_applied',
+    readonly outcome: EditorWriteOutcome = 'not_applied',
     readonly status?: number,
   ) {
     super(message)
@@ -292,11 +292,7 @@ export class EditorApiClient implements IEditorApi {
           error.data.code ?? fallback,
           error.data.error,
           error.data.diagnostics,
-          writing &&
-            rejectedCommandStatuses.get(error.data.code ?? '') !== response.status &&
-            ![413, 415].includes(response.status)
-            ? 'unknown'
-            : 'not_applied',
+          writing ? writeFailureOutcome(response.status, error.data.outcome) : 'not_applied',
           response.status,
         )
       }

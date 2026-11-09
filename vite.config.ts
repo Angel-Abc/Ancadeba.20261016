@@ -58,5 +58,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Filesystem and HTTP integration tests take ~0.5s alone but can approach 5s when
+    // every file runs in parallel, so the default limit made full runs flaky.
+    testTimeout: 20_000,
   },
 })

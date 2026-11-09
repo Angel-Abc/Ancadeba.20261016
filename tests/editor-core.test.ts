@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test'
 import {
   applyCommand,
   capabilities,
+  EditorError,
   inspectProject,
   object,
   validateProject,
@@ -42,6 +43,17 @@ function project(): ProjectSnapshot {
 }
 
 describe('editor core', () => {
+  it.each([
+    [400, 'not_applied'],
+    [404, 'not_applied'],
+    [409, 'not_applied'],
+    [422, 'not_applied'],
+    [503, 'not_applied'],
+    [500, 'unknown'],
+  ] as const)('declares HTTP %i editor errors as %s', (status, outcome) => {
+    expect(new EditorError(status, 'example', 'Example').outcome).toBe(outcome)
+  })
+
   it('updates nested layout without mutating source or dropping extension properties', () => {
     const original = project()
     const before = JSON.stringify(original)

@@ -75,4 +75,6 @@ export const apiErrorSchema = z.object({
   error: z.string(),
   code: z.string().optional(),
   diagnostics: z.array(diagnosticSchema).default([]),
+  /** Whether a failed mutation may have saved; absent on legacy workspace errors. */
+  outcome: z.enum(['not_applied', 'unknown']).optional(),
 })

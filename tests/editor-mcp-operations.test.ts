@@ -209,19 +209,24 @@ describe('MCP history and asset upload HTTP operations', () => {
   })
 
   it('distinguishes definite operation rejections from uncertain storage failures', async () => {
-    for (const [code, status, outcome] of [
-      ['history_empty', 409, 'not_applied'],
-      ['invalid_asset', 422, 'not_applied'],
-      ['unsupported_history', 503, 'not_applied'],
-      ['unsupported_import', 503, 'not_applied'],
-      ['history_restore_failed', 500, 'unknown'],
-      ['history_restore_uncertain', 409, 'unknown'],
-      ['asset_publication_failed', 500, 'unknown'],
+    for (const [code, status, declared, outcome] of [
+      ['history_empty', 409, 'not_applied', 'not_applied'],
+      ['invalid_asset', 422, 'not_applied', 'not_applied'],
+      ['unsupported_history', 503, 'not_applied', 'not_applied'],
+      ['unsupported_import', 503, 'not_applied', 'not_applied'],
+      ['history_restore_failed', 500, 'unknown', 'unknown'],
+      ['history_restore_failed', 500, 'not_applied', 'unknown'],
+      ['history_restore_uncertain', 409, 'unknown', 'unknown'],
+      ['history_empty', 409, undefined, 'unknown'],
+      ['asset_publication_failed', 500, 'unknown', 'unknown'],
     ] as const) {
       const client = new EditorApiClient(config, async (url) =>
         requestUrl(url).endsWith('capabilities')
           ? json(available)
-          : json({ error: 'Operation failed', code }, status),
+          : json(
+              { error: 'Operation failed', code, ...(declared ? { outcome: declared } : {}) },
+              status,
+            ),
       )
 
       await expect(

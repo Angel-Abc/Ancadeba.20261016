@@ -331,9 +331,13 @@ editing again; do not retry automatically. A capability-check failure happens
 before the mutation and is reported as not applied.
 
 Legacy workspace errors can also occur during the server's reread after saving,
-including HTTP 4xx responses. They are reported as uncertain writes. Only known
-editor rejection codes with their expected status, request-size/content-type
-rejections, and local request-validation failures are reported as not applied.
+including HTTP 4xx responses. They are reported as uncertain writes. Editor errors
+declare their own `outcome`: the server raises 4xx rejections and 503 unavailable
+features only before writing or after a confirmed rollback, so it declares them
+`not_applied`, and other 5xx failures `unknown`. The adapter trusts a declared
+`not_applied` only with a 4xx or 503 status; any other editor error is uncertain.
+Request-size/content-type rejections and local request-validation failures are
+also reported as not applied.
 Local validation failures include diagnostic property paths and send no HTTP request.
 
 Diagnostics retain server codes, game-relative files, and property paths.

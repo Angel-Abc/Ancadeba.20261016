@@ -103,7 +103,10 @@ describe('MCP editor HTTP client', () => {
     const client = new EditorApiClient(config, async (url) =>
       requestUrl(url).endsWith('capabilities')
         ? json(capabilities)
-        : json({ error: 'Changed', code: 'revision_conflict', diagnostics }, 409),
+        : json(
+            { error: 'Changed', code: 'revision_conflict', diagnostics, outcome: 'not_applied' },
+            409,
+          ),
     )
 
     await expect(client.apply('old', metadata)).rejects.toMatchObject({
@@ -299,16 +302,19 @@ describe('MCP editor HTTP client', () => {
     ['invalid_project', 422],
     ['revision_conflict', 409],
     ['scene_exists', 409],
-    ['scene_not_found', 404],
+    ['map_exists', 409],
+    ['combat_not_found', 404],
+    ['component_id_in_use', 422],
+    ['unsupported_history', 503],
     [undefined, 413],
     [undefined, 415],
   ] as const)(
-    'recognizes a definite rejection %s with HTTP %i before persistence',
+    'recognizes a declared rejection %s with HTTP %i before persistence',
     async (code, status) => {
       const client = new EditorApiClient(config, async (url) =>
         requestUrl(url).endsWith('capabilities')
           ? json(capabilities)
-          : json({ error: 'Rejected', ...(code ? { code } : {}) }, status),
+          : json({ error: 'Rejected', ...(code ? { code, outcome: 'not_applied' } : {}) }, status),
       )
 
       await expect(client.apply('old', metadata)).rejects.toMatchObject({
@@ -318,15 +324,38 @@ describe('MCP editor HTTP client', () => {
     },
   )
 
-  it('does not trust rejection codes returned with inconsistent status codes', async () => {
+  it('does not trust declared rejections returned with inconsistent status codes', async () => {
     const client = new EditorApiClient(config, async (url) =>
       requestUrl(url).endsWith('capabilities')
         ? json(capabilities)
-        : json({ error: 'Unexpected failure', code: 'revision_conflict' }, 500),
+        : json(
+            { error: 'Unexpected failure', code: 'revision_conflict', outcome: 'not_applied' },
+            500,
+          ),
     )
 
     await expect(client.apply('old', metadata)).rejects.toMatchObject({ outcome: 'unknown' })
   })
+
+  it.each([
+    ['revision_conflict', undefined],
+    ['map_exists', 'unknown'],
+  ] as const)(
+    'treats a %s rejection without a declared not-applied outcome as uncertain',
+    async (code, outcome) => {
+      const client = new EditorApiClient(config, async (url) =>
+        requestUrl(url).endsWith('capabilities')
+          ? json(capabilities)
+          : json({ error: 'Rejected', code, ...(outcome ? { outcome } : {}) }, 409),
+      )
+
+      await expect(client.apply('old', metadata)).rejects.toMatchObject({
+        code,
+        status: 409,
+        outcome: 'unknown',
+      })
+    },
+  )
 
   it('reports local invalid revisions and commands as not applied without any HTTP requests', async () => {
     let calls = 0

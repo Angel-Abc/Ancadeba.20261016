@@ -1184,7 +1184,10 @@ describe('shared editor project API', () => {
 
     expect(results.map((result) => result.status).sort((a, b) => a - b)).toEqual([200, 409])
     const rejected = results.find((result) => result.status === 409)!
-    expect((await rejected.json()).code).toBe('revision_conflict')
+    expect(await rejected.json()).toMatchObject({
+      code: 'revision_conflict',
+      outcome: 'not_applied',
+    })
   })
 
   it('detects raw API writes, direct filesystem changes, and input-file changes', async () => {

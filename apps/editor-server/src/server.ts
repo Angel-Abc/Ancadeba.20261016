@@ -77,6 +77,7 @@ export function createEditorServer(
           error: error.message,
           code: error.code,
           diagnostics: error.diagnostics,
+          outcome: error.outcome,
         })
 
         return
