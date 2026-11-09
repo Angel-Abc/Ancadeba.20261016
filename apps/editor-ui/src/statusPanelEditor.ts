@@ -20,6 +20,8 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
   let draft: StatusPanelComponentDefinition | undefined
   let dirty = false
   let busy = false
+  let creating = false
+  let submitted: EditorCommand | undefined
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -33,12 +35,14 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       : parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')
 
     if (parsed.success) {
-      if (parsed.data.type === 'scene.upsertStatusPanel') componentId = parsed.data.component.id
+      submitted = parsed.data
       save(parsed.data)
     }
   }
 
   function reset() {
+    creating = false
+
     const panels =
       view?.scenes
         .find((scene) => scene.id === sceneId)
@@ -137,6 +141,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
           effects: [],
         }
         dirty = true
+        creating = true
         render()
       }),
     )
@@ -148,18 +153,22 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     submitButton.textContent = 'Save status panel'
     form.append(
       saveBar(document, submitButton),
-      ...statusPanelForm(
-        controls,
-        view,
-        draft,
-        render,
-        panels.some((panel) => panel.id === draft!.id),
-      ),
+      ...statusPanelForm(controls, view, draft, render, !creating),
     )
     form.addEventListener('submit', (event) => {
       event.preventDefault()
 
-      if (draft) submit({ type: 'scene.upsertStatusPanel', sceneId, component: draft })
+      if (!draft) return
+
+      const id = draft.id
+
+      if (creating && scene.components.some((component) => component.id === id)) {
+        error.textContent = 'A component with this ID already exists. Choose a different ID.'
+
+        return
+      }
+
+      submit({ type: 'scene.upsertStatusPanel', sceneId, component: draft, createOnly: creating })
     })
     fields.append(
       form,
@@ -167,9 +176,10 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       controls.button(
         'Remove status panel',
         () => {
-          if (draft) submit({ type: 'scene.removeStatusPanel', sceneId, componentId: draft.id })
+          if (draft && !creating)
+            submit({ type: 'scene.removeStatusPanel', sceneId, componentId: draft.id })
         },
-        !panels.some((panel) => panel.id === draft!.id),
+        creating || !panels.some((panel) => panel.id === draft!.id),
       ),
     )
   }
@@ -185,9 +195,12 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       busy = state.busy
 
       const saved =
-        replaceFields &&
-        (state.lastCommand === 'scene.upsertStatusPanel' ||
-          state.lastCommand === 'scene.removeStatusPanel')
+        submitted && !busy && !state.error && replaceFields && state.lastCommand === submitted.type
+
+      if (saved && submitted?.type === 'scene.upsertStatusPanel')
+        componentId = submitted.component.id
+
+      if (!busy) submitted = undefined
 
       const resetFields = projectChanged || (replaceFields && !state.preserveDrafts)
 

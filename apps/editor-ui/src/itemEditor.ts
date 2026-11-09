@@ -54,6 +54,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   let combatStats: CombatStatsProfile | undefined
   let dirty = false
   let busy = false
+  let creating = false
+  let submitted: EditorCommand | undefined
+  let hiddenPreviews: InventoryComponentDefinition['previews'] = {}
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -94,12 +97,14 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       : parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')
 
     if (parsed.success) {
-      if (parsed.data.type === 'scene.upsertItemView') target = `view:${parsed.data.component.id}`
+      submitted = parsed.data
       save(parsed.data)
     }
   }
 
   const reset = () => {
+    creating = false
+    hiddenPreviews = {}
     item = target.startsWith('item:')
       ? structuredClone(view?.inventory?.itemTypes[target.slice(5)])
       : undefined
@@ -248,6 +253,8 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             item = undefined
             slots = undefined
             target = `view:${id}`
+            creating = true
+            hiddenPreviews = {}
             dirty = true
             render()
           }),
@@ -318,6 +325,12 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
     if (component && scene) {
       const draft = component
+
+      const identity = controls.input('View ID', draft.id, (value) => {
+        if (creating) draft.id = value.trim()
+      })
+
+      identity.querySelector('input')!.readOnly = !creating
       form.append(
         ...(draft.type !== 'inventory'
           ? [
@@ -331,9 +344,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
               ),
             ]
           : []),
-        controls.input('View ID', draft.id, (value) => {
-          draft.id = value.trim()
-        }),
+        identity,
         controls.input('View label', draft.label, (value) => {
           draft.label = value
         }),
@@ -413,6 +424,14 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
                   value === 'true'
                     ? [...new Set([...draft.owners, id])]
                     : draft.owners.filter((owner) => owner !== id)
+
+                if (value === 'false') {
+                  if (draft.previews[id]) hiddenPreviews[id] = draft.previews[id]
+                  delete draft.previews[id]
+                } else if (hiddenPreviews[id]) {
+                  draft.previews[id] = hiddenPreviews[id]
+                  delete hiddenPreviews[id]
+                }
               },
             ),
           ),
@@ -506,11 +525,21 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
           slots: Object.fromEntries(slots),
           combatStats: combatStats ?? null,
         })
-      } else if (component) submit({ type: 'scene.upsertItemView', sceneId, component })
+      } else if (component) {
+        const id = component.id
+
+        if (creating && scene?.components.some((entry) => entry.id === id)) {
+          error.textContent = 'A component with this ID already exists. Choose a different ID.'
+
+          return
+        }
+
+        submit({ type: 'scene.upsertItemView', sceneId, component, createOnly: creating })
+      }
     })
     fields.append(form, controls.button('Discard item draft', reset))
 
-    if (component && source)
+    if (component && source && !creating)
       fields.append(
         controls.button('Remove item view', () =>
           submit({ type: 'scene.removeItemView', sceneId, componentId: source.id }),
@@ -535,14 +564,12 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       busy = state.busy
 
       const saved =
-        replaceFields &&
-        [
-          'inventory.setItemPresentation',
-          'inventory.setEquipmentSlots',
-          'scene.setInventoryDetails',
-          'scene.upsertItemView',
-          'scene.removeItemView',
-        ].includes(state.lastCommand ?? '')
+        submitted && !busy && !state.error && replaceFields && state.lastCommand === submitted.type
+
+      if (saved && submitted?.type === 'scene.upsertItemView')
+        target = `view:${submitted.component.id}`
+
+      if (!busy) submitted = undefined
 
       const resetFields = projectChanged || (replaceFields && !state.preserveDrafts)
 

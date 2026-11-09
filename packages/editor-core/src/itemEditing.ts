@@ -146,6 +146,9 @@ export function editItems(
   const index = components.findIndex((entry) => object(entry).id === id)
   const previous = object(components[index])
 
+  if (command.type === 'scene.upsertItemView' && command.createOnly && index >= 0)
+    throw new EditorError(409, 'component_exists', 'A component with this ID already exists')
+
   if (command.type === 'scene.setInventoryDetails') {
     if (previous.type !== 'inventory')
       throw new EditorError(422, 'invalid_inventory_panel', 'Select an inventory panel')

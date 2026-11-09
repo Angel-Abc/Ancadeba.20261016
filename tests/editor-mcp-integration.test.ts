@@ -13,6 +13,8 @@ import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProj
 import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { EditorApiClient } from '../apps/editor-mcp/src/editorApiClient.js'
 import { createMcpServer } from '../apps/editor-mcp/src/mcpServer.js'
+import { changeSummarySchema, gameSummarySchema } from '../apps/editor-mcp/src/protocol.js'
+import { object, type EditorCommand } from '@ancadeba/editor-core'
 
 const manifest = {
   'schema-version': '1.0.0',
@@ -25,12 +27,12 @@ const manifest = {
 }
 
 const scene = {
-  'schema-version': '1.0.0',
+  'schema-version': '1.0.0' as const,
   id: 'shop',
   title: 'Shop',
   description: '',
   type: 'stand-alone',
-  screen: { type: 'grid', grid: { rows: 12, columns: 16 } },
+  screen: { type: 'grid' as const, grid: { rows: 12, columns: 16 } },
   components: [],
 }
 
@@ -137,11 +139,17 @@ describe('MCP and shared editor integration', () => {
       method: 'PUT',
       body: JSON.stringify({ ...manifest, title: 'Human edit' }),
     })
-    const command = { title: 'Reviewed change', description: '', version: '1' }
+
+    const command = {
+      type: 'game.updateMetadata',
+      title: 'Reviewed change',
+      description: '',
+      version: '1',
+    }
 
     const failed = await client.callTool({
-      name: 'ancadeba_update_game_metadata',
-      arguments: { expectedRevision: stale, ...command },
+      name: 'ancadeba_apply_command',
+      arguments: { expectedRevision: stale, command },
     })
 
     expect(failed.isError).toBe(true)
@@ -152,12 +160,160 @@ describe('MCP and shared editor integration', () => {
     expect(fresh.game.title).toBe('Human edit')
 
     const retried = await client.callTool({
-      name: 'ancadeba_update_game_metadata',
-      arguments: { expectedRevision: fresh.revision, ...command },
+      name: 'ancadeba_apply_command',
+      arguments: { expectedRevision: fresh.revision, command },
     })
 
     expect(retried.isError).toBe(false)
     expect((await inspect()).game.title).toBe('Reviewed change')
+  })
+
+  it('authors gameplay, maps, localization, text bindings and CSS through revision-checked MCP commands', async () => {
+    let revision = (await inspect()).revision
+    const css = '/* Exact CSS text */\r\n.ancadeba-scene { color: #abcdef; }\r\n'
+
+    const commands: EditorCommand[] = [
+      { type: 'scene.create', scene: { ...scene, type: 'game' } },
+      {
+        type: 'game.updateRules',
+        ruleId: 'world',
+        rules: { state: [{ path: ['gold'], value: 10 }], actions: {} },
+      },
+      {
+        type: 'game.upsertInventory',
+        inventoryId: 'items',
+        createOnly: true,
+        inventory: {
+          'schema-version': '1.0.0',
+          itemTypes: {
+            coin: {
+              label: 'Coin',
+              description: '',
+              properties: [],
+              container: false,
+              equipmentSlots: [],
+            },
+          },
+          owners: { hero: { label: 'Hero', equipmentSlots: {} } },
+          items: {
+            coin1: { itemType: 'coin', placement: { type: 'carried', owner: 'hero' }, colors: {} },
+          },
+        },
+      },
+      {
+        type: 'game.upsertMap',
+        mapId: 'garden',
+        createOnly: true,
+        map: {
+          'schema-version': '1.0.0',
+          type: 'square-grid',
+          width: 1,
+          height: 1,
+          terrain: { grass: { color: '#608c4f' } },
+          tiles: [['grass']],
+          layers: [{ id: 'objects', tiles: [[null]], visible: true, collision: false }],
+        },
+      },
+      {
+        type: 'game.updateInput',
+        inputId: 'keys',
+        input: {
+          'schema-version': '1.0.0',
+          'virtual-keys': ['primary'],
+          keyboard: { KeyQ: 'primary' },
+          contexts: { gameplay: { primary: 'act' } },
+          'initial-context': 'gameplay',
+        },
+      },
+      {
+        type: 'game.updateLocalization',
+        languages: { default: 'en', available: ['en', 'nl'] },
+        catalogs: { en: { title: 'My game' }, nl: { title: 'Mijn spel' } },
+      },
+      {
+        type: 'scene.upsertComponent',
+        sceneId: 'shop',
+        createOnly: true,
+        component: {
+          id: 'gold',
+          type: 'text',
+          text: 'Gold: {{gold}}',
+          bindings: { gold: { source: 'game.state', path: ['gold'] } },
+          presentation: { variant: 'body', align: 'start' },
+          placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+        },
+      },
+      {
+        type: 'scene.duplicateComponent',
+        sceneId: 'shop',
+        componentId: 'gold',
+        newId: 'gold-copy',
+      },
+      { type: 'scene.moveComponent', sceneId: 'shop', componentId: 'gold-copy', index: 0 },
+      { type: 'scene.removeComponent', sceneId: 'shop', componentId: 'gold-copy' },
+      { type: 'scene.rename', sceneId: 'shop', newId: 'market' },
+      { type: 'game.setInitialScene', sceneId: 'market' },
+      { type: 'game.upsertStylesheet', file: 'styles/custom.css', css, createOnly: true },
+    ]
+
+    for (const command of commands) {
+      const result = await client.callTool({
+        name: 'ancadeba_apply_command',
+        arguments: { expectedRevision: revision, command },
+      })
+
+      expect(result.isError, command.type).toBe(false)
+      revision = changeSummarySchema.parse(object(result.structuredContent).data).revision
+    }
+
+    const metadata = await client.callTool({
+      name: 'ancadeba_update_game_metadata',
+      arguments: {
+        expectedRevision: revision,
+        title: '',
+        description: '',
+        version: '2',
+        titleKey: 'title',
+      },
+    })
+
+    expect(metadata.isError).toBe(false)
+    const result = await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    const data = gameSummarySchema.parse(object(result.structuredContent).data)
+    expect(data).toMatchObject({
+      game: { titleKey: 'title', 'initial-scene': 'market', stylesheet: 'styles/custom.css' },
+      rules: { state: [{ path: ['gold'], value: 10 }] },
+      inventoryFiles: { items: { items: { coin1: { itemType: 'coin' } } } },
+      maps: { garden: { layers: [{ id: 'objects' }] } },
+      input: { keyboard: { KeyQ: 'primary' } },
+      languageCatalogs: { nl: { title: 'Mijn spel' } },
+      stylesheets: { 'styles/custom.css': css },
+      diagnostics: [],
+    })
+    expect(await readFile(join(root, 'basic/styles/custom.css'), 'utf8')).toBe(css)
+    const savedScene = JSON.parse(await readFile(join(root, 'basic/scenes/market.json'), 'utf8'))
+    expect(savedScene.components).toMatchObject([
+      { id: 'gold', bindings: { gold: { source: 'game.state', path: ['gold'] } } },
+    ])
+
+    const duplicate = await client.callTool({
+      name: 'ancadeba_apply_command',
+      arguments: {
+        expectedRevision: data.revision,
+        command: {
+          type: 'scene.upsertComponent',
+          sceneId: 'market',
+          component: savedScene.components[0],
+          createOnly: true,
+        },
+      },
+    })
+
+    expect(duplicate.structuredContent).toMatchObject({
+      ok: false,
+      error: { code: 'component_exists', outcome: 'not_applied' },
+    })
+    expect((await inspect()).revision).toBe(data.revision)
   })
 
   it('round-trips bound text scenes and rejects layout changes that would clip their components', async () => {
@@ -260,12 +416,15 @@ describe('MCP and shared editor integration', () => {
 
     try {
       const result = await client.callTool({
-        name: 'ancadeba_update_game_metadata',
+        name: 'ancadeba_apply_command',
         arguments: {
           expectedRevision: initial.revision,
-          title: 'Saved before reread failure',
-          description: '',
-          version: '1',
+          command: {
+            type: 'game.updateMetadata',
+            title: 'Saved before reread failure',
+            description: '',
+            version: '1',
+          },
         },
       })
 

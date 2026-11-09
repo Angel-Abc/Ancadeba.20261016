@@ -2,7 +2,8 @@
 
 The visual editor creates starter games and edits projects through a
 revision-checked HTTP API. External agents use the same API for supported edits;
-the MCP adapter exposes a subset of its commands. The editor core depends on the schemas and
+the MCP adapter exposes all shared editor commands known to its installed version,
+filtered by the connected server's capabilities. The editor core depends on the schemas and
 Zod. It does not import the engine runtime, browser APIs, or Node APIs.
 
 ## Packages and services
@@ -603,6 +604,11 @@ draft, and unsaved drafts block switching scenes or panels. **Discard status-pan
 draft** restores the saved configuration. **Remove status panel** removes the
 selected saved panel. Other panels' unsaved edits remain available.
 
+New status panels require an unused component ID. Creation rejects collisions
+without replacing existing panels, including after a conflict or draft rerender.
+Saved panel IDs remain fixed while their contents are edited. Creation requests
+use `scene.upsertStatusPanel` with `createOnly: true`.
+
 Missing or invalid bindings produce an unavailable display, with diagnostics in
 editor preview. Resource bars require actual finite numeric values and a positive
 maximum; they never substitute a string fallback as a resource amount. Rule edits
@@ -940,6 +946,12 @@ key. Properties accept literal text, finite numbers, or existing scalar state
 bindings; they do not calculate stats or change game state. Artwork accepts an
 image, part, or composition from the game asset catalog. The instance's dyes
 apply to image and part artwork.
+
+Set an item view's ID before its first save. Saved IDs are read-only, and new
+views reject existing component IDs. Creation requests use
+`scene.upsertItemView` with `createOnly: true`. Hiding an inventory owner also
+removes that owner's preview mapping when saved. Showing the owner again before
+saving restores its draft mapping; discarding restores the saved configuration.
 
 Select an inventory panel as the editing target to choose its **Main text details
 target**. The selected item's section is appended to that text alongside nearby

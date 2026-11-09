@@ -1,6 +1,7 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
 import { describe, expect, it } from 'vite-plus/test'
-import { capabilities, type EditorCommand } from '@ancadeba/editor-core'
+import { capabilities, commandSchema, object, type EditorCommand } from '@ancadeba/editor-core'
+import { mcpCapabilitiesSchema } from '../apps/editor-mcp/src/protocol.js'
 import { createMcpServer } from '../apps/editor-mcp/src/mcpServer.js'
 import { EditorApiError, type IEditorApi } from '../apps/editor-mcp/src/editorApiClient.js'
 
@@ -110,6 +111,7 @@ describe('MCP adapter tools', () => {
     try {
       const { tools } = await client.listTools()
       expect(tools.map((tool) => tool.name).sort((a, b) => a.localeCompare(b))).toEqual([
+        'ancadeba_apply_command',
         'ancadeba_create_scene',
         'ancadeba_edit_assets',
         'ancadeba_get_capabilities',
@@ -152,6 +154,124 @@ describe('MCP adapter tools', () => {
       expect(capability.structuredContent).toMatchObject({
         data: { version: 1, gamePath: 'basic' },
       })
+    } finally {
+      await close()
+    }
+  })
+  it('dispatches every advertised editor command through the typed generic tool', async () => {
+    expect(new Set(capabilities.commands.map(({ type }) => type))).toEqual(
+      new Set(commandSchema.options.map((option) => option.shape.type.value)),
+    )
+
+    const remote = api()
+    const calls: EditorCommand[] = []
+    remote.apply = async (revision, command, signal) => {
+      expect(revision).toBe('one')
+      expect(signal).toBeInstanceOf(AbortSignal)
+      calls.push(command)
+
+      return { ...view, revision: 'two', changedFiles: ['game.json'], summary: 'Saved' }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const discovery = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      const supported = mcpCapabilitiesSchema.parse(object(discovery.structuredContent).data)
+      expect(supported.commands).toEqual(capabilities.commands)
+
+      for (const { type, example } of capabilities.commands) {
+        const result = await client.callTool({
+          name: 'ancadeba_apply_command',
+          arguments: { expectedRevision: 'one', command: example },
+        })
+
+        expect(result.isError, type).toBe(false)
+        expect(calls.at(-1)).toEqual(commandSchema.parse(example))
+        expect(result.structuredContent).toMatchObject({
+          ok: true,
+          data: { revision: 'two', gamePath: 'basic' },
+        })
+      }
+
+      expect(calls.map(({ type }) => type)).toEqual(capabilities.commands.map(({ type }) => type))
+    } finally {
+      await close()
+    }
+  })
+
+  it('discovers the command intersection with MCP arguments and canonical local examples', async () => {
+    const remote = api()
+    remote.capabilities = async () => ({
+      ...capabilities,
+      commands: [
+        { type: 'future.command', example: { type: 'future.command' } },
+        {
+          type: 'game.assignStylesheet',
+          example: { type: 'game.assignStylesheet', futureField: true },
+        },
+        { type: 'game.assignStylesheet', example: { type: 'game.assignStylesheet' } },
+      ],
+    })
+    const { client, close } = await connection(remote)
+
+    try {
+      const result = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      const data = mcpCapabilitiesSchema.parse(object(result.structuredContent).data)
+      expect(data.commandTool).toBe('ancadeba_apply_command')
+      expect(data.commands).toEqual([
+        { type: 'game.assignStylesheet', example: { type: 'game.assignStylesheet', file: null } },
+      ])
+      expect(data.requestSchema).toMatchObject({
+        type: 'object',
+        additionalProperties: false,
+        required: expect.arrayContaining(['command', 'expectedRevision']),
+        properties: { expectedRevision: { type: 'string' } },
+      })
+      expect(JSON.stringify(data.requestSchema)).toContain('game.assignStylesheet')
+      expect(JSON.stringify(data.requestSchema)).not.toContain('future.command')
+      expect(JSON.stringify(data.requestSchema)).not.toContain('game.upsertMap')
+      expect(data.requestSchema.properties).not.toHaveProperty('path')
+      remote.capabilities = async () => ({ ...capabilities, commands: [] })
+      const empty = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      expect(mcpCapabilitiesSchema.parse(object(empty.structuredContent).data)).toMatchObject({
+        commands: [],
+        requestSchema: { properties: { command: { not: {} } } },
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  it('rejects unsafe or out-of-scope generic commands before dispatch', async () => {
+    const remote = api()
+    let calls = 0
+    remote.apply = async () => {
+      calls++
+      throw new Error('Must not dispatch')
+    }
+
+    const { client, close } = await connection(remote)
+    const command = { type: 'game.assignStylesheet', file: null }
+
+    try {
+      for (const args of [
+        { command },
+        { command, expectedRevision: '' },
+        { command, expectedRevision: 'one', path: 'other' },
+        { command, expectedRevision: 'one', editorServerUrl: 'http://other' },
+        { command: { ...command, path: 'other' }, expectedRevision: 'one' },
+        { command: { type: 'future.command' }, expectedRevision: 'one' },
+        {
+          command: { type: 'game.upsertStylesheet', file: '../outside.css', css: '' },
+          expectedRevision: 'one',
+        },
+        { command: { type: 'scene.remove', sceneId: '../outside' }, expectedRevision: 'one' },
+      ])
+        expect(
+          (await client.callTool({ name: 'ancadeba_apply_command', arguments: args })).isError,
+        ).toBe(true)
+      expect(calls).toBe(0)
     } finally {
       await close()
     }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { sceneSchema } from '@ancadeba/schemas'
 import { diagnosticSchema, projectViewSchema } from '@ancadeba/editor-core'
+import { commandTool } from './commandSupport.js'
 
 export { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
 
@@ -14,6 +15,11 @@ export const capabilitiesSchema = z.object({
   version: z.number().int(),
   requestSchema: z.record(z.string(), z.unknown()),
   commands: z.array(z.object({ type: z.string(), example: z.record(z.string(), z.unknown()) })),
+})
+
+export const mcpCapabilitiesSchema = capabilitiesSchema.extend({
+  gamePath: z.string(),
+  commandTool: z.literal(commandTool),
 })
 
 export const appliedChangeSchema = projectViewSchema.extend({

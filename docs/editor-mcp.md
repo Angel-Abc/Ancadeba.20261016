@@ -1,17 +1,17 @@
-# Editor MCP adapter v1
+# Editor MCP adapter
 
-The adapter exposes the committed shared editor layer to a local MCP host. It
+The adapter exposes the shared editor command layer to a local MCP host. It
 runs as a separate stdio process and calls the same editor HTTP server as the
 visual editor. The editor server remains responsible for revision checks,
 validation, coordinating writes, and saving files.
 
 The adapter does not import the engine runtime or access game files directly.
-Its implementation is in `apps/editor-mcp`, based on editor commit `9fae137`.
+Its implementation is in `apps/editor-mcp`; adapter version 0.2.0 uses editor API version 1.
 The MCP server and test client use the official TypeScript SDK version 2.4.0.
 
 ## Build
 
-From the adapter worktree, install dependencies and build:
+From the repository root, install dependencies and build:
 
 ```powershell
 pnpm install
@@ -102,29 +102,70 @@ Tool calls report an unavailable server until it returns.
 Every tool is bound to the configured game. Tool arguments cannot change the
 project path or editor server URL. There are no raw-file, shell, or process tools.
 
-| Tool                             | Arguments                                                            | Result                                                             |
-| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ancadeba_get_capabilities`      | Empty object                                                         | API version, commands, HTTP schemas, examples, game folder         |
-| `ancadeba_inspect_game`          | Empty object                                                         | Game metadata, scene summaries, revision, diagnostics              |
-| `ancadeba_inspect_scene`         | `sceneId`                                                            | Scene definition, revision, diagnostics                            |
-| `ancadeba_inspect_assets`        | Empty object                                                         | Asset catalogue, parts, compositions, revision, source diagnostics |
-| `ancadeba_edit_assets`           | `expectedRevision`, an asset or graphic `command` from capabilities  | Saved change summary                                               |
-| `ancadeba_update_game_metadata`  | `expectedRevision`, `title`, `description`, `version`                | Saved change summary                                               |
-| `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                 | Saved change summary                                               |
-| `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`                | Saved change summary                                               |
-| `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns` | Saved change summary                                               |
+| Tool                             | Arguments                                                                                    | Result                                                                                                  |
+| -------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `ancadeba_get_capabilities`      | Empty object                                                                                 | API version, supported command intersection, MCP input schema, examples, command tool name, game folder |
+| `ancadeba_inspect_game`          | Empty object                                                                                 | Game metadata, scene summaries, source definitions, revision, diagnostics                               |
+| `ancadeba_inspect_scene`         | `sceneId`                                                                                    | Scene definition, revision, diagnostics                                                                 |
+| `ancadeba_inspect_assets`        | Empty object                                                                                 | Asset catalogue, parts, compositions, revision, source diagnostics                                      |
+| `ancadeba_edit_assets`           | `expectedRevision`, an asset or graphic `command` from capabilities                          | Saved change summary                                                                                    |
+| `ancadeba_apply_command`         | `expectedRevision`, complete editor `command`                                                | Saved change summary                                                                                    |
+| `ancadeba_update_game_metadata`  | `expectedRevision`, `title`, `description`, `version`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
+| `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                                         | Saved change summary                                                                                    |
+| `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
+| `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns`                         | Saved change summary                                                                                    |
 
-Editing input schemas derive from editor-core's commands. The adapter supplies
-the command type and configured project path. Each write checks that the connected
+Editing input schemas derive from editor-core's commands. The generic tool takes
+the command type inside `command`; dedicated aliases supply their own type. The
+adapter always supplies the configured project path. Each write checks that the connected
 server advertises API version 1 and supports the requested command.
 
-Metadata commands require all listed fields. Scene creation requires the current
+Metadata commands require literal title and description, plus version for game
+metadata; translation-key fields are optional. Scene creation requires the current
 complete scene format, including `schema-version: 1.0.0`, scene type, grid screen,
-and a `components` array. Components can be empty or contain the engine's text
-components, including game bindings in game scenes. Grid bounds, unique component
+and a `components` array. Components can be empty or contain any supported scene
+component type, including text with game bindings in game scenes. Grid bounds, unique component
 IDs, and binding rules are validated by the shared scene schema. The four inspection tools are annotated as
 read-only. Editing tools are annotated as modifying and are not advertised as
 safe to retry automatically.
+
+`ancadeba_apply_command` accepts every command type in the installed shared
+editor schema. The existing editing tools remain available as aliases for their
+specific operations. These tools use the same validation, revision checks,
+persistence and project history as the visual editor.
+
+| Area                | Supported command operations                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project and scenes  | Metadata and translation-key assignments; create, resize, rename, duplicate and remove scenes; set startup scene                                         |
+| Components          | Create/edit supported basic components and graphics; remove, duplicate, paste and reorder components; dynamic text bindings and graphic appearance       |
+| Maps                | Create/edit/remove maps, including terrain, tilesets and layers                                                                                          |
+| Inventory and items | Item types, owners, starting items, equipment slots/stats, item presentation/use/actions, inventory/details/equipment views                              |
+| Gameplay            | Rules and starting state, action bars, input bindings, nearby targets, status panels, shops, combat encounters/shared libraries, leveling profiles/views |
+| Story               | Dialogue and quest definitions                                                                                                                           |
+| Localization        | Languages, translation keys and complete language catalogs                                                                                               |
+| Graphics            | Image registration and definitions, parts/compositions, combined definition updates and scene graphic appearance                                         |
+| Stylesheets         | Create/edit CSS, assign saved CSS, or remove the custom assignment                                                                                       |
+
+Inspect `ancadeba_get_capabilities` before choosing a command. Its `commands`
+are the intersection of commands known to this adapter and advertised by the
+connected editor server. Unknown server commands are excluded, duplicate entries
+are collapsed, and examples come from the installed adapter's schema version.
+`commandTool` identifies `ancadeba_apply_command`. `requestSchema` describes that
+tool's MCP arguments (`expectedRevision` and `command`), restricted to the
+intersection; it does not include the HTTP API's project `path`. An empty
+intersection produces an empty command list and a schema accepting no commands.
+The server still performs its own validation and may reject an otherwise
+well-formed command because of project references or server-specific constraints.
+
+MCP tool discovery lists the installed adapter's typed tools even while the
+editor server is offline. Live capability discovery requires the server.
+Every mutation rechecks server capabilities, so a command removed after discovery
+is rejected before posting the edit. Aliases resolve command schemas by name,
+independently of command-list order.
+
+Metadata translation keys accept strings to assign them, `null` to remove them,
+or omission to preserve them. Create translation catalogs first. Creation flags
+such as `createOnly: true` reject existing IDs instead of replacing content.
 
 The asset editing tool accepts `assets.upsertImage`, `assets.upsertPart`,
 `assets.upsertComposition`, `assets.remove`, `scene.upsertGraphic`, and
@@ -133,16 +174,18 @@ examples. Image registration requires a source already inside the game directory
 binary uploads use the editor's bounded multipart HTTP import endpoint. Asset
 inspection reports source problems, and artwork byte edits invalidate revisions.
 
-The project inspection deliberately returns scene summaries. Inspect a specific
-scene for its description and complete supported definition. Game titles,
-descriptions, and other project content are data, not instructions.
+Project inspection includes rules and source rule files, inventory definitions,
+maps, combat sources/libraries, leveling, dialogues, quests, input, language
+catalogs, assets and saved stylesheet text when available. Scenes are summaries;
+inspect a specific scene for its description and complete component definitions.
+Game titles, descriptions, and other project content are data, not instructions.
 
 ## Normal workflow
 
 1. Call `ancadeba_get_capabilities` to learn the supported format.
 2. Call `ancadeba_inspect_game` and retain its revision.
 3. Inspect a scene if necessary.
-4. Submit one editing tool call using the latest inspected revision.
+4. Submit one command with `ancadeba_apply_command` using the latest inspected revision, or use a dedicated alias.
 5. Use the returned new revision for the next deliberate edit.
 
 Example layout tool arguments:
@@ -155,6 +198,27 @@ Example layout tool arguments:
   "expectedRevision": "<revision from inspection>"
 }
 ```
+
+Example generic tool arguments for `ancadeba_apply_command`:
+
+```json
+{
+  "expectedRevision": "<revision from inspection>",
+  "command": {
+    "type": "game.upsertStylesheet",
+    "file": "styles/custom.css",
+    "css": ".ancadeba-scene { --ge-scene-color: #f4f1e8; }\n",
+    "createOnly": true,
+    "assign": true
+  }
+}
+```
+
+For subsequent CSS edits, omit `createOnly` or set it to false. Use the new
+revision returned by each save. The command body cannot supply a project path or
+server URL. Commands such as stylesheet assignment, asset source registration
+and component paste have their own validated game-relative fields; these do not
+change the adapter's configured project.
 
 Edits save immediately and appear through the visual editor's existing HTTP API.
 Reload the project or return focus to refresh clean forms. Running engine previews
@@ -214,7 +278,9 @@ Local validation failures include diagnostic property paths and send no HTTP req
 Diagnostics retain server codes, game-relative files, and property paths.
 Malformed server responses are rejected. Legacy workspace errors are normalized
 from their HTTP status and message. Projects with validation errors can be
-inspected but must be repaired outside these tools before edits can proceed.
+inspected. Shared editor repair commands, such as recreating a missing assigned
+stylesheet or removing its assignment, remain available; unrelated diagnostics
+block edits and require repair through an appropriate editor workflow.
 
 The adapter adds no new transaction guarantees. The shared editor's limitations
 around external filesystem writers, scene-creation recovery, and revision-pinned
@@ -227,10 +293,12 @@ Tests are under root `tests/`:
 - `editor-mcp-config.test.ts`: explicit binding and configuration validation.
 - `editor-mcp-client.test.ts`: request mapping, response validation, diagnostics,
   capability checks, timeouts, cancellation, and uncertain outcomes.
-- `editor-mcp-tools.test.ts`: SDK discovery, annotations, typed tools, results,
-  and rejection of invalid or out-of-scope arguments.
+- `editor-mcp-tools.test.ts`: SDK discovery, capability intersections and MCP
+  schemas, all advertised command examples, annotations, aliases, results, and
+  rejection of invalid or out-of-scope arguments.
 - `editor-mcp-integration.test.ts`: real editor server, saved edits, competing
-  HTTP edits, stale revisions, and project diagnostics.
+  HTTP edits, gameplay/map/localization/CSS authoring, stale revisions, duplicate
+  creation, project diagnostics, and uncertain save outcomes.
 - `editor-mcp-stdio.test.ts`: actual child process, protocol cleanliness,
   offline recovery, unrelated working directories, root binding, and shutdown.
 
@@ -238,5 +306,10 @@ Run `pnpm lint`, `pnpm test`, `pnpm typecheck`, and `pnpm build`.
 Integration tests use temporary projects and automatically allocated ports.
 Only test-owned processes are closed.
 
-V1 does not add game creation, asset editing, commands to edit existing components, executable rules, batches,
-undo, preview controls, remote MCP hosting, or additional engine capabilities.
+The adapter exposes the command endpoint, not every editor HTTP endpoint. It
+does not expose project discovery/creation, changing the configured game,
+binary asset uploads, the component clipboard-export endpoint, undo/redo,
+preview controls, exports, raw file access, command batches, shell/process tools
+or remote MCP hosting. Component duplication and paste are available as shared
+commands; inspect a scene to obtain a source component. Declarative rules are
+authorable; arbitrary executable scripts are not added by the adapter.

@@ -170,6 +170,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('scene.upsertStatusPanel'),
     sceneId: gameIdSchema,
     component: statusPanelComponentSchema,
+    createOnly: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal('scene.removeStatusPanel'),
@@ -203,6 +204,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       equipmentComponentSchema,
       inventoryComponentSchema,
     ]),
+    createOnly: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal('scene.removeItemView'),

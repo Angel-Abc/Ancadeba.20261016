@@ -109,6 +109,12 @@ images, grouped parts, and layered compositions. The editor's Assets panel impor
 edits palettes, previews compositions, and places graphics in scenes. MCP exposes
 the same revision-checked authoring commands.
 
+The [MCP adapter](docs/editor-mcp.md) also exposes the shared editor's gameplay,
+map, inventory, localization, scene/component and stylesheet commands through
+`ancadeba_apply_command`. Capability discovery reports the commands supported by
+both the installed adapter and connected server, with MCP argument schemas and
+examples. Existing focused MCP tools remain available.
+
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
 to equip the cloak and move items between characters and their bags. The sample's

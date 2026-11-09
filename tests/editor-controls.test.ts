@@ -4,6 +4,7 @@ import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 import { describe, expect, it, vi } from 'vite-plus/test'
 import {
   applyCommand,
+  commandSchema,
   inspectProject,
   object,
   projectViewSchema,
@@ -2226,6 +2227,272 @@ describe('editor draft workflows', () => {
       read: () => inspectProject(source),
     }
   }
+
+  function itemViewProject() {
+    let source = applyCommand(project(), {
+      type: 'game.upsertInventory',
+      inventoryId: 'items',
+      inventory: {
+        'schema-version': '1.0.0',
+        itemTypes: {},
+        owners: {
+          hero: { label: 'Hero', equipmentSlots: {} },
+          companion: { label: 'Companion', equipmentSlots: {} },
+        },
+        items: {},
+      },
+    }).project
+
+    source = applyCommand(source, {
+      type: 'assets.upsertComposition',
+      id: 'portrait',
+      composition: {
+        bounds: { x: 0, y: 0, width: 10, height: 10 },
+        layers: ['base'],
+        anchors: {},
+        slots: {},
+      },
+    }).project
+
+    for (const component of [
+      {
+        id: 'items',
+        type: 'inventory',
+        owners: ['hero', 'companion'],
+        previews: {
+          hero: { composition: 'portrait', slots: {} },
+          companion: { composition: 'portrait', slots: {} },
+        },
+      },
+      { id: 'other-items', type: 'inventory', owners: ['hero'] },
+      { id: 'equipment', type: 'equipment', inventory: 'items', owner: 'hero' },
+      { id: 'details', type: 'item-details', inventory: 'items', equipment: 'equipment' },
+    ]) {
+      const parsed = commandSchema.parse({
+        type: 'scene.upsertItemView',
+        sceneId: 'shop',
+        component: { ...component, placement: { row: 1, column: 1 } },
+      })
+
+      source = applyCommand(source, parsed).project
+    }
+
+    return source
+  }
+
+  function statusProject() {
+    return applyCommand(project(), {
+      type: 'scene.upsertStatusPanel',
+      sceneId: 'shop',
+      component: {
+        id: 'existing',
+        type: 'status-panel',
+        label: 'Original',
+        name: '',
+        rows: [],
+        effects: [],
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+      },
+    }).project
+  }
+
+  it('protects create-only item and status commands against any component ID collision', () => {
+    const itemSource = itemViewProject()
+    const statusSource = statusProject()
+
+    for (const [source, command] of [
+      [
+        itemSource,
+        {
+          type: 'scene.upsertItemView',
+          sceneId: 'shop',
+          component: inspectProject(itemSource).scenes[0]!.components.find(
+            ({ id }) => id === 'items',
+          ),
+        },
+      ],
+      [
+        statusSource,
+        {
+          type: 'scene.upsertStatusPanel',
+          sceneId: 'shop',
+          component: inspectProject(statusSource).scenes[0]!.components.find(
+            ({ id }) => id === 'existing',
+          ),
+        },
+      ],
+    ] as const) {
+      const before = JSON.stringify(source)
+
+      for (const id of [command.component!.id, 'description']) {
+        const input = commandSchema.parse({
+          ...command,
+          component: { ...command.component, id },
+          createOnly: true,
+        })
+
+        expect(() => applyCommand(source, input)).toThrow(
+          expect.objectContaining({ status: 409, code: 'component_exists' }),
+        )
+      }
+
+      expect(JSON.stringify(source)).toBe(before)
+
+      const updated = applyCommand(
+        source,
+        commandSchema.parse({ ...command, component: { ...command.component, label: 'Updated' } }),
+      )
+
+      expect(
+        inspectProject(updated.project).scenes[0]!.components.find(
+          ({ id }) => id === command.component!.id,
+        ),
+      ).toHaveProperty('label', 'Updated')
+    }
+  })
+
+  it.each(['items', 'equipment', 'details'])(
+    'keeps saved item-view ID %s immutable while editing its fields',
+    async (id) => {
+      const ui = await connected(bindItemEditor, itemViewProject())
+      expect(ui.editor.navigate('shop', id)).toBe(true)
+      expect(ui.field('View ID').readOnly).toBe(true)
+      ui.edit('View ID', 'other-items')
+      ui.edit('View label', 'Updated view')
+      ui.submit('Save items and equipment')
+      await ui.flush()
+      expect(ui.commands[0]).toMatchObject({
+        type: 'scene.upsertItemView',
+        createOnly: false,
+        component: { id, label: 'Updated view' },
+      })
+      expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'other-items')).toHaveProperty(
+        'label',
+        'Inventory',
+      )
+      expect(
+        ui.read().scenes[0]!.components.filter(({ id: savedId }) => savedId === id),
+      ).toHaveLength(1)
+      expect(ui.field('View ID').value).toBe(id)
+    },
+  )
+
+  it('retains new item-view drafts through duplicate IDs and conflicts and locks the ID after saving', async () => {
+    const ui = await connected(bindItemEditor, itemViewProject())
+    ui.editor.navigate('shop', 'items')
+    ui.click('Add inventory')
+    ui.edit('View ID', 'other-items')
+    ui.edit('View label', 'New panel')
+    ui.submit('Save items and equipment')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('already exists')
+    expect(ui.field('View ID').readOnly).toBe(false)
+    ui.edit('View ID', 'new-items')
+    ui.rejectNext()
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Unrelated',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('View ID').value).toBe('new-items')
+    expect(ui.field('View ID').readOnly).toBe(false)
+    expect(ui.field('View label').value).toBe('New panel')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      type: 'scene.upsertItemView',
+      createOnly: true,
+      component: { id: 'new-items' },
+    })
+    expect(ui.field('View ID').value).toBe('new-items')
+    expect(ui.field('View ID').readOnly).toBe(true)
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'other-items')).toHaveProperty(
+      'label',
+      'Inventory',
+    )
+  })
+
+  it('rejects new status-panel collisions after rerendering and preserves creation drafts on conflict', async () => {
+    const ui = await connected(bindStatusPanelEditor, statusProject())
+    ui.click('Add status panel')
+    ui.edit('Status component ID', 'existing')
+    ui.edit('Status panel title', 'New status')
+    ui.click('Add value row')
+    expect(ui.field('Status component ID').value).toBe('existing')
+    ui.submit('Save status panel')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('already exists')
+    ui.click('Remove status panel')
+    expect(ui.commands).toHaveLength(0)
+    ui.edit('Status component ID', 'description')
+    ui.submit('Save status panel')
+    expect(ui.commands).toHaveLength(0)
+    ui.edit('Status component ID', 'new-status')
+    ui.rejectNext()
+    ui.submit('Save status panel')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Unrelated',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Status component ID').value).toBe('new-status')
+    expect(ui.field('Status panel title').value).toBe('New status')
+    ui.submit('Save status panel')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      type: 'scene.upsertStatusPanel',
+      createOnly: true,
+      component: { id: 'new-status' },
+    })
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'existing')).toHaveProperty(
+      'label',
+      'Original',
+    )
+    ui.edit('Status panel title', 'Edited status')
+    ui.submit('Save status panel')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      createOnly: false,
+      component: { id: 'new-status', label: 'Edited status' },
+    })
+  })
+
+  it('removes hidden-owner previews, restores draft toggles, and preserves other owners and discarded mappings', async () => {
+    const ui = await connected(bindItemEditor, itemViewProject())
+    ui.editor.navigate('shop', 'items')
+    ui.edit('Show owner Companion', 'false')
+    ui.edit('Show owner Companion', 'true')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'items')).toMatchObject({
+      previews: { hero: { composition: 'portrait' }, companion: { composition: 'portrait' } },
+    })
+    ui.edit('Show owner Companion', 'false')
+    ui.click('Discard item draft')
+    expect(ui.field('Show owner Companion').value).toBe('true')
+    ui.edit('Show owner Companion', 'false')
+    ui.rejectNext()
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.field('Show owner Companion').value).toBe('false')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    const saved = ui.read().scenes[0]!.components.find(({ id }) => id === 'items')
+    expect(saved).toMatchObject({
+      owners: ['hero'],
+      previews: { hero: { composition: 'portrait' } },
+    })
+    expect(saved?.type === 'inventory' && Object.keys(saved.previews)).toEqual(['hero'])
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
 
   function progressionProject() {
     return applyCommand(project(), {

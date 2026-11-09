@@ -103,18 +103,21 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(9)
+    expect((await activeClient.listTools()).tools).toHaveLength(10)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
 
     const result = await activeClient.callTool({
-      name: 'ancadeba_update_game_metadata',
+      name: 'ancadeba_apply_command',
       arguments: {
         expectedRevision: current.revision,
-        title: 'Saved through stdio',
-        description: '',
-        version: '1',
+        command: {
+          type: 'game.updateMetadata',
+          title: 'Saved through stdio',
+          description: '',
+          version: '1',
+        },
       },
     })
 
@@ -136,7 +139,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(9)
+    expect((await activeClient.listTools()).tools).toHaveLength(10)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({
