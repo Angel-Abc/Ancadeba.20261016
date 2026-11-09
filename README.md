@@ -115,6 +115,11 @@ map, inventory, localization, scene/component and stylesheet commands through
 both the installed adapter and connected server, with MCP argument schemas and
 examples. Existing focused MCP tools remain available.
 
+MCP also supports shared saved-project undo/redo with `ancadeba_undo` and
+`ancadeba_redo`, and image uploads with `ancadeba_upload_asset`. Uploads accept
+base64 SVG/PNG/JPEG/WebP bytes and use the same bounded import and history flow
+as the editor. Capability discovery reports live operation availability.
+
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
 to equip the cloak and move items between characters and their bags. The sample's

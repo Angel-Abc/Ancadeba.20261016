@@ -32,6 +32,15 @@ export class EditorProjectService {
     private readonly history = new EditorHistory(),
   ) {}
 
+  get features() {
+    return {
+      history:
+        typeof this.repository.restoreHistoryFiles === 'function' &&
+        typeof this.repository.readHistoryFiles === 'function',
+      assetImport: typeof this.repository.createAsset === 'function',
+    }
+  }
+
   create(input: unknown): Promise<ProjectView> {
     const parsed = createProjectRequestSchema.safeParse(input)
 

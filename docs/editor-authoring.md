@@ -779,6 +779,9 @@ Run `pnpm lint`, `pnpm test`,
 The editor does not include scripts, command batches, real-time collaboration,
 or embedded chat. The [MCP adapter](editor-mcp.md) exposes authoring operations
 to an external coding agent; those saves share the server's project history.
+MCP clients can undo/redo saved changes and upload base64 image bytes through
+the same server endpoints. Capability discovery includes `features.history` and
+`features.assetImport` according to the repository's available services.
 
 ## Stylesheet authoring
 

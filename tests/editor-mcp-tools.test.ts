@@ -47,7 +47,7 @@ async function connection(api: IEditorApi) {
 
 function api(): IEditorApi {
   return {
-    capabilities: async () => capabilities,
+    capabilities: async () => ({ ...capabilities, features: { history: true, assetImport: true } }),
     inspectGame: async () => view,
     inspectScene: async () => ({ revision: view.revision, scene, diagnostics: [] }),
     apply: async () => ({
@@ -56,10 +56,145 @@ function api(): IEditorApi {
       changedFiles: ['game.json'],
       summary: 'Saved',
     }),
+    restore: async () => ({ ...view, revision: 'two', history: { canUndo: false, canRedo: true } }),
+    uploadAsset: async () => ({
+      ...view,
+      revision: 'two',
+      changedFiles: ['assets/images/art.svg'],
+      summary: 'Imported image art',
+    }),
   }
 }
 
 describe('MCP adapter tools', () => {
+  it('exposes typed shared history and image upload tools and advertises live operation support', async () => {
+    const remote = api()
+    const history: unknown[] = []
+    const uploads: unknown[] = []
+    remote.restore = async (revision, direction, signal) => {
+      expect(signal).toBeInstanceOf(AbortSignal)
+      history.push({ revision, direction })
+
+      return {
+        ...view,
+        revision: 'two',
+        history: { canUndo: direction === 'redo', canRedo: direction === 'undo' },
+      }
+    }
+
+    remote.uploadAsset = async (input, signal) => {
+      expect(signal).toBeInstanceOf(AbortSignal)
+      uploads.push(input)
+
+      return {
+        ...view,
+        revision: 'three',
+        changedFiles: ['assets/images/art.svg'],
+        summary: 'Imported image art',
+      }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const discovery = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      expect(
+        mcpCapabilitiesSchema.parse(object(discovery.structuredContent).data).operations,
+      ).toMatchObject({
+        undo: { tool: 'ancadeba_undo', supported: true },
+        redo: { tool: 'ancadeba_redo', supported: true },
+        assetUpload: {
+          tool: 'ancadeba_upload_asset',
+          supported: true,
+          maxMultipartBytes: 10 * 1024 * 1024,
+        },
+      })
+
+      for (const direction of ['undo', 'redo']) {
+        const result = await client.callTool({
+          name: 'ancadeba_' + direction,
+          arguments: { expectedRevision: 'one' },
+        })
+
+        expect(result.structuredContent).toMatchObject({
+          ok: true,
+          data: { gamePath: 'basic', direction, revision: 'two' },
+        })
+      }
+
+      const input = {
+        expectedRevision: 'two',
+        id: 'art',
+        format: 'svg',
+        dataBase64: Buffer.from('<svg/>').toString('base64'),
+      }
+
+      const uploaded = await client.callTool({ name: 'ancadeba_upload_asset', arguments: input })
+      expect(uploaded.structuredContent).toMatchObject({
+        ok: true,
+        data: { gamePath: 'basic', revision: 'three', changedFiles: ['assets/images/art.svg'] },
+      })
+      expect(history).toEqual([
+        { revision: 'one', direction: 'undo' },
+        { revision: 'one', direction: 'redo' },
+      ])
+      expect(uploads).toEqual([input])
+      remote.capabilities = async () => capabilities
+      const old = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      expect(
+        mcpCapabilitiesSchema.parse(object(old.structuredContent).data).operations,
+      ).toMatchObject({
+        undo: { supported: false },
+        redo: { supported: false },
+        assetUpload: { supported: false },
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  it('rejects upload and history scope overrides and malformed bytes before handlers run', async () => {
+    const remote = api()
+    let calls = 0
+    remote.restore = async () => {
+      calls++
+      throw new Error('Must not dispatch')
+    }
+
+    remote.uploadAsset = async () => {
+      calls++
+      throw new Error('Must not dispatch')
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      for (const name of ['ancadeba_undo', 'ancadeba_redo'])
+        for (const args of [
+          {},
+          { expectedRevision: '' },
+          { expectedRevision: 'one', path: 'other' },
+          { expectedRevision: 'one', direction: 'redo' },
+        ])
+          expect((await client.callTool({ name, arguments: args })).isError).toBe(true)
+      const input = { expectedRevision: 'one', id: 'art', format: 'svg', dataBase64: 'Zg==' }
+
+      for (const args of [
+        { ...input, dataBase64: 'Zh==' },
+        { ...input, dataBase64: 'data:image/svg+xml;base64,Zg==' },
+        { ...input, path: 'other' },
+        { ...input, filePath: 'C:/secret.svg' },
+        { ...input, url: 'http://example.com/image' },
+        { ...input, id: '../art' },
+      ])
+        expect(
+          (await client.callTool({ name: 'ancadeba_upload_asset', arguments: args })).isError,
+        ).toBe(true)
+      expect(calls).toBe(0)
+    } finally {
+      await close()
+    }
+  })
   it('exposes typed catalogue inspection and normalized graphic authoring commands', async () => {
     const service = api()
     let applied: EditorCommand | undefined
@@ -118,9 +253,12 @@ describe('MCP adapter tools', () => {
         'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
         'ancadeba_inspect_scene',
+        'ancadeba_redo',
+        'ancadeba_undo',
         'ancadeba_update_game_metadata',
         'ancadeba_update_scene_layout',
         'ancadeba_update_scene_metadata',
+        'ancadeba_upload_asset',
       ])
       expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(4)
 

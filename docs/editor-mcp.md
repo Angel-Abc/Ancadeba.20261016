@@ -6,7 +6,7 @@ visual editor. The editor server remains responsible for revision checks,
 validation, coordinating writes, and saving files.
 
 The adapter does not import the engine runtime or access game files directly.
-Its implementation is in `apps/editor-mcp`; adapter version 0.2.0 uses editor API version 1.
+Its implementation is in `apps/editor-mcp`; adapter version 0.3.0 uses editor API version 1.
 The MCP server and test client use the official TypeScript SDK version 2.4.0.
 
 ## Build
@@ -110,6 +110,9 @@ project path or editor server URL. There are no raw-file, shell, or process tool
 | `ancadeba_inspect_assets`        | Empty object                                                                                 | Asset catalogue, parts, compositions, revision, source diagnostics                                      |
 | `ancadeba_edit_assets`           | `expectedRevision`, an asset or graphic `command` from capabilities                          | Saved change summary                                                                                    |
 | `ancadeba_apply_command`         | `expectedRevision`, complete editor `command`                                                | Saved change summary                                                                                    |
+| `ancadeba_undo`                  | `expectedRevision`                                                                           | New revision, direction, diagnostics and shared history status                                          |
+| `ancadeba_redo`                  | `expectedRevision`                                                                           | New revision, direction, diagnostics and shared history status                                          |
+| `ancadeba_upload_asset`          | `expectedRevision`, `id`, `format`, `dataBase64`                                             | Saved change summary, including the unique source path in `changedFiles`                                |
 | `ancadeba_update_game_metadata`  | `expectedRevision`, `title`, `description`, `version`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
 | `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                                         | Saved change summary                                                                                    |
 | `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
@@ -163,6 +166,15 @@ Every mutation rechecks server capabilities, so a command removed after discover
 is rejected before posting the edit. Aliases resolve command schemas by name,
 independently of command-list order.
 
+History and uploads are separate operations, not command types. Discovery adds
+`operations.undo`, `operations.redo` and `operations.assetUpload`, each with a
+tool name, `supported` flag and MCP input schema. Upload discovery includes
+`maxMultipartBytes` (10485760). The HTTP server advertises optional
+`features.history` and `features.assetImport` based on its configured repository.
+Missing flags from older servers mean unsupported; commands still work. Update
+the editor server and reconnect the MCP adapter to enable the new operations.
+Each operation rechecks the API version and its feature flag before posting.
+
 Metadata translation keys accept strings to assign them, `null` to remove them,
 or omission to preserve them. Create translation catalogs first. Creation flags
 such as `createOnly: true` reject existing IDs instead of replacing content.
@@ -171,7 +183,7 @@ The asset editing tool accepts `assets.upsertImage`, `assets.upsertPart`,
 `assets.upsertComposition`, `assets.remove`, `scene.upsertGraphic`, and
 `scene.removeGraphic`. Inspect capabilities for complete input schemas and
 examples. Image registration requires a source already inside the game directory;
-binary uploads use the editor's bounded multipart HTTP import endpoint. Asset
+binary uploads use `ancadeba_upload_asset` and the editor's bounded multipart HTTP import endpoint. Asset
 inspection reports source problems, and artwork byte edits invalidate revisions.
 
 Project inspection includes rules and source rule files, inventory definitions,
@@ -219,6 +231,55 @@ revision returned by each save. The command body cannot supply a project path or
 server URL. Commands such as stylesheet assignment, asset source registration
 and component paste have their own validated game-relative fields; these do not
 change the adapter's configured project.
+
+## Undo and redo
+
+Inspect `ancadeba_inspect_game` for `history.canUndo`, `history.canRedo` and the
+next `undoLabel`/`redoLabel`. Call `ancadeba_undo` or `ancadeba_redo` with
+`{ "expectedRevision": "<inspected revision>" }`. The result includes the new
+revision, direction, diagnostics and updated history. Use that returned revision
+for the next operation.
+
+This replays the most recent saved change in the configured game's shared editor
+history, including edits made by other clients. It does not affect unsaved UI
+drafts. History exists only for the running editor server session; defaults are
+50 entries per project and a 64 MiB total memory budget. A new saved edit clears
+redo, and external file changes invalidate the history. An empty stack returns
+`history_empty` without changing files. Reinspect after conflicts or replay
+failures; never automatically retry an uncertain operation.
+
+## Uploading image assets
+
+Call `ancadeba_upload_asset` with an inspected revision, an asset `id`, `format`
+(`svg`, `png`, `jpeg` or `webp`) and `dataBase64` containing the image's raw bytes
+encoded as canonical padded base64. Do not include a data URL prefix, whitespace,
+a local filename or a URL. For example:
+
+```json
+{
+  "expectedRevision": "<inspected revision>",
+  "id": "portrait",
+  "format": "svg",
+  "dataBase64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCAxMCIvPg=="
+}
+```
+
+The adapter decodes bytes and encodes a multipart HTTP request. The complete
+request, including metadata and multipart framing, must fit within 10 MiB;
+leave room below that limit for raw image bytes. Base64 expands the MCP argument
+size; the adapter's bounded stdio buffer includes room for that expansion.
+The adapter rejects malformed base64 and oversized multipart requests
+before contacting the editor. The server validates the declared image format,
+dimensions and SVG source, derives bounds/colors, and assigns a unique source
+path under `assets/images/` in the configured game.
+
+Importing a new ID registers an image. Importing an existing image ID replaces
+its catalogue entry, retaining compatible defaults/palettes and the previous
+source file. Inspection returns the new image definition; `changedFiles` in the
+upload result includes the new source path. Successful imports participate in
+shared undo/redo, restoring exact file bytes and catalogue references. A failure
+after publication can leave an imported or unreferenced source; an uncertain
+result requires inspection before another deliberate upload.
 
 Edits save immediately and appear through the visual editor's existing HTTP API.
 Reload the project or return focus to refresh clean forms. Running engine previews
@@ -293,12 +354,14 @@ Tests are under root `tests/`:
 - `editor-mcp-config.test.ts`: explicit binding and configuration validation.
 - `editor-mcp-client.test.ts`: request mapping, response validation, diagnostics,
   capability checks, timeouts, cancellation, and uncertain outcomes.
+- `editor-mcp-operations.test.ts`: history/multipart mapping, exact uploaded
+  bytes, canonical base64 and size limits, feature checks and uncertain outcomes.
 - `editor-mcp-tools.test.ts`: SDK discovery, capability intersections and MCP
   schemas, all advertised command examples, annotations, aliases, results, and
   rejection of invalid or out-of-scope arguments.
 - `editor-mcp-integration.test.ts`: real editor server, saved edits, competing
   HTTP edits, gameplay/map/localization/CSS authoring, stale revisions, duplicate
-  creation, project diagnostics, and uncertain save outcomes.
+  creation, shared history, image uploads/replacement, project diagnostics, and uncertain save outcomes.
 - `editor-mcp-stdio.test.ts`: actual child process, protocol cleanliness,
   offline recovery, unrelated working directories, root binding, and shutdown.
 
@@ -308,7 +371,7 @@ Only test-owned processes are closed.
 
 The adapter exposes the command endpoint, not every editor HTTP endpoint. It
 does not expose project discovery/creation, changing the configured game,
-binary asset uploads, the component clipboard-export endpoint, undo/redo,
+the component clipboard-export endpoint,
 preview controls, exports, raw file access, command batches, shell/process tools
 or remote MCP hosting. Component duplication and paste are available as shared
 commands; inspect a scene to obtain a source component. Declarative rules are

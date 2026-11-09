@@ -5,6 +5,7 @@ import {
   type EditorCommand,
 } from '@ancadeba/editor-core'
 import { z } from 'zod'
+import { mcpOperations, type editorFeaturesSchema } from './operationSupport.js'
 
 export const commandTool = 'ancadeba_apply_command'
 export const mcpCommandRequestSchema = commandRequestSchema.omit({ path: true })
@@ -26,7 +27,11 @@ export function schemaFor<T extends EditorCommand['type']>(type: T) {
 }
 
 /** Advertise locally understood commands that the connected server currently supports. */
-export function mcpCapabilities(remote: { version: number; commands: { type: string }[] }) {
+export function mcpCapabilities(remote: {
+  version: number
+  commands: { type: string }[]
+  features?: z.infer<typeof editorFeaturesSchema> | undefined
+}) {
   const supported = new Set(remote.commands.map(({ type }) => type))
   const options = commandSchema.options.filter((option) => supported.has(option.shape.type.value))
 
@@ -39,5 +44,7 @@ export function mcpCapabilities(remote: { version: number; commands: { type: str
     commandTool,
     requestSchema: z.toJSONSchema(request),
     commands: capabilities.commands.filter(({ type }) => supported.has(type)),
+    ...(remote.features ? { features: remote.features } : {}),
+    operations: mcpOperations(remote.features),
   }
 }

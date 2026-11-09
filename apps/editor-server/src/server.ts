@@ -103,7 +103,10 @@ export function createEditorServer(
       response.setHeader('Cache-Control', 'no-store')
 
       if (request.method === 'GET' && url.pathname === '/api/editor/capabilities') {
-        json(response, 200, capabilities)
+        json(response, 200, {
+          ...capabilities,
+          features: projects?.features ?? { history: false, assetImport: false },
+        })
 
         return
       }

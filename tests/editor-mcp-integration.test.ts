@@ -1,7 +1,7 @@
 import { once } from 'node:events'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
@@ -13,7 +13,12 @@ import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProj
 import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { EditorApiClient } from '../apps/editor-mcp/src/editorApiClient.js'
 import { createMcpServer } from '../apps/editor-mcp/src/mcpServer.js'
-import { changeSummarySchema, gameSummarySchema } from '../apps/editor-mcp/src/protocol.js'
+import {
+  changeSummarySchema,
+  gameSummarySchema,
+  historyResultSchema,
+  mcpCapabilitiesSchema,
+} from '../apps/editor-mcp/src/protocol.js'
 import { object, type EditorCommand } from '@ancadeba/editor-core'
 
 const manifest = {
@@ -89,6 +94,284 @@ describe('MCP and shared editor integration', () => {
       }
     ).data
   }
+
+  async function game() {
+    const result = await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    expect(result.isError).toBe(false)
+
+    return gameSummarySchema.parse(object(result.structuredContent).data)
+  }
+
+  async function restore(direction: 'undo' | 'redo', revision: string) {
+    const result = await client.callTool({
+      name: direction === 'undo' ? 'ancadeba_undo' : 'ancadeba_redo',
+      arguments: { expectedRevision: revision },
+    })
+
+    expect(result.isError).toBe(false)
+
+    return historyResultSchema.parse(object(result.structuredContent).data)
+  }
+
+  it('discovers live history/upload support and replays saved changes from other editor clients', async () => {
+    const discovery = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+    expect(mcpCapabilitiesSchema.parse(object(discovery.structuredContent).data)).toMatchObject({
+      features: { history: true, assetImport: true },
+      operations: {
+        undo: { supported: true },
+        redo: { supported: true },
+        assetUpload: { supported: true, maxMultipartBytes: 10 * 1024 * 1024 },
+      },
+    })
+    const initial = await game()
+    expect(initial.history).toMatchObject({ canUndo: false, canRedo: false })
+    const before = await readFile(join(root, 'basic/game.json'))
+
+    const saved = await fetch(`${base}/api/editor/commands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'basic',
+        expectedRevision: initial.revision,
+        command: {
+          type: 'game.updateMetadata',
+          title: 'Human edit',
+          description: '',
+          version: '1',
+        },
+      }),
+    })
+
+    expect(saved.status).toBe(200)
+    const human = await game()
+    expect(human.history).toMatchObject({ canUndo: true, undoLabel: 'Updated game metadata' })
+    const undone = await restore('undo', human.revision)
+    expect(undone).toMatchObject({ direction: 'undo', history: { canUndo: false, canRedo: true } })
+    expect(await readFile(join(root, 'basic/game.json'))).toEqual(before)
+    const redone = await restore('redo', undone.revision)
+    expect(redone.history).toMatchObject({ canUndo: true, canRedo: false })
+    expect((await game()).game?.title).toBe('Human edit')
+    const again = await restore('undo', redone.revision)
+
+    const branch = await client.callTool({
+      name: 'ancadeba_apply_command',
+      arguments: {
+        expectedRevision: again.revision,
+        command: {
+          type: 'game.updateMetadata',
+          title: 'New branch',
+          description: '',
+          version: '1',
+        },
+      },
+    })
+
+    expect(branch.isError).toBe(false)
+    const fresh = await game()
+
+    const empty = await client.callTool({
+      name: 'ancadeba_redo',
+      arguments: { expectedRevision: fresh.revision },
+    })
+
+    expect(empty.structuredContent).toMatchObject({
+      error: { code: 'history_empty', outcome: 'not_applied' },
+    })
+    await writeFile(
+      join(root, 'basic/game.json'),
+      JSON.stringify({ ...manifest, title: 'External edit' }),
+    )
+
+    const stale = await client.callTool({
+      name: 'ancadeba_undo',
+      arguments: { expectedRevision: fresh.revision },
+    })
+
+    expect(stale.structuredContent).toMatchObject({
+      error: { code: 'revision_conflict', outcome: 'not_applied' },
+    })
+    const external = await game()
+    expect(external.history).toMatchObject({ canUndo: false, canRedo: false })
+
+    const noHistory = await client.callTool({
+      name: 'ancadeba_undo',
+      arguments: { expectedRevision: external.revision },
+    })
+
+    expect(noHistory.structuredContent).toMatchObject({
+      error: { code: 'history_empty', outcome: 'not_applied' },
+    })
+    expect((await game()).game?.title).toBe('External edit')
+  })
+
+  it('uploads and replaces SVG sources with exact bytes and restores them through undo/redo', async () => {
+    const first =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 10"><!-- Café -->\r\n<rect width="12" height="10" fill="#112233"/></svg>'
+
+    const second =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 20"><rect width="24" height="20" fill="#112233"/></svg>'
+
+    const manifestBytes = await readFile(join(root, 'basic/game.json'))
+
+    const upload = async (svg: string) => {
+      const result = await client.callTool({
+        name: 'ancadeba_upload_asset',
+        arguments: {
+          expectedRevision: (await game()).revision,
+          id: 'art',
+          format: 'svg',
+          dataBase64: Buffer.from(svg).toString('base64'),
+        },
+      })
+
+      expect(result.isError).toBe(false)
+
+      return game()
+    }
+
+    const created = await upload(first)
+    const firstPath = created.assets!.images.art!.source
+    expect(created.assets!.images.art!.bounds).toMatchObject({ width: 12, height: 10 })
+    expect(await readFile(join(root, 'basic', firstPath), 'utf8')).toBe(first)
+    expect(created.history?.undoLabel).toBe('Imported image art')
+    const replaced = await upload(second)
+    const secondPath = replaced.assets!.images.art!.source
+    expect(secondPath).not.toBe(firstPath)
+    expect(await readFile(join(root, 'basic', firstPath), 'utf8')).toBe(first)
+    const undone = await restore('undo', replaced.revision)
+    expect((await game()).assets!.images.art!.source).toBe(firstPath)
+    await expect(readFile(join(root, 'basic', secondPath))).rejects.toHaveProperty('code', 'ENOENT')
+    const redone = await restore('redo', undone.revision)
+    expect(await readFile(join(root, 'basic', secondPath), 'utf8')).toBe(second)
+    const original = await restore('undo', redone.revision)
+    await restore('undo', original.revision)
+    expect((await game()).assets).toBeUndefined()
+    expect(await readFile(join(root, 'basic/game.json'))).toEqual(manifestBytes)
+    await expect(readFile(join(root, 'basic', firstPath))).rejects.toHaveProperty('code', 'ENOENT')
+  })
+
+  it('uploads binary PNG bytes and rejects invalid images or stale uploads without publishing files', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jlyIAAAAASUVORK5CYII=',
+      'base64',
+    )
+
+    const initial = await game()
+
+    const uploaded = await client.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: initial.revision,
+        id: 'pixel',
+        format: 'png',
+        dataBase64: png.toString('base64'),
+      },
+    })
+
+    expect(uploaded.isError).toBe(false)
+    const saved = await game()
+    expect(saved.assets!.images.pixel!.bounds).toMatchObject({ width: 1, height: 1 })
+    expect(await readFile(join(root, 'basic', saved.assets!.images.pixel!.source))).toEqual(png)
+    const files = await readdir(join(root, 'basic/assets/images'))
+
+    const stale = await client.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: initial.revision,
+        id: 'stale',
+        format: 'png',
+        dataBase64: png.toString('base64'),
+      },
+    })
+
+    expect(stale.structuredContent).toMatchObject({
+      error: { code: 'revision_conflict', outcome: 'not_applied' },
+    })
+
+    const invalid = await client.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: saved.revision,
+        id: 'invalid',
+        format: 'jpeg',
+        dataBase64: png.toString('base64'),
+      },
+    })
+
+    expect(invalid.structuredContent).toMatchObject({
+      error: { code: 'invalid_asset', outcome: 'not_applied' },
+    })
+    expect(await readdir(join(root, 'basic/assets/images'))).toEqual(files)
+    expect((await game()).revision).toBe(saved.revision)
+  })
+
+  it('reports uncertain history and upload results when the post-write reread fails', async () => {
+    const saved = await client.callTool({
+      name: 'ancadeba_update_game_metadata',
+      arguments: {
+        expectedRevision: (await game()).revision,
+        title: 'Changed',
+        description: '',
+        version: '1',
+      },
+    })
+
+    expect(saved.isError).toBe(false)
+    const revision = (await game()).revision
+    const load = repository.load.bind(repository)
+    let reads = 0
+
+    const failure = vi.spyOn(repository, 'load').mockImplementation(async (folder) => {
+      if (++reads === 2) throw new WorkspaceError(404, 'Reread failed')
+
+      return load(folder)
+    })
+
+    try {
+      const result = await client.callTool({
+        name: 'ancadeba_undo',
+        arguments: { expectedRevision: revision },
+      })
+
+      expect(result.structuredContent).toMatchObject({
+        error: { code: 'history_restore_failed', outcome: 'unknown' },
+      })
+      expect(JSON.parse(await readFile(join(root, 'basic/game.json'), 'utf8')).title).toBe('Game')
+    } finally {
+      failure.mockRestore()
+    }
+
+    const fresh = await game()
+    reads = 0
+
+    const uploadFailure = vi.spyOn(repository, 'load').mockImplementation(async (folder) => {
+      if (++reads === 2) throw new WorkspaceError(404, 'Reread failed')
+
+      return load(folder)
+    })
+
+    try {
+      const result = await client.callTool({
+        name: 'ancadeba_upload_asset',
+        arguments: {
+          expectedRevision: fresh.revision,
+          id: 'art',
+          format: 'svg',
+          dataBase64: Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>',
+          ).toString('base64'),
+        },
+      })
+
+      expect(result.structuredContent).toMatchObject({
+        error: { code: 'not_found', outcome: 'unknown' },
+      })
+      const catalog = JSON.parse(await readFile(join(root, 'basic/assets/catalogue.json'), 'utf8'))
+      expect(catalog.images.art).toBeDefined()
+    } finally {
+      uploadFailure.mockRestore()
+    }
+  })
 
   it('creates and edits saved scenes visible through the visual editor HTTP contract', async () => {
     let revision = (await inspect()).revision

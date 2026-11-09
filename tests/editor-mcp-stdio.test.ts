@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { once } from 'node:events'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/client'
@@ -15,6 +15,8 @@ import { EditorCoordinator } from '../apps/editor-server/src/editorCoordinator.j
 import { EditorProjectService } from '../apps/editor-server/src/editorProjectService.js'
 import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProjectRepository.js'
 import { createEditorServer } from '../apps/editor-server/src/server.js'
+import { object } from '@ancadeba/editor-core'
+import { historyResultSchema, gameSummarySchema } from '../apps/editor-mcp/src/protocol.js'
 
 const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href
 const entry = fileURLToPath(new URL('../apps/editor-mcp/src/main.ts', import.meta.url))
@@ -103,7 +105,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(10)
+    expect((await activeClient.listTools()).tools).toHaveLength(13)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -124,6 +126,42 @@ describe('MCP stdio process', () => {
     expect(result.isError).toBe(false)
     const view = await (await fetch(`${base}/api/editor/project?path=basic`)).json()
     expect(view.game.title).toBe('Saved through stdio')
+
+    const undone = await activeClient.callTool({
+      name: 'ancadeba_undo',
+      arguments: { expectedRevision: view.revision },
+    })
+
+    expect(undone.isError).toBe(false)
+    const history = historyResultSchema.parse(object(undone.structuredContent).data)
+    expect(history.history).toMatchObject({ canUndo: false, canRedo: true })
+
+    const redone = await activeClient.callTool({
+      name: 'ancadeba_redo',
+      arguments: { expectedRevision: history.revision },
+    })
+
+    expect(redone.isError).toBe(false)
+    const restored = historyResultSchema.parse(object(redone.structuredContent).data)
+
+    const uploaded = await activeClient.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: restored.revision,
+        id: 'stdio-art',
+        format: 'svg',
+        dataBase64: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 10"/>',
+        ).toString('base64'),
+      },
+    })
+
+    expect(uploaded.isError).toBe(false)
+    expect(
+      (await (await fetch(`${base}/api/editor/project?path=basic`)).json()).assets.images[
+        'stdio-art'
+      ].bounds,
+    ).toMatchObject({ width: 12, height: 10 })
     expect(errors).toEqual([])
     expect(stderr.join('')).toBe('')
     const pid = activeTransport.pid
@@ -132,6 +170,35 @@ describe('MCP stdio process', () => {
 
     if (pid !== null) expect(() => process.kill(pid, 0)).toThrow()
   })
+  it('uploads images whose base64 message exceeds the SDK default stdio buffer', async () => {
+    const { activeClient, errors, stderr } = await connect()
+    const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    const before = gameSummarySchema.parse(object(inspection.structuredContent).data)
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><!--' +
+      'x'.repeat(8 * 1024 * 1024) +
+      '--></svg>'
+
+    const result = await activeClient.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: before.revision,
+        id: 'large',
+        format: 'svg',
+        dataBase64: Buffer.from(svg).toString('base64'),
+      },
+    })
+
+    expect(result.isError).toBe(false)
+    const inspected = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    const saved = gameSummarySchema.parse(object(inspected.structuredContent).data)
+    const source = saved.assets!.images.large!.source
+    expect(await readFile(join(root, 'basic', source), 'utf8')).toBe(svg)
+    expect(errors).toEqual([])
+    expect(stderr.join('')).toBe('')
+  }, 15000)
+
   it('can list tools while the editor is offline and recovers when that same server returns', async () => {
     // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const port = (server.address() as AddressInfo).port
@@ -139,7 +206,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(10)
+    expect((await activeClient.listTools()).tools).toHaveLength(13)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({

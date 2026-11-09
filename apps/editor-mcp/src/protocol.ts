@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { sceneSchema } from '@ancadeba/schemas'
 import { diagnosticSchema, projectViewSchema } from '@ancadeba/editor-core'
 import { commandTool } from './commandSupport.js'
+import { editorFeaturesSchema, operationsSchema } from './operationSupport.js'
 
 export { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
 
@@ -15,11 +16,13 @@ export const capabilitiesSchema = z.object({
   version: z.number().int(),
   requestSchema: z.record(z.string(), z.unknown()),
   commands: z.array(z.object({ type: z.string(), example: z.record(z.string(), z.unknown()) })),
+  features: editorFeaturesSchema.optional(),
 })
 
 export const mcpCapabilitiesSchema = capabilitiesSchema.extend({
   gamePath: z.string(),
   commandTool: z.literal(commandTool),
+  operations: operationsSchema,
 })
 
 export const appliedChangeSchema = projectViewSchema.extend({
@@ -56,6 +59,10 @@ export const changeSummarySchema = appliedChangeSchema
     diagnostics: true,
   })
   .extend({ gamePath: z.string() })
+
+export const historyResultSchema = projectViewSchema
+  .pick({ revision: true, history: true, diagnostics: true })
+  .extend({ gamePath: z.string(), direction: z.enum(['undo', 'redo']) })
 
 export function resultSchema<T extends z.ZodType>(data: T) {
   return z.object({ ok: z.boolean(), data: data.optional(), error: toolErrorSchema.optional() })

@@ -1113,7 +1113,9 @@ describe('shared editor project API', () => {
 
   it('discovers, creates, edits, and loads the saved game through the unchanged engine loader', async () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
-    expect((await capabilities.json()).commands).toHaveLength(56)
+    const advertised = await capabilities.json()
+    expect(advertised.commands).toHaveLength(56)
+    expect(advertised.features).toEqual({ history: true, assetImport: true })
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

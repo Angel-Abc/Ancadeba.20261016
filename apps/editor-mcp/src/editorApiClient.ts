@@ -1,6 +1,7 @@
 import { commandRequestSchema, type EditorCommand, type Diagnostic } from '@ancadeba/editor-core'
 import type { z } from 'zod'
 import type { AdapterConfig } from './config.js'
+import { assetUploadInputSchema, historyInputSchema, maxUploadBytes } from './operationSupport.js'
 import {
   apiErrorSchema,
   appliedChangeSchema,
@@ -22,7 +23,21 @@ const rejectedCommandStatuses = new Map<string, number>([
   ['asset_not_found', 404],
   ['component_not_found', 404],
   ['component_exists', 409],
+  ['history_empty', 409],
+  ['unsupported_history', 503],
+  ['unsupported_import', 503],
+  ['invalid_asset', 422],
 ])
+
+interface RequestBody {
+  body: string | ArrayBuffer
+  headers: Record<string, string>
+}
+
+const jsonBody = (value: unknown): RequestBody => ({
+  body: JSON.stringify(value),
+  headers: { 'Content-Type': 'application/json' },
+})
 
 export class EditorApiError extends Error {
   constructor(
@@ -43,6 +58,15 @@ export interface IEditorApi {
   apply(
     expectedRevision: string,
     command: EditorCommand,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof appliedChangeSchema>>
+  restore(
+    expectedRevision: string,
+    direction: 'undo' | 'redo',
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectViewSchema>>
+  uploadAsset(
+    input: z.infer<typeof assetUploadInputSchema>,
     signal?: AbortSignal,
   ): Promise<z.infer<typeof appliedChangeSchema>>
 }
@@ -117,13 +141,92 @@ export class EditorApiClient implements IEditorApi {
       )
     }
 
-    return this.request('/api/editor/commands', appliedChangeSchema, request.data, signal)
+    return this.request('/api/editor/commands', appliedChangeSchema, jsonBody(request.data), signal)
+  }
+
+  async restore(expectedRevision: string, direction: 'undo' | 'redo', signal?: AbortSignal) {
+    const parsed = historyInputSchema.safeParse({ expectedRevision })
+
+    if (!parsed.success || !['undo', 'redo'].includes(direction))
+      throw new EditorApiError('invalid_request', 'Provide a revision and an undo/redo direction')
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.history)
+      throw new EditorApiError(
+        'unsupported_history',
+        'The connected editor does not advertise undo/redo support',
+      )
+
+    return this.request(
+      '/api/editor/history',
+      projectViewSchema,
+      jsonBody({ path: this.config.game, ...parsed.data, direction }),
+      signal,
+    )
+  }
+
+  async uploadAsset(input: z.infer<typeof assetUploadInputSchema>, signal?: AbortSignal) {
+    const parsed = assetUploadInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide a revision, image ID, format and canonical base64 image bytes',
+        parsed.error.issues.map((issue) => ({
+          code: 'invalid_request',
+          file: '',
+          path: issue.path.map((part) => (typeof part === 'number' ? part : String(part))),
+          message: issue.message,
+        })),
+      )
+    const { dataBase64, ...metadata } = parsed.data
+    const bytes = Buffer.from(dataBase64, 'base64')
+    const form = new FormData()
+    form.set('metadata', JSON.stringify({ path: this.config.game, ...metadata }))
+
+    const mime = { svg: 'image/svg+xml', png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' }[
+      metadata.format
+    ]
+
+    form.set(
+      'file',
+      new Blob([new Uint8Array(bytes)], { type: mime }),
+      `${metadata.id}.${metadata.format}`,
+    )
+    const encoded = new Response(form)
+    const body = await encoded.arrayBuffer()
+
+    if (body.byteLength > maxUploadBytes)
+      throw new EditorApiError(
+        'request_too_large',
+        'The complete multipart upload must fit within 10 MiB, including metadata',
+        [],
+        'not_applied',
+        413,
+      )
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.assetImport)
+      throw new EditorApiError(
+        'unsupported_import',
+        'The connected editor does not advertise asset upload support',
+      )
+
+    return this.request(
+      '/api/editor/assets/import',
+      appliedChangeSchema,
+      {
+        body,
+        headers: { 'Content-Type': encoded.headers.get('content-type')! },
+      },
+      signal,
+    )
   }
 
   private async request<T>(
     path: string,
     schema: z.ZodType<T>,
-    body?: unknown,
+    body?: RequestBody,
     requestSignal?: AbortSignal,
   ): Promise<T> {
     const signals = [
@@ -145,9 +248,7 @@ export class EditorApiClient implements IEditorApi {
 
       const response = await fetcher(`${this.config.editorServerUrl}${path}`, {
         method: writing ? 'POST' : 'GET',
-        ...(writing
-          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-          : {}),
+        ...body,
         redirect: 'error',
         cache: 'no-store',
         signal,
