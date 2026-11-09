@@ -33,6 +33,8 @@ export type {
 
 export { mountGameView, type GameViewSession, type GameViewOptions } from './gameView.js'
 
+export { mountGameStylesheet } from './gameStylesheet.js'
+
 export * from './graphicResources.js'
 
 export * from './graphicComponentRenderer.js'

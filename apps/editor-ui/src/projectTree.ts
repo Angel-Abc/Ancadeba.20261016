@@ -19,10 +19,16 @@ export interface ProjectTreeSection {
   nodes(view: ProjectView, t: Translate): ProjectTreeNode[]
 }
 
-/** A scene's literal title, else its default-language translation, else its ID. */
+/** Metadata uses its assigned default-language translation before the literal fallback. */
+export function gameTitle(view: ProjectView): string {
+  const game = view.game
+
+  return (game?.titleKey ? view.translations?.[game.titleKey] : undefined) ?? game?.title ?? ''
+}
+
 export function sceneTitle(view: ProjectView, scene: ProjectView['scenes'][number]): string {
   return (
-    scene.title || (scene.titleKey ? view.translations?.[scene.titleKey] : undefined) || scene.id
+    ((scene.titleKey ? view.translations?.[scene.titleKey] : undefined) ?? scene.title) || scene.id
   )
 }
 

@@ -21,7 +21,8 @@ import type { Translate } from '@ancadeba/utilities'
 import type { ProjectEditorState } from './projectController.js'
 import { EditorWorkspaceResources } from './workspaceResources.js'
 import { bindGraphicDefinitionsEditor } from './graphicDefinitionsEditor.js'
-import { sceneChoices } from './choiceLabels.js'
+import { bindSceneGraphicEditor } from './sceneGraphicEditor.js'
+import { startingGameBindings } from './textBindingChoices.js'
 
 export interface AssetPanelActions {
   save(command: EditorCommand): Promise<void>
@@ -48,6 +49,7 @@ export function bindAssetsPanel(
   let selected = ''
   let navigationKey = ''
   let structuredPath: string | undefined
+  let graphicPath: string | undefined
   let preview: RenderedGraphic | undefined
   let thumbnails: RenderedComponent[] = []
   let appearance = graphicAppearanceSchema.parse({})
@@ -86,18 +88,8 @@ export function bindAssetsPanel(
       <div class="preview-actions"><button type="submit" data-i18n="assets.saveDefinition"></button><button id="asset-remove" type="button" data-i18n="assets.remove"></button></div>
     </form></details>
     <section id="graphic-definitions-editor" hidden></section>
-    <form id="asset-graphic"><h4 data-i18n="assets.sceneGraphic"></h4>
-      <label for="graphic-scene" data-i18n="scene.label"></label><select id="graphic-scene"></select>
-      <label for="graphic-existing" data-i18n="assets.existing"></label><select id="graphic-existing"></select>
-      <label for="graphic-id" data-i18n="metadata.id"></label><input id="graphic-id" required pattern="[a-zA-Z0-9_-]+" />
-      <label for="graphic-visual" data-i18n="assets.visual"></label><select id="graphic-visual"></select>
-      <label for="graphic-alt" data-i18n="assets.alt"></label><input id="graphic-alt" />
-      <label for="graphic-alt-key" data-i18n="assets.altKey"></label><input id="graphic-alt-key" />
-      <label for="graphic-fit" data-i18n="assets.fit"></label><select id="graphic-fit"><option value="contain" data-i18n="assets.contain"></option><option value="cover" data-i18n="assets.cover"></option></select>
-      <div class="graphic-placement"><label><span data-i18n="assets.row"></span><input id="graphic-row" type="number" min="1" step="1" value="1" required /></label><label><span data-i18n="assets.column"></span><input id="graphic-column" type="number" min="1" step="1" value="1" required /></label><label><span data-i18n="assets.rowSpan"></span><input id="graphic-row-span" type="number" min="1" step="1" value="1" required /></label><label><span data-i18n="assets.columnSpan"></span><input id="graphic-column-span" type="number" min="1" step="1" value="1" required /></label></div>
-      <label for="graphic-appearance" data-i18n="assets.appearanceJson"></label><textarea id="graphic-appearance" rows="6" spellcheck="false">{}</textarea>
-      <div class="preview-actions"><button type="submit" data-i18n="assets.saveGraphic"></button><button type="button" id="graphic-remove" data-i18n="assets.removeGraphic"></button></div>
-    </form><p id="asset-error" class="error" role="alert" hidden></p>`
+    <section id="scene-graphic-editor" hidden></section>
+    <p id="asset-error" class="error" role="alert" hidden></p>`
 
   const find = <T extends HTMLElement>(id: string) => {
     const node = panel.querySelector<T>(`#${id}`)
@@ -205,6 +197,23 @@ export function bindAssetsPanel(
             { ...makeGraphic(id), appearance },
             { document, assets, graphics: resources, bindingMode: 'editor' },
           )
+        : undefined,
+  )
+
+  const sceneGraphicEditor = bindSceneGraphicEditor(
+    find('scene-graphic-editor'),
+    (command) => {
+      void actions.save(command)
+    },
+    (component, view, startingValues) =>
+      resources
+        ? renderer.render(component, {
+            document,
+            assets: view.assets,
+            graphics: resources,
+            bindingMode: 'editor',
+            ...(startingValues ? { bindings: startingGameBindings(view) } : {}),
+          })
         : undefined,
   )
 
@@ -351,27 +360,6 @@ export function bindAssetsPanel(
     renderSlotControls()
   }
 
-  const fillGraphics = () => {
-    if (dirty.has('asset-graphic')) return
-    const scene = state?.view?.scenes.find((scene) => scene.id === value('graphic-scene'))
-    const components = scene?.components.filter((component) => component.type === 'graphic') ?? []
-    selectOptions('graphic-existing', [
-      ['', t('assets.newGraphic')],
-      ...components.map((component): [string, string] => [component.id, component.id]),
-    ])
-    const component = components.find((component) => component.id === value('graphic-existing'))
-    set('graphic-id', component?.id ?? '')
-    set('graphic-visual', component?.visual ?? selected)
-    set('graphic-alt', component?.alt ?? '')
-    set('graphic-alt-key', component?.altKey ?? '')
-    set('graphic-fit', component?.fit ?? 'contain')
-    set('graphic-row', component?.placement.row ?? 1)
-    set('graphic-column', component?.placement.column ?? 1)
-    set('graphic-row-span', component?.placement.rowSpan ?? 1)
-    set('graphic-column-span', component?.placement.columnSpan ?? 1)
-    set('graphic-appearance', JSON.stringify(component?.appearance ?? {}, null, 2))
-  }
-
   const savePalette = async (mode: 'defaults' | 'preset' | 'remove') => {
     const asset = paletteAsset()
 
@@ -501,53 +489,11 @@ export function bindAssetsPanel(
   })
   on('asset-save-defaults', 'click', () => savePalette('defaults'))
   on('asset-remove-preset', 'click', () => savePalette('remove'))
-  on('graphic-scene', 'change', fillGraphics)
-  on('graphic-existing', 'change', fillGraphics)
-  on('asset-graphic', 'submit', (event) => {
-    event.preventDefault()
-    const appearance: unknown = JSON.parse(value('graphic-appearance'))
 
-    const component = graphicComponentSchema.parse({
-      id: value('graphic-id'),
-      type: 'graphic',
-      visual: value('graphic-visual'),
-      alt: value('graphic-alt'),
-      ...(value('graphic-alt-key') ? { altKey: value('graphic-alt-key') } : {}),
-      fit: value('graphic-fit'),
-      placement: {
-        row: Number(value('graphic-row')),
-        column: Number(value('graphic-column')),
-        rowSpan: Number(value('graphic-row-span')),
-        columnSpan: Number(value('graphic-column-span')),
-      },
-      appearance,
-    })
-
-    return actions.save({ type: 'scene.upsertGraphic', sceneId: value('graphic-scene'), component })
-  })
-  on('graphic-remove', 'click', () =>
-    actions.save({
-      type: 'scene.removeGraphic',
-      sceneId: value('graphic-scene'),
-      componentId: value('graphic-existing'),
-    }),
-  )
-
-  for (const id of ['asset-image', 'asset-palettes', 'asset-definition', 'asset-graphic'])
+  for (const id of ['asset-image', 'asset-palettes', 'asset-definition'])
     on(id, 'input', (event) => {
-      if (
-        event.target instanceof HTMLElement &&
-        ['graphic-scene', 'graphic-existing'].includes(event.target.id)
-      )
-        return
-
       if (id === 'asset-palettes' && event.target instanceof HTMLSelectElement) return
       dirty.add(id)
-
-      if (id === 'asset-graphic') {
-        find<HTMLSelectElement>('graphic-scene').disabled = true
-        find<HTMLSelectElement>('graphic-existing').disabled = true
-      }
 
       if (id === 'asset-definition' || id === 'asset-palettes')
         find<HTMLSelectElement>('asset-select').disabled = true
@@ -562,7 +508,8 @@ export function bindAssetsPanel(
     control.disabled = true
 
   return {
-    hasDrafts: () => dirty.size > 0 || definitionsEditor.hasDrafts(),
+    hasDrafts: () =>
+      dirty.size > 0 || definitionsEditor.hasDrafts() || sceneGraphicEditor.hasDrafts(),
     navigate(kind: string, id?: string, sceneId?: string, preserveDefinitionSelection = false) {
       const nextKey = `${kind}:${sceneId ?? ''}:${id ?? ''}`
       const changing = nextKey !== navigationKey
@@ -599,7 +546,7 @@ export function bindAssetsPanel(
       const definition = find('asset-definition').parentElement!
       definition.hidden = Boolean(structured) || (kind !== 'asset' && kind !== 'new-asset')
       definition.toggleAttribute('open', kind === 'new-asset')
-      find('asset-graphic').hidden = !graphic
+      find('scene-graphic-editor').hidden = !graphic
 
       if (kind === 'asset' && id && (changing || selected !== id)) {
         selected = id
@@ -616,11 +563,13 @@ export function bindAssetsPanel(
         set('asset-json', '{}')
       }
 
-      if (graphic && sceneId && !dirty.has('asset-graphic')) {
-        set('graphic-scene', sceneId)
-        fillGraphics()
-        set('graphic-existing', kind === 'component' ? (id ?? '') : '')
-        fillGraphics()
+      if (
+        graphic &&
+        sceneId &&
+        (changing || graphicPath !== state?.path || !preserveDefinitionSelection)
+      ) {
+        sceneGraphicEditor.navigate(sceneId, kind === 'component' ? id : undefined)
+        graphicPath = state?.path
       }
     },
     render(next: ProjectEditorState, replace: boolean) {
@@ -644,12 +593,7 @@ export function bindAssetsPanel(
 
       if (replace) {
         if (!next.preserveDrafts) dirty.clear()
-        else if (
-          submittedForm &&
-          (next.lastCommand?.startsWith('assets.') ||
-            next.lastCommand === 'scene.upsertGraphic' ||
-            next.lastCommand === 'scene.removeGraphic')
-        ) {
+        else if (submittedForm && next.lastCommand?.startsWith('assets.')) {
           dirty.delete(submittedForm)
 
           if (submittedForm === 'asset-image') set('asset-file', '')
@@ -660,15 +604,14 @@ export function bindAssetsPanel(
       for (const control of panel.querySelectorAll<
         HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement
       >('input, button, select, textarea'))
-        if (!control.closest('#graphic-definitions-editor'))
+        if (!control.closest('#graphic-definitions-editor, #scene-graphic-editor'))
           control.disabled = next.busy || !next.view?.game
       find<HTMLSelectElement>('asset-select').disabled ||=
         dirty.has('asset-definition') || dirty.has('asset-palettes')
-      find<HTMLSelectElement>('graphic-scene').disabled ||= dirty.has('asset-graphic')
-      find<HTMLSelectElement>('graphic-existing').disabled ||= dirty.has('asset-graphic')
 
       if (!replace || !next.view) {
         definitionsEditor.render(next, replace)
+        sceneGraphicEditor.render(next, replace)
 
         return
       }
@@ -686,12 +629,7 @@ export function bindAssetsPanel(
 
       if (requestedSelection && visuals.includes(requestedSelection))
         set('asset-select', requestedSelection)
-      selectOptions('graphic-visual', entries)
       selected = value('asset-select')
-      selectOptions(
-        'graphic-scene',
-        sceneChoices(next.view).map(([id, name]) => [id, name]),
-      )
 
       if (resourceRevision !== `${next.path}:${next.view.revision}`) {
         preview?.dispose()
@@ -744,12 +682,13 @@ export function bindAssetsPanel(
 
       if (!dirty.has('asset-palettes')) appearance = graphicAppearanceSchema.parse({})
       fillSelection(false)
-      fillGraphics()
       showEmptyState()
       definitionsEditor.render(next, replace)
+      sceneGraphicEditor.render(next, replace)
     },
     dispose() {
       definitionsEditor.dispose()
+      sceneGraphicEditor.dispose()
       abort.abort()
       preview?.dispose()
 

@@ -32,6 +32,12 @@ export function editCombat(
     const file = combatFile(definition.id)
     const previous = object(documents[file])
 
+    if (
+      command.createOnly &&
+      (game.combat ?? []).some((id) => id.toLowerCase() === definition.id.toLowerCase())
+    )
+      throw new EditorError(409, 'combat_exists', 'An encounter with this ID already exists')
+
     if (!game.combat?.includes(definition.id) && Object.hasOwn(documents, file))
       throw new EditorError(409, 'combat_exists', 'An encounter file already exists')
 

@@ -50,6 +50,7 @@ export const projectViewSchema = z.object({
   languageCatalogs: z.record(languageTagSchema, languageCatalogSchema).optional(),
   maps: z.record(gameIdSchema, mapDefinitionSchema).optional(),
   inventoryFiles: z.record(gameIdSchema, inventorySchema).optional(),
+  stylesheets: z.record(z.string(), z.string()).optional(),
   revision: z.string().min(1),
   game: gameSchema.nullable(),
   scenes: z.array(sceneSchema),

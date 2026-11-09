@@ -16,7 +16,9 @@ export async function saveProjectStructureChanges(
 
   const kind = change.changedFiles.some((file) => file.startsWith('scenes/'))
     ? 'scene'
-    : 'definition'
+    : change.changedFiles.some((file) => file.endsWith('.css'))
+      ? 'stylesheet'
+      : 'definition'
 
   const read = async (file: string) => {
     try {
@@ -42,7 +44,11 @@ export async function saveProjectStructureChanges(
       before,
       after: change.removedFiles?.includes(file)
         ? undefined
-        : Buffer.from(`${JSON.stringify(change.project.documents[file], null, 2)}\n`),
+        : Buffer.from(
+            typeof change.project.documents[file] === 'string'
+              ? change.project.documents[file]
+              : `${JSON.stringify(change.project.documents[file], null, 2)}\n`,
+          ),
     })
   }
 

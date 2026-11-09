@@ -19,6 +19,7 @@ export function combatForm(
   view: ProjectView,
   draft: CombatSource,
   render: () => void,
+  creating = false,
 ): HTMLElement[] {
   const { input, select, group, button, create, translation } = controls
   const keys = translationChoices(view)
@@ -163,10 +164,14 @@ export function combatForm(
       ...actions,
     )
 
+  const identity = input('Encounter ID', draft.id, (value) => {
+    if (creating) draft.id = value.trim()
+  })
+
+  identity.querySelector('input')!.readOnly = !creating
+
   const result: HTMLElement[] = [
-    input('Encounter ID', draft.id, (value) => {
-      draft.id = value.trim()
-    }),
+    identity,
     ...presentation('Encounter', draft),
     number('Encounter seed', draft.seed, (value) => {
       draft.seed = value

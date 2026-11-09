@@ -61,6 +61,8 @@ export interface ProjectView {
   languageCatalogs?: Record<string, LanguageCatalog> | undefined
   maps?: Record<string, MapDefinition> | undefined
   inventoryFiles?: Record<string, InventoryDefinition> | undefined
+  /** Editable CSS files in this project, including saved files not currently assigned. */
+  stylesheets?: Record<string, string> | undefined
   revision: string
   game: GameDefinition | null
   scenes: SceneDefinition[]

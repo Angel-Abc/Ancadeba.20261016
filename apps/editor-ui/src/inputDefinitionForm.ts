@@ -6,6 +6,7 @@ export interface InputDraft {
   keyboard: { code: string; key: string }[]
   contexts: Record<string, { key: string; input: string }[]>
   initialContext: string
+  newContext: string
 }
 
 export function createInputDraft(input: InputDefinition): InputDraft {
@@ -19,6 +20,7 @@ export function createInputDraft(input: InputDefinition): InputDraft {
       ]),
     ),
     initialContext: input['initial-context'],
+    newContext: '',
   }
 }
 
@@ -30,6 +32,8 @@ function uniqueMappings(entries: [string, string][], name: string): Record<strin
 }
 
 export function readInputDraft(draft: InputDraft): InputDefinition {
+  if (draft.newContext) throw new Error('Add or clear the pending input context before saving.')
+
   return {
     'schema-version': '1.0.0',
     'virtual-keys': draft.virtualKeys
@@ -63,7 +67,6 @@ export function inputDefinitionForm(
   const keyboard = group('Physical keyboard mappings')
   const contexts = group('Input contexts')
   let selectedContext = draft.initialContext
-  let newContext = ''
 
   const keys = () =>
     draft.virtualKeys
@@ -162,22 +165,22 @@ export function inputDefinitionForm(
         },
         ids.length < 2,
       ),
-      input('New context ID', newContext, (value) => {
-        newContext = value.trim()
+      input('New context ID', draft.newContext, (value) => {
+        draft.newContext = value.trim()
       }),
       button('Add context', () => {
         if (
-          !gameIdSchema.safeParse(newContext).success ||
-          Object.hasOwn(draft.contexts, newContext)
+          !gameIdSchema.safeParse(draft.newContext).success ||
+          Object.hasOwn(draft.contexts, draft.newContext)
         ) {
           reportError('Enter a unique context ID using letters, numbers, underscores, or hyphens.')
 
           return
         }
 
-        draft.contexts = { ...draft.contexts, [newContext]: [] }
-        selectedContext = newContext
-        newContext = ''
+        draft.contexts = { ...draft.contexts, [draft.newContext]: [] }
+        selectedContext = draft.newContext
+        draft.newContext = ''
         edited()
         renderContexts()
       }),

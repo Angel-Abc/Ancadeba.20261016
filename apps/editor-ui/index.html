@@ -171,9 +171,40 @@
                 <form id="editor-metadata">
                   <label for="editor-title" data-i18n="game.title">Game title</label
                   ><input id="editor-title" required />
+                  <div class="metadata-translation-field">
+                    <label for="editor-title-key" data-i18n="metadata.titleTranslation"
+                      >Title translation key</label
+                    >
+                    <input id="editor-title-key" list="editor-metadata-keys" autocomplete="off" />
+                    <small
+                      id="editor-title-key-preview"
+                      class="translation-preview"
+                      aria-live="polite"
+                    ></small>
+                  </div>
                   <label for="editor-description" data-i18n="metadata.description"
                     >Description</label
                   ><textarea id="editor-description"></textarea>
+                  <div class="metadata-translation-field">
+                    <label for="editor-description-key" data-i18n="metadata.descriptionTranslation"
+                      >Description translation key</label
+                    >
+                    <input
+                      id="editor-description-key"
+                      list="editor-metadata-keys"
+                      autocomplete="off"
+                    />
+                    <small
+                      id="editor-description-key-preview"
+                      class="translation-preview"
+                      aria-live="polite"
+                    ></small>
+                  </div>
+                  <datalist id="editor-metadata-keys"></datalist>
+                  <p class="help" data-i18n="metadata.translationHelp">
+                    Choose keys saved in Localization. Leave a key empty to use literal text.
+                    Missing language translations use the default-language text.
+                  </p>
                   <label for="editor-version" data-i18n="metadata.version">Version</label
                   ><input id="editor-version" required />
                   <button type="submit" data-i18n="game.save">Save game properties</button>
@@ -183,8 +214,39 @@
                 <form id="scene-metadata" hidden>
                   <label for="scene-title" data-i18n="scene.title">Scene title</label
                   ><input id="scene-title" required />
+                  <div class="metadata-translation-field">
+                    <label for="scene-title-key" data-i18n="metadata.titleTranslation"
+                      >Title translation key</label
+                    >
+                    <input id="scene-title-key" list="scene-metadata-keys" autocomplete="off" />
+                    <small
+                      id="scene-title-key-preview"
+                      class="translation-preview"
+                      aria-live="polite"
+                    ></small>
+                  </div>
                   <label for="scene-description" data-i18n="metadata.description">Description</label
                   ><textarea id="scene-description"></textarea>
+                  <div class="metadata-translation-field">
+                    <label for="scene-description-key" data-i18n="metadata.descriptionTranslation"
+                      >Description translation key</label
+                    >
+                    <input
+                      id="scene-description-key"
+                      list="scene-metadata-keys"
+                      autocomplete="off"
+                    />
+                    <small
+                      id="scene-description-key-preview"
+                      class="translation-preview"
+                      aria-live="polite"
+                    ></small>
+                  </div>
+                  <datalist id="scene-metadata-keys"></datalist>
+                  <p class="help" data-i18n="metadata.translationHelp">
+                    Choose keys saved in Localization. Leave a key empty to use literal text.
+                    Missing language translations use the default-language text.
+                  </p>
                   <button type="submit" data-i18n="scene.save">Save scene properties</button>
                 </form>
                 <form id="scene-layout" hidden>
@@ -230,6 +292,7 @@
               <section id="combat-editor" hidden></section>
               <section id="leveling-editor" hidden></section>
               <section id="localization-editor" hidden></section>
+              <section id="stylesheet-editor" hidden></section>
               <section id="component-editor" hidden></section>
               <section id="component-details" hidden>
                 <p id="component-help" class="help" data-i18n="tree.readOnly">

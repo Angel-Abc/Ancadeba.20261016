@@ -2,7 +2,11 @@ import { bindLevelingEditor } from './levelingEditor.js'
 import { bindLocalizationEditor } from './localizationEditor.js'
 import { bindMapEditor } from './mapEditor.js'
 import { mapConfirmation } from './mapConfirmation.js'
-import { BrowserGraphicResources, createGraphicPlatform } from '@ancadeba/ui-components'
+import {
+  BrowserGraphicResources,
+  createGraphicPlatform,
+  mountGameStylesheet,
+} from '@ancadeba/ui-components'
 import { EditorWorkspaceResources } from './workspaceResources.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
 import { createProjectRequestSchema } from '@ancadeba/editor-core'
@@ -24,6 +28,8 @@ import { bindComponentEditor, editableComponentTypes } from './componentEditor.j
 import { bindSceneControls } from './sceneControls.js'
 import { bindComponentClipboard } from './componentClipboard.js'
 import { bindEditorShortcuts } from './editorShortcuts.js'
+import { bindMetadataTranslations } from './metadataTranslations.js'
+import { bindStylesheetEditor } from './stylesheetEditor.js'
 import {
   buildProjectTree,
   dataFileContent,
@@ -32,6 +38,7 @@ import {
   ruleFileNodes,
   mapFileNodes,
   sceneTitle,
+  gameTitle,
   projectTreeSections,
   type ProjectTreeNode,
   type ProjectTreeSection,
@@ -120,6 +127,16 @@ export function bindProjectPanel(
   let historyBlocked = false
   let openingProject = false
   let creatingProject = false
+
+  const projectTranslations = bindMetadataTranslations(root, 'editor', t, () => {
+    dirtyForms.add(metadata.id)
+  })
+
+  const sceneTranslations = bindMetadataTranslations(root, 'scene', t, () => {
+    dirtyForms.add(sceneMetadata.id)
+    scenes.disabled = true
+  })
+
   let openError = ''
   let discoveryError: string | undefined
   let discovery: AbortController | undefined
@@ -250,6 +267,8 @@ export function bindProjectPanel(
   let levelingEditor: ReturnType<typeof bindLevelingEditor> | undefined
   const localizationElement = treeElement && root.querySelector<HTMLElement>('#localization-editor')
   let localizationEditor: ReturnType<typeof bindLocalizationEditor> | undefined
+  const stylesheetElement = treeElement && root.querySelector<HTMLElement>('#stylesheet-editor')
+  let stylesheetEditor: ReturnType<typeof bindStylesheetEditor> | undefined
   const combatElement = treeElement && root.querySelector<HTMLElement>('#combat-editor')
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
   const componentElement = treeElement && root.querySelector<HTMLElement>('#component-editor')
@@ -275,6 +294,30 @@ export function bindProjectPanel(
     ...(levelingElement ? [{ id: 'leveling', labelKey: 'leveling.heading', nodes: () => [] }] : []),
     ...(localizationElement
       ? [{ id: 'localization', labelKey: 'localization.heading', nodes: () => [] }]
+      : []),
+    ...(stylesheetElement
+      ? [
+          {
+            id: 'stylesheet',
+            labelKey: 'stylesheets.heading',
+            nodes: (view: ProjectView): ProjectTreeNode[] => [
+              ...Object.keys(view.stylesheets ?? {}).map((file) => ({
+                key: `stylesheet:${file}`,
+                section: 'stylesheet',
+                kind: 'stylesheet-file',
+                id: file,
+                label: file,
+                ...(view.game?.stylesheet === file ? { detail: t('stylesheets.assigned') } : {}),
+              })),
+              {
+                key: 'stylesheet-new',
+                section: 'stylesheet',
+                kind: 'new-stylesheet',
+                label: t('stylesheets.new'),
+              },
+            ],
+          },
+        ]
       : []),
     ...(combatElement ? [{ id: 'combat', labelKey: 'combat.heading', nodes: () => [] }] : []),
     ...(treeElement ? [dataFilesSection] : []),
@@ -358,6 +401,8 @@ export function bindProjectPanel(
     if (storyElement) storyElement.hidden = node.section !== 'story'
 
     if (localizationElement) localizationElement.hidden = node.section !== 'localization'
+
+    if (stylesheetElement) stylesheetElement.hidden = node.section !== 'stylesheet'
 
     if (rulesElement) rulesElement.hidden = node.section !== 'rules'
 
@@ -512,6 +557,8 @@ export function bindProjectPanel(
       node.section === 'maps' || (node.kind === 'data-file' && node.parentId === 'maps')
 
     if (
+      (node.section === 'stylesheet' &&
+        !stylesheetEditor?.navigate(node.id, node.kind === 'new-stylesheet')) ||
       (usesMapEditor && mapEditor && !mapEditor.navigate(node.id, node.kind === 'new-map')) ||
       (!usesMapEditor && mapEditor?.hasDrafts()) ||
       (sceneControls &&
@@ -583,13 +630,6 @@ export function bindProjectPanel(
     return true
   }
 
-  /** A translated title makes the literal title an optional fallback, so an empty field is valid. */
-  const showTitleSource = (id: string, titleKey: string | undefined) => {
-    const input = find<HTMLInputElement>(id)
-    input.required = !titleKey
-    input.placeholder = titleKey ? t('metadata.titleFromKey', { key: titleKey }) : ''
-  }
-
   const fillScene = () => {
     const scene = view?.scenes.find((scene) => scene.id === scenes.value)
     sceneMetadata.hidden = !scene
@@ -597,7 +637,7 @@ export function bindProjectPanel(
 
     if (!scene) return
 
-    showTitleSource('scene-title', scene.titleKey)
+    sceneTranslations.render(view, scene, !dirtyForms.has(sceneMetadata.id))
 
     if (!dirtyForms.has(sceneMetadata.id)) {
       set('scene-title', scene.title)
@@ -624,6 +664,7 @@ export function bindProjectPanel(
     combatEditor?.render(state, replaceFields)
     levelingEditor?.render(state, replaceFields)
     localizationEditor?.render(state, replaceFields)
+    stylesheetEditor?.render(state, replaceFields)
     componentEditor?.render(state, replaceFields)
     storyEditor?.render(state, replaceFields)
     mapEditor?.render(state, replaceFields)
@@ -654,7 +695,7 @@ export function bindProjectPanel(
           : view
             ? t('project.loaded', {
                 title: view.game
-                  ? view.game.title || state.path || t('workspace.root')
+                  ? gameTitle(view) || state.path || t('workspace.root')
                   : t('project.withErrors'),
                 path: state.path || t('workspace.root'),
               })
@@ -671,14 +712,14 @@ export function bindProjectPanel(
     header.hidden = !view
     workspace.hidden = !view
     find('project-title').textContent = view
-      ? view.game?.title || state.path || t('workspace.root')
+      ? gameTitle(view) || state.path || t('workspace.root')
       : ''
 
-    if (view?.game) showTitleSource('editor-title', view.game.titleKey)
+    projectTranslations.render(view, view?.game ?? undefined, false)
 
     const shownScene = view?.scenes.find((scene) => scene.id === scenes.value)
 
-    if (shownScene) showTitleSource('scene-title', shownScene.titleKey)
+    if (shownScene) sceneTranslations.render(view, shownScene, false)
 
     if (openingProject && !state.busy) {
       openingProject = false
@@ -709,6 +750,31 @@ export function bindProjectPanel(
 
     const updateTree = () => {
       if (!tree) return
+
+      if (selection.section === 'stylesheet' && !stylesheetEditor?.hasDrafts()) {
+        if (
+          replaceFields &&
+          state.lastCommand === 'game.upsertStylesheet' &&
+          view?.game?.stylesheet
+        )
+          selection = {
+            key: `stylesheet:${view.game.stylesheet}`,
+            section: 'stylesheet',
+            kind: 'stylesheet-file',
+            id: view.game.stylesheet,
+            label: view.game.stylesheet,
+          }
+        else if (
+          selection.kind === 'stylesheet-file' &&
+          !Object.hasOwn(view?.stylesheets ?? {}, selection.id ?? '')
+        )
+          selection = {
+            key: 'stylesheet',
+            section: 'stylesheet',
+            kind: 'section',
+            label: t('stylesheets.heading'),
+          }
+      }
 
       if (
         selection.section === 'maps' &&
@@ -800,15 +866,17 @@ export function bindProjectPanel(
       set('editor-title', view.game.title)
       set('editor-description', view.game.description)
       set('editor-version', view.game.version)
+      projectTranslations.render(view, view.game, true)
     }
 
     const selected = preferredScene ?? scenes.value
+    const currentView = view
     preferredScene = undefined
     scenes.replaceChildren(
       ...view.scenes.map((scene) => {
         const option = root.ownerDocument.createElement('option')
         option.value = scene.id
-        option.textContent = `${scene.title} (${scene.id})`
+        option.textContent = `${sceneTitle(currentView, scene)} (${scene.id})`
 
         return option
       }),
@@ -976,6 +1044,26 @@ export function bindProjectPanel(
       void controller.save(command)
     })
 
+  if (stylesheetElement)
+    stylesheetEditor = bindStylesheetEditor(
+      stylesheetElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+      (css) => {
+        const host = root.ownerDocument.createElement('div')
+        host.hidden = true
+        stylesheetElement.append(host)
+
+        try {
+          mountGameStylesheet(host, css)
+        } finally {
+          host.remove()
+        }
+      },
+    )
+
   if (storyElement)
     storyEditor = bindStoryEditor(storyElement, (command) => {
       void controller.save(command)
@@ -1134,6 +1222,7 @@ export function bindProjectPanel(
       combatEditor?.hasDrafts() ||
       levelingEditor?.hasDrafts() ||
       localizationEditor?.hasDrafts() ||
+      stylesheetEditor?.hasDrafts() ||
       componentEditor?.hasDrafts() ||
       storyEditor?.hasDrafts() ||
       mapEditor?.hasDrafts(),
@@ -1208,19 +1297,43 @@ export function bindProjectPanel(
     })
 
   submit(metadata, () => {
+    if (busy) return
+
+    const issue = projectTranslations.validate()
+
+    if (issue) {
+      error.textContent = issue
+      error.hidden = false
+
+      return
+    }
+
     void controller.save({
       type: 'game.updateMetadata',
       title: value('editor-title'),
       description: value('editor-description'),
       version: value('editor-version'),
+      ...projectTranslations.read(),
     })
   })
   submit(sceneMetadata, () => {
+    if (busy) return
+
+    const issue = sceneTranslations.validate()
+
+    if (issue) {
+      error.textContent = issue
+      error.hidden = false
+
+      return
+    }
+
     void controller.save({
       type: 'scene.updateMetadata',
       sceneId: scenes.value,
       title: value('scene-title'),
       description: value('scene-description'),
+      ...sceneTranslations.read(),
     })
   })
   submit(layout, () => {
@@ -1266,6 +1379,8 @@ export function bindProjectPanel(
     tree?.dispose()
     rail?.dispose()
     unsubscribeLanguage?.()
+    projectTranslations.dispose()
+    sceneTranslations.dispose()
 
     for (const remove of listeners) remove()
   }

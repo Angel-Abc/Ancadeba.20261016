@@ -23,6 +23,7 @@ import { WorkspaceError, workspaceError, type WorkspaceService } from './workspa
 import { createWorkspaceProject } from './projectCreation.js'
 import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
+import { projectStylesheets } from './projectStylesheets.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
   createDirectory?(path: string): Promise<void>
@@ -94,7 +95,11 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       sources.push([file, Buffer.from(bytes).toString('base64')])
 
-      if (!json) return
+      if (!json) {
+        documents[file] = Buffer.from(bytes).toString('utf8')
+
+        return
+      }
 
       try {
         documents[file] = JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -134,6 +139,18 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       for (const id of game.data.combatLibraries ?? []) await read(combatLibraryFile(id))
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
+
+      for (const file of await projectStylesheets(this.workspace, folder)) {
+        if (file === game.data.stylesheet) continue
+
+        try {
+          const bytes = await this.workspace.read(projectPath(folder, file))
+          documents[file] = Buffer.from(bytes).toString('utf8')
+          sources.push([file, Buffer.from(bytes).toString('base64')])
+        } catch (error) {
+          if (![400, 403, 404, 409].includes(workspaceError(error).status)) throw error
+        }
+      }
 
       if (game.data.assets) {
         const file = assetCatalogFile(game.data.assets)

@@ -24,6 +24,9 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
   let component: ReturnType<typeof combatComponentSchema.parse> | undefined
   let dirty = false
   let busy = false
+  let creating = false
+  let playerHealth = ''
+  let enemyHealth = ''
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -48,6 +51,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           })
       : undefined
     dirty = false
+    creating = false
     error.textContent = ''
     render()
   }
@@ -74,6 +78,19 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
 
   const submit = (command: EditorCommand) => {
     if (busy) return
+
+    if (
+      command.type === 'game.upsertCombat' &&
+      creating &&
+      (view?.game?.combat ?? []).some(
+        (id) => id.toLowerCase() === command.encounter.id.toLowerCase(),
+      )
+    ) {
+      error.textContent = 'A combat encounter with this ID already exists. Choose a different ID.'
+
+      return
+    }
+
     const parsed = commandSchema.safeParse(command)
     error.textContent = parsed.success
       ? ''
@@ -90,6 +107,41 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
 
     if (!view?.game) return
     const scene = view.scenes.find((scene) => scene.id === sceneId)
+
+    const healthFields = (view.rules?.state ?? []).flatMap((field) =>
+      typeof field.value === 'number' && field.value > 0
+        ? [{ path: field.path, value: field.value }]
+        : [],
+    )
+
+    const fieldId = (path: string[]) => (path.length ? JSON.stringify(path) : '')
+
+    if (!healthFields.some((field) => fieldId(field.path) === playerHealth))
+      playerHealth = fieldId(
+        (healthFields.find((field) => field.path.at(-1) === 'health') ?? healthFields[0])?.path ??
+          [],
+      )
+
+    if (
+      enemyHealth === playerHealth ||
+      !healthFields.some((field) => fieldId(field.path) === enemyHealth)
+    )
+      enemyHealth = fieldId(
+        (
+          healthFields.find(
+            (field) => field.path.at(-1) === 'enemyHealth' && fieldId(field.path) !== playerHealth,
+          ) ?? healthFields.find((field) => fieldId(field.path) !== playerHealth)
+        )?.path ?? [],
+      )
+
+    const healthChoices = healthFields.map(
+      (field) => [fieldId(field.path), `${field.path.join('.')} · ${field.value}`] as const,
+    )
+
+    const help = document.createElement('p')
+    help.className = 'help'
+    help.textContent =
+      'Before adding an encounter, declare two distinct numeric health fields with positive starting values in Rules (for example health = 40 and enemyHealth = 20). Select them below. Existing state values stay unchanged.'
 
     const picker = controls.select(
       'Combat game scene',
@@ -118,6 +170,28 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     fields.append(
       picker,
       encounters,
+      controls.group(
+        'New encounter health',
+        help,
+        controls.select(
+          'New player health field',
+          playerHealth,
+          healthChoices,
+          (value) => {
+            playerHealth = value
+          },
+          false,
+        ),
+        controls.select(
+          'New enemy health field',
+          enemyHealth,
+          healthChoices,
+          (value) => {
+            enemyHealth = value
+          },
+          false,
+        ),
+      ),
       controls.button('Add encounter', () => {
         if (dirty) {
           error.textContent = 'Save or discard the combat draft first.'
@@ -125,15 +199,28 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           return
         }
 
+        const playerField = healthFields.find((field) => fieldId(field.path) === playerHealth)
+        const enemyField = healthFields.find((field) => fieldId(field.path) === enemyHealth)
+
+        if (
+          !scene ||
+          scene.type !== 'game' ||
+          !playerField ||
+          !enemyField ||
+          playerHealth === enemyHealth
+        ) {
+          error.textContent =
+            'Choose a game scene and two distinct positive health fields from Rules before adding an encounter.'
+
+          return
+        }
+
+        error.textContent = ''
         let id = 'training'
         let number = 1
 
-        while (view?.combat?.[id]) id = `training-${number++}`
-
-        const health = view?.rules?.state.find(
-          (field) => typeof field.value === 'number' && field.path.at(-1) === 'health',
-        )?.path ??
-          view?.rules?.state.find((field) => typeof field.value === 'number')?.path ?? ['health']
+        while (view?.game?.combat?.some((entry) => entry.toLowerCase() === id.toLowerCase()))
+          id = `training-${number++}`
 
         draft = combatDefinitionSchema.parse({
           'schema-version': '1.0.0',
@@ -142,16 +229,16 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           player: {
             id: 'player',
             label: 'Player',
-            health: { source: 'game.state', path: health },
-            maximumHealth: 40,
+            health: { source: 'game.state', path: [...playerField.path] },
+            maximumHealth: Math.max(40, playerField.value),
             moves: ['attack', 'guard'],
           },
           enemies: [
             {
               id: 'opponent',
               label: 'Opponent',
-              health: { source: 'game.state', path: ['enemyHealth'] },
-              maximumHealth: 20,
+              health: { source: 'game.state', path: [...enemyField.path] },
+              maximumHealth: Math.max(20, enemyField.value),
               moves: ['attack'],
               rotation: ['attack'],
             },
@@ -162,6 +249,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           },
         })
         encounterId = id
+        creating = true
         component = combatComponentSchema.parse({
           id: 'combat',
           type: 'combat',
@@ -202,7 +290,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           submit(command)
         },
       ),
-      ...combatForm(controls, view, draft, render),
+      ...combatForm(controls, view, draft, render, creating),
       controls.group(
         'Combat view',
         controls.input('Combat component ID', current.id, (value) => {
@@ -253,6 +341,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
         submit({
           type: 'game.upsertCombat',
           encounter: draft,
+          createOnly: creating,
           scene: { id: sceneId, component: { ...component, encounter: draft.id } },
         })
     })
@@ -262,9 +351,13 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       controls.button('Remove combat view', () =>
         submit({ type: 'scene.setCombat', sceneId, component: null }),
       ),
-      controls.button('Delete encounter definition', () => {
-        if (draft) submit({ type: 'game.removeCombat', encounterId: draft.id })
-      }),
+      controls.button(
+        'Delete encounter definition',
+        () => {
+          if (draft) submit({ type: 'game.removeCombat', encounterId: draft.id })
+        },
+        creating,
+      ),
     )
   }
 

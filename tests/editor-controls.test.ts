@@ -45,6 +45,10 @@ import { bindInventoryEditor } from '../apps/editor-ui/src/inventoryEditor.js'
 import { bindLocalizationEditor } from '../apps/editor-ui/src/localizationEditor.js'
 import { bindGraphicDefinitionsEditor } from '../apps/editor-ui/src/graphicDefinitionsEditor.js'
 import { textBindingId } from '../apps/editor-ui/src/textBindingChoices.js'
+import { bindSceneGraphicEditor } from '../apps/editor-ui/src/sceneGraphicEditor.js'
+import { bindStylesheetEditor } from '../apps/editor-ui/src/stylesheetEditor.js'
+import { startingGameBindings } from '../apps/editor-ui/src/textBindingChoices.js'
+import { resolveGraphic } from '@ancadeba/game-runtime'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -241,6 +245,7 @@ class Control extends EventTarget {
   type = ''
   className = ''
   disabled = false
+  readOnly = false
   hidden = false
   constructor(
     readonly ownerDocument: ControlDocument,
@@ -1277,6 +1282,13 @@ describe('action bar editor controls', () => {
   })
   it('edits shared libraries without flattening imports and preserves both conflicting drafts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
+    initial.view!.rules = {
+      state: [
+        { path: ['health'], value: 40 },
+        { path: ['enemyHealth'], value: 20 },
+      ],
+      actions: {},
+    }
     const editor = bindCombatEditor(root.asElement(), (command) => commands.push(command))
     editor.render(initial, true)
     click('Add combat library')
@@ -2229,6 +2241,629 @@ describe('editor draft workflows', () => {
       },
     }).project
   }
+
+  function styledProject() {
+    return applyCommand(
+      applyCommand(project(), {
+        type: 'game.upsertStylesheet',
+        file: 'theme.css',
+        css: '.ancadeba-scene { color: gold; }\n',
+        createOnly: true,
+      }).project,
+      {
+        type: 'game.upsertStylesheet',
+        file: 'styles/blue.css',
+        css: '.ancadeba-scene { color: blue; }\n',
+        createOnly: true,
+        assign: false,
+      },
+    ).project
+  }
+
+  it('creates, assigns, detaches and reuses stylesheet files through authoring controls', async () => {
+    const ui = await connected(bindStylesheetEditor, styledProject())
+    expect(ui.field('CSS source').value).toContain('gold')
+    expect(ui.field('Stylesheet path').readOnly).toBe(true)
+    ui.click('New stylesheet')
+    ui.edit('Stylesheet path', 'THEME.css')
+    ui.submit('Save and assign stylesheet')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('already exists')
+    ui.edit('Stylesheet path', 'styles/custom.css')
+    ui.edit('CSS source', '/* My theme */\n.ancadeba-scene { color: purple; }\n')
+    ui.submit('Save and assign stylesheet')
+    await ui.flush()
+    expect(ui.read().game?.stylesheet).toBe('styles/custom.css')
+    expect(ui.read().stylesheets?.['styles/custom.css']).toContain('purple')
+    expect(ui.field('Stylesheet path').readOnly).toBe(true)
+    ui.click('Use built-in styling')
+    await ui.flush()
+    expect(ui.read().game?.stylesheet).toBeUndefined()
+    expect(ui.read().stylesheets?.['styles/custom.css']).toContain('purple')
+    ui.edit('Saved stylesheet', 'theme.css')
+    ui.click('Assign saved stylesheet')
+    await ui.flush()
+    expect(ui.read().game?.stylesheet).toBe('theme.css')
+    expect(ui.read().stylesheets?.['styles/blue.css']).toContain('blue')
+  })
+
+  it('keeps CSS drafts after conflicts and unrelated saves and guards switching files and assignments', async () => {
+    const ui = await connected(bindStylesheetEditor, styledProject())
+    const css = '.ancadeba-scene { --ge-scene-color: #123456; }\n'
+    ui.edit('CSS source', css)
+    ui.edit('Saved stylesheet', 'styles/blue.css')
+    expect(ui.field('Saved stylesheet').value).toBe('theme.css')
+    expect(ui.editor.navigate('styles/blue.css')).toBe(false)
+    ui.click('Use built-in styling')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('Save or discard')
+    ui.rejectNext()
+    ui.submit('Save stylesheet')
+    await ui.flush()
+    expect(ui.field('CSS source').value).toBe(css)
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Unrelated',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('CSS source').value).toBe(css)
+    ui.submit('Save stylesheet')
+    await ui.flush()
+    expect(ui.read().stylesheets?.['theme.css']).toBe(css)
+    ui.edit('CSS source', 'discard me')
+    ui.click('Discard stylesheet draft')
+    expect(ui.field('CSS source').value).toBe(css)
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('retains CSS when scoped compatibility or path validation fails and permits correction', async () => {
+    const validate = vi.fn((css: string) => {
+      if (css.includes('@font-face')) throw new Error('Unsupported global CSS rule')
+    })
+
+    const ui = await connected((root, save) =>
+      bindStylesheetEditor(root, save, editorLocalization().t, validate),
+    )
+
+    ui.edit('CSS source', '@font-face { font-family: Bad; src: url(font.woff); }')
+    ui.click('Check scoped CSS')
+    ui.submit('Save and assign stylesheet')
+    expect(ui.root.textContent).toContain('Unsupported global CSS rule')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.field('CSS source').value).toContain('@font-face')
+    ui.edit('CSS source', '')
+    ui.edit('Stylesheet path', '../outside.css')
+    ui.submit('Save and assign stylesheet')
+    expect(ui.commands).toHaveLength(0)
+    ui.edit('Stylesheet path', 'styles/blank.css')
+    ui.submit('Save and assign stylesheet')
+    await ui.flush()
+    expect(validate).toHaveBeenCalledWith('')
+    expect(ui.read().stylesheets?.['styles/blank.css']).toBe('')
+  })
+
+  it('repairs missing assigned CSS without enabling unrelated invalid project edits', async () => {
+    const source = styledProject()
+    const documents = { ...source.documents }
+    delete documents['theme.css']
+    const ui = await connected(bindStylesheetEditor, { ...source, documents })
+    ui.edit('CSS source', '.ancadeba-scene { color: teal; }')
+    ui.submit('Save stylesheet')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().stylesheets?.['theme.css']).toContain('teal')
+  })
+
+  function combatProject() {
+    return applyCommand(project(), {
+      type: 'game.updateRules',
+      ruleId: 'health',
+      rules: {
+        state: [
+          { path: ['hero', 'health'], value: 80 },
+          { path: ['foe', 'hp'], value: 30 },
+          { path: ['gold'], value: 0 },
+        ],
+        actions: {},
+      },
+    }).project
+  }
+
+  function sceneGraphicProject() {
+    const image = {
+      format: 'svg' as const,
+      source: 'assets/cloth.svg',
+      bounds: { x: 0, y: 0, width: 40, height: 40 },
+      colors: { fill: '#112233' },
+      palettes: { night: { fill: '#223344' } },
+    }
+
+    const initial = applyCommand(project(), {
+      type: 'assets.upsertImage',
+      id: 'cloth',
+      image,
+    }).project
+
+    const shared = {
+      bounds: image.bounds,
+      pieces: [
+        {
+          id: 'cloth',
+          image: 'cloth',
+          layer: 'body',
+          anchor: 'origin',
+          sourceAnchor: { x: 0, y: 0 },
+          scale: 1,
+          rotation: 0,
+          slots: { fill: 'fabric' },
+        },
+      ],
+    }
+
+    const definitions = applyCommand(initial, {
+      type: 'assets.updateDefinitions',
+      parts: {
+        cloak: {
+          ...shared,
+          colors: { fabric: '#334455', trim: '#ffffff' },
+          palettes: { royal: { fabric: '#665191' }, unique: { fabric: '#aa0000' } },
+        },
+        coat: {
+          ...shared,
+          colors: { fabric: '#556677' },
+          palettes: { royal: { fabric: '#003399' } },
+        },
+      },
+      compositions: {
+        hero: {
+          bounds: image.bounds,
+          layers: ['body'],
+          anchors: { origin: { x: 0, y: 0 } },
+          slots: { outfit: { parts: ['cloak', 'coat'], default: 'cloak' } },
+        },
+      },
+    }).project
+
+    return applyCommand(definitions, {
+      type: 'game.updateRules',
+      ruleId: 'appearance',
+      rules: {
+        state: [
+          { path: ['hero', 'tint'], value: '#123456' },
+          { path: ['hero', 'palette'], value: 'royal' },
+          { path: ['hero', 'show'], value: false },
+          { path: ['hero', 'part'], value: 'coat' },
+        ],
+        actions: {},
+      },
+    }).project
+  }
+
+  it('authors scene graphic colors, palettes and visibility without a JSON field', async () => {
+    const ui = await connected(bindSceneGraphicEditor, sceneGraphicProject())
+    ui.editor.navigate('shop')
+    ui.edit('Graphic component ID', 'portrait')
+    ui.edit('Static palette', 'night', 'Graphic colors')
+    ui.edit('Static color', 'override', 'Color fill')
+    ui.edit('Hex color', '#abcdef', 'Color fill')
+    expect(ui.field('Color picker', 'Color fill').value).toBe('#abcdef')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    const current = ui.read().scenes[0]!.components.find((component) => component.id === 'portrait')
+    expect(current).toMatchObject({
+      appearance: { palette: 'night', colors: { fill: '#abcdef' }, visible: true },
+    })
+    expect(ui.field('Graphic component ID').readOnly).toBe(true)
+    expect(ui.root.all().filter((node) => node.tagName === 'textarea')).toHaveLength(0)
+    ui.edit('Static color', 'inherit', 'Color fill')
+    ui.edit('Static palette', '', 'Graphic colors')
+    ui.edit('Static visibility', 'false', 'Graphic')
+    expect(ui.root.textContent).toContain('Graphic hidden')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      component: { appearance: { colors: {}, visible: false } },
+    })
+    await ui.controller.load('demo')
+    expect(ui.editor.navigate('shop', 'portrait')).toBe(true)
+    expect(ui.field('Static visibility', 'Graphic').value).toBe('false')
+  })
+
+  it('binds scene visibility, slot parts, palettes, colors and slot visibility with typed fallbacks', async () => {
+    const ui = await connected(bindSceneGraphicEditor, sceneGraphicProject())
+    ui.editor.navigate('shop')
+    ui.edit('Graphic visual', 'hero')
+
+    const bind = (title: string, path: string[]) =>
+      ui.edit('Bound value', textBindingId({ source: 'game.state', path }), title)
+
+    bind('Graphic visibility binding', ['hero', 'show'])
+    ui.edit('Static palette', 'royal', 'outfit colors')
+    ui.edit('Static color', 'override', 'Color fabric')
+    ui.edit('Hex color', '#ffffff', 'Color fabric')
+    bind('outfit colors fabric binding', ['hero', 'tint'])
+    bind('outfit colors palette binding', ['hero', 'palette'])
+    bind('outfit slot visibility binding', ['hero', 'show'])
+    bind('outfit part binding', ['hero', 'part'])
+    ui.submit('Save scene graphic')
+    await ui.flush()
+
+    const component = ui
+      .read()
+      .scenes[0]!.components.find((component) => component.type === 'graphic')
+
+    if (component?.type !== 'graphic') throw new Error('Expected graphic')
+    expect(component.appearance).toMatchObject({
+      bindings: { visible: { source: 'game.state', path: ['hero', 'show'] } },
+      slots: {
+        outfit: {
+          palette: 'royal',
+          colors: { fabric: '#ffffff' },
+          partBinding: { path: ['hero', 'part'] },
+          bindings: {
+            palette: { path: ['hero', 'palette'] },
+            visible: { path: ['hero', 'show'] },
+            colors: { fabric: { path: ['hero', 'tint'] } },
+          },
+        },
+      },
+    })
+    expect(
+      resolveGraphic(ui.read().assets!, 'hero', component.appearance).pieces[0]?.colors.fill,
+    ).toBe('#ffffff')
+    ui.edit('Preview values', 'starting')
+    expect(ui.root.textContent).toContain('Graphic hidden')
+    ui.edit('Bound value', '', 'Graphic visibility binding')
+    ui.edit('Bound value', '', 'outfit slot visibility binding')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    const next = ui.read().scenes[0]!.components.find((entry) => entry.type === 'graphic')
+
+    if (next?.type !== 'graphic') throw new Error('Expected graphic')
+
+    const resolution = resolveGraphic(
+      ui.read().assets!,
+      'hero',
+      next.appearance,
+      startingGameBindings(ui.read()),
+    )
+
+    expect(resolution.visible).toBe(true)
+    expect(resolution.pieces[0]?.colors.fill).toBe('#123456')
+    expect(next.appearance.bindings?.visible).toBeUndefined()
+    expect(next.appearance.slots.outfit?.bindings?.visible).toBeUndefined()
+  })
+
+  it('keeps slot overrides compatible with changed parts and supports defaults, none and resetting a slot', async () => {
+    const ui = await connected(bindSceneGraphicEditor, sceneGraphicProject())
+    ui.editor.navigate('shop')
+    ui.edit('Graphic visual', 'hero')
+    ui.edit('Static palette', 'unique', 'outfit colors')
+    ui.edit('Static color', 'override', 'Color trim')
+    ui.edit('Static part', 'part:coat', 'Slot outfit')
+    expect(ui.field('Static palette', 'outfit colors').value).toBe('')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    ui.edit('Static part', 'part:cloak', 'Slot outfit')
+    ui.edit('Static palette', 'unique', 'outfit colors')
+    ui.edit(
+      'Bound value',
+      textBindingId({ source: 'game.state', path: ['hero', 'part'] }),
+      'outfit part binding',
+    )
+    expect(ui.field('Static palette', 'outfit colors').value).toBe('')
+    ui.edit('Bound value', '', 'outfit part binding')
+    ui.edit('Static part', 'none', 'Slot outfit')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      component: { appearance: { slots: { outfit: { part: null } } } },
+    })
+    ui.click('Reset slot appearance')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({ component: { appearance: { slots: {} } } })
+    expect(ui.field('Static part', 'Slot outfit').value).toBe('inherit')
+  })
+
+  it('retains invalid and conflicting graphic drafts through unrelated saves and permits correction or discard', async () => {
+    const ui = await connected(bindSceneGraphicEditor, sceneGraphicProject())
+    ui.editor.navigate('shop')
+    ui.edit('Static color', 'override', 'Color fill')
+    ui.edit('Hex color', 'invalid', 'Color fill')
+    ui.submit('Save scene graphic')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.editor.navigate('other')).toBe(false)
+    ui.edit('Hex color', '#abcdef', 'Color fill')
+    ui.edit('Bound value', 'custom', 'Graphic visibility binding')
+    ui.edit('Path key', 'heroes', 'Path segment 1')
+    ui.click('Add path segment')
+    ui.edit('Path segment type', 'index', 'Path segment 2')
+    ui.edit('Array index', '', 'Path segment 2')
+    ui.submit('Save scene graphic')
+    expect(ui.commands).toHaveLength(0)
+    ui.edit('Array index', '0', 'Path segment 2')
+    ui.click('Add path segment')
+    ui.edit('Path key', 'visible', 'Path segment 3')
+    ui.rejectNext()
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.field('Hex color', 'Color fill').value).toBe('#abcdef')
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Unrelated',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Path key', 'Path segment 3').value).toBe('visible')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({
+      component: { appearance: { bindings: { visible: { path: ['heroes', 0, 'visible'] } } } },
+    })
+    ui.edit('Static visibility', 'false', 'Graphic')
+    ui.click('Discard scene graphic draft')
+    expect(ui.field('Static visibility', 'Graphic').value).toBe('true')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('supports static graphic authoring in stand-alone scenes and protects existing component IDs', async () => {
+    const source = sceneGraphicProject()
+    object(source.documents['scenes/other.json']).type = 'stand-alone'
+    const ui = await connected(bindSceneGraphicEditor, source)
+    ui.editor.navigate('other')
+    expect(ui.root.textContent).toContain('Game-state bindings require a game scene')
+    expect(ui.root.textContent).not.toContain('Bound value')
+    ui.edit('Graphic component ID', 'description')
+    ui.submit('Save scene graphic')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('already exists')
+    ui.edit('Graphic component ID', 'decoration')
+    ui.edit('Static visibility', 'false', 'Graphic')
+    ui.submit('Save scene graphic')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    const command = ui.commands[0]!
+    expect(() => applyCommand(applyCommand(source, command).project, command)).toThrow(
+      'already exists',
+    )
+  })
+
+  it('preserves graphic extensions while removing cleared appearance values and bindings', () => {
+    const source = sceneGraphicProject()
+
+    const created = applyCommand(source, {
+      type: 'scene.upsertGraphic',
+      sceneId: 'shop',
+      component: {
+        id: 'portrait',
+        type: 'graphic',
+        visual: 'hero',
+        alt: 'Hero',
+        fit: 'contain',
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+        appearance: {
+          colors: {},
+          visible: true,
+          slots: {
+            outfit: {
+              colors: { fabric: '#abcdef' },
+              palette: 'royal',
+              part: 'cloak',
+              visible: true,
+              partBinding: { source: 'game.state', path: ['hero', 'part'] },
+              bindings: { colors: {}, visible: { source: 'game.state', path: ['hero', 'show'] } },
+            },
+          },
+        },
+      },
+    }).project
+
+    const scene = object(created.documents['scenes/shop.json'])
+
+    const raw = (Array.isArray(scene.components) ? scene.components.map(object) : []).find(
+      (entry) => entry.id === 'portrait',
+    )!
+
+    raw.extension = 'component'
+    object(raw.placement).extension = 'placement'
+    object(raw.appearance).extension = 'appearance'
+    object(object(object(raw.appearance).slots).outfit).extension = 'slot'
+    const view = inspectProject(created)
+    const current = view.scenes[0]!.components.find((component) => component.type === 'graphic')
+
+    if (current?.type !== 'graphic') throw new Error('Expected graphic')
+    current.appearance.slots.outfit = { visible: false, colors: {} }
+    const before = JSON.stringify(created)
+
+    const saved = applyCommand(created, {
+      type: 'scene.upsertGraphic',
+      sceneId: 'shop',
+      component: current,
+    })
+
+    expect(JSON.stringify(created)).toBe(before)
+    const result = JSON.parse(JSON.stringify(saved.project.documents['scenes/shop.json']))
+    expect(result.components.at(-1)).toMatchObject({
+      extension: 'component',
+      placement: { extension: 'placement' },
+      appearance: {
+        extension: 'appearance',
+        slots: { outfit: { extension: 'slot', visible: false, colors: {} } },
+      },
+    })
+    expect(result.components.at(-1).appearance.slots.outfit).not.toHaveProperty('part')
+    expect(result.components.at(-1).appearance.slots.outfit).not.toHaveProperty('partBinding')
+    expect(result.components.at(-1).appearance.slots.outfit).not.toHaveProperty('palette')
+    expect(result.components.at(-1).appearance.slots.outfit).not.toHaveProperty('bindings')
+  })
+
+  it('explains encounter health prerequisites before creating a draft', async () => {
+    const ui = await connected(bindCombatEditor)
+    ui.click('Add encounter')
+    expect(ui.root.textContent).toContain('two distinct positive health fields')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.commands).toHaveLength(0)
+
+    await ui.controller.save({
+      type: 'game.updateRules',
+      ruleId: 'health',
+      rules: {
+        state: [
+          { path: ['health'], value: 40 },
+          { path: ['enemyHealth'], value: 0 },
+        ],
+        actions: {},
+      },
+    })
+    ui.click('Add encounter')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().combatSources).toEqual({})
+  })
+
+  it('creates a saveable encounter using distinct selected health fields and preserves initial state', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    const health = JSON.stringify(['hero', 'health'])
+    const enemy = JSON.stringify(['foe', 'hp'])
+    ui.edit('New enemy health field', health)
+    ui.click('Add encounter')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.root.textContent).toContain('two distinct positive health fields')
+    ui.edit('New enemy health field', enemy)
+    ui.click('Add encounter')
+    ui.edit('Encounter ID', 'custom-training')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.['custom-training']).toMatchObject({
+      player: { health: { path: ['hero', 'health'] }, maximumHealth: 80 },
+      enemies: [{ health: { path: ['foe', 'hp'] }, maximumHealth: 30 }],
+    })
+    expect(ui.read().rules?.state).toEqual(inspectProject(combatProject()).rules?.state)
+    expect(ui.field('Combat encounter').value).toBe('custom-training')
+    expect(ui.field('Encounter ID').readOnly).toBe(true)
+  })
+
+  it('protects existing encounters from new draft collisions in the UI and core', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const original = ui.commands[0]!
+
+    if (original.type !== 'game.upsertCombat') throw new Error('Expected encounter')
+    const saved = applyCommand(combatProject(), original).project
+    const before = JSON.stringify(saved)
+
+    for (const id of ['training', 'TRAINING'])
+      expect(() =>
+        applyCommand(saved, { ...original, encounter: { ...original.encounter, id } }),
+      ).toThrow('already exists')
+    expect(JSON.stringify(saved)).toBe(before)
+
+    ui.edit('Encounter ID', 'ignored-rename')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({ encounter: { id: 'training' }, createOnly: false })
+    ui.click('Add encounter')
+    ui.edit('Encounter ID', 'TRAINING')
+    ui.edit('Encounter name', 'Must not overwrite')
+    const count = ui.commands.length
+    ui.submit('Save combat encounter')
+    expect(ui.commands).toHaveLength(count)
+    expect(ui.root.textContent).toContain('already exists')
+    expect(ui.read().combatSources?.training?.label).toBe('Training')
+    ui.edit('Encounter ID', 'new-encounter')
+    ui.rejectNext()
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.field('Encounter ID').value).toBe('new-encounter')
+    expect(ui.field('Encounter ID').readOnly).toBe(false)
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.['new-encounter']?.label).toBe('Must not overwrite')
+    expect(ui.field('Encounter ID').readOnly).toBe(true)
+  })
+
+  it('protects combat libraries from collisions and locks IDs only after successful creation', async () => {
+    const ui = await connected(bindCombatEditor)
+    ui.click('Add combat library')
+    ui.edit('Library ID', 'shared')
+    ui.click('Add guard move')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.field('Library ID').readOnly).toBe(true)
+    const original = ui.commands[0]!
+
+    if (original.type !== 'game.upsertCombatLibrary') throw new Error('Expected library')
+    const saved = applyCommand(project(), original).project
+
+    for (const id of ['shared', 'SHARED'])
+      expect(() =>
+        applyCommand(saved, { ...original, library: { ...original.library, id, moves: {} } }),
+      ).toThrow('already exists')
+    ui.edit('Library ID', 'ignored-rename')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.commands.at(-1)).toMatchObject({ library: { id: 'shared' }, createOnly: false })
+
+    ui.click('Add combat library')
+    ui.edit('Library ID', 'SHARED')
+    const count = ui.commands.length
+    ui.submit('Save combat library')
+    expect(ui.commands).toHaveLength(count)
+    expect(ui.root.textContent).toContain('already exists')
+    expect(Object.keys(ui.read().combatLibraries!.shared!.moves)).not.toHaveLength(0)
+    ui.edit('Library ID', 'new-library')
+    ui.rejectNext()
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.field('Library ID').value).toBe('new-library')
+    expect(ui.field('Library ID').readOnly).toBe(false)
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.field('Combat library').value).toBe('new-library')
+    expect(ui.field('Library ID').readOnly).toBe(true)
+  })
+
+  it('retains pending input contexts through validation, rerenders and unrelated saves', async () => {
+    const ui = await connected(bindActionBarPanel)
+    ui.edit('New context ID', 'combat')
+    ui.submit('Save input bindings')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('Add or clear the pending input context')
+    ui.edit('Virtual keys (comma-separated)', 'primary, secondary, extra')
+    expect(ui.field('New context ID').value).toBe('combat')
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Renamed',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('New context ID').value).toBe('combat')
+    ui.click('Add context')
+    expect(ui.field('New context ID').value).toBe('')
+    ui.click('Add context mapping')
+    ui.edit('Virtual input ID', 'attack')
+    ui.rejectNext()
+    ui.submit('Save input bindings')
+    await ui.flush()
+    expect(ui.field('Virtual input ID').value).toBe('attack')
+    ui.submit('Save input bindings')
+    await ui.flush()
+    expect(ui.read().input?.contexts.combat).toEqual({ primary: 'attack' })
+    ui.edit('New context ID', 'discard-me')
+    ui.click('Discard input draft')
+    expect(ui.field('New context ID').value).toBe('')
+    ui.edit('New context ID', 'clear-me')
+    ui.edit('New context ID', '')
+    ui.submit('Save input bindings')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().input?.contexts).not.toHaveProperty('clear-me')
+  })
 
   function textProject() {
     const source = applyCommand(project(), {

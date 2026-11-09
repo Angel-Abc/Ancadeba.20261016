@@ -18,6 +18,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
   let dirty = false
   let busy = false
   let submittedId: string | undefined
+  let creating = false
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -28,6 +29,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
       ? structuredClone(view.combatLibraries[libraryId])
       : undefined
     dirty = false
+    creating = false
     error.textContent = ''
     render()
   }
@@ -54,6 +56,19 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
 
   const submit = (command: EditorCommand) => {
     if (busy) return
+
+    if (
+      command.type === 'game.upsertCombatLibrary' &&
+      creating &&
+      (view?.game?.combatLibraries ?? []).some(
+        (id) => id.toLowerCase() === command.library.id.toLowerCase(),
+      )
+    ) {
+      error.textContent = 'A combat library with this ID already exists. Choose a different ID.'
+
+      return
+    }
+
     const parsed = commandSchema.safeParse(command)
     error.textContent = parsed.success
       ? ''
@@ -95,9 +110,13 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
           let id = 'common'
           let number = 1
 
-          while (view?.combatLibraries?.[id]) id = `common-${number++}`
+          while (
+            view?.game?.combatLibraries?.some((entry) => entry.toLowerCase() === id.toLowerCase())
+          )
+            id = `common-${number++}`
           libraryId = id
           draft = combatLibrarySchema.parse({ 'schema-version': '1.0.0', id })
+          creating = true
           dirty = true
           render()
         }),
@@ -151,25 +170,31 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
     saveButton.textContent = 'Save combat library'
+
+    const identity = controls.input('Library ID', current.id, (value) => {
+      if (creating) current.id = value.trim()
+    })
+
+    identity.querySelector('input')!.readOnly = !creating
     form.append(
       saveBar(document, saveButton),
       usage,
       entryUsage,
-      controls.input('Library ID', current.id, (value) => {
-        current.id = value.trim()
-      }),
+      identity,
       ...combatMovesForm(controls, view, current, render),
       combatStatusesForm(controls, view, current, render),
     )
     form.addEventListener('submit', (event) => {
       event.preventDefault()
-      submit({ type: 'game.upsertCombatLibrary', library: current })
+      submit({ type: 'game.upsertCombatLibrary', library: current, createOnly: creating })
     })
     fields.append(
       form,
       controls.button('Discard library draft', reset),
-      controls.button('Delete combat library', () =>
-        submit({ type: 'game.removeCombatLibrary', libraryId }),
+      controls.button(
+        'Delete combat library',
+        () => submit({ type: 'game.removeCombatLibrary', libraryId }),
+        creating,
       ),
     )
   }

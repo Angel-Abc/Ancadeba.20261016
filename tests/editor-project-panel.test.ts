@@ -18,6 +18,9 @@ class Control extends EventTarget {
   textContent = ''
   disabled = false
   hidden = false
+  required = false
+  placeholder = ''
+  label = ''
   attributes = new Map<string, string>()
   children: Control[] = []
 
@@ -102,6 +105,7 @@ function panel(
   const creations: CreateProjectRequest[] = []
   const historyRequests: HistoryRequest[] = []
   let createResponse: (() => Promise<Response>) | undefined
+  let applyResponse: (() => Promise<Response>) | undefined
   const onProjectChange = vi.fn<(path: string) => void>()
   const confirmDiscardDrafts = vi.fn(() => false)
   let localization = editorLocalization()
@@ -140,6 +144,8 @@ function panel(
     if (init?.method === 'POST') {
       if (typeof init.body !== 'string') throw new Error('Expected a JSON request body')
       requests.push(commandRequestSchema.parse(JSON.parse(init.body)))
+
+      if (applyResponse) return applyResponse()
     }
 
     if (!latest) throw new Error('Project could not be loaded')
@@ -190,10 +196,199 @@ function panel(
     setCreateResponse: (response?: () => Promise<Response>) => {
       createResponse = response
     },
+    setApplyResponse: (response?: () => Promise<Response>) => {
+      applyResponse = response
+    },
   }
 }
 
 describe('project panel form reconciliation', () => {
+  function localized(revision: string) {
+    const view = project(revision)
+    view.game!.languages = { default: 'en', available: ['en', 'nl'] }
+    view.translations = {
+      'game.title': 'Translated game',
+      'game.description': 'Game description',
+      'scene.title': 'Translated scene',
+      'scene.description': '',
+    }
+    view.translationKeys = Object.keys(view.translations)
+    view.languageCatalogs = {
+      en: view.translations,
+      nl: { 'game.title': 'Vertaald spel', 'scene.title': 'Vertaalde scene' },
+    }
+
+    return view
+  }
+
+  it.each(['editor', 'scene'])(
+    'rejects empty metadata title translations in the %s form',
+    async (prefix) => {
+      const ui = panel()
+      const source = localized('one')
+      source.languageCatalogs!.nl!['game.title'] = ''
+      ui.setLatest(source)
+
+      try {
+        await ui.submitProject()
+        await vi.waitFor(() => expect(ui.control('scene-title').value).toBe('shop'))
+
+        for (const key of ['game.title', 'scene.description']) {
+          ui.control(`${prefix}-title-key`).value = key
+          ui.control(`${prefix}-title-key`).fire('input')
+          ui.control(`${prefix}-metadata`).fire('submit')
+          expect(ui.requests).toHaveLength(0)
+          expect(ui.control('editor-error').textContent).toContain(
+            'Title translations must not be empty',
+          )
+          expect(ui.control(`${prefix}-title-key`).value).toBe(key)
+        }
+      } finally {
+        ui.dispose()
+      }
+    },
+  )
+
+  it('assigns and clears title and description keys for projects and scenes with previews and optional literal titles', async () => {
+    const ui = panel()
+    ui.setLatest(localized('one'))
+
+    try {
+      await ui.submitProject()
+      await vi.waitFor(() => expect(ui.control('scene-title').value).toBe('shop'))
+      expect(ui.control('editor-metadata-keys').children.map((option) => option.value)).toContain(
+        'game.title',
+      )
+      ui.control('editor-title-key').value = 'game.title'
+      ui.control('editor-title-key').fire('input')
+      ui.control('editor-description-key').value = 'game.description'
+      ui.control('editor-description-key').fire('input')
+      ui.control('editor-title').value = ''
+      expect(ui.control('editor-title').required).toBe(false)
+      expect(ui.control('editor-title-key-preview').textContent).toBe('Translated game')
+      const saved = localized('two')
+      Object.assign(saved.game!, {
+        title: '',
+        titleKey: 'game.title',
+        descriptionKey: 'game.description',
+      })
+      ui.setLatest(saved)
+      ui.control('editor-metadata').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.control('project-title').textContent).toBe('Translated game'),
+      )
+      expect(ui.requests[0]?.command).toMatchObject({
+        type: 'game.updateMetadata',
+        title: '',
+        titleKey: 'game.title',
+        descriptionKey: 'game.description',
+      })
+      ui.control('scene-title-key').value = 'scene.title'
+      ui.control('scene-title-key').fire('input')
+      ui.control('scene-description-key').value = 'scene.description'
+      ui.control('scene-description-key').fire('input')
+      ui.control('scene-title').value = ''
+      expect(ui.control('scene-title').required).toBe(false)
+      expect(ui.control('scene-description-key-preview').textContent).toBe('(empty text)')
+      const sceneSaved = structuredClone(saved)
+      sceneSaved.revision = 'three'
+      Object.assign(sceneSaved.scenes[0]!, {
+        title: '',
+        titleKey: 'scene.title',
+        descriptionKey: 'scene.description',
+      })
+      ui.setLatest(sceneSaved)
+      ui.control('scene-metadata').fire('submit')
+      await vi.waitFor(() => expect(ui.requests).toHaveLength(2))
+      await vi.waitFor(() => expect(ui.control('editor-reload').disabled).toBe(false))
+      expect(ui.requests[1]?.command).toMatchObject({
+        type: 'scene.updateMetadata',
+        sceneId: 'shop',
+        titleKey: 'scene.title',
+        descriptionKey: 'scene.description',
+      })
+      expect(ui.control('editor-scenes').children[0]?.textContent).toBe('Translated scene (shop)')
+
+      for (const prefix of ['editor', 'scene']) {
+        ui.control(`${prefix}-title-key`).value = ''
+        ui.control(`${prefix}-title-key`).fire('input')
+        ui.control(`${prefix}-description-key`).value = ''
+        ui.control(`${prefix}-description-key`).fire('input')
+        ui.control(`${prefix}-title`).value = 'Literal fallback'
+        expect(ui.control(`${prefix}-title`).required).toBe(true)
+        ui.control(`${prefix}-metadata`).fire('submit')
+        await vi.waitFor(() => expect(ui.control('editor-reload').disabled).toBe(false))
+      }
+
+      expect(ui.requests.slice(2).map(({ command }) => command)).toEqual([
+        expect.objectContaining({
+          type: 'game.updateMetadata',
+          titleKey: null,
+          descriptionKey: null,
+        }),
+        expect.objectContaining({
+          type: 'scene.updateMetadata',
+          titleKey: null,
+          descriptionKey: null,
+        }),
+      ])
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('blocks unknown metadata keys and preserves key drafts through conflicts, unrelated saves and catalog refreshes', async () => {
+    const ui = panel()
+    ui.setLatest(localized('one'))
+
+    try {
+      await ui.submitProject()
+      await vi.waitFor(() => expect(ui.control('editor-title').value).toBe('Game'))
+      ui.control('editor-title-key').value = 'missing.title'
+      ui.control('editor-title-key').fire('input')
+      ui.control('editor-metadata').fire('submit')
+      expect(ui.requests).toHaveLength(0)
+      expect(ui.control('editor-title-key').attributes.get('aria-invalid')).toBe('true')
+      expect(ui.control('editor-error').textContent).toContain('Unknown translation key')
+      ui.control('editor-title-key').value = 'game.title'
+      ui.control('editor-title-key').fire('input')
+      ui.setApplyResponse(async () =>
+        Response.json({ code: 'revision_conflict', error: 'Conflict' }, { status: 409 }),
+      )
+      ui.control('editor-metadata').fire('submit')
+      await vi.waitFor(() => expect(ui.control('editor-error').textContent).toBe('Conflict'))
+      expect(ui.control('editor-title-key').value).toBe('game.title')
+      expect(ui.control('editor-title').required).toBe(false)
+      ui.setApplyResponse()
+      ui.setLatest(localized('two'))
+      ui.control('scene-description').value = 'Unrelated scene draft'
+      ui.control('scene-metadata').fire('input')
+      ui.control('scene-metadata').fire('submit')
+      await vi.waitFor(() => expect(ui.requests).toHaveLength(2))
+      await vi.waitFor(() => expect(ui.control('editor-reload').disabled).toBe(false))
+      expect(ui.control('editor-title-key').value).toBe('game.title')
+      ui.control('editor-title-key').value = 'new.title'
+      ui.control('editor-title-key').fire('input')
+      const updated = localized('three')
+      updated.translationKeys!.push('new.title')
+      updated.translations!['new.title'] = 'Newly authored title'
+      updated.languageCatalogs!.en!['new.title'] = 'Newly authored title'
+      ui.setLatest(updated)
+      ui.control('editor-reload').fire('click')
+      await vi.waitFor(() =>
+        expect(ui.control('editor-title-key-preview').textContent).toBe('Newly authored title'),
+      )
+      expect(ui.control('editor-title-key').value).toBe('new.title')
+      expect(ui.control('editor-title-key').attributes.get('aria-invalid')).toBe('false')
+      ui.setLanguage('nl')
+      expect(ui.control('editor-title-key').value).toBe('new.title')
+      ui.control('editor-metadata').fire('submit')
+      await vi.waitFor(() => expect(ui.requests).toHaveLength(3))
+      expect(ui.requests[2]?.command).toMatchObject({ titleKey: 'new.title' })
+    } finally {
+      ui.dispose()
+    }
+  })
   it('refreshes preview for saved revisions and clean external changes without restarting for unchanged reads or drafts', async () => {
     const { control, setLatest, submitProject, onProjectChange, window, dispose, setLanguage } =
       panel()

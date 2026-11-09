@@ -143,8 +143,47 @@ can bind to the same state paths. Resolution does not mutate other instances.
 Load a project in the editor's Game project panel. Assets imports/registers images,
 browses thumbnails, edits defaults/presets, and places scene graphics. Choose
 **Add definition** or select an existing part or composition to open structured
-authoring with a live preview. Scene appearance/binding configuration and advanced
-image definitions still have JSON forms. Restart engine preview to see saved changes.
+authoring with a live preview. Scene graphics also have visual appearance controls;
+advanced image definitions retain a JSON form. Restart engine preview to see saved changes.
+
+### Visual scene appearance authoring
+
+Select a graphic in the scene explorer, or choose **Add graphic** in a scene.
+Choose **Graphic visual** from the registered images, parts and compositions, then
+edit **Graphic appearance**. These settings affect this scene instance only.
+Changing the visual resets its appearance; the shared asset stays unchanged.
+
+**Static visibility** shows or hides the whole graphic or an individual composition
+slot. Images and parts expose **Static palette** and their named colors. Choose
+**Override color** to use a color picker or enter a six-digit hex color; choose
+**Inherit palette / default** to remove that override. Explicit colors override
+the selected palette. Raster artwork exposes visibility without recoloring controls.
+
+Composition **Slot** groups offer **Default**, **None**, and each allowed part.
+Each slot has its own palette, colors and visibility. **Reset slot appearance**
+restores the catalogue default and removes its overrides and bindings. Changing
+a part retains compatible overrides and clears incompatible colors and palettes.
+
+In game scenes, each property has a **binding** group. Choose a declared state
+field or another compatible game value, or use **Custom path** to choose a source
+and edit individual object/Map keys and array indexes. **Use static value** removes
+the binding. Static appearance supplies the fallback if a bound value is missing
+or invalid. Colors require `#rrggbb`, palettes require a preset name (empty text
+means default colors), visibility requires a boolean, and part selection requires
+an allowed part ID (empty text means no part). With a part binding, static palette
+and color overrides must work for every allowed part; the form offers shared
+choices and clears incompatible overrides when enabling the binding.
+
+**Preview values** switches between **Static fallback values** and **Starting game
+values** without saving or changing the draft. The latter uses declared initial
+state and quest values; runtime-derived or custom values may be unavailable until
+play. Hidden graphics and unavailable bindings are explained beside the preview.
+Stand-alone scenes expose static appearance controls only.
+
+**Save scene graphic** uses revision-checked persistence and shared project Undo/Redo.
+Invalid edits, failed saves, conflicts and unrelated saves retain the draft.
+**Discard scene graphic draft** restores the saved component. Saved component IDs
+are read-only, and new graphics cannot replace another component with the same ID.
 
 ### Visual part authoring
 

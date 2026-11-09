@@ -122,10 +122,10 @@ export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
 }
 
 /** A source-definition preview, before quest actions and runtime-derived systems have run. */
-export function previewTextBindings(view: ProjectView, draft: TextComponentDefinition) {
+export function startingGameBindings(view: ProjectView): IGameBindings {
   const choices = new Map(textBindingChoices(view).map((choice) => [choice.id, choice]))
 
-  const source: IGameBindings = {
+  return {
     read(binding) {
       const choice = choices.get(textBindingId(binding))
 
@@ -142,8 +142,10 @@ export function previewTextBindings(view: ProjectView, draft: TextComponentDefin
     },
     subscribeChanges: () => () => {},
   }
+}
 
+export function previewTextBindings(view: ProjectView, draft: TextComponentDefinition) {
   const text = draft.textKey ? (view.translations?.[draft.textKey] ?? draft.text) : draft.text
 
-  return resolveText({ text, bindings: draft.bindings }, source)
+  return resolveText({ text, bindings: draft.bindings }, startingGameBindings(view))
 }

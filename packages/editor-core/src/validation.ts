@@ -86,6 +86,18 @@ export function validateProject(
 
   if (!game.success) return diagnostics
 
+  if (
+    game.data.stylesheet &&
+    typeof documents[game.data.stylesheet] !== 'string' &&
+    !sourceDiagnostics.some((diagnostic) => diagnostic.file === game.data.stylesheet)
+  )
+    diagnostics.push({
+      code: 'invalid_stylesheet',
+      file: game.data.stylesheet,
+      path: [],
+      message: 'Referenced stylesheet is missing or does not contain CSS text',
+    })
+
   const scenes = new Map<string, SceneDefinition>()
 
   for (const id of game.data.scenes) {

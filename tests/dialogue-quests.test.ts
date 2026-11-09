@@ -796,8 +796,8 @@ describe('story project integration', () => {
 
       const documents = Object.fromEntries(
         [...texts]
-          .filter(([file]) => file.endsWith('.json'))
-          .map(([file, text]) => [file, JSON.parse(text)]),
+          .filter(([file]) => file.endsWith('.json') || file.endsWith('.css'))
+          .map(([file, text]) => [file, file.endsWith('.json') ? JSON.parse(text) : text]),
       )
 
       expect(validateProject(documents)).toEqual([])

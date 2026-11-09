@@ -10,6 +10,7 @@ import {
   flattenProjectTree,
   ruleFileNodes,
   sceneTitle,
+  gameTitle,
   sceneTreeLabel,
   type ProjectTreeNode,
 } from '../apps/editor-ui/src/projectTree.js'
@@ -180,6 +181,13 @@ describe('extensible project explorer', () => {
     }
 
     expect(sceneTitle(translated, scene)).toBe('In the museum')
+    expect(sceneTitle(translated, { ...scene, title: 'Literal fallback' })).toBe('In the museum')
+    expect(
+      gameTitle({
+        ...translated,
+        game: { ...translated.game, title: 'Fallback game', titleKey: 'scenes.standard.title' },
+      }),
+    ).toBe('In the museum')
     expect(sceneTitle({ ...translated, translations: {} }, scene)).toBe('standard')
     expect(ruleFileNodes(translated).map((node) => node.key)).toEqual([
       'rule-file:rules',

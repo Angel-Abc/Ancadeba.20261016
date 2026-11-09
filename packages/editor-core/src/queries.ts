@@ -26,6 +26,7 @@ import {
   resolveCombatSource,
   mapDefinitionSchema,
   mapFile,
+  stylesheetPathSchema,
 } from '@ancadeba/schemas'
 import { validateProject } from './validation.js'
 import {
@@ -112,6 +113,12 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
   )
 
   return {
+    stylesheets: Object.fromEntries(
+      Object.entries(project.documents).filter(
+        (entry): entry is [string, string] =>
+          stylesheetPathSchema.safeParse(entry[0]).success && typeof entry[1] === 'string',
+      ),
+    ),
     dialogues: parsedFiles(
       game.data?.dialogues,
       dialogueFile,

@@ -283,7 +283,9 @@ keys, and edit translated text without changing JSON files. Missing translations
 use the default-language catalog; explicit empty translations remain empty.
 Saved keys appear in the other editors' translation pickers. See the
 [localization authoring guide](docs/editor-authoring.md#localization-authoring).
-The metadata forms edit literal source fields.
+In **Project properties** or a scene's properties, assign **Title translation key**
+and **Description translation key** using saved catalog keys. The forms preview
+default-language text and let you clear a key to return to literal text.
 
 The default catalog must contain every referenced key. Other catalogs may omit
 keys to use the default translation. Explicit empty strings are supported for
@@ -356,6 +358,11 @@ image pieces, transforms, color mappings, palettes, layers, anchors and slot
 choices with a live preview. Related part and composition edits save together,
 with validation and shared project Undo/Redo. See the
 [graphics authoring guide](docs/asset-workshop.md#visual-part-authoring).
+
+Select a scene graphic or **Add graphic** to edit instance colors, palettes,
+composition slot parts, visibility and game-state bindings with a live preview.
+Static fallbacks and starting game values can be previewed separately. See
+[scene appearance authoring](docs/asset-workshop.md#visual-scene-appearance-authoring).
 
 ## Scene rendering
 
@@ -572,8 +579,12 @@ appearance and scene-picker spacing also read their defaults from `variables.css
 Simple read-only inventories arrange their items in a grid that adds columns as
 space permits. Set `--ge-inventory-item-min-width` to tune their column widths.
 
-Set the optional `"stylesheet": "museum.css"` field in `game.json` to load a
-game-relative CSS file in standalone play, editor preview, and exported games.
+Use **Stylesheet** in the editor to create, assign and edit game-relative CSS
+files. Choose **New stylesheet**, enter a path such as `styles/custom.css`, edit
+**CSS source**, then **Save and assign stylesheet**. Saved files can be selected
+again or detached with **Use built-in styling**. Saves use shared Undo/Redo.
+The optional `stylesheet` manifest field identifies the assigned file, which
+loads in standalone play, editor preview, and exported games.
 The browser scopes the stylesheet to the game viewport. Use `:scope` for
 viewport-wide variables and component classes or `data-scene-id` for specific
 styles. The preview's scene picker sits outside that scope.

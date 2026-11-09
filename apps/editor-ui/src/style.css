@@ -761,6 +761,45 @@ label[for='graphic-existing'] {
   margin: 0 !important;
 }
 
+.metadata-translation-field,
+#editor-metadata > .help,
+#scene-metadata > .help {
+  grid-column: 1 / -1;
+}
+
+.metadata-translation-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.stylesheet-editor-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.stylesheet-editor-form > :is(.save-bar, p, .stylesheet-source-field) {
+  flex: 1 1 100%;
+}
+
+.stylesheet-editor-form label {
+  display: grid;
+  gap: 0.4rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.stylesheet-source {
+  min-height: 24rem;
+  width: 100%;
+  resize: vertical;
+  font-family: Consolas, 'Liberation Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
 /* Same weight as [hidden]: the panels' ID-scoped label rules would otherwise win. */
 [data-scope='component'] .context-picker,
 [data-explorer-chosen] {
@@ -987,6 +1026,35 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   border-radius: 0.5rem;
   background: #b8c5b52b;
   overflow: hidden;
+}
+
+#assets-panel .scene-graphic-form > :is(fieldset, .help, .save-bar) {
+  grid-column: 1 / -1;
+}
+
+.scene-graphic-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.scene-graphic-form fieldset > :is(fieldset, p, div) {
+  grid-column: 1 / -1;
+}
+
+.scene-graphic-preview {
+  height: 260px;
+  padding: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--ed-border);
+  border-radius: 0.5rem;
+  background: #b8c5b52b;
+}
+
+.scene-graphic-preview > .ancadeba-graphic {
+  width: 100%;
+  height: 100%;
 }
 
 .definition-preview > .ancadeba-graphic,

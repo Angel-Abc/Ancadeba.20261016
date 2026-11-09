@@ -7,6 +7,7 @@ import {
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
 import { mergeGraphicDefinitions } from './graphicDefinitionEditing.js'
+import { mergeGraphicAppearance } from './graphicAppearanceEditing.js'
 
 export function editAssets(
   documents: Record<string, unknown>,
@@ -77,8 +78,20 @@ export function editAssets(
       throw new EditorError(409, 'component_exists', 'This ID belongs to another component type')
 
     if (command.type === 'scene.upsertGraphic') {
-      if (index < 0) components.push(command.component)
-      else components[index] = { ...object(components[index]), ...command.component }
+      if (command.createOnly && index >= 0)
+        throw new EditorError(409, 'component_exists', 'A component with this ID already exists')
+      const before = object(components[index])
+
+      const next = {
+        ...before,
+        ...command.component,
+        altKey: command.component.altKey,
+        placement: { ...object(before.placement), ...command.component.placement },
+        appearance: mergeGraphicAppearance(before.appearance, command.component.appearance),
+      }
+
+      if (index < 0) components.push(next)
+      else components[index] = next
     } else {
       if (index < 0) throw new EditorError(404, 'component_not_found', 'Graphic does not exist')
       components.splice(index, 1)

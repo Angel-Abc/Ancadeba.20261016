@@ -31,9 +31,9 @@ the complete command list, schemas, and examples, including gameplay authoring.
 
 | Command                    | Fields                                                                               |
 | -------------------------- | ------------------------------------------------------------------------------------ |
-| `game.updateMetadata`      | `title`, `description`, `version`                                                    |
+| `game.updateMetadata`      | `title`, `description`, `version`; optional `titleKey`, `descriptionKey`             |
 | `scene.create`             | A complete `scene` matching the current scene schema                                 |
-| `scene.updateMetadata`     | `sceneId`, `title`, `description`                                                    |
+| `scene.updateMetadata`     | `sceneId`, `title`, `description`; optional `titleKey`, `descriptionKey`             |
 | `scene.updateLayout`       | `sceneId`, positive integer `rows` and `columns`                                     |
 | `assets.upsertImage`       | `id`, complete `image` definition                                                    |
 | `assets.upsertPart`        | `id`, complete `part` definition                                                     |
@@ -49,6 +49,10 @@ the complete command list, schemas, and examples, including gameplay authoring.
 | `scene.removeStatusPanel`  | `sceneId`, status `componentId`                                                      |
 
 Scene creation updates both the scene document and the manifest reference.
+Metadata commands accept translation-key strings to assign them, or `null` to
+remove them. Omitting either key preserves its existing value for older clients.
+Referenced keys must exist in the default-language catalog; title translations
+must be nonempty. Clearing a title key requires a nonempty literal title.
 Game IDs cannot be changed. Scene IDs support revision-checked rename commands.
 Scenes support the runtime's component types, including inventory, maps, combat,
 dialogue interactions, and quests; the focused graphic commands edit only graphic components.
@@ -69,6 +73,12 @@ anchors and slot choices. A live runtime preview marks attachment points.
 **Save parts and compositions** saves related changes together through
 `assets.updateDefinitions`; invalid references retain the draft for correction.
 See [visual graphics authoring](asset-workshop.md#visual-part-authoring) for the workflow.
+
+Scene graphics expose visual controls for static colors, palettes, visibility,
+composition slot selections and typed game-state bindings. The per-instance draft
+has a live preview for static fallbacks or authored starting values, and preserves
+edits on validation failures and conflicts. See
+[scene appearance authoring](asset-workshop.md#visual-scene-appearance-authoring).
 
 `POST /api/editor/assets/import` accepts multipart fields `metadata` (JSON with
 `path`, `expectedRevision`, `id`, and `format`) and `file` (bytes). The entire
@@ -600,6 +610,20 @@ cannot remove or change the types of declared fields used by a saved status pane
 until those bindings are updated. Status panels display values; game rules own
 resource changes and effect timing.
 
+### Combat encounter and library workflows
+
+Before choosing **Add encounter**, declare two numeric starting-health fields in
+**Rules** with positive values, such as `health = 40` and `enemyHealth = 20`.
+Under **New encounter health**, select different fields for the player and enemy.
+The editor uses those declared paths, preserves their starting values, and raises
+the default maximum health when needed to accommodate them. Missing health fields
+are explained before a draft is created, so you can go to Rules and add them.
+
+New encounters and combat libraries require an unused ID. Creation checks IDs
+without regard to letter case and cannot overwrite an existing definition.
+Saved definition IDs are read-only; editing their other fields updates the
+selected definition. Failed saves retain the draft for correction and retry.
+
 ### Action bars and input bindings
 
 Open **Action bar & input** in the explorer, or select an action-bar component in
@@ -623,6 +647,11 @@ context mappings, and the initial context. Multiple physical keys can map to the
 same virtual key. Duplicate physical codes or virtual-key mappings within a
 context produce an error and retain the draft. Changes that would invalidate a
 saved bar's input references are rejected.
+
+After typing a **New context ID**, choose **Add context** and configure its mappings,
+or clear the name before saving. A pending name blocks saving and stays available
+through validation errors, conflicts, and unrelated saves. **Discard input draft**
+clears pending entries along with the other input edits.
 
 Games without input can create a configuration. Its editable starting layout is
 `QWERT / ASDFG / ZXCVB`, mapped to inputs `slot-1` through `slot-15`. Save input
@@ -745,7 +774,63 @@ The editor does not include scripts, command batches, real-time collaboration,
 or embedded chat. The [MCP adapter](editor-mcp.md) exposes authoring operations
 to an external coding agent; those saves share the server's project history.
 
+## Stylesheet authoring
+
+Choose **Stylesheet** in the explorer or **Styles** on the section rail. Select a
+saved CSS file to edit it, or choose **New stylesheet** and enter a game-relative
+path such as `styles/custom.css`. Existing filenames are read-only. New paths use
+letters, digits, underscores and hyphens, `/` folder separators, and a `.css`
+extension. Creating a file never overwrites an existing one.
+
+Edit **CSS source**, then choose **Check scoped CSS** to test compatibility with
+the browser's game stylesheet loader. **Save and assign stylesheet** creates the
+file and assigns it to the game; **Save stylesheet** edits the currently assigned
+file. **Assign saved stylesheet** switches to an existing saved file without
+rewriting its contents. **Use built-in styling** removes the custom assignment
+and retains CSS files for reuse. File and assignment changes share project
+Undo/Redo. CSS text is saved directly, without JSON quoting or extra newlines.
+
+CSS is scoped to the game viewport. Use `.ancadeba-scene`, `.ancadeba-button`,
+`:scope` and `--ge-` theme variables. Supported grouping rules include media,
+supports, container and scope queries. Keep CSS self-contained: imports are
+ignored and global rules such as `@font-face`, `@keyframes` and `@layer` are not
+supported. The compatibility check uses the same browser parser as the game;
+browsers may ignore malformed declarations. Restart **Play** to load saved CSS.
+Preview and export use the game's assigned stylesheet through the normal loader.
+
+Saved CSS files are discovered within the project, excluding nested games and
+dependency/build folders (`node_modules`, `dist`, `coverage`). The currently
+assigned file is always loaded. Revisions cover discovered CSS contents, so
+external changes produce conflicts. Invalid paths, duplicate filenames, browser
+compatibility errors, save failures and conflicts retain the draft. Save or discard
+the current draft before switching files or assignments; **Discard stylesheet
+draft** restores saved content. A missing assigned stylesheet can be recreated
+or detached here without repairing source files manually.
+
+`game.upsertStylesheet` accepts `file`, raw `css`, optional `createOnly` and
+optional `assign` (defaults to true). Set `assign: false` to save a file without
+changing the active stylesheet. `game.assignStylesheet` accepts an existing CSS
+`file`, or `null` for built-in styling. New CSS is published before its manifest
+reference, with guarded rollback. Inspection exposes saved text in `stylesheets`.
+
 ## Localization authoring
+
+In **Project properties**, or a scene's properties, use **Title translation key**
+and **Description translation key** to assign saved catalog keys. Both searchable
+fields show the selected key's default-language text. Add languages, keys and
+translations in **Localization** first, then save them to make them selectable.
+Project headers and scene labels show the assigned default-language title.
+
+Leave a key empty to use the corresponding literal title or description. Literal
+fields retain their source values while a key is assigned; translated text takes
+precedence. A literal title may be blank when its title key is valid. Descriptions
+may translate to empty text, but titles must be nonempty in every provided
+translation. Missing language entries use the default-language catalog.
+
+Unknown keys and empty title translations block saving and retain the entries.
+Metadata key drafts survive conflicts, unrelated saves, catalog refreshes and
+editor-language changes. **Save game properties** or **Save scene properties**
+saves the assignments using the shared revision check and project Undo/Redo.
 
 Choose **Localization** in the explorer or **Languages** on the section rail.
 Enter a **New language tag** such as `en`, `nl`, or `en-US`, then choose **Add

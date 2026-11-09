@@ -3,6 +3,7 @@ import { gameLanguagesSchema, translationKeySchema } from './languages.js'
 
 // IDs are also single filename segments when resolving resource references.
 export const gameIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/)
+export const stylesheetPathSchema = z.string().regex(/^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.css$/)
 
 const uniqueFileIds = (ids: string[]) =>
   new Set(ids.map((id) => id.toLowerCase())).size === ids.length
@@ -30,10 +31,7 @@ export const gameSchema = z
       .optional(),
     version: z.string().trim().min(1),
     'initial-scene': gameIdSchema.optional(),
-    stylesheet: z
-      .string()
-      .regex(/^(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.css$/)
-      .optional(),
+    stylesheet: stylesheetPathSchema.optional(),
     assets: gameIdSchema.optional(),
     inventory: z
       .array(gameIdSchema)

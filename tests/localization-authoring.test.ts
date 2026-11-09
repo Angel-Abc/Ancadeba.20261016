@@ -45,6 +45,148 @@ const translated = (source: ProjectSnapshot) =>
   }).project
 
 describe('localization authoring commands', () => {
+  it('assigns project and scene metadata keys without changing literal fallbacks or extension fields', () => {
+    const source = applyCommand(project(), command()).project
+    object(source.documents['game.json']).extension = 'game'
+    object(source.documents['scenes/adventure.json']).extension = 'scene'
+    const before = JSON.stringify(source)
+
+    const game = applyCommand(source, {
+      type: 'game.updateMetadata',
+      title: 'Literal game',
+      description: 'Literal description',
+      version: '2',
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    }).project
+
+    const saved = applyCommand(game, {
+      type: 'scene.updateMetadata',
+      sceneId: 'adventure',
+      title: 'Literal scene',
+      description: 'Scene fallback',
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    }).project
+
+    expect(JSON.stringify(source)).toBe(before)
+    expect(saved.documents['game.json']).toMatchObject({
+      title: 'Literal game',
+      titleKey: 'greeting.title',
+      description: 'Literal description',
+      descriptionKey: 'greeting.body',
+      extension: 'game',
+    })
+    expect(saved.documents['scenes/adventure.json']).toMatchObject({
+      title: 'Literal scene',
+      titleKey: 'greeting.title',
+      description: 'Scene fallback',
+      descriptionKey: 'greeting.body',
+      extension: 'scene',
+    })
+    const view = inspectProject(saved)
+
+    const localized = localizeDefinitions(
+      view.game!,
+      new Map(view.scenes.map((scene) => [scene.id, scene])),
+      {
+        fallback: view.languageCatalogs!.en!,
+        messages: view.languageCatalogs!.nl!,
+      },
+    )
+
+    expect(localized.game).toMatchObject({ title: 'Welkom', description: 'Hello\ntraveler' })
+    expect(localized.scenes.get('adventure')).toMatchObject({
+      title: 'Welkom',
+      description: 'Hello\ntraveler',
+    })
+  })
+
+  it('preserves omitted metadata keys for older clients and explicitly clears them with null', () => {
+    let source = applyCommand(project(), command()).project
+
+    const game = {
+      type: 'game.updateMetadata' as const,
+      title: 'Game fallback',
+      description: 'Description',
+      version: '1',
+    }
+
+    const scene = {
+      type: 'scene.updateMetadata' as const,
+      sceneId: 'adventure',
+      title: 'Scene fallback',
+      description: 'Description',
+    }
+
+    source = applyCommand(source, {
+      ...game,
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    }).project
+    source = applyCommand(source, {
+      ...scene,
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    }).project
+    source = applyCommand(applyCommand(source, game).project, scene).project
+    expect(source.documents['game.json']).toMatchObject({
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    })
+    expect(source.documents['scenes/adventure.json']).toMatchObject({
+      titleKey: 'greeting.title',
+      descriptionKey: 'greeting.body',
+    })
+
+    const cleared = applyCommand(
+      applyCommand(source, { ...game, titleKey: null, descriptionKey: null }).project,
+      { ...scene, titleKey: null, descriptionKey: null },
+    ).project
+
+    for (const file of ['game.json', 'scenes/adventure.json']) {
+      const saved: unknown = JSON.parse(JSON.stringify(cleared.documents[file]))
+      expect(saved).not.toHaveProperty('titleKey')
+      expect(saved).not.toHaveProperty('descriptionKey')
+    }
+  })
+
+  it('validates metadata keys and rejects clearing the only title without changing source', () => {
+    const source = applyCommand(project(), command()).project
+
+    const game = {
+      type: 'game.updateMetadata' as const,
+      title: '',
+      description: '',
+      version: '1',
+      titleKey: 'greeting.title',
+    }
+
+    const saved = applyCommand(source, game).project
+
+    const scene = {
+      type: 'scene.updateMetadata' as const,
+      sceneId: 'adventure',
+      title: '',
+      description: '',
+      titleKey: 'greeting.title',
+    }
+
+    expect(() => applyCommand(source, scene)).not.toThrow()
+    const before = JSON.stringify(saved)
+
+    for (const edit of [
+      { ...game, titleKey: 'missing.key' },
+      { ...game, titleKey: null },
+      { ...game, descriptionKey: 'missing.key' },
+    ])
+      expect(() => applyCommand(saved, edit)).toThrow('invalid project')
+    expect(() => applyCommand(source, { ...scene, titleKey: 'missing.key' })).toThrow(
+      'invalid project',
+    )
+    expect(commandSchema.safeParse({ ...game, titleKey: '' }).success).toBe(false)
+    expect(JSON.stringify(saved)).toBe(before)
+  })
   it('creates complete source catalogs and exposes them with default-language picker previews', () => {
     const source = project()
     const before = JSON.stringify(source)
@@ -234,6 +376,46 @@ describe('localization persistence', () => {
       expectedRevision: (await service.inspect('game')).revision,
       direction,
     })
+
+  it('persists metadata key assignments and clearing with exact undo and redo', async () => {
+    await apply(command())
+
+    for (const edit of [
+      {
+        type: 'game.updateMetadata' as const,
+        title: '',
+        description: 'Fallback',
+        version: '1',
+        titleKey: 'greeting.title',
+        descriptionKey: 'greeting.body',
+      },
+      {
+        type: 'scene.updateMetadata' as const,
+        sceneId: 'adventure',
+        title: '',
+        description: 'Fallback',
+        titleKey: 'greeting.title',
+        descriptionKey: 'greeting.body',
+      },
+    ]) {
+      const file =
+        edit.type === 'game.updateMetadata' ? 'game/game.json' : 'game/scenes/adventure.json'
+
+      const before = await workspace.read(file)
+      await apply(edit)
+      const saved = await workspace.read(file)
+      await restore('undo')
+      expect(await workspace.read(file)).toEqual(before)
+      await restore('redo')
+      expect(await workspace.read(file)).toEqual(saved)
+      await apply({ ...edit, title: 'Literal title', titleKey: null, descriptionKey: null })
+      const cleared = JSON.parse(Buffer.from(await workspace.read(file)).toString('utf8'))
+      expect(cleared).not.toHaveProperty('titleKey')
+      expect(cleared).not.toHaveProperty('descriptionKey')
+      await restore('undo')
+      expect(await workspace.read(file)).toEqual(saved)
+    }
+  })
 
   it('creates and edits catalogs with exact shared undo/redo, including language removal', async () => {
     const manifest = await workspace.read('game/game.json')

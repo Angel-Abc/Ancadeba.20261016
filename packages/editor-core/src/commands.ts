@@ -45,6 +45,8 @@ import {
   gameLanguagesSchema,
   languageTagSchema,
   languageCatalogSchema,
+  translationKeySchema,
+  stylesheetPathSchema,
 } from '@ancadeba/schemas'
 
 /** Scene components without a dedicated authoring command are saved whole. */
@@ -60,6 +62,9 @@ const metadata = {
   // A blank title is valid when the document has a titleKey; project validation enforces one of them.
   title: z.string().trim(),
   description: z.string(),
+  // Omitted keys preserve existing metadata; null explicitly restores literal text.
+  titleKey: translationKeySchema.nullable().optional(),
+  descriptionKey: translationKeySchema.nullable().optional(),
 }
 
 export const commandSchema = z.discriminatedUnion('type', [
@@ -107,6 +112,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     type: z.literal('scene.upsertGraphic'),
     sceneId: gameIdSchema,
     component: graphicComponentSchema,
+    createOnly: z.boolean().optional(),
   }),
   z.strictObject({
     type: z.literal('scene.removeGraphic'),
@@ -217,6 +223,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('game.upsertCombat'),
     encounter: combatSourceSchema,
+    createOnly: z.boolean().optional(),
     scene: z.object({ id: gameIdSchema, component: combatComponentSchema }).optional(),
   }),
   z.strictObject({ type: z.literal('game.removeCombat'), encounterId: gameIdSchema }),
@@ -247,7 +254,11 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('game.removeDialogue'), dialogueId: gameIdSchema }),
   z.strictObject({ type: z.literal('game.upsertQuest'), quest: questSchema }),
   z.strictObject({ type: z.literal('game.removeQuest'), questId: gameIdSchema }),
-  z.strictObject({ type: z.literal('game.upsertCombatLibrary'), library: combatLibrarySchema }),
+  z.strictObject({
+    type: z.literal('game.upsertCombatLibrary'),
+    library: combatLibrarySchema,
+    createOnly: z.boolean().optional(),
+  }),
   z.strictObject({ type: z.literal('game.removeCombatLibrary'), libraryId: gameIdSchema }),
   z.strictObject({
     type: z.literal('combat.copySharedEntry'),
@@ -328,6 +339,17 @@ export const commandSchema = z.discriminatedUnion('type', [
     parts: z.record(assetIdSchema, partSchema),
     compositions: z.record(assetIdSchema, compositionSchema),
   }),
+  z.strictObject({
+    type: z.literal('game.upsertStylesheet'),
+    file: stylesheetPathSchema,
+    css: z.string(),
+    createOnly: z.boolean().optional(),
+    assign: z.boolean().optional(),
+  }),
+  z.strictObject({
+    type: z.literal('game.assignStylesheet'),
+    file: stylesheetPathSchema.nullable(),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -362,6 +384,17 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'game.upsertStylesheet',
+      example: {
+        type: 'game.upsertStylesheet',
+        file: 'styles/custom.css',
+        css: '.ancadeba-scene { --ge-scene-color: #e5e7eb; }\n',
+        createOnly: true,
+        assign: true,
+      },
+    },
+    { type: 'game.assignStylesheet', example: { type: 'game.assignStylesheet', file: null } },
     {
       type: 'assets.updateDefinitions',
       example: {

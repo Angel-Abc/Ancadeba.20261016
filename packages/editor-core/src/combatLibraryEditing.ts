@@ -50,6 +50,12 @@ export function editCombatLibrary(
     const file = combatLibraryFile(library.id)
     const previous = object(documents[file])
 
+    if (
+      command.createOnly &&
+      (game.combatLibraries ?? []).some((id) => id.toLowerCase() === library.id.toLowerCase())
+    )
+      throw new EditorError(409, 'combat_library_exists', 'A library with this ID already exists')
+
     if (!game.combatLibraries?.includes(library.id) && Object.hasOwn(documents, file))
       throw new EditorError(409, 'combat_library_exists', 'A library file already exists')
     documents[file] = { ...previous, ...library, ...mergeCombatEntries(previous, library) }

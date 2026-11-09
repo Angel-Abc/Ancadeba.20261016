@@ -18,6 +18,7 @@ import { editSceneStructure, type SceneEditResult } from './sceneEditing.js'
 import { editMap } from './mapEditing.js'
 import { editInventory } from './inventoryEditing.js'
 import { editLocalization } from './localizationEditing.js'
+import { editStylesheet } from './stylesheetEditing.js'
 
 export function applyCommand(project: ProjectSnapshot, input: EditorCommand): CommandResult {
   const parsed = commandSchema.safeParse(input)
@@ -39,7 +40,10 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   const diagnostics = initialDiagnostics.filter(
     (diagnostic) =>
       (!repairing || diagnostic.file !== repairSource) &&
-      (command.type !== 'game.updateRules' || diagnostic.code !== 'invalid_rules'),
+      (command.type !== 'game.updateRules' || diagnostic.code !== 'invalid_rules') &&
+      (!['game.upsertStylesheet', 'game.assignStylesheet'].includes(command.type) ||
+        diagnostic.file !== manifest.stylesheet ||
+        !['missing_file', 'invalid_stylesheet'].includes(diagnostic.code)),
   )
 
   if (diagnostics.length)
@@ -62,6 +66,9 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.removeComponent'
   ) {
     structure = editSceneStructure(documents, game, command)
+    changedFiles.push(...structure.changedFiles)
+  } else if (command.type === 'game.upsertStylesheet' || command.type === 'game.assignStylesheet') {
+    structure = editStylesheet(documents, game, command)
     changedFiles.push(...structure.changedFiles)
   } else if (command.type === 'game.updateLocalization') {
     structure = editLocalization(documents, game, command)
@@ -146,6 +153,10 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
       title: command.title,
       description: command.description,
       version: command.version,
+      ...(command.titleKey !== undefined ? { titleKey: command.titleKey ?? undefined } : {}),
+      ...(command.descriptionKey !== undefined
+        ? { descriptionKey: command.descriptionKey ?? undefined }
+        : {}),
     }
     changedFiles.push('game.json')
   } else if (command.type === 'scene.create') {
@@ -170,7 +181,15 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     sceneSchema.parse(source)
 
     if (command.type === 'scene.updateMetadata') {
-      documents[file] = { ...source, title: command.title, description: command.description }
+      documents[file] = {
+        ...source,
+        title: command.title,
+        description: command.description,
+        ...(command.titleKey !== undefined ? { titleKey: command.titleKey ?? undefined } : {}),
+        ...(command.descriptionKey !== undefined
+          ? { descriptionKey: command.descriptionKey ?? undefined }
+          : {}),
+      }
     } else {
       const screen = object(source.screen)
       documents[file] = {
