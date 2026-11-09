@@ -278,8 +278,12 @@ support `textKey`; buttons and language selectors support `labelKey`. Keys take 
 `title`, `description`, `text`, and `label` fields, which can be omitted when a key
 is supplied. Existing games with literal text continue to work without a
 `languages` declaration. IDs, actions, input mappings, and binding aliases stay
-language-independent. Edit translations in the JSON catalogs; the editor's
-existing metadata forms edit literal source fields.
+language-independent. Use **Localization** in the editor to add languages, create
+keys, and edit translated text without changing JSON files. Missing translations
+use the default-language catalog; explicit empty translations remain empty.
+Saved keys appear in the other editors' translation pickers. See the
+[localization authoring guide](docs/editor-authoring.md#localization-authoring).
+The metadata forms edit literal source fields.
 
 The default catalog must contain every referenced key. Other catalogs may omit
 keys to use the default translation. Explicit empty strings are supported for
@@ -344,6 +348,14 @@ the headless runtime has no application UI catalog or browser-language dependenc
 Both `sample-games/basic` and `sample-games/localized` have complete English and
 Dutch catalogs. The basic sample includes translated narrative, inventory text,
 menus, and status templates.
+
+## Visual graphic authoring
+
+In **Assets**, choose **Add definition** or select a part/composition to edit
+image pieces, transforms, color mappings, palettes, layers, anchors and slot
+choices with a live preview. Related part and composition edits save together,
+with validation and shared project Undo/Redo. See the
+[graphics authoring guide](docs/asset-workshop.md#visual-part-authoring).
 
 ## Scene rendering
 
@@ -644,6 +656,12 @@ alongside `game.actions`. Application state comes from the existing `createGameS
 factory and game rules own its writes. No application state store is added.
 
 Game-scene text definitions can opt into named bindings:
+
+In the editor, select a text component and choose **Dynamic placeholders** under
+**Text binding mode**. Add named bindings to declared state fields (including
+gold), quest status/stage/tracking, game time, character levels or equipment stats.
+A starting-value preview and fallback controls help configure them. See the
+[text binding authoring guide](docs/editor-authoring.md#dynamic-text-placeholders).
 
 ```json
 {

@@ -35,7 +35,25 @@ export function editComponent(
       .map((key) => [key, undefined]),
   )
 
-  const next = { ...previous, ...cleared, ...component }
+  const next = {
+    ...previous,
+    ...cleared,
+    ...component,
+    ...(component.type === 'text' && component.bindings !== undefined
+      ? {
+          bindings: Object.fromEntries(
+            Object.entries(component.bindings).map(([alias, binding]) => [
+              alias,
+              {
+                ...object(object(previous.bindings)[alias]),
+                ...binding,
+                fallback: binding.fallback,
+              },
+            ]),
+          ),
+        }
+      : {}),
+  }
 
   if (index < 0) components.push(next)
   else components[index] = next

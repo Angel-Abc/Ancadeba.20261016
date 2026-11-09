@@ -366,5 +366,7 @@
   "maps.cutSourceChanged": "The cut source changed. Select and cut the group again before moving it.",
   "maps.invalidGroundFill": "Choose an existing replacement terrain for ground tiles. Ground cannot contain empty cells.",
   "maps.undoDraft": "Undo map edit",
-  "maps.redoDraft": "Redo map edit"
+  "maps.redoDraft": "Redo map edit",
+  "localization.heading": "Localization",
+  "rail.localization": "Languages"
 }

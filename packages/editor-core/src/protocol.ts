@@ -13,6 +13,7 @@ import {
   combatLibrarySchema,
   combatOriginsSchema,
   languageCatalogSchema,
+  languageTagSchema,
   mapDefinitionSchema,
 } from '@ancadeba/schemas'
 
@@ -46,6 +47,7 @@ export const projectViewSchema = z.object({
   inventory: inventorySchema.optional(),
   translationKeys: z.array(z.string()).optional(),
   translations: languageCatalogSchema.optional(),
+  languageCatalogs: z.record(languageTagSchema, languageCatalogSchema).optional(),
   maps: z.record(gameIdSchema, mapDefinitionSchema).optional(),
   inventoryFiles: z.record(gameIdSchema, inventorySchema).optional(),
   revision: z.string().min(1),

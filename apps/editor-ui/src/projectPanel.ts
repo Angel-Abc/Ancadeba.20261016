@@ -1,4 +1,5 @@
 import { bindLevelingEditor } from './levelingEditor.js'
+import { bindLocalizationEditor } from './localizationEditor.js'
 import { bindMapEditor } from './mapEditor.js'
 import { mapConfirmation } from './mapConfirmation.js'
 import { BrowserGraphicResources, createGraphicPlatform } from '@ancadeba/ui-components'
@@ -247,6 +248,8 @@ export function bindProjectPanel(
   let shopEditor: ReturnType<typeof bindShopEditor> | undefined
   const levelingElement = treeElement && root.querySelector<HTMLElement>('#leveling-editor')
   let levelingEditor: ReturnType<typeof bindLevelingEditor> | undefined
+  const localizationElement = treeElement && root.querySelector<HTMLElement>('#localization-editor')
+  let localizationEditor: ReturnType<typeof bindLocalizationEditor> | undefined
   const combatElement = treeElement && root.querySelector<HTMLElement>('#combat-editor')
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
   const componentElement = treeElement && root.querySelector<HTMLElement>('#component-editor')
@@ -270,6 +273,9 @@ export function bindProjectPanel(
     ...(itemElement ? [{ id: 'items', labelKey: 'items.heading', nodes: () => [] }] : []),
     ...(shopElement ? [{ id: 'shops', labelKey: 'shops.heading', nodes: () => [] }] : []),
     ...(levelingElement ? [{ id: 'leveling', labelKey: 'leveling.heading', nodes: () => [] }] : []),
+    ...(localizationElement
+      ? [{ id: 'localization', labelKey: 'localization.heading', nodes: () => [] }]
+      : []),
     ...(combatElement ? [{ id: 'combat', labelKey: 'combat.heading', nodes: () => [] }] : []),
     ...(treeElement ? [dataFilesSection] : []),
     ...additionalSections,
@@ -351,6 +357,8 @@ export function bindProjectPanel(
 
     if (storyElement) storyElement.hidden = node.section !== 'story'
 
+    if (localizationElement) localizationElement.hidden = node.section !== 'localization'
+
     if (rulesElement) rulesElement.hidden = node.section !== 'rules'
 
     if (actionBarElement) actionBarElement.hidden = node.section !== 'controls' && !actionBar
@@ -364,6 +372,7 @@ export function bindProjectPanel(
       levelingEditor?.navigate(
         sceneId,
         component?.type === 'character-progression' ? component.profile : undefined,
+        component?.id,
       )
 
     if (combatElement) combatElement.hidden = node.section !== 'combat' && !combatComponent
@@ -478,12 +487,14 @@ export function bindProjectPanel(
 
     const sceneChanges = sceneId && sceneId !== scenes.value
 
-    const componentType =
+    const selectedComponent =
       node.kind === 'component'
         ? view?.scenes
             .find((scene) => scene.id === sceneId)
-            ?.components.find((component) => component.id === node.id)?.type
+            ?.components.find((component) => component.id === node.id)
         : undefined
+
+    const componentType = selectedComponent?.type
 
     const usesAssets =
       node.section === 'assets' ||
@@ -523,7 +534,13 @@ export function bindProjectPanel(
         !itemEditor?.navigate(sceneId, node.section === 'scenes' ? node.id : undefined)) ||
       ((node.section === 'shops' || componentType === 'shop') && !shopEditor?.navigate(sceneId)) ||
       ((node.section === 'leveling' || componentType === 'character-progression') &&
-        !levelingEditor?.navigate(sceneId)) ||
+        !levelingEditor?.navigate(
+          sceneId,
+          selectedComponent?.type === 'character-progression'
+            ? selectedComponent.profile
+            : undefined,
+          selectedComponent?.id,
+        )) ||
       ((node.section === 'combat' || componentType === 'combat') &&
         !combatEditor?.navigate(sceneId)) ||
       (node.kind === 'rule-file' && !rulesPanel?.navigate(node.id ?? '')) ||
@@ -606,6 +623,7 @@ export function bindProjectPanel(
     shopEditor?.render(state, replaceFields)
     combatEditor?.render(state, replaceFields)
     levelingEditor?.render(state, replaceFields)
+    localizationEditor?.render(state, replaceFields)
     componentEditor?.render(state, replaceFields)
     storyEditor?.render(state, replaceFields)
     mapEditor?.render(state, replaceFields)
@@ -836,7 +854,7 @@ export function bindProjectPanel(
       (selection.section === 'scenes' &&
         (selection.kind === 'component' || selection.kind === 'new-graphic'))
     )
-      assetsPanel?.navigate(selection.kind, selection.id, selection.parentId)
+      assetsPanel?.navigate(selection.kind, selection.id, selection.parentId, true)
     updateTree()
   }
 
@@ -950,6 +968,11 @@ export function bindProjectPanel(
 
   if (levelingElement)
     levelingEditor = bindLevelingEditor(levelingElement, (command) => {
+      void controller.save(command)
+    })
+
+  if (localizationElement)
+    localizationEditor = bindLocalizationEditor(localizationElement, (command) => {
       void controller.save(command)
     })
 
@@ -1110,6 +1133,7 @@ export function bindProjectPanel(
       shopEditor?.hasDrafts() ||
       combatEditor?.hasDrafts() ||
       levelingEditor?.hasDrafts() ||
+      localizationEditor?.hasDrafts() ||
       componentEditor?.hasDrafts() ||
       storyEditor?.hasDrafts() ||
       mapEditor?.hasDrafts(),

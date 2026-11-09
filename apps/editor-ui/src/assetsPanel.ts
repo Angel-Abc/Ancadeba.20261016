@@ -20,6 +20,7 @@ import type { EditorCommand } from '@ancadeba/editor-core'
 import type { Translate } from '@ancadeba/utilities'
 import type { ProjectEditorState } from './projectController.js'
 import { EditorWorkspaceResources } from './workspaceResources.js'
+import { bindGraphicDefinitionsEditor } from './graphicDefinitionsEditor.js'
 
 export interface AssetPanelActions {
   save(command: EditorCommand): Promise<void>
@@ -45,6 +46,7 @@ export function bindAssetsPanel(
   let resourceRevision = ''
   let selected = ''
   let navigationKey = ''
+  let structuredPath: string | undefined
   let preview: RenderedGraphic | undefined
   let thumbnails: RenderedComponent[] = []
   let appearance = graphicAppearanceSchema.parse({})
@@ -82,6 +84,7 @@ export function bindAssetsPanel(
       <label for="asset-json" data-i18n="assets.definitionJson"></label><textarea id="asset-json" rows="12" spellcheck="false"></textarea>
       <div class="preview-actions"><button type="submit" data-i18n="assets.saveDefinition"></button><button id="asset-remove" type="button" data-i18n="assets.remove"></button></div>
     </form></details>
+    <section id="graphic-definitions-editor" hidden></section>
     <form id="asset-graphic"><h4 data-i18n="assets.sceneGraphic"></h4>
       <label for="graphic-scene" data-i18n="scene.label"></label><select id="graphic-scene"></select>
       <label for="graphic-existing" data-i18n="assets.existing"></label><select id="graphic-existing"></select>
@@ -189,6 +192,21 @@ export function bindAssetsPanel(
     })
 
   const renderer = new GraphicComponentRenderer()
+
+  const definitionsEditor = bindGraphicDefinitionsEditor(
+    find('graphic-definitions-editor'),
+    (command) => {
+      void actions.save(command)
+    },
+    (assets, id, appearance) =>
+      resources
+        ? renderer.render(
+            { ...makeGraphic(id), appearance },
+            { document, assets, graphics: resources, bindingMode: 'editor' },
+          )
+        : undefined,
+  )
+
   const updatePreview = () => preview?.setAppearance(appearance)
 
   const renderColors = () => {
@@ -543,12 +561,26 @@ export function bindAssetsPanel(
     control.disabled = true
 
   return {
-    hasDrafts: () => dirty.size > 0,
-    navigate(kind: string, id?: string, sceneId?: string) {
+    hasDrafts: () => dirty.size > 0 || definitionsEditor.hasDrafts(),
+    navigate(kind: string, id?: string, sceneId?: string, preserveDefinitionSelection = false) {
       const nextKey = `${kind}:${sceneId ?? ''}:${id ?? ''}`
       const changing = nextKey !== navigationKey
       navigationKey = nextKey
       const graphic = kind === 'component' || kind === 'new-graphic'
+      const structured = kind === 'new-asset' || (kind === 'asset' && id && !catalog().images[id])
+      find('graphic-definitions-editor').hidden = !structured
+
+      if (
+        structured &&
+        (changing || structuredPath !== state?.path || !preserveDefinitionSelection)
+      ) {
+        definitionsEditor.navigate(
+          id && catalog().compositions[id] ? 'compositions' : 'parts',
+          kind === 'asset' ? id : undefined,
+        )
+        structuredPath = state?.path
+      }
+
       const browsing = ['section', 'images', 'parts', 'compositions'].includes(kind)
       find('asset-gallery').hidden = !browsing
       browsingKind = browsing ? kind : ''
@@ -556,11 +588,11 @@ export function bindAssetsPanel(
       for (const thumbnail of panel.querySelectorAll<HTMLElement>('.asset-thumbnail'))
         thumbnail.hidden = kind !== 'section' && thumbnail.dataset.assetKind !== kind
       showEmptyState()
-      find('asset-workshop').hidden = kind !== 'asset'
+      find('asset-workshop').hidden = kind !== 'asset' || Boolean(structured)
       find('asset-image').hidden =
         kind !== 'import' && !(kind === 'asset' && id && catalog().images[id])
       const definition = find('asset-definition').parentElement!
-      definition.hidden = kind !== 'asset' && kind !== 'new-asset'
+      definition.hidden = Boolean(structured) || (kind !== 'asset' && kind !== 'new-asset')
       definition.toggleAttribute('open', kind === 'new-asset')
       find('asset-graphic').hidden = !graphic
 
@@ -623,13 +655,19 @@ export function bindAssetsPanel(
       for (const control of panel.querySelectorAll<
         HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement
       >('input, button, select, textarea'))
-        control.disabled = next.busy || !next.view?.game
+        if (!control.closest('#graphic-definitions-editor'))
+          control.disabled = next.busy || !next.view?.game
       find<HTMLSelectElement>('asset-select').disabled ||=
         dirty.has('asset-definition') || dirty.has('asset-palettes')
       find<HTMLSelectElement>('graphic-scene').disabled ||= dirty.has('asset-graphic')
       find<HTMLSelectElement>('graphic-existing').disabled ||= dirty.has('asset-graphic')
 
-      if (!replace || !next.view) return
+      if (!replace || !next.view) {
+        definitionsEditor.render(next, replace)
+
+        return
+      }
+
       const definitions = catalog()
 
       const visuals = [
@@ -703,8 +741,10 @@ export function bindAssetsPanel(
       fillSelection(false)
       fillGraphics()
       showEmptyState()
+      definitionsEditor.render(next, replace)
     },
     dispose() {
+      definitionsEditor.dispose()
       abort.abort()
       preview?.dispose()
 

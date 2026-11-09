@@ -141,10 +141,52 @@ can bind to the same state paths. Resolution does not mutate other instances.
 ## Authoring and lifecycle
 
 Load a project in the editor's Game project panel. Assets imports/registers images,
-browses thumbnails, edits defaults/presets, previews parts/compositions, and places
-scene graphics. Definitions and appearance/binding configuration use JSON; there
-is no visual layer-arrangement tool. Preview controls do not save. Forms save
-separately, preserving other drafts. Restart engine preview to see saved changes.
+browses thumbnails, edits defaults/presets, and places scene graphics. Choose
+**Add definition** or select an existing part or composition to open structured
+authoring with a live preview. Scene appearance/binding configuration and advanced
+image definitions still have JSON forms. Restart engine preview to see saved changes.
+
+### Visual part authoring
+
+Choose **Definition kind → Parts**, enter a **New graphic definition ID**, and
+choose **Add part**. Set its **Preview bounds**, then enter a **New piece ID** and
+choose **Add image piece**. Import an image first if none are registered.
+For each piece, choose its image, layer and destination anchor; edit source anchor
+coordinates, scale and rotation. **Move piece … up/down** controls the order of
+pieces on equal layers. Preview markers label each source attachment point.
+
+**Part colors and palettes** adds shared part color slots and palette presets.
+Map each image color to a part color, or leave it at the image default. Palette
+overrides may inherit the part's defaults. **Preview palette** tries a preset
+without changing the draft. Removing a part color clears its palette overrides and
+piece mappings, leaving the image defaults in effect.
+
+### Visual composition authoring
+
+Choose **Definition kind → Compositions** and add a definition. Edit its bounds
+and its layers in back-to-front order with **Move layer … back/forward**. Add
+named destination anchors and edit their coordinates; markers in the preview show
+where pieces attach. Layer names and piece attachment references must match.
+
+Add a named slot, select its allowed parts, and choose **Default part**, including
+**None**. Adding an allowed part includes any missing layers and anchors it needs;
+existing anchor positions remain unchanged. Newly included anchors start at the
+part's source attachment point. Each slot changes all of a selected part's pieces
+together. Slots can select parts, never nested compositions.
+
+**Save parts and compositions** saves all part and composition changes together.
+Switch entries within this form to update shared references before saving. Add or
+clear pending identifiers before changing entries or saving. Invalid references,
+duplicate IDs, empty parts, missing layers/anchors, invalid transforms, and
+deletions still referenced by scenes or inventory are rejected. Drafts survive
+save failures, revision conflicts and unrelated saves. **Discard graphic definitions
+draft** restores saved definitions. Saved changes use shared project Undo/Redo.
+
+The revision-checked `assets.updateDefinitions` command accepts complete `parts`
+and `compositions` dictionaries. It preserves registered images and extension
+fields at stable definition/piece IDs. Changing layer names or anchor references
+can require changes to multiple related definitions; the shared draft lets those
+changes pass validation together.
 
 POST /api/editor/assets/import accepts multipart fields metadata (JSON with path,
 expectedRevision, id, format) and file. The entire request, including multipart
@@ -156,7 +198,7 @@ Unused broken images can be replaced or unregistered through guarded repair
 operations. Removing definitions still referenced elsewhere is rejected.
 
 Project revisions cover catalogue JSON and registered artwork bytes. MCP exposes
-the same commands through ancadeba_edit_assets, with catalogue/source diagnostics
+single-definition asset edits through ancadeba_edit_assets, with catalogue/source diagnostics
 from ancadeba_inspect_assets. MCP registers files already inside the game; browser
 or HTTP import handles binary uploads.
 

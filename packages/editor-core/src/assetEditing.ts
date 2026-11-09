@@ -6,6 +6,7 @@ import {
 } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
+import { mergeGraphicDefinitions } from './graphicDefinitionEditing.js'
 
 export function editAssets(
   documents: Record<string, unknown>,
@@ -19,6 +20,27 @@ export function editAssets(
     const catalog = assetCatalogSchema.parse(
       game.assets ? documents[file] : { 'schema-version': '1.0.0' },
     )
+
+    if (command.type === 'assets.updateDefinitions') {
+      if (!game.assets && Object.hasOwn(documents, file))
+        throw new EditorError(
+          409,
+          'asset_catalog_exists',
+          'An unlisted asset catalog already exists',
+        )
+      documents[file] = mergeGraphicDefinitions(
+        documents[file] ?? { 'schema-version': '1.0.0', images: {} },
+        command,
+      )
+
+      if (!game.assets) {
+        documents['game.json'] = { ...object(documents['game.json']), assets: id }
+
+        return [file, 'game.json']
+      }
+
+      return [file]
+    }
 
     if (command.type === 'assets.upsertImage') catalog.images[command.id] = command.image
     else if (command.type === 'assets.upsertPart') catalog.parts[command.id] = command.part

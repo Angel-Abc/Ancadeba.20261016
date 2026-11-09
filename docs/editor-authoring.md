@@ -63,6 +63,13 @@ manifest reference. Inspection includes the parsed catalogue as `assets` when
 present. See [the graphics guide](asset-workshop.md) for source and composition
 formats, palettes, and game-state bindings.
 
+**Assets → Add definition**, or selecting a saved part/composition, opens visual
+authoring for pieces, transforms, color mappings, palettes, layer order, destination
+anchors and slot choices. A live runtime preview marks attachment points.
+**Save parts and compositions** saves related changes together through
+`assets.updateDefinitions`; invalid references retain the draft for correction.
+See [visual graphics authoring](asset-workshop.md#visual-part-authoring) for the workflow.
+
 `POST /api/editor/assets/import` accepts multipart fields `metadata` (JSON with
 `path`, `expectedRevision`, `id`, and `format`) and `file` (bytes). The entire
 request is limited to 10 MiB, including multipart overhead. Source files are
@@ -345,8 +352,8 @@ replace an existing component. Conflicts and rejected settings preserve the draf
 Save or discard edits before switching the component type or another component.
 **Cancel** returns to the scene without saving.
 
-Text supports literal content, existing translation keys, heading/body styles,
-and alignment. Buttons support scene navigation, starting a new game, rule actions,
+Text supports literal content, translation keys, dynamic bindings, heading/body
+styles, and alignment. Buttons support scene navigation, starting a new game, rule actions,
 and map movement. New-game targets list only game scenes. A button without an action
 is disabled during play. Map views choose existing map definitions from the game
 manifest and configure their visible area, interactivity, and optional player
@@ -354,6 +361,41 @@ marker with zero-based coordinates. Create map definitions in the **Maps**
 workspace before selecting them here. Invalid view dimensions and blocked or
 out-of-bounds player spawns are rejected. Language selectors use the manifest's
 configured languages and catalogs; they remain disabled in play until those exist.
+
+### Dynamic text placeholders
+
+Select a text component in a game scene, or add one, and choose **Text binding
+mode → Dynamic placeholders**. Write `{{gold}}` or another named placeholder in
+**Text**. Enter its **New binding name**, choose **New binding value**, and choose
+**Add text binding**. Names use letters, digits, underscores or hyphens and must be
+unique within this text component. **Bound value** changes an existing binding.
+**Append {{name}}** adds a placeholder at the end of literal text.
+
+State values come from fields declared in Rules, including numeric gold/currency
+fields. Quest choices include status, current stage ID and tracked state. For an
+objective counter, bind the state field used by that objective's numeric progress.
+Game time offers turns and elapsed world time; authored character levels and
+equipment stats are also selectable.
+
+**Starting-value preview** updates as text and bindings change. It shows authored
+state defaults and quest values before actions run; derived and custom values may
+be unavailable until play. **Use fallback text** supplies text for unresolved
+values in the standalone game. The engine's editor preview marks unresolved values
+for diagnosis. **Custom path** supports a source and separate object/Map keys or
+numeric array-index segments, without writing JSON.
+
+**Text translation** uses the selected key's default-language template in the
+authoring preview. Edit translated templates in Localization; every language uses
+this component's binding names. Appending to a translated template is disabled
+here because its text may be shared. Saving validates placeholders in the source
+text and translated templates. Unbound placeholders, invalid paths and pending
+binding names retain the draft for correction.
+
+**Remove binding …** removes a name; update any placeholders that still use it.
+**Static text** explicitly turns interpolation off and keeps braces literal.
+Bindings require game scenes. Save/discard and project Undo/Redo work as for other
+component edits, and conflicts preserve binding rows and pending names. Registered
+state changes and quest transitions refresh the text during play.
 
 Asset groups display filtered thumbnail galleries. Selecting a thumbnail also
 selects and reveals the corresponding tree entry. Action-bar components open their
@@ -703,6 +745,56 @@ The editor does not include scripts, command batches, real-time collaboration,
 or embedded chat. The [MCP adapter](editor-mcp.md) exposes authoring operations
 to an external coding agent; those saves share the server's project history.
 
+## Localization authoring
+
+Choose **Localization** in the explorer or **Languages** on the section rail.
+Enter a **New language tag** such as `en`, `nl`, or `en-US`, then choose **Add
+language**. The first language becomes the default. Language tags must be unique,
+including case. The editor authors game content; **Editor language** controls the
+editor interface separately.
+
+Enter a **New translation key**, for example `story.welcome`, and choose **Add
+translation key**. Select a **Translation key** to edit its multiline **Translation
+text (…)** for each language. In other languages, **Text source (…)** chooses
+between using default-language text and an explicit translation. An empty explicit
+translation stays empty; choosing default text removes the override. Define
+`language.name` to give in-game language selectors native names.
+
+**Save localization** saves the language configuration and all catalogs together.
+Saved keys and default text become available in the other editors' translation
+pickers. Assign a key to a text, label, or other translation field there. Preview
+and export use the saved catalogs; switch the preview's game language or add a
+language-select component to try translations during play.
+
+**Default language** changes the fallback catalog. Missing keys are copied from
+the previous default into the new default, while its existing translations remain.
+**Remove language …** removes that catalog; the last language cannot be removed.
+Removing the default picks the next available language and carries its fallback
+entries forward. **Remove translation key** removes it from every catalog.
+Referenced keys cannot be removed, and required translated labels cannot be empty.
+Validation also checks translated text bindings. Fix invalid drafts and retry, or
+choose **Discard localization draft** to restore saved content. Add or clear any
+pending language/key inputs before saving.
+
+Unsaved localization edits survive section changes, unrelated saves, and revision
+conflicts. Project Undo/Redo restores saved catalog and language changes together.
+The revision-checked `game.updateLocalization` command accepts `languages`
+(`default`, `available`) and `catalogs` (one complete source catalog per available
+tag). Newly referenced files are protected against overwriting unlisted catalogs;
+multi-file save failures use guarded rollback.
+
+## Character levels
+
+In **Character levels**, choose a game scene and a leveling profile, or choose
+**Add leveling profile**. A custom **Profile ID** remains selected after saving.
+Profiles use declared numeric state fields for XP and level.
+
+Level displays reference shared profiles but keep their own placement and text
+target. Select a specific display in the scene explorer to edit it. When a scene
+has multiple displays for the same profile, **Level display** selects the one to
+edit or remove. Save or discard its draft before switching displays. Profile
+changes apply to every display using that profile.
+
 ## Inventory authoring
 
 Choose **Items & equipment → Inventory definitions** to create or edit an inventory
@@ -818,6 +910,8 @@ and merchant inventory owners and their panel IDs, labels, and placements. Savin
 also saves these two panels as read-only, single-owner inventories. They retain
 item selection and custom item actions, but do not expose free Move controls.
 Each scene supports one shop, with distinct participant owners.
+Set **Shop ID** before the first save. Saved shop IDs are read-only so later
+edits keep action-bar references intact.
 
 Choose a declared numeric **Player balance field** such as `player.gold`, a
 currency label or translation, and either finite merchant funds with a different

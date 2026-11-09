@@ -15,6 +15,7 @@ import {
   type CombatLibrary,
   type CombatOrigins,
   type MapDefinition,
+  type LanguageCatalog,
 } from '@ancadeba/schemas'
 
 export type ProjectDocuments = Readonly<Record<string, unknown>>
@@ -56,6 +57,8 @@ export interface ProjectView {
   translationKeys?: string[] | undefined
   /** Default-language text for each translation key, for previews in the editor. */
   translations?: Record<string, string> | undefined
+  /** Source catalogs for every configured language; missing keys use the default catalog. */
+  languageCatalogs?: Record<string, LanguageCatalog> | undefined
   maps?: Record<string, MapDefinition> | undefined
   inventoryFiles?: Record<string, InventoryDefinition> | undefined
   revision: string

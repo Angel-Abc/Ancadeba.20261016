@@ -38,10 +38,12 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
   let path: string | undefined
   let sceneId = ''
   let profileId = ''
+  let componentId = ''
   let draft: LevelingProfile | undefined
   let component: ReturnType<typeof characterProgressionComponentSchema.parse> | undefined
   let dirty = false
   let busy = false
+  let submitted: EditorCommand | undefined
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -50,20 +52,19 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
   const reset = () => {
     const scene = view?.scenes.find((scene) => scene.id === sceneId)
 
-    const found = scene?.components.find(
-      (component) =>
-        component.type === 'character-progression' &&
-        (!profileId || component.profile === profileId),
-    )
+    const displays =
+      scene?.components.filter((entry) => entry.type === 'character-progression') ?? []
 
-    profileId =
-      profileId ||
-      (found?.type === 'character-progression'
-        ? found.profile
-        : (Object.keys(view?.leveling ?? {})[0] ?? ''))
+    const found =
+      displays.find(
+        (entry) => entry.id === componentId && (!profileId || entry.profile === profileId),
+      ) ?? displays.find((entry) => !profileId || entry.profile === profileId)
+
+    if (!profileId || !view?.leveling?.[profileId])
+      profileId = found?.profile ?? Object.keys(view?.leveling ?? {})[0] ?? ''
     draft = view?.leveling?.[profileId] ? structuredClone(view.leveling[profileId]) : undefined
     component = draft
-      ? found?.type === 'character-progression'
+      ? found?.profile === profileId
         ? structuredClone(found)
         : characterProgressionComponentSchema.parse({
             id: `progression-${draft.id}`,
@@ -72,15 +73,17 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
             placement: { row: 1, column: 1 },
           })
       : undefined
+    componentId = component?.id ?? ''
     dirty = false
     error.textContent = ''
     render()
   }
 
-  const navigate = (id?: string, nextProfile?: string) => {
+  const navigate = (id?: string, nextProfile?: string, nextComponent?: string) => {
     if (
       (id === undefined || id === sceneId) &&
-      (nextProfile === undefined || nextProfile === profileId)
+      (nextProfile === undefined || nextProfile === profileId) &&
+      (nextComponent === undefined || nextComponent === componentId)
     )
       return true
 
@@ -92,6 +95,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
 
     sceneId = id ?? sceneId
     profileId = nextProfile ?? ''
+    componentId = nextComponent ?? ''
     reset()
 
     return true
@@ -104,7 +108,10 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
       ? ''
       : parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')
 
-    if (parsed.success) save(parsed.data)
+    if (parsed.success) {
+      submitted = structuredClone(parsed.data)
+      save(parsed.data)
+    }
   }
 
   function render() {
@@ -170,6 +177,7 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
         profile: id,
         placement: { row: 1, column: 1 },
       })
+      componentId = component.id
       dirty = true
       render()
     })
@@ -177,6 +185,27 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
     addProfile.className = 'context-picker'
 
     fields.append(picker, profiles, addProfile)
+
+    const displays =
+      scene?.components.filter(
+        (entry) => entry.type === 'character-progression' && entry.profile === profileId,
+      ) ?? []
+
+    if (displays.length > 1) {
+      const display = select(
+        'Level display',
+        componentId,
+        displays.map((entry) => entry.id),
+        (value) => {
+          if (!navigate(sceneId, profileId, value))
+            display.querySelector('select')!.value = componentId
+        },
+        false,
+      )
+
+      display.className = 'context-picker'
+      fields.append(display)
+    }
 
     if (!draft || !component || !scene) return
     const current = draft
@@ -474,19 +503,26 @@ export function bindLevelingEditor(root: HTMLElement, save: (command: EditorComm
       busy = state.busy
 
       const saved =
-        replaceFields &&
-        [
-          'game.upsertLeveling',
-          'game.removeLeveling',
-          'scene.upsertLevelingView',
-          'scene.removeLevelingView',
-        ].includes(state.lastCommand ?? '')
+        submitted && replaceFields && !busy && !state.error && state.lastCommand === submitted.type
+          ? submitted
+          : undefined
+
+      if (!busy) submitted = undefined
+
+      if (saved?.type === 'game.upsertLeveling') {
+        profileId = saved.profile.id
+        componentId = saved.scene?.component.id ?? ''
+      } else if (saved?.type === 'game.removeLeveling') {
+        profileId = ''
+        componentId = ''
+      } else if (saved?.type === 'scene.removeLevelingView') componentId = ''
 
       const resetFields = projectChanged || (replaceFields && !state.preserveDrafts)
 
       if (resetFields) {
         sceneId = view?.scenes.find((scene) => scene.type === 'game')?.id ?? ''
         profileId = ''
+        componentId = ''
       }
 
       if (resetFields || saved || (changed && !dirty)) reset()

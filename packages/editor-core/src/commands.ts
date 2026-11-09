@@ -42,6 +42,9 @@ import {
   gridPlacementSchema,
   mapDefinitionSchema,
   inventorySchema,
+  gameLanguagesSchema,
+  languageTagSchema,
+  languageCatalogSchema,
 } from '@ancadeba/schemas'
 
 /** Scene components without a dedicated authoring command are saved whole. */
@@ -303,6 +306,28 @@ export const commandSchema = z.discriminatedUnion('type', [
     inventory: inventorySchema,
     createOnly: z.boolean().optional(),
   }),
+  z
+    .strictObject({
+      type: z.literal('game.updateLocalization'),
+      languages: gameLanguagesSchema,
+      catalogs: z.record(languageTagSchema, languageCatalogSchema),
+    })
+    .superRefine((command, context) => {
+      if (
+        Object.keys(command.catalogs).length !== command.languages.available.length ||
+        command.languages.available.some((language) => !Object.hasOwn(command.catalogs, language))
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['catalogs'],
+          message: 'Provide exactly one catalog for every available language',
+        })
+    }),
+  z.strictObject({
+    type: z.literal('assets.updateDefinitions'),
+    parts: z.record(assetIdSchema, partSchema),
+    compositions: z.record(assetIdSchema, compositionSchema),
+  }),
 ])
 
 // Paths are further checked by the server's workspace boundary.
@@ -337,6 +362,29 @@ export const capabilities = {
   version: 1,
   requestSchema: z.toJSONSchema(commandRequestSchema),
   commands: [
+    {
+      type: 'assets.updateDefinitions',
+      example: {
+        type: 'assets.updateDefinitions',
+        parts: {},
+        compositions: {
+          character: {
+            bounds: { x: 0, y: 0, width: 100, height: 100 },
+            layers: ['body'],
+            anchors: { origin: { x: 0, y: 0 } },
+            slots: {},
+          },
+        },
+      },
+    },
+    {
+      type: 'game.updateLocalization',
+      example: {
+        type: 'game.updateLocalization',
+        languages: { default: 'en', available: ['en', 'nl'] },
+        catalogs: { en: { 'greeting.hello': 'Hello' }, nl: { 'greeting.hello': 'Hallo' } },
+      },
+    },
     {
       type: 'game.upsertInventory',
       example: {

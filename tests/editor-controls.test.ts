@@ -17,10 +17,15 @@ import {
   inventorySchema,
   combatLibrarySchema,
   sceneComponentSchema,
+  textComponentSchema,
+  questSchema,
 } from '@ancadeba/schemas'
 import { bindActionBarPanel } from '../apps/editor-ui/src/actionBarPanel.js'
 import { createInputDraft, readInputDraft } from '../apps/editor-ui/src/inputDefinitionForm.js'
-import type { ProjectEditorState } from '../apps/editor-ui/src/projectController.js'
+import type {
+  ProjectEditorState,
+  ProjectEditorListener,
+} from '../apps/editor-ui/src/projectController.js'
 import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm.js'
 import { displayLabel, ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
@@ -37,6 +42,9 @@ import { bindRulesPanel } from '../apps/editor-ui/src/rulesPanel.js'
 import { ProjectEditorController } from '../apps/editor-ui/src/projectController.js'
 import { EditorClientError } from '../apps/editor-ui/src/editorClient.js'
 import { bindInventoryEditor } from '../apps/editor-ui/src/inventoryEditor.js'
+import { bindLocalizationEditor } from '../apps/editor-ui/src/localizationEditor.js'
+import { bindGraphicDefinitionsEditor } from '../apps/editor-ui/src/graphicDefinitionsEditor.js'
+import { textBindingId } from '../apps/editor-ui/src/textBindingChoices.js'
 
 const input = inputSchema.parse({
   'schema-version': '1.0.0',
@@ -2162,12 +2170,8 @@ describe('action bar editor controls', () => {
 })
 
 describe('editor draft workflows', () => {
-  async function connected(
-    bind:
-      | typeof bindRulesPanel
-      | typeof bindStoryEditor
-      | typeof bindInventoryEditor
-      | typeof bindItemEditor,
+  async function connected<T extends { render: ProjectEditorListener }>(
+    bind: (root: HTMLElement, save: (command: EditorCommand) => void) => T,
     source = project(),
   ) {
     const ui = panel()
@@ -2210,6 +2214,705 @@ describe('editor draft workflows', () => {
       read: () => inspectProject(source),
     }
   }
+
+  function progressionProject() {
+    return applyCommand(project(), {
+      type: 'game.updateRules',
+      ruleId: 'state',
+      rules: {
+        state: [
+          { path: ['experience'], value: 0 },
+          { path: ['level'], value: 1 },
+          { path: ['gold'], value: 10 },
+        ],
+        actions: {},
+      },
+    }).project
+  }
+
+  function textProject() {
+    const source = applyCommand(project(), {
+      type: 'game.updateRules',
+      ruleId: 'state',
+      rules: {
+        state: [
+          { path: ['gold'], value: 0 },
+          { path: ['collected'], value: 1 },
+          { path: ['flag'], value: false },
+        ],
+        actions: {},
+      },
+    }).project
+
+    return applyCommand(source, {
+      type: 'game.upsertQuest',
+      quest: questSchema.parse({
+        'schema-version': '1.0.0',
+        id: 'delivery',
+        label: 'Delivery',
+        stages: [
+          {
+            id: 'collect',
+            label: 'Collect',
+            objectives: [
+              {
+                id: 'tokens',
+                label: 'Tokens',
+                progress: { binding: { source: 'game.state', path: ['collected'] }, target: 3 },
+              },
+            ],
+          },
+        ],
+      }),
+    }).project
+  }
+
+  it('authors state, gold and quest placeholders and previews their starting values', async () => {
+    const ui = await connected(bindComponentEditor, textProject())
+    ui.editor.navigate('shop', 'description')
+    ui.edit('Text', 'Gold {{gold}} · Collected {{progress}}/3 · Quest {{quest}} · {{tracked}}')
+    ui.edit('Text binding mode', 'dynamic')
+
+    for (const [alias, source, path] of [
+      ['gold', 'game.state', ['gold']],
+      ['progress', 'game.state', ['collected']],
+      ['quest', 'game.quests', ['delivery', 'status']],
+      ['tracked', 'game.quests', ['delivery', 'tracked']],
+    ] as const) {
+      ui.edit('New binding name', alias)
+      ui.edit('New binding value', textBindingId({ source, path }))
+      ui.click('Add text binding')
+    }
+
+    expect(ui.root.all().find((node) => node.tagName === 'output')!.textContent).toBe(
+      'Gold 0 · Collected 1/3 · Quest not-started · false',
+    )
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().scenes[0]!.components[0]).toMatchObject({
+      bindings: {
+        gold: { source: 'game.state', path: ['gold'] },
+        progress: { path: ['collected'] },
+        quest: { source: 'game.quests', path: ['delivery', 'status'] },
+        tracked: { path: ['delivery', 'tracked'] },
+      },
+    })
+    await ui.controller.load('demo')
+    expect(ui.field('Bound value', 'Binding quest').value).toBe(
+      textBindingId({ source: 'game.quests', path: ['delivery', 'status'] }),
+    )
+  })
+
+  it('guards pending names, duplicates and unbound placeholders while preserving explicit static braces', async () => {
+    const ui = await connected(bindComponentEditor, textProject())
+    ui.editor.navigate('shop', 'description')
+    ui.edit('Text', 'Gold: {{gold}}')
+    expect(ui.root.all().find((node) => node.tagName === 'output')!.textContent).toBe(
+      'Gold: {{gold}}',
+    )
+    ui.edit('Text binding mode', 'dynamic')
+    expect(ui.root.textContent).toContain('Unbound placeholders: gold')
+    ui.edit('New binding name', 'bad.name')
+    ui.click('Add text binding')
+    expect(ui.root.textContent).toContain('unused binding name')
+    ui.edit('New binding name', 'gold')
+    ui.click('Add text binding')
+    ui.edit('New binding name', 'gold')
+    ui.click('Add text binding')
+    expect(ui.root.textContent).toContain('unused binding name')
+    ui.submit('Save component')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('pending text binding')
+    ui.edit('New binding name', '')
+    ui.click('Remove binding gold')
+    ui.submit('Save component')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('Undeclared or invalid text binding')
+    ui.edit('Text binding mode', 'static')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components[0]).toMatchObject({ text: 'Gold: {{gold}}' })
+    expect(ui.read().scenes[0]!.components[0]).toHaveProperty('bindings', undefined)
+  })
+
+  it('authors custom typed paths and fallback text and appends placeholders without JSON', async () => {
+    const ui = await connected(bindComponentEditor, textProject())
+    ui.editor.navigate('shop', 'description')
+    ui.edit('Text', '')
+    ui.edit('Text binding mode', 'dynamic')
+    ui.edit('New binding name', 'heroGold')
+    ui.click('Add text binding')
+    ui.edit('Bound value', 'custom')
+    ui.edit('Path key', 'heroes', 'Path segment 1')
+    ui.click('Add path segment')
+    ui.edit('Path segment type', 'index', 'Path segment 2')
+    ui.edit('Array index', '0', 'Path segment 2')
+    ui.click('Add path segment')
+    ui.edit('Path key', 'gold', 'Path segment 3')
+    ui.edit('Use fallback text', 'true')
+    ui.edit('Fallback text', 'No hero')
+    ui.click('Append {{heroGold}}')
+    expect(ui.field('Text').value).toBe('{{heroGold}}')
+    expect(ui.root.all().find((node) => node.tagName === 'output')!.textContent).toBe('No hero')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components[0]).toMatchObject({
+      bindings: {
+        heroGold: { source: 'game.state', path: ['heroes', 0, 'gold'], fallback: 'No hero' },
+      },
+    })
+    ui.edit('Use fallback text', 'false')
+    ui.submit('Save component')
+    await ui.flush()
+    const component = ui.read().scenes[0]!.components[0]!
+
+    if (component.type !== 'text') throw new Error('Expected text')
+    expect(component.bindings!.heroGold!.fallback).toBeUndefined()
+  })
+
+  it('preserves failed drafts and pending names while refreshing state choices after unrelated saves', async () => {
+    const ui = await connected(bindComponentEditor, textProject())
+    ui.editor.navigate('shop', 'description')
+    ui.edit('Text', '{{gold}}')
+    ui.edit('Text binding mode', 'dynamic')
+    ui.edit('New binding name', 'gold')
+    ui.click('Add text binding')
+    ui.edit('Use fallback text', 'true')
+    ui.edit('Fallback text', 'Unavailable')
+    ui.rejectNext()
+    ui.submit('Save component')
+    await ui.flush()
+    ui.edit('New binding name', 'bonus')
+    await ui.controller.save({
+      type: 'game.updateRules',
+      ruleId: 'state',
+      rules: {
+        ...ui.read().rules!,
+        state: [...ui.read().rules!.state, { path: ['bonus'], value: 5 }],
+      },
+    })
+    expect(ui.field('New binding name').value).toBe('bonus')
+    expect(ui.field('Fallback text').value).toBe('Unavailable')
+    ui.edit('New binding value', textBindingId({ source: 'game.state', path: ['bonus'] }))
+    ui.click('Add text binding')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().scenes[0]!.components[0]).toMatchObject({
+      bindings: { gold: { fallback: 'Unavailable' }, bonus: { path: ['bonus'] } },
+    })
+  })
+
+  it('previews translated templates and preserves invalid translated drafts for correction', async () => {
+    const source = applyCommand(textProject(), {
+      type: 'game.updateLocalization',
+      languages: { default: 'en', available: ['en', 'nl'] },
+      catalogs: { en: { hud: 'Gold {{gold}}' }, nl: { hud: 'Goud {{gold}}' } },
+    }).project
+
+    const ui = await connected(bindComponentEditor, source)
+    ui.editor.navigate('shop', 'description')
+    ui.edit('Text translation', 'hud')
+    ui.edit('Text binding mode', 'dynamic')
+    ui.edit('New binding name', 'gold')
+    ui.click('Add text binding')
+    expect(ui.root.all().find((node) => node.tagName === 'output')!.textContent).toBe('Gold 0')
+    expect(
+      ui.root
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Append {{gold}}'),
+    ).toHaveProperty('disabled', true)
+    ui.submit('Save component')
+    await ui.flush()
+    ui.click('Remove binding gold')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.read().scenes[0]!.components[0]).toMatchObject({
+      bindings: { gold: { path: ['gold'] } },
+    })
+    ui.click('Discard component draft')
+    expect(ui.field('Bound value').value).toBe(
+      textBindingId({ source: 'game.state', path: ['gold'] }),
+    )
+  })
+
+  it('keeps stand-alone text static and disables runtime binding authoring there', async () => {
+    const initial = project()
+
+    const source = {
+      ...initial,
+      documents: {
+        ...initial.documents,
+        'scenes/other.json': {
+          ...object(initial.documents['scenes/other.json']),
+          type: 'stand-alone',
+        },
+      },
+    }
+
+    const ui = await connected(bindComponentEditor, source)
+    ui.editor.navigate('other', 'description')
+    expect(ui.field('Text binding mode')).toHaveProperty('disabled', true)
+    ui.edit('Text', 'Literal {{braces}}')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[1]!.components[0]).toMatchObject({ text: 'Literal {{braces}}' })
+  })
+
+  function graphicProject() {
+    return applyCommand(project(), {
+      type: 'assets.upsertImage',
+      id: 'cloth',
+      image: {
+        format: 'svg',
+        source: 'assets/images/cloth.svg',
+        bounds: { x: 0, y: 0, width: 100, height: 100 },
+        colors: { fabric: '#123456' },
+        palettes: {},
+      },
+    }).project
+  }
+
+  it('authors a layered part and composition, including colors, palettes, anchors and slot defaults', async () => {
+    const ui = await connected(bindGraphicDefinitionsEditor, graphicProject())
+    ui.edit('New graphic definition ID', 'cloak')
+    ui.click('Add part')
+    ui.edit('New piece ID', 'rear')
+    ui.click('Add image piece')
+    ui.edit('Piece layer', 'back', 'Piece rear')
+    ui.edit('Source anchor x', '10', 'Piece rear')
+    ui.edit('Source anchor y', '20', 'Piece rear')
+    ui.edit('Piece scale', '1.5', 'Piece rear')
+    ui.edit('Piece rotation', '15', 'Piece rear')
+    ui.edit('New part color ID', 'shared')
+    ui.click('Add part color')
+    ui.edit('Default color shared', '#336699')
+    ui.edit('Map image color fabric', 'shared', 'Piece rear')
+    ui.edit('New part palette ID', 'ocean')
+    ui.click('Add part palette')
+    ui.edit('Palette ocean overrides shared', 'true')
+    ui.edit('Palette ocean color shared', '#223344')
+    ui.edit('New piece ID', 'clasp')
+    ui.click('Add image piece')
+    ui.edit('Piece layer', 'front', 'Piece clasp')
+    ui.click('Move piece clasp up')
+    ui.edit('Definition kind', 'compositions')
+    ui.edit('New graphic definition ID', 'hero')
+    ui.click('Add composition')
+    ui.edit('New slot ID', 'outfit')
+    ui.click('Add composition slot')
+    ui.click('Remove layer body')
+    ui.click('Move layer back back')
+    ui.edit('Anchor x', '50', 'Anchor origin')
+    ui.edit('Anchor y', '60', 'Anchor origin')
+    ui.edit('Default part', '', 'Slot outfit')
+    ui.edit('Default part', 'cloak', 'Slot outfit')
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.field('Graphic definition').value).toBe('hero')
+    expect(ui.read().assets).toMatchObject({
+      parts: {
+        cloak: {
+          colors: { shared: '#336699' },
+          palettes: { ocean: { shared: '#223344' } },
+          pieces: [
+            { id: 'clasp', layer: 'front' },
+            {
+              id: 'rear',
+              layer: 'back',
+              sourceAnchor: { x: 10, y: 20 },
+              scale: 1.5,
+              rotation: 15,
+              slots: { fabric: 'shared' },
+            },
+          ],
+        },
+      },
+      compositions: {
+        hero: {
+          layers: ['back', 'front'],
+          anchors: { origin: { x: 50, y: 60 } },
+          slots: { outfit: { parts: ['cloak'], default: 'cloak' } },
+        },
+      },
+    })
+    ui.edit('Definition kind', 'parts')
+    ui.edit('Graphic definition', 'cloak')
+    ui.edit('Preview palette', 'ocean')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.click('Remove palette ocean')
+    expect(
+      ui.root.all().some((node) => node.tagName === 'label' && node.ownText === 'Preview palette'),
+    ).toBe(false)
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    expect(ui.read().assets!.parts.cloak!.palettes).toEqual({})
+    await ui.controller.load('demo')
+    expect(ui.field('Graphic definition').value).toBe('cloak')
+    expect(ui.field('Piece layer', 'Piece rear').value).toBe('back')
+  })
+
+  it('keeps invalid and conflicting graphic drafts editable across unrelated saves', async () => {
+    const ui = await connected(bindGraphicDefinitionsEditor, graphicProject())
+    ui.edit('New graphic definition ID', 'cape')
+    ui.click('Add part')
+    ui.submit('Save parts and compositions')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.edit('New piece ID', 'fabric')
+    ui.click('Add image piece')
+    ui.rejectNext()
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Changed',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Graphic definition').value).toBe('cape')
+    expect(ui.field('Piece image').value).toBe('cloth')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().assets!.parts.cape).toBeDefined()
+    ui.edit('Piece rotation', '25')
+    expect(ui.editor.navigate('compositions')).toBe(false)
+    ui.click('Discard graphic definitions draft')
+    expect(ui.field('Piece rotation').value).toBe('0')
+  })
+
+  it('guards pending identifiers and rejects duplicate or reserved definition and piece IDs', async () => {
+    const ui = await connected(bindGraphicDefinitionsEditor, graphicProject())
+    ui.edit('New graphic definition ID', 'cloth')
+    ui.click('Add part')
+    expect(ui.root.textContent).toContain('valid, unused identifier')
+    ui.edit('New graphic definition ID', '__proto__')
+    ui.click('Add part')
+    expect(ui.root.textContent).toContain('valid, unused identifier')
+    ui.edit('New graphic definition ID', 'part')
+    ui.click('Add part')
+    ui.edit('New piece ID', 'piece')
+    ui.edit('Definition kind', 'compositions')
+    expect(ui.field('Definition kind').value).toBe('parts')
+    ui.submit('Save parts and compositions')
+    expect(ui.root.textContent).toContain('pending identifiers')
+    ui.click('Add image piece')
+    ui.edit('New piece ID', 'piece')
+    ui.click('Add image piece')
+    expect(ui.root.textContent).toContain('valid, unused identifier')
+    ui.edit('New piece ID', '')
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    expect(ui.read().assets!.parts.part!.pieces).toHaveLength(1)
+  })
+
+  it('retains referenced deletions and permits removing a composition and its part together', async () => {
+    const ui = await connected(bindGraphicDefinitionsEditor, graphicProject())
+    ui.edit('New graphic definition ID', 'part')
+    ui.click('Add part')
+    ui.edit('New piece ID', 'piece')
+    ui.click('Add image piece')
+    ui.edit('Definition kind', 'compositions')
+    ui.edit('New graphic definition ID', 'hero')
+    ui.click('Add composition')
+    ui.edit('New slot ID', 'outfit')
+    ui.click('Add composition slot')
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    ui.edit('Definition kind', 'parts')
+    ui.edit('Graphic definition', 'part')
+    ui.click('Remove part')
+    ui.submit('Save parts and compositions')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.root.textContent).toContain('Missing part part')
+    ui.edit('Definition kind', 'compositions')
+    ui.edit('Graphic definition', 'hero')
+    ui.click('Remove composition')
+    ui.submit('Save parts and compositions')
+    await ui.flush()
+    expect(ui.read().assets).toMatchObject({ parts: {}, compositions: {} })
+    expect(ui.read().assets!.images.cloth).toBeDefined()
+  })
+
+  it('authors languages and multiline translations with live fallback and intentional empty text', async () => {
+    const ui = await connected(bindLocalizationEditor)
+    ui.click('Add language')
+    ui.edit('New language tag', 'nl')
+    ui.click('Add language')
+    ui.edit('New translation key', 'story.welcome')
+    ui.click('Add translation key')
+    ui.edit('Translation text (en)', 'Hello\ntraveler')
+    expect(ui.field('Translation text (nl)')).toHaveProperty('disabled', true)
+    expect(ui.field('Translation text (nl)').value).toBe('Hello\ntraveler')
+    ui.edit('Text source (nl)', 'translated')
+    ui.edit('Translation text (nl)', '')
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().languageCatalogs).toEqual({
+      en: { 'story.welcome': 'Hello\ntraveler' },
+      nl: { 'story.welcome': '' },
+    })
+    expect(ui.read().translationKeys).toContain('story.welcome')
+    ui.edit('Text source (nl)', 'default')
+    ui.edit('New translation key', 'story.goodbye')
+    ui.click('Add translation key')
+    ui.edit('Translation text (en)', 'Goodbye')
+    ui.edit('Translation key', 'story.welcome')
+    expect(ui.field('Translation text (nl)').value).toBe('Hello\ntraveler')
+    ui.edit('Default language', 'nl')
+    expect(ui.field('Translation text (nl)').value).toBe('Hello\ntraveler')
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.read().game!.languages!.default).toBe('nl')
+    expect(ui.read().languageCatalogs!.nl).toEqual({
+      'story.welcome': 'Hello\ntraveler',
+      'story.goodbye': 'Goodbye',
+    })
+    await ui.controller.load('demo')
+    expect(ui.field('Default language').value).toBe('nl')
+    expect(ui.field('Translation text (nl)').value).toBe('Hello\ntraveler')
+  })
+
+  it('preserves failed localization drafts through unrelated saves and permits retry or discard', async () => {
+    const ui = await connected(bindLocalizationEditor)
+    ui.click('Add language')
+    ui.edit('New translation key', 'greeting')
+    ui.click('Add translation key')
+    ui.edit('Translation text (en)', 'Draft')
+    ui.rejectNext()
+    ui.submit('Save localization')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Changed',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Translation text (en)').value).toBe('Draft')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Translation text (en)', 'Unsaved')
+    await ui.controller.load('demo', true)
+    expect(ui.field('Translation text (en)').value).toBe('Unsaved')
+    ui.click('Discard localization draft')
+    expect(ui.field('Translation text (en)').value).toBe('Draft')
+    ui.edit('Translation text (en)', 'Discard on load')
+    await ui.controller.load('demo')
+    expect(ui.field('Translation text (en)').value).toBe('Draft')
+  })
+
+  it('rejects duplicate and invalid identifiers and guards pending inputs while saving', async () => {
+    const ui = await connected(bindLocalizationEditor)
+    ui.click('Add language')
+    ui.edit('New language tag', 'EN')
+    ui.click('Add language')
+    expect(ui.root.textContent).toContain('unique language tag')
+    ui.edit('New language tag', '../nl')
+    ui.click('Add language')
+    expect(ui.root.textContent).toContain('unique language tag')
+    ui.edit('New language tag', '')
+    ui.edit('New translation key', 'invalid key')
+    ui.click('Add translation key')
+    expect(ui.root.textContent).toContain('unused key')
+    ui.edit('New translation key', 'greeting')
+    ui.click('Add translation key')
+    ui.edit('New translation key', 'greeting')
+    ui.click('Add translation key')
+    expect(ui.root.textContent).toContain('unused key')
+    ui.submit('Save localization')
+    expect(ui.commands).toHaveLength(0)
+    expect(ui.root.textContent).toContain('pending language tag or translation key')
+    ui.edit('New translation key', '')
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.read().game!.languages!.available).toEqual(['en'])
+    expect(
+      ui.root
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Remove language en'),
+    ).toHaveProperty('disabled', true)
+  })
+
+  it('retains a referenced-key deletion for correction and removes languages with their fallback intact', async () => {
+    const ui = await connected(bindLocalizationEditor)
+    ui.click('Add language')
+    ui.edit('New language tag', 'nl')
+    ui.click('Add language')
+    ui.edit('New translation key', 'greeting')
+    ui.click('Add translation key')
+    ui.edit('Translation text (en)', 'Hello')
+    ui.submit('Save localization')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'scene.upsertComponent',
+      sceneId: 'shop',
+      component: textComponentSchema.parse({
+        id: 'welcome',
+        type: 'text',
+        textKey: 'greeting',
+        placement: { row: 3, column: 1 },
+      }),
+    })
+    ui.click('Remove translation key')
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.read().translationKeys).toContain('greeting')
+    ui.edit('New translation key', 'greeting')
+    ui.click('Add translation key')
+    ui.edit('Translation text (en)', 'Restored')
+    ui.click('Remove language en')
+    expect(ui.field('Default language').value).toBe('nl')
+    expect(ui.field('Translation text (nl)').value).toBe('Restored')
+    ui.submit('Save localization')
+    await ui.flush()
+    expect(ui.read().languageCatalogs).toEqual({ nl: { greeting: 'Restored' } })
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('keeps a custom leveling profile and display selected after saving and reloading', async () => {
+    const ui = await connected(bindLevelingEditor, progressionProject())
+    ui.click('Add leveling profile')
+    ui.edit('Profile ID', 'hero')
+    ui.edit('Display component ID', 'hero-levels')
+    ui.submit('Save character levels')
+    await ui.flush()
+    expect(ui.field('Leveling profile').value).toBe('hero')
+    expect(ui.field('Profile ID').value).toBe('hero')
+    expect(ui.field('Display component ID').value).toBe('hero-levels')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Profile label', 'Hero progression')
+    ui.submit('Save character levels')
+    await ui.flush()
+    expect(ui.read().leveling!.hero!.label).toBe('Hero progression')
+    expect(ui.read().game!.leveling).toEqual(['hero'])
+    await ui.controller.load('demo')
+    expect(ui.field('Profile ID').value).toBe('hero')
+    expect(ui.field('Display component ID').value).toBe('hero-levels')
+  })
+
+  it('retains a failed custom leveling draft across unrelated saves and selects it after retry', async () => {
+    const ui = await connected(bindLevelingEditor, progressionProject())
+    ui.click('Add leveling profile')
+    ui.edit('Profile ID', 'hero')
+    ui.edit('Display component ID', 'hero-levels')
+    ui.rejectNext()
+    ui.submit('Save character levels')
+    await ui.flush()
+    await ui.controller.save({
+      type: 'game.updateMetadata',
+      title: 'Changed',
+      description: '',
+      version: '1',
+    })
+    expect(ui.field('Profile ID').value).toBe('hero')
+    expect(ui.field('Display component ID').value).toBe('hero-levels')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.submit('Save character levels')
+    await ui.flush()
+    expect(ui.field('Leveling profile').value).toBe('hero')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('edits and removes the selected duplicate level display while preserving the original', async () => {
+    const first = await connected(bindLevelingEditor, progressionProject())
+    first.click('Add leveling profile')
+    first.submit('Save character levels')
+    await first.flush()
+    await first.controller.save({
+      type: 'scene.duplicateComponent',
+      sceneId: 'shop',
+      componentId: 'progression-player',
+      newId: 'second-display',
+    })
+    expect(first.editor.navigate('shop', 'player', 'second-display')).toBe(true)
+    expect(first.field('Display component ID').value).toBe('second-display')
+    first.edit('Row', '4')
+    expect(first.editor.navigate('shop', 'player', 'progression-player')).toBe(false)
+    first.edit('Level display', 'progression-player')
+    expect(first.field('Level display').value).toBe('second-display')
+    first.submit('Save character levels')
+    await first.flush()
+    expect(first.field('Level display').value).toBe('second-display')
+    expect(first.field('Display component ID').value).toBe('second-display')
+
+    const displays = first
+      .read()
+      .scenes[0]!.components.filter((component) => component.type === 'character-progression')
+
+    expect(displays.map((component) => [component.id, component.placement.row])).toEqual([
+      ['progression-player', 1],
+      ['second-display', 4],
+    ])
+    first.edit('Level display', 'progression-player')
+    expect(first.field('Row').value).toBe('1')
+    first.edit('Level display', 'second-display')
+    first.click('Remove level display from scene')
+    await first.flush()
+    expect(
+      first
+        .read()
+        .scenes[0]!.components.filter((component) => component.type === 'character-progression')
+        .map((component) => component.id),
+    ).toEqual(['progression-player'])
+    expect(first.field('Display component ID').value).toBe('progression-player')
+  })
+
+  it('allows a custom shop ID before creation and keeps saved identity stable through later edits', async () => {
+    const source = applyCommand(progressionProject(), {
+      type: 'game.upsertInventory',
+      inventoryId: 'items',
+      inventory: inventorySchema.parse({
+        'schema-version': '1.0.0',
+        itemTypes: {},
+        items: {},
+        owners: { player: { label: 'Hero' }, merchant: { label: 'Merchant' } },
+      }),
+    }).project
+
+    const ui = await connected(bindShopEditor, source)
+    ui.click('Add shop')
+    expect(ui.field('Shop ID')).not.toHaveProperty('readOnly', true)
+    ui.edit('Shop ID', 'market')
+    ui.submit('Save shop')
+    await ui.flush()
+    expect(ui.field('Shop ID')).toHaveProperty('readOnly', true)
+    expect(ui.field('Shop ID').value).toBe('market')
+    await ui.controller.save({
+      type: 'scene.setActionBar',
+      sceneId: 'shop',
+      component: actionBarComponentSchema.parse({
+        id: 'trade-actions',
+        type: 'action-bar',
+        placement: { row: 3, column: 1 },
+        slots: {
+          '1': { label: 'Buy', action: { type: 'shop-action', shop: 'market', operation: 'buy' } },
+        },
+      }),
+    })
+    ui.edit('Shop title', 'Market stalls')
+    ui.submit('Save shop')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    const scene = ui.read().scenes[0]!
+    expect(scene.components.filter((component) => component.type === 'shop')).toMatchObject([
+      { id: 'market', label: 'Market stalls' },
+    ])
+    expect(scene.components.find((component) => component.type === 'action-bar')).toMatchObject({
+      slots: { '1': { action: { shop: 'market' } } },
+    })
+    await ui.controller.load('demo')
+    expect(ui.field('Shop ID')).toHaveProperty('readOnly', true)
+    expect(ui.field('Shop title').value).toBe('Market stalls')
+  })
 
   function triggerProject() {
     let source = project()

@@ -366,5 +366,7 @@
   "maps.cutSourceChanged": "De geknipte bron is gewijzigd. Selecteer en knip de groep opnieuw om die te verplaatsen.",
   "maps.invalidGroundFill": "Kies een bestaand vervangend terrein voor de ondergrond. De ondergrond mag geen lege cellen bevatten.",
   "maps.undoDraft": "Kaartbewerking ongedaan maken",
-  "maps.redoDraft": "Kaartbewerking opnieuw uitvoeren"
+  "maps.redoDraft": "Kaartbewerking opnieuw uitvoeren",
+  "localization.heading": "Lokalisatie",
+  "rail.localization": "Talen"
 }

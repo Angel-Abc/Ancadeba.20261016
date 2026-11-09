@@ -83,9 +83,13 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     return inventorySchema.safeParse(document).data
   })
 
-  const catalog =
-    language &&
-    languageCatalogSchema.safeParse(project.documents[`languages/${language}/messages.json`])
+  const languageCatalogs = parsedFiles(
+    game.data?.languages?.available,
+    (language) => `languages/${language}/messages.json`,
+    (document) => languageCatalogSchema.safeParse(document).data,
+  )
+
+  const catalog = language ? languageCatalogs[language] : undefined
 
   const combatLibraries = parsedFiles(
     game.data?.combatLibraries,
@@ -139,9 +143,8 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     ...(sources.length ? { rules: mergeRuleSources(sources).rules, ruleFiles } : {}),
     ...(assets?.success ? { assets: assets.data } : {}),
     ...(inventory ? { inventory } : {}),
-    ...(catalog && catalog.success
-      ? { translationKeys: Object.keys(catalog.data).sort(), translations: catalog.data }
-      : {}),
+    ...(game.data?.languages ? { languageCatalogs } : {}),
+    ...(catalog ? { translationKeys: Object.keys(catalog).sort(), translations: catalog } : {}),
     ...(Object.keys(maps).length ? { maps } : {}),
     ...(Object.keys(inventoryFiles).length ? { inventoryFiles } : {}),
     revision: project.revision,

@@ -23,6 +23,16 @@ export function shopForm(
 ): HTMLElement[] {
   const { input, select, group, button, create, translation } = controls
   const keys = translationChoices(view)
+
+  const existing = view.scenes
+    .find((scene) => scene.id === sceneId)
+    ?.components.some((component) => component.type === 'shop')
+
+  const identity = input('Shop ID', shop.id, (value) => {
+    if (!existing) shop.id = value.trim()
+  })
+
+  identity.querySelector('input')!.readOnly = Boolean(existing)
   const fields = (view.rules?.state ?? []).filter((field) => typeof field.value === 'number')
 
   const bindings = fields.map(
@@ -52,9 +62,7 @@ export function shopForm(
     )
 
   const result: HTMLElement[] = [
-    input('Shop ID', shop.id, (value) => {
-      shop.id = value.trim()
-    }),
+    identity,
     input('Shop title', shop.label, (value) => {
       shop.label = value
     }),

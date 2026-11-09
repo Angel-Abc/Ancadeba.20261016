@@ -10,6 +10,7 @@ import {
 } from './componentDrafts.js'
 import type { ProjectEditorState } from './projectController.js'
 import { nearbyForm } from './nearbyForm.js'
+import { textBindingsForm, type TextBindingPending } from './textBindingsForm.js'
 import {
   placementFields,
   ruleFormControls,
@@ -64,6 +65,7 @@ export function bindComponentEditor(
   let newType: CreatableComponentType = 'text'
   let submitted: { type: EditorCommand['type']; sceneId: string; componentId: string } | undefined
   let addLabel = t('component.add')
+  const bindingPending: TextBindingPending = { alias: '', value: '' }
 
   const controls = ruleFormControls(document, () => {
     dirty = true
@@ -99,6 +101,8 @@ export function bindComponentEditor(
           ? structuredClone(current)
           : undefined
     dirty = false
+    bindingPending.alias = ''
+    bindingPending.value = ''
     error.textContent = ''
     render()
   }
@@ -186,7 +190,7 @@ export function bindComponentEditor(
             ]
           : []),
       ),
-      ...componentFields(controls, view, sceneId, draft, render),
+      ...componentFields(controls, view, sceneId, draft, render, bindingPending),
       controls.group(
         'Placement',
         ...placementFields.map(([key, label]) =>
@@ -209,6 +213,12 @@ export function bindComponentEditor(
 
       if (!target) {
         error.textContent = t('component.sceneMissing')
+
+        return
+      }
+
+      if (draft.type === 'text' && bindingPending.alias) {
+        error.textContent = 'Add or clear the pending text binding before saving.'
 
         return
       }
@@ -290,7 +300,7 @@ export function bindComponentEditor(
       addLabel = t('component.add')
 
       if (replace || saved || (changed && !dirty)) reset()
-      else if (languageChanged && draft) render()
+      else if (draft && (languageChanged || (changed && draft.type === 'text'))) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
 
       if (created) onCreated?.(created.sceneId, created.componentId)
@@ -304,6 +314,7 @@ function componentFields(
   sceneId: string,
   draft: BasicComponent,
   render: () => void,
+  bindingPending: TextBindingPending,
 ): HTMLElement[] {
   const { input, select, translation, create } = controls
 
@@ -322,23 +333,40 @@ function componentFields(
     const text = create('textarea')
     text.rows = 4
     text.value = draft.text
+
+    const bindings = textBindingsForm(
+      controls,
+      view,
+      draft,
+      bindingPending,
+      view.scenes.find((scene) => scene.id === sceneId)?.type === 'game',
+      render,
+      (placeholder) => {
+        draft.text += `${draft.text && !/\s$/.test(draft.text) ? ' ' : ''}${placeholder}`
+        text.value = draft.text
+      },
+    )
+
     text.addEventListener('input', () => {
       draft.text = text.value
       controls.markEdited()
+      bindings.refresh()
     })
     const textField = create('label')
     textField.append('Text', text)
-    const aliases = Object.keys(draft.bindings ?? {})
-    const bindings = create('p')
-    bindings.className = 'help'
-    bindings.textContent = aliases.length
-      ? `Placeholders bound to game values: ${aliases.map((alias) => `{${alias}}`).join(', ')}. They are kept when you save.`
-      : ''
 
     return [
       textField,
-      ...(aliases.length ? [bindings] : []),
-      literal('Text translation', 'Use literal text'),
+      translation(
+        'Text translation',
+        draft.textKey ?? '',
+        translationChoices(view, 'Use literal text'),
+        (value) => {
+          draft.textKey = value || undefined
+          bindings.refresh()
+        },
+      ),
+      bindings.element,
       select(
         'Style',
         draft.presentation.variant,
