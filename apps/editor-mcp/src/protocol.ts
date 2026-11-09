@@ -1,10 +1,19 @@
 import { z } from 'zod'
 import { sceneSchema } from '@ancadeba/schemas'
-import { diagnosticSchema, projectViewSchema } from '@ancadeba/editor-core'
+import { diagnosticSchema, projectViewSchema, projectListSchema } from '@ancadeba/editor-core'
 import { commandTool } from './commandSupport.js'
 import { editorFeaturesSchema, operationsSchema } from './operationSupport.js'
 
 export { apiErrorSchema, projectViewSchema } from '@ancadeba/editor-core'
+
+export { projectListSchema } from '@ancadeba/editor-core'
+
+export const projectDiscoveryResultSchema = projectListSchema.extend({ gamePath: z.string() })
+
+export const projectCreationResultSchema = projectViewSchema.extend({
+  gamePath: z.string(),
+  configuredGamePath: z.string(),
+})
 
 export const sceneViewSchema = z.object({
   revision: z.string().min(1),

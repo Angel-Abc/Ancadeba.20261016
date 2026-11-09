@@ -16,7 +16,12 @@ import { EditorProjectService } from '../apps/editor-server/src/editorProjectSer
 import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProjectRepository.js'
 import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { object } from '@ancadeba/editor-core'
-import { historyResultSchema, gameSummarySchema } from '../apps/editor-mcp/src/protocol.js'
+import {
+  historyResultSchema,
+  gameSummarySchema,
+  projectCreationResultSchema,
+  projectDiscoveryResultSchema,
+} from '../apps/editor-mcp/src/protocol.js'
 
 const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href
 const entry = fileURLToPath(new URL('../apps/editor-mcp/src/main.ts', import.meta.url))
@@ -105,7 +110,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(13)
+    expect((await activeClient.listTools()).tools).toHaveLength(15)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -199,6 +204,33 @@ describe('MCP stdio process', () => {
     expect(stderr.join('')).toBe('')
   }, 15000)
 
+  it('discovers and creates a configured future project through stdio before its manifest exists', async () => {
+    const { activeClient, errors, stderr } = await connect('future')
+    const listed = await activeClient.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+    expect(
+      projectDiscoveryResultSchema.parse(object(listed.structuredContent).data).projects,
+    ).toContainEqual({ path: 'basic', title: 'Process game' })
+
+    const result = await activeClient.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'future', title: 'Created through stdio' },
+    })
+
+    expect(result.isError).toBe(false)
+    const created = projectCreationResultSchema.parse(object(result.structuredContent).data)
+    expect(created).toMatchObject({
+      gamePath: 'future',
+      configuredGamePath: 'future',
+      diagnostics: [],
+    })
+    const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    expect(gameSummarySchema.parse(object(inspection.structuredContent).data).game?.title).toBe(
+      'Created through stdio',
+    )
+    expect(errors).toEqual([])
+    expect(stderr.join('')).toBe('')
+  })
+
   it('can list tools while the editor is offline and recovers when that same server returns', async () => {
     // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
     const port = (server.address() as AddressInfo).port
@@ -206,7 +238,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(13)
+    expect((await activeClient.listTools()).tools).toHaveLength(15)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({

@@ -106,7 +106,14 @@ export function createEditorServer(
       if (request.method === 'GET' && url.pathname === '/api/editor/capabilities') {
         json(response, 200, {
           ...capabilities,
-          features: projects?.features ?? { history: false, assetImport: false },
+          features: {
+            ...(projects?.features ?? {
+              history: false,
+              assetImport: false,
+              projectCreation: false,
+            }),
+            projectDiscovery: true,
+          },
         })
 
         return

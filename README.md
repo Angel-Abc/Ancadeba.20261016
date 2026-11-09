@@ -120,6 +120,11 @@ MCP also supports shared saved-project undo/redo with `ancadeba_undo` and
 base64 SVG/PNG/JPEG/WebP bytes and use the same bounded import and history flow
 as the editor. Capability discovery reports live operation availability.
 
+Use `ancadeba_list_projects` to discover workspace games and
+`ancadeba_create_project` to create a playable starter in a new folder. Creation
+returns its revision and leaves the connection's configured game binding unchanged.
+Configure `--game` with a future folder to create and edit it through one connection.
+
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
 to equip the cloak and move items between characters and their bags. The sample's

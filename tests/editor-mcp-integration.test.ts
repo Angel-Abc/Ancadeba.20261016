@@ -18,8 +18,12 @@ import {
   gameSummarySchema,
   historyResultSchema,
   mcpCapabilitiesSchema,
+  projectDiscoveryResultSchema,
+  projectCreationResultSchema,
 } from '../apps/editor-mcp/src/protocol.js'
 import { object, type EditorCommand } from '@ancadeba/editor-core'
+import { GameLoader } from '@ancadeba/game-runtime'
+import { JsonResourceLoader } from '@ancadeba/utilities'
 
 const manifest = {
   'schema-version': '1.0.0',
@@ -101,6 +105,181 @@ describe('MCP and shared editor integration', () => {
 
     return gameSummarySchema.parse(object(result.structuredContent).data)
   }
+
+  it('discovers root/nested projects, creates a playable starter and preserves the existing binding', async () => {
+    await writeFile(join(root, 'game.json'), JSON.stringify({ ...manifest, title: 'Root game' }))
+    await mkdir(join(root, 'nested/other'), { recursive: true })
+    await writeFile(
+      join(root, 'nested/other/game.json'),
+      JSON.stringify({ ...manifest, title: 'Nested game' }),
+    )
+    const list = await client.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+    expect(projectDiscoveryResultSchema.parse(object(list.structuredContent).data)).toMatchObject({
+      gamePath: 'basic',
+      projects: [
+        { path: '', title: 'Root game' },
+        { path: 'basic', title: 'Game' },
+        { path: 'nested/other', title: 'Nested game' },
+      ],
+    })
+    const before = await readFile(join(root, 'basic/game.json'))
+
+    const created = await client.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'new-game', title: 'New adventure', description: 'Created through MCP' },
+    })
+
+    expect(created.isError).toBe(false)
+    const data = projectCreationResultSchema.parse(object(created.structuredContent).data)
+    expect(data).toMatchObject({
+      gamePath: 'new-game',
+      configuredGamePath: 'basic',
+      game: {
+        id: 'new-game',
+        title: 'New adventure',
+        stylesheet: 'theme.css',
+        'initial-scene': 'start',
+      },
+      scenes: [{ id: 'start' }, { id: 'adventure' }],
+      diagnostics: [],
+    })
+
+    const loaded = await new GameLoader(
+      new JsonResourceLoader(
+        {
+          readText: (file) => readFile(join(root, 'new-game', file), 'utf8'),
+          readBytes: async (file) => new Uint8Array(await readFile(join(root, 'new-game', file))),
+        },
+        { debug: () => '', info: () => '', warn: () => '', error: () => '' },
+      ),
+    ).load()
+
+    expect(loaded.scenes.size).toBe(2)
+    expect(await readFile(join(root, 'basic/game.json'))).toEqual(before)
+    expect((await game()).game?.title).toBe('Game')
+    const updatedList = await client.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+    expect(
+      projectDiscoveryResultSchema.parse(object(updatedList.structuredContent).data).projects,
+    ).toContainEqual({ path: 'new-game', title: 'New adventure' })
+  })
+
+  it('never overwrites existing destinations and allows only one concurrent creation per folder', async () => {
+    const before = await readFile(join(root, 'basic/game.json'))
+    await mkdir(join(root, 'empty'))
+
+    for (const path of ['basic', 'empty']) {
+      const rejected = await client.callTool({
+        name: 'ancadeba_create_project',
+        arguments: { path, title: 'Replacement' },
+      })
+
+      expect(rejected.structuredContent).toMatchObject({
+        ok: false,
+        error: { code: 'project_exists', outcome: 'not_applied' },
+      })
+    }
+
+    expect(await readFile(join(root, 'basic/game.json'))).toEqual(before)
+    expect(await readdir(join(root, 'empty'))).toEqual([])
+
+    const attempts = await Promise.all(
+      [0, 1].map(() =>
+        client.callTool({
+          name: 'ancadeba_create_project',
+          arguments: { path: 'racing', title: 'Winner' },
+        }),
+      ),
+    )
+
+    expect(attempts.filter((result) => !result.isError)).toHaveLength(1)
+    expect(attempts.filter((result) => result.isError)[0]?.structuredContent).toMatchObject({
+      error: { code: 'project_exists', outcome: 'not_applied' },
+    })
+    expect(JSON.parse(await readFile(join(root, 'racing/game.json'), 'utf8')).title).toBe('Winner')
+  })
+
+  it('bootstraps a configured game that does not exist and can edit it immediately after creation', async () => {
+    const bootstrap = createMcpServer(
+      new EditorApiClient({ editorServerUrl: base, game: 'future', timeoutMs: 2000 }, fetch),
+      'future',
+    )
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await bootstrap.connect(serverTransport)
+    const starter = new Client({ name: 'bootstrap-tests', version: '1' })
+    await starter.connect(clientTransport)
+
+    try {
+      const listed = await starter.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+      expect(listed.isError).toBe(false)
+
+      const created = await starter.callTool({
+        name: 'ancadeba_create_project',
+        arguments: { path: 'future', title: 'Future' },
+      })
+
+      expect(created.isError).toBe(false)
+      const data = projectCreationResultSchema.parse(object(created.structuredContent).data)
+      expect(data).toMatchObject({ gamePath: 'future', configuredGamePath: 'future' })
+
+      const saved = await starter.callTool({
+        name: 'ancadeba_apply_command',
+        arguments: {
+          expectedRevision: data.revision,
+          command: {
+            type: 'game.updateMetadata',
+            title: 'Edited starter',
+            description: '',
+            version: '1',
+          },
+        },
+      })
+
+      expect(saved.isError).toBe(false)
+      expect(JSON.parse(await readFile(join(root, 'future/game.json'), 'utf8')).title).toBe(
+        'Edited starter',
+      )
+      expect((await game()).game?.title).toBe('Game')
+    } finally {
+      await starter.close()
+      await bootstrap.close()
+    }
+  })
+
+  it('recovers uncertain creation by listing the requested folder without automatic retries', async () => {
+    const load = repository.load.bind(repository)
+    const create = vi.spyOn(repository, 'create')
+
+    const failure = vi.spyOn(repository, 'load').mockImplementation(async (path) => {
+      if (path === 'uncertain') throw new WorkspaceError(404, 'Reread failed')
+
+      return load(path)
+    })
+
+    try {
+      const result = await client.callTool({
+        name: 'ancadeba_create_project',
+        arguments: { path: 'uncertain', title: 'Saved starter' },
+      })
+
+      expect(result.structuredContent).toMatchObject({
+        error: {
+          code: 'project_creation_uncertain',
+          outcome: 'unknown',
+          recovery: expect.stringContaining('"uncertain"'),
+        },
+      })
+      expect(create).toHaveBeenCalledTimes(1)
+      const list = await client.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+      expect(
+        projectDiscoveryResultSchema.parse(object(list.structuredContent).data).projects,
+      ).toContainEqual({ path: 'uncertain', title: 'Saved starter' })
+      expect((await game()).game?.title).toBe('Game')
+    } finally {
+      failure.mockRestore()
+      create.mockRestore()
+    }
+  })
 
   async function restore(direction: 'undo' | 'redo', revision: string) {
     const result = await client.callTool({

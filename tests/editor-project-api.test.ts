@@ -1115,7 +1115,12 @@ describe('shared editor project API', () => {
     const capabilities = await fetch(`${base}/api/editor/capabilities`)
     const advertised = await capabilities.json()
     expect(advertised.commands).toHaveLength(56)
-    expect(advertised.features).toEqual({ history: true, assetImport: true })
+    expect(advertised.features).toEqual({
+      history: true,
+      assetImport: true,
+      projectDiscovery: true,
+      projectCreation: true,
+    })
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })
     expect(created.status).toBe(200)

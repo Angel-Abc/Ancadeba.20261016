@@ -47,7 +47,12 @@ async function connection(api: IEditorApi) {
 
 function api(): IEditorApi {
   return {
-    capabilities: async () => ({ ...capabilities, features: { history: true, assetImport: true } }),
+    listProjects: async () => ({ projects: [{ path: 'basic', title: 'Game' }] }),
+    createProject: async () => view,
+    capabilities: async () => ({
+      ...capabilities,
+      features: { history: true, assetImport: true, projectDiscovery: true, projectCreation: true },
+    }),
     inspectGame: async () => view,
     inspectScene: async () => ({ revision: view.revision, scene, diagnostics: [] }),
     apply: async () => ({
@@ -67,6 +72,134 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
+  it('lists workspace projects and creates starters without silently changing the configured binding', async () => {
+    const remote = api()
+    const created: unknown[] = []
+    remote.listProjects = async (signal) => {
+      expect(signal).toBeInstanceOf(AbortSignal)
+
+      return {
+        projects: [
+          { path: '', title: 'Root' },
+          { path: 'nested/game', title: 'Nested' },
+        ],
+      }
+    }
+
+    remote.createProject = async (input, signal) => {
+      expect(signal).toBeInstanceOf(AbortSignal)
+      created.push(input)
+
+      return { ...view, game: { ...view.game, id: input.path, title: input.title } }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const discovery = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+      expect(
+        mcpCapabilitiesSchema.parse(object(discovery.structuredContent).data).operations,
+      ).toMatchObject({
+        projectDiscovery: { tool: 'ancadeba_list_projects', supported: true },
+        projectCreation: { tool: 'ancadeba_create_project', supported: true },
+      })
+      const list = await client.callTool({ name: 'ancadeba_list_projects', arguments: {} })
+      expect(list.structuredContent).toMatchObject({
+        ok: true,
+        data: { gamePath: 'basic', projects: [{ path: '' }, { path: 'nested/game' }] },
+      })
+
+      const result = await client.callTool({
+        name: 'ancadeba_create_project',
+        arguments: { path: 'new-game', title: '  New game  ' },
+      })
+
+      expect(result.structuredContent).toMatchObject({
+        ok: true,
+        data: {
+          gamePath: 'new-game',
+          configuredGamePath: 'basic',
+          game: { id: 'new-game', title: 'New game' },
+        },
+      })
+      expect(created).toEqual([{ path: 'new-game', title: 'New game', description: '' }])
+      expect(
+        (await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })).structuredContent,
+      ).toMatchObject({ data: { gamePath: 'basic', game: { id: 'test' } } })
+    } finally {
+      await close()
+    }
+  })
+
+  it('rejects project discovery arguments and invalid or scoped creation requests before handlers run', async () => {
+    const remote = api()
+    let calls = 0
+    remote.listProjects = async () => {
+      calls++
+      throw new Error('Must not dispatch')
+    }
+
+    remote.createProject = async () => {
+      calls++
+      throw new Error('Must not dispatch')
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      for (const args of [
+        { path: 'other' },
+        { editorServerUrl: 'http://other' },
+        { expectedRevision: 'one' },
+      ])
+        expect(
+          (await client.callTool({ name: 'ancadeba_list_projects', arguments: args })).isError,
+        ).toBe(true)
+
+      for (const args of [
+        { path: '../outside', title: 'Title' },
+        { path: 'nested/game', title: 'Title' },
+        { path: 'new', title: ' ' },
+        { path: 'new', title: 'Title', editorServerUrl: 'http://other' },
+        { path: 'new', title: 'Title', expectedRevision: 'one' },
+      ])
+        expect(
+          (await client.callTool({ name: 'ancadeba_create_project', arguments: args })).isError,
+        ).toBe(true)
+      expect(calls).toBe(0)
+    } finally {
+      await close()
+    }
+  })
+
+  it('directs uncertain creation recovery to the requested folder rather than the bound game', async () => {
+    const remote = api()
+    let creates = 0
+    remote.createProject = async () => {
+      creates++
+      throw new EditorApiError('project_creation_uncertain', 'May have saved', [], 'unknown', 500)
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const result = await client.callTool({
+        name: 'ancadeba_create_project',
+        arguments: { path: 'new-game', title: 'New game' },
+      })
+
+      expect(result.structuredContent).toMatchObject({
+        ok: false,
+        error: { outcome: 'unknown', recovery: expect.stringContaining('"new-game"') },
+      })
+      expect(object(object(result.structuredContent).error).recovery).toContain(
+        'Do not retry automatically',
+      )
+      expect(creates).toBe(1)
+    } finally {
+      await close()
+    }
+  })
   it('exposes typed shared history and image upload tools and advertises live operation support', async () => {
     const remote = api()
     const history: unknown[] = []
@@ -247,12 +380,14 @@ describe('MCP adapter tools', () => {
       const { tools } = await client.listTools()
       expect(tools.map((tool) => tool.name).sort((a, b) => a.localeCompare(b))).toEqual([
         'ancadeba_apply_command',
+        'ancadeba_create_project',
         'ancadeba_create_scene',
         'ancadeba_edit_assets',
         'ancadeba_get_capabilities',
         'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
         'ancadeba_inspect_scene',
+        'ancadeba_list_projects',
         'ancadeba_redo',
         'ancadeba_undo',
         'ancadeba_update_game_metadata',
@@ -260,13 +395,13 @@ describe('MCP adapter tools', () => {
         'ancadeba_update_scene_metadata',
         'ancadeba_upload_asset',
       ])
-      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(4)
+      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(5)
 
       for (const tool of tools) {
         expect(tool.outputSchema).toHaveProperty('type', 'object')
         expect(tool.inputSchema).toHaveProperty('additionalProperties', false)
 
-        if (!tool.annotations?.readOnlyHint)
+        if (!tool.annotations?.readOnlyHint && tool.name !== 'ancadeba_create_project')
           expect(tool.inputSchema.required).toContain('expectedRevision')
       }
 

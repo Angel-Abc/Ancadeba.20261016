@@ -38,6 +38,7 @@ export class EditorProjectService {
         typeof this.repository.restoreHistoryFiles === 'function' &&
         typeof this.repository.readHistoryFiles === 'function',
       assetImport: typeof this.repository.createAsset === 'function',
+      projectCreation: typeof this.repository.create === 'function',
     }
   }
 

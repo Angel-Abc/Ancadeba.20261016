@@ -6,13 +6,19 @@ import {
 } from '@ancadeba/editor-core'
 import type { z } from 'zod'
 import type { AdapterConfig } from './config.js'
-import { assetUploadInputSchema, historyInputSchema, maxUploadBytes } from './operationSupport.js'
+import {
+  assetUploadInputSchema,
+  historyInputSchema,
+  maxUploadBytes,
+  createProjectInputSchema,
+} from './operationSupport.js'
 import {
   apiErrorSchema,
   appliedChangeSchema,
   capabilitiesSchema,
   projectViewSchema,
   sceneViewSchema,
+  projectListSchema,
 } from './protocol.js'
 
 // These editor errors are raised before persistence. Other failures may come from
@@ -52,6 +58,11 @@ export class EditorApiError extends Error {
 }
 
 export interface IEditorApi {
+  listProjects(signal?: AbortSignal): Promise<z.infer<typeof projectListSchema>>
+  createProject(
+    input: z.infer<typeof createProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectViewSchema>>
   capabilities(signal?: AbortSignal): Promise<z.infer<typeof capabilitiesSchema>>
   inspectGame(signal?: AbortSignal): Promise<z.infer<typeof projectViewSchema>>
   inspectScene(id: string, signal?: AbortSignal): Promise<z.infer<typeof sceneViewSchema>>
@@ -90,6 +101,43 @@ export class EditorApiClient implements IEditorApi {
       throw new EditorApiError('incompatible_api', 'This adapter requires editor API version 1')
 
     return data
+  }
+
+  async listProjects(signal?: AbortSignal) {
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.projectDiscovery)
+      throw new EditorApiError(
+        'unsupported_discovery',
+        'The connected editor does not advertise project discovery support',
+      )
+
+    return this.request('/api/editor/projects', projectListSchema, undefined, signal)
+  }
+
+  async createProject(input: z.infer<typeof createProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = createProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide a new single-folder project path and a nonempty title',
+        parsed.error.issues.map((issue) => ({
+          code: 'invalid_request',
+          file: '',
+          path: issue.path.map((part) => (typeof part === 'number' ? part : String(part))),
+          message: issue.message,
+        })),
+      )
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.projectCreation)
+      throw new EditorApiError(
+        'unsupported_creation',
+        'The connected editor does not advertise project creation support',
+      )
+
+    return this.request('/api/editor/projects', projectViewSchema, jsonBody(parsed.data), signal)
   }
 
   inspectGame(signal?: AbortSignal) {
