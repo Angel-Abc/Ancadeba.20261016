@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util'
+import { workspaceProjectPathSchema } from './projectPath.js'
 
 export interface AdapterConfig {
   editorServerUrl: string
@@ -43,23 +44,7 @@ export function parseAdapterConfig(args: string[]): AdapterConfig {
 
   const game = values.game
 
-  if (
-    game !== '' &&
-    game
-      .split('/')
-      .some(
-        (segment) =>
-          !segment ||
-          segment === '.' ||
-          segment === '..' ||
-          /[<>:"\\|?*]/.test(segment) ||
-          segment.split('').some((character) => character.charCodeAt(0) < 32) ||
-          /[. ]$/.test(segment) ||
-          /^(con|prn|aux|nul|conin\$|conout\$|clock\$|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/i.test(
-            segment,
-          ),
-      )
-  ) {
+  if (!workspaceProjectPathSchema.safeParse(game).success) {
     throw new Error(
       'Game must be a workspace-relative folder using / separators, or empty for the root',
     )

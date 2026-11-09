@@ -6,6 +6,7 @@ import {
 } from '@ancadeba/editor-core'
 import type { z } from 'zod'
 import type { AdapterConfig } from './config.js'
+import { workspaceProjectPathSchema } from './projectPath.js'
 import {
   assetUploadInputSchema,
   historyInputSchema,
@@ -58,6 +59,7 @@ export class EditorApiError extends Error {
 }
 
 export interface IEditorApi {
+  forProject(path: string): IEditorApi
   listProjects(signal?: AbortSignal): Promise<z.infer<typeof projectListSchema>>
   createProject(
     input: z.infer<typeof createProjectInputSchema>,
@@ -88,6 +90,19 @@ export class EditorApiClient implements IEditorApi {
     private readonly fetcher: typeof fetch,
     private readonly shutdownSignal?: AbortSignal,
   ) {}
+
+  forProject(path: string): IEditorApi {
+    const parsed = workspaceProjectPathSchema.safeParse(path)
+
+    if (!parsed.success)
+      throw new EditorApiError('invalid_request', 'Select a workspace-relative project folder')
+
+    return new EditorApiClient(
+      { ...this.config, game: parsed.data },
+      this.fetcher,
+      this.shutdownSignal,
+    )
+  }
 
   async capabilities(signal?: AbortSignal) {
     const data = await this.request(

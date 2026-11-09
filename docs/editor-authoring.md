@@ -228,7 +228,9 @@ Invalid input returns 400, an existing destination returns 409, and links remain
 inaccessible. Creation reserves a new folder exclusively and publishes `game.json`
 after both scene files. MCP clients can list workspace projects and create a
 starter project with `ancadeba_list_projects` and `ancadeba_create_project`.
-Creation leaves the adapter's configured game binding unchanged.
+Creation leaves the active project unchanged. Use `ancadeba_switch_project` to
+select a discovered or newly created game without reconnecting; each MCP
+connection retains its own selection and in-flight requests keep their original scope.
 
 The searchable tree contains Game properties, Scenes with their components,
 and Assets grouped into Images, Parts, and Compositions. Scene types and the

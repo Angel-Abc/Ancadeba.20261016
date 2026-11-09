@@ -6,7 +6,7 @@ visual editor. The editor server remains responsible for revision checks,
 validation, coordinating writes, and saving files.
 
 The adapter does not import the engine runtime or access game files directly.
-Its implementation is in `apps/editor-mcp`; adapter version 0.4.0 uses editor API version 1.
+Its implementation is in `apps/editor-mcp`; adapter version 0.5.0 uses editor API version 1.
 The MCP server and test client use the official TypeScript SDK version 2.4.0.
 
 ## Build
@@ -75,18 +75,20 @@ Arguments:
 | Argument              | Meaning                                                        |
 | --------------------- | -------------------------------------------------------------- |
 | `--editor-server-url` | Required loopback HTTP origin, such as `http://127.0.0.1:3100` |
-| `--game`              | Required game folder relative to the editor workspace          |
+| `--game`              | Required initial game folder relative to the editor workspace  |
 | `--timeout-ms`        | Per-HTTP-request timeout, 1 to 60000; default 10000            |
 | `--help`              | Print usage to stderr and exit                                 |
 
 Use an empty string argument for `--game` when the workspace itself is the game.
-Multiple games can use separate configured adapter instances. The URL must not
+Switch between discovered games through one connection with
+`ancadeba_switch_project`. Separate adapter instances have independent active
+selections. The URL must not
 contain credentials, a path, query, or fragment. Redirects are not followed.
 Game paths use forward slashes and must satisfy the workspace path restrictions.
 
-The configured game need not exist yet: use a future folder such as `my-game`
+The initial game need not exist yet: use a future folder such as `my-game`
 to list workspace projects, create `my-game`, and then edit it through the same
-connection. Discovery and creation do not read the configured game's manifest.
+connection. Discovery and creation do not read the active game's manifest.
 
 Stdout carries only MCP messages. Errors and usage text go to stderr. Do not use
 a package-manager command as the host's launcher: its banners could corrupt the
@@ -103,16 +105,18 @@ Tool calls report an unavailable server until it returns.
 
 ## Tools
 
-Existing-game tools are bound to the configured game. Workspace discovery lists
+Existing-game tools target this connection's active game, initially set by
+`--game` and changed with `ancadeba_switch_project`. Workspace discovery lists
 projects under the configured editor workspace, and creation accepts only a new
 single-folder destination within that workspace. Neither operation changes the
-connection's game binding. No tool can change the server URL. There are no
+active game automatically. No tool can change the server URL. There are no
 raw-file, shell, or process tools.
 
 | Tool                             | Arguments                                                                                    | Result                                                                                                  |
 | -------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `ancadeba_get_capabilities`      | Empty object                                                                                 | API version, supported command intersection, MCP input schema, examples, command tool name, game folder |
 | `ancadeba_list_projects`         | Empty object                                                                                 | Workspace project paths/titles and configured `gamePath`                                                |
+| `ancadeba_switch_project`        | `path` from discovery, including empty for the workspace root                                | Full selected project view, fresh revision, diagnostics, `gamePath` and `previousGamePath`              |
 | `ancadeba_create_project`        | `path`, `title`, optional `description`                                                      | Complete created project, its `gamePath`/revision and unchanged `configuredGamePath`                    |
 | `ancadeba_inspect_game`          | Empty object                                                                                 | Game metadata, scene summaries, source definitions, revision, diagnostics                               |
 | `ancadeba_inspect_scene`         | `sceneId`                                                                                    | Scene definition, revision, diagnostics                                                                 |
@@ -129,7 +133,7 @@ raw-file, shell, or process tools.
 
 Editing input schemas derive from editor-core's commands. The generic tool takes
 the command type inside `command`; dedicated aliases supply their own type. The
-adapter supplies the configured project path for existing-game tools. Creation
+adapter supplies the active project path captured at request start for existing-game tools. Creation
 uses the validated new folder argument. Each command write checks that the
 connected server advertises API version 1 and supports the requested command;
 workspace operations check their own feature flags.
@@ -140,7 +144,8 @@ complete scene format, including `schema-version: 1.0.0`, scene type, grid scree
 and a `components` array. Components can be empty or contain any supported scene
 component type, including text with game bindings in game scenes. Grid bounds, unique component
 IDs, and binding rules are validated by the shared scene schema. The four inspection
-tools and workspace discovery are annotated as read-only. Editing and creation tools are annotated as modifying and are not advertised as
+tools and workspace discovery are annotated as read-only. Switching is marked as
+modifying session selection, although it does not write files. Editing and creation tools are annotated as modifying and are not advertised as
 safe to retry automatically.
 
 `ancadeba_apply_command` accepts every command type in the installed shared
@@ -178,7 +183,8 @@ is rejected before posting the edit. Aliases resolve command schemas by name,
 independently of command-list order.
 
 Workspace, history and upload tools are separate operations, not command types. Discovery adds
-`operations.projectDiscovery` and `operations.projectCreation` alongside
+`operations.projectDiscovery`, `operations.projectCreation` and
+`operations.projectSwitching` alongside
 `operations.undo`, `operations.redo` and `operations.assetUpload`, each with a
 tool name, `supported` flag and MCP input schema. Upload discovery includes
 `maxMultipartBytes` (10485760). The HTTP server advertises optional
@@ -186,8 +192,10 @@ tool name, `supported` flag and MCP input schema. Upload discovery includes
 `features.projectCreation`. Discovery is available through the workspace service;
 creation and other writes depend on the configured project repository.
 Missing flags from older servers mean unsupported; commands still work. Update
-the editor server and reconnect the MCP adapter to enable the new operations.
-Each operation rechecks the API version and its feature flag before posting.
+an older server if a required feature flag is absent, and load the updated adapter.
+Writes recheck the API version and their feature flags before posting.
+Switching is implemented within the adapter using discovery and inspection;
+its availability follows `features.projectDiscovery`, without a new HTTP endpoint.
 
 Metadata translation keys accept strings to assign them, `null` to remove them,
 or omission to preserve them. Create translation catalogs first. Creation flags
@@ -240,18 +248,60 @@ one another. The shared editor generates `game.json`, start/adventure scenes
 and `theme.css`, returning the complete project view and revision. The starter
 can be played through the normal runtime loader.
 
-The result's `gamePath` identifies the new project; `configuredGamePath` records
-this connection's unchanged game binding. If they match, subsequent inspections
-and edits immediately target the new game. Otherwise, open a separate adapter
-connection with `--game my-game` to edit it; existing-game tools still target
-the original binding. Project creation itself is not an undoable history entry;
+The result's `gamePath` identifies the new project. The existing
+`configuredGamePath` field records the active binding captured at creation's
+start; it does not necessarily equal the initial CLI `--game`. Creation does not
+select the new game. Call `ancadeba_switch_project` with its folder to edit it
+without reconnecting. Project creation itself is not an undoable history entry;
 subsequent saved edits participate in the normal project history.
 
 Creation failures may have left files behind. An uncertain response identifies
 the requested folder in its recovery instructions: list projects and open that
 folder in the editor or inspect the workspace before another creation attempt.
 Do not retry automatically. A new project appearing in discovery after a failed
-response does not imply that the original connection changed its binding.
+response does not imply that the original connection selected it.
+
+## Switching projects
+
+Call `ancadeba_list_projects`, then select an exact returned path:
+
+```json
+{
+  "path": "my-game"
+}
+```
+
+Pass those arguments to `ancadeba_switch_project`. An empty string selects a
+discovered game at the workspace root; nested paths and spaces in directory
+names are supported. Parent traversal, absolute paths, backslashes, reserved
+device names, server URLs and extra arguments are rejected. The server still
+enforces its workspace boundary. A target must appear in fresh discovery and
+return a valid project-inspection response before the selection changes.
+Projects with diagnostics can be selected for inspection and supported repairs;
+the switch result may contain a null `game` for a malformed manifest.
+
+The result contains the selected project view, diagnostics, fresh `revision`,
+`gamePath` and `previousGamePath`. Use that revision for subsequent edits.
+Commands, metadata aliases, scene/asset inspections, uploads and undo/redo now
+target the selected project. Capabilities and workspace discovery return its
+active `gamePath`. No reconnect, CLI change or editor-server restart is needed
+for each switch. Selection is private to this MCP connection and resets to
+`--game` when a new connection is created; it does not alter the editor UI's
+selection or other MCP connections.
+
+Await a switch before issuing work intended for the new project. Each ordinary
+tool request captures an immutable project/API scope when its handler starts;
+requests already running finish on their original project and return that
+request's `gamePath`, even if another switch finishes first. Switch requests
+themselves run in order. Validation, discovery, cancellation before selection,
+or target-inspection failures preserve the previous active project and do not
+block later switches. If a connection is interrupted around a switch response,
+inspect the active `gamePath` before editing again.
+
+Switching writes no files and does not clear server history. Each project's
+saved undo/redo stack remains associated with that project, subject to the
+normal server-session and external-change rules. Selecting the current path
+again refreshes its project view and revision.
 
 ## Editing examples
 
@@ -295,7 +345,7 @@ next `undoLabel`/`redoLabel`. Call `ancadeba_undo` or `ancadeba_redo` with
 revision, direction, diagnostics and updated history. Use that returned revision
 for the next operation.
 
-This replays the most recent saved change in the configured game's shared editor
+This replays the most recent saved change in the active game's shared editor
 history, including edits made by other clients. It does not affect unsaved UI
 drafts. History exists only for the running editor server session; defaults are
 50 entries per project and a 64 MiB total memory budget. A new saved edit clears
@@ -326,7 +376,7 @@ size; the adapter's bounded stdio buffer includes room for that expansion.
 The adapter rejects malformed base64 and oversized multipart requests
 before contacting the editor. The server validates the declared image format,
 dimensions and SVG source, derives bounds/colors, and assigns a unique source
-path under `assets/images/` in the configured game.
+path under `assets/images/` in the active game.
 
 Importing a new ID registers an image. Importing an existing image ID replaces
 its catalogue entry, retaining compatible defaults/palettes and the previous
@@ -417,6 +467,9 @@ Tests are under root `tests/`:
   bytes, canonical base64 and size limits, feature checks and uncertain outcomes.
 - `editor-mcp-projects.test.ts`: workspace list/create request mapping, local
   validation, feature availability, cancellation and uncertain creation outcomes.
+- `editor-mcp-switching.test.ts`: selection validation, root/nested projects,
+  per-connection isolation, immutable HTTP scopes, all tool routes, in-flight
+  request labels, competing switches and cancellation.
 - `editor-mcp-tools.test.ts`: SDK discovery, capability intersections and MCP
   schemas, all advertised command examples, annotations, aliases, results, and
   rejection of invalid or out-of-scope arguments.
@@ -431,8 +484,7 @@ Integration tests use temporary projects and automatically allocated ports.
 Only test-owned processes are closed.
 
 The adapter exposes the command endpoint, not every editor HTTP endpoint. It
-does not expose changing the configured game of an existing connection,
-the component clipboard-export endpoint,
+does not expose changing the editor server URL, the component clipboard-export endpoint,
 preview controls, exports, raw file access, command batches, shell/process tools
 or remote MCP hosting. Component duplication and paste are available as shared
 commands; inspect a scene to obtain a source component. Declarative rules are

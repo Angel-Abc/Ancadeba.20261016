@@ -4,6 +4,7 @@ import {
   createProjectRequestSchema,
 } from '@ancadeba/editor-core'
 import { z } from 'zod'
+import { workspaceProjectPathSchema } from './projectPath.js'
 
 // The existing editor import endpoint limits the entire multipart request to 10 MiB.
 export const maxUploadBytes = 10 * 1024 * 1024
@@ -12,6 +13,7 @@ export const maxMcpMessageBytes = maxBase64UploadCharacters + 64 * 1024
 export const historyInputSchema = historyRequestSchema.omit({ path: true, direction: true })
 export const listProjectsInputSchema = z.strictObject({})
 export const createProjectInputSchema = createProjectRequestSchema
+export const switchProjectInputSchema = z.strictObject({ path: workspaceProjectPathSchema })
 
 export const assetUploadInputSchema = assetImportMetadataSchema.omit({ path: true }).extend({
   dataBase64: z
@@ -47,6 +49,7 @@ export const operationsSchema = z.object({
   redo: toolOperation('ancadeba_redo'),
   projectDiscovery: toolOperation('ancadeba_list_projects'),
   projectCreation: toolOperation('ancadeba_create_project'),
+  projectSwitching: toolOperation('ancadeba_switch_project'),
   assetUpload: z.object({
     tool: z.literal('ancadeba_upload_asset'),
     supported: z.boolean(),
@@ -57,6 +60,11 @@ export const operationsSchema = z.object({
 
 export function mcpOperations(features?: z.infer<typeof editorFeaturesSchema>) {
   return {
+    projectSwitching: {
+      tool: 'ancadeba_switch_project' as const,
+      supported: features?.projectDiscovery === true,
+      requestSchema: z.toJSONSchema(switchProjectInputSchema),
+    },
     projectDiscovery: {
       tool: 'ancadeba_list_projects' as const,
       supported: features?.projectDiscovery === true,

@@ -47,6 +47,7 @@ async function connection(api: IEditorApi) {
 
 function api(): IEditorApi {
   return {
+    forProject: () => api(),
     listProjects: async () => ({ projects: [{ path: 'basic', title: 'Game' }] }),
     createProject: async () => view,
     capabilities: async () => ({
@@ -389,6 +390,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_inspect_scene',
         'ancadeba_list_projects',
         'ancadeba_redo',
+        'ancadeba_switch_project',
         'ancadeba_undo',
         'ancadeba_update_game_metadata',
         'ancadeba_update_scene_layout',
@@ -401,7 +403,10 @@ describe('MCP adapter tools', () => {
         expect(tool.outputSchema).toHaveProperty('type', 'object')
         expect(tool.inputSchema).toHaveProperty('additionalProperties', false)
 
-        if (!tool.annotations?.readOnlyHint && tool.name !== 'ancadeba_create_project')
+        if (
+          !tool.annotations?.readOnlyHint &&
+          !['ancadeba_create_project', 'ancadeba_switch_project'].includes(tool.name)
+        )
           expect(tool.inputSchema.required).toContain('expectedRevision')
       }
 

@@ -15,6 +15,11 @@ export const projectCreationResultSchema = projectViewSchema.extend({
   configuredGamePath: z.string(),
 })
 
+export const projectSwitchResultSchema = projectViewSchema.extend({
+  gamePath: z.string(),
+  previousGamePath: z.string(),
+})
+
 export const sceneViewSchema = z.object({
   revision: z.string().min(1),
   scene: sceneSchema,

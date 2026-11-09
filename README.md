@@ -122,8 +122,9 @@ as the editor. Capability discovery reports live operation availability.
 
 Use `ancadeba_list_projects` to discover workspace games and
 `ancadeba_create_project` to create a playable starter in a new folder. Creation
-returns its revision and leaves the connection's configured game binding unchanged.
-Configure `--game` with a future folder to create and edit it through one connection.
+returns its revision and leaves the active project unchanged. Select a discovered
+or newly created game with `ancadeba_switch_project` to edit it without restarting
+or reconfiguring the connection. `--game` sets only the initial selection.
 
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**

@@ -20,6 +20,7 @@ import {
   mcpCapabilitiesSchema,
   projectDiscoveryResultSchema,
   projectCreationResultSchema,
+  projectSwitchResultSchema,
 } from '../apps/editor-mcp/src/protocol.js'
 import { object, type EditorCommand } from '@ancadeba/editor-core'
 import { GameLoader } from '@ancadeba/game-runtime'
@@ -105,6 +106,188 @@ describe('MCP and shared editor integration', () => {
 
     return gameSummarySchema.parse(object(result.structuredContent).data)
   }
+
+  it('switches to a created project and isolates edits, uploads, history and creation metadata', async () => {
+    const initial = await game()
+    const original = await readFile(join(root, 'basic/game.json'))
+
+    const created = await client.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'second', title: 'Second' },
+    })
+
+    expect(created.isError).toBe(false)
+
+    const switched = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'second' },
+    })
+
+    expect(switched.isError).toBe(false)
+    const selected = projectSwitchResultSchema.parse(object(switched.structuredContent).data)
+    expect(selected).toMatchObject({
+      gamePath: 'second',
+      previousGamePath: 'basic',
+      game: { title: 'Second' },
+    })
+
+    const metadata = {
+      type: 'game.updateMetadata',
+      title: 'Edited second',
+      description: '',
+      version: '2',
+    }
+
+    const stale = await client.callTool({
+      name: 'ancadeba_apply_command',
+      arguments: { expectedRevision: initial.revision, command: metadata },
+    })
+
+    expect(stale.structuredContent).toMatchObject({
+      error: { code: 'revision_conflict', outcome: 'not_applied' },
+    })
+
+    const saved = await client.callTool({
+      name: 'ancadeba_apply_command',
+      arguments: { expectedRevision: selected.revision, command: metadata },
+    })
+
+    expect(saved.isError).toBe(false)
+    const edited = await game()
+    expect(edited).toMatchObject({
+      gamePath: 'second',
+      game: { title: 'Edited second' },
+      history: { canUndo: true },
+    })
+    const undone = await restore('undo', edited.revision)
+    expect(undone.gamePath).toBe('second')
+    expect((await game()).game?.title).toBe('Second')
+    const redone = await restore('redo', undone.revision)
+
+    const uploaded = await client.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: redone.revision,
+        id: 'art',
+        format: 'svg',
+        dataBase64: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>',
+        ).toString('base64'),
+      },
+    })
+
+    expect(uploaded.isError).toBe(false)
+    const withArt = await game()
+    expect(withArt.gamePath).toBe('second')
+    const source = withArt.assets!.images.art!.source
+    expect(await readFile(join(root, 'second', source), 'utf8')).toContain('<svg')
+    expect(
+      (await client.callTool({ name: 'ancadeba_inspect_assets', arguments: {} })).structuredContent,
+    ).toMatchObject({ data: { gamePath: 'second', assets: { images: { art: { source } } } } })
+    await restore('undo', withArt.revision)
+    await expect(readFile(join(root, 'second', source))).rejects.toHaveProperty('code', 'ENOENT')
+
+    const third = await client.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'third', title: 'Third' },
+    })
+
+    expect(third.structuredContent).toMatchObject({
+      data: { gamePath: 'third', configuredGamePath: 'second' },
+    })
+    expect((await game()).gamePath).toBe('second')
+    expect(await readFile(join(root, 'basic/game.json'))).toEqual(original)
+
+    const back = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'basic' },
+    })
+
+    expect(projectSwitchResultSchema.parse(object(back.structuredContent).data)).toMatchObject({
+      gamePath: 'basic',
+      previousGamePath: 'second',
+      history: { canUndo: false, canRedo: false },
+    })
+
+    const again = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'second' },
+    })
+
+    expect(
+      projectSwitchResultSchema.parse(object(again.structuredContent).data).history?.canRedo,
+    ).toBe(true)
+  })
+
+  it('selects root/nested and diagnostic projects while failed inspections preserve the active selection', async () => {
+    await writeFile(join(root, 'game.json'), JSON.stringify({ ...manifest, title: 'Root game' }))
+    await mkdir(join(root, 'Nested Games/town'), { recursive: true })
+    await writeFile(
+      join(root, 'Nested Games/town/game.json'),
+      JSON.stringify({ ...manifest, title: 'Town' }),
+    )
+    await mkdir(join(root, 'broken'))
+    await writeFile(join(root, 'broken/game.json'), '{')
+
+    for (const [path, title] of [
+      ['', 'Root game'],
+      ['Nested Games/town', 'Town'],
+    ]) {
+      const selected = await client.callTool({
+        name: 'ancadeba_switch_project',
+        arguments: { path },
+      })
+
+      expect(selected.isError).toBe(false)
+      expect(await game()).toMatchObject({ gamePath: path, game: { title } })
+      expect(
+        (await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} }))
+          .structuredContent,
+      ).toMatchObject({
+        data: { gamePath: path, operations: { projectSwitching: { supported: true } } },
+      })
+      expect(
+        (await client.callTool({ name: 'ancadeba_list_projects', arguments: {} }))
+          .structuredContent,
+      ).toMatchObject({ data: { gamePath: path } })
+    }
+
+    const missing = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'missing' },
+    })
+
+    expect(missing.structuredContent).toMatchObject({
+      error: { code: 'project_not_found', outcome: 'not_applied' },
+    })
+    expect((await game()).gamePath).toBe('Nested Games/town')
+
+    const broken = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'broken' },
+    })
+
+    expect(projectSwitchResultSchema.parse(object(broken.structuredContent).data)).toMatchObject({
+      gamePath: 'broken',
+      game: null,
+      diagnostics: expect.arrayContaining([expect.objectContaining({ code: 'invalid_json' })]),
+    })
+
+    const failed = vi.spyOn(repository, 'load').mockImplementation(async () => {
+      throw new WorkspaceError(404, 'Target disappeared')
+    })
+
+    try {
+      expect(
+        (await client.callTool({ name: 'ancadeba_switch_project', arguments: { path: 'basic' } }))
+          .isError,
+      ).toBe(true)
+    } finally {
+      failed.mockRestore()
+    }
+
+    expect((await game()).gamePath).toBe('broken')
+  })
 
   it('discovers root/nested projects, creates a playable starter and preserves the existing binding', async () => {
     await writeFile(join(root, 'game.json'), JSON.stringify({ ...manifest, title: 'Root game' }))
