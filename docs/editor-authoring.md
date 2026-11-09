@@ -786,6 +786,10 @@ to an external coding agent; those saves share the server's project history.
 MCP clients can undo/redo saved changes and upload base64 image bytes through
 the same server endpoints. Capability discovery includes `features.history` and
 `features.assetImport` according to the repository's available services.
+MCP clients can export the active project's saved files with `ancadeba_export_game`,
+which returns a standalone ZIP as an embedded binary resource. Discovery reports
+`features.gameExport` based on the server's export service. See the
+[MCP export guide](editor-mcp.md#export-the-active-game) for limits and downloads.
 
 ## Stylesheet authoring
 

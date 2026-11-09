@@ -60,6 +60,16 @@ function fixture() {
 
     const scoped: IEditorApi = {
       forProject: api,
+      exportGame: async () => {
+        record(path, 'export')
+
+        return {
+          fileName: 'game.zip',
+          mimeType: 'application/zip',
+          size: 4,
+          dataBase64: 'UEsDBA==',
+        }
+      },
       capabilities: async () => ({
         ...capabilities,
         features: {
@@ -132,6 +142,42 @@ async function connection(api: IEditorApi) {
 }
 
 describe('MCP connection project switching', () => {
+  it('keeps an in-flight export scoped to the project selected before switching', async () => {
+    const f = fixture()
+    const started = deferred<void>()
+    const finish = deferred<void>()
+    f.api('a').exportGame = async () => {
+      started.resolve()
+      await finish.promise
+
+      return { fileName: 'a.zip', mimeType: 'application/zip', size: 4, dataBase64: 'UEsDBA==' }
+    }
+
+    const { client, close } = await connection(f.api('a'))
+
+    try {
+      const exporting = client.callTool({ name: 'ancadeba_export_game', arguments: {} })
+      await started.promise
+      expect(
+        (
+          await client.callTool({
+            name: 'ancadeba_switch_project',
+            arguments: { path: 'nested/b' },
+          })
+        ).isError,
+      ).toBe(false)
+      finish.resolve()
+      expect((await exporting).structuredContent).toMatchObject({
+        data: { gamePath: 'a', fileName: 'a.zip' },
+      })
+      expect(
+        (await client.callTool({ name: 'ancadeba_export_game', arguments: {} })).structuredContent,
+      ).toMatchObject({ data: { gamePath: 'nested/b', fileName: 'game.zip' } })
+    } finally {
+      finish.resolve()
+      await close()
+    }
+  })
   it('selects nested/root projects, refreshes the same project and isolates separate connections', async () => {
     const f = fixture()
     const one = await connection(f.api('a'))
@@ -226,6 +272,7 @@ describe('MCP connection project switching', () => {
 
       for (const operation of [
         { name: 'ancadeba_inspect_game', arguments: {} },
+        { name: 'ancadeba_export_game', arguments: {} },
         { name: 'ancadeba_inspect_assets', arguments: {} },
         { name: 'ancadeba_inspect_scene', arguments: { sceneId: 'room' } },
       ])

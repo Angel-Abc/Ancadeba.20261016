@@ -113,6 +113,7 @@ export function createEditorServer(
               projectCreation: false,
             }),
             projectDiscovery: true,
+            gameExport: exports !== undefined,
           },
         })
 

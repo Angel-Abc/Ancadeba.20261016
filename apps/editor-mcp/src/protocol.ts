@@ -20,6 +20,14 @@ export const projectSwitchResultSchema = projectViewSchema.extend({
   previousGamePath: z.string(),
 })
 
+export const gameExportResultSchema = z.object({
+  gamePath: z.string(),
+  fileName: z.string(),
+  mimeType: z.literal('application/zip'),
+  size: z.number().int().positive(),
+  resourceUri: z.string(),
+})
+
 export const sceneViewSchema = z.object({
   revision: z.string().min(1),
   scene: sceneSchema,

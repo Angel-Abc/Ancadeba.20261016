@@ -1118,6 +1118,7 @@ describe('shared editor project API', () => {
     expect(advertised.features).toEqual({
       history: true,
       assetImport: true,
+      gameExport: false,
       projectDiscovery: true,
       projectCreation: true,
     })

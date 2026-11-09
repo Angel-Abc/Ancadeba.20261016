@@ -126,6 +126,12 @@ returns its revision and leaves the active project unchanged. Select a discovere
 or newly created game with `ancadeba_switch_project` to edit it without restarting
 or reconfiguring the connection. `--game` sets only the initial selection.
 
+Use `ancadeba_export_game` to export the active project's saved files as a playable
+ZIP without opening the editor. It returns ZIP metadata and an embedded binary
+resource; the host can offer a download or save its decoded base64 blob. Capability
+discovery reports availability and the 6 MiB archive limit. See the
+[MCP export guide](docs/editor-mcp.md#export-the-active-game) for timeouts and client usage.
+
 `sample-games/graphics` is a self-contained wardrobe example with two independent
 characters, item previews, and a two-piece cloak. Choose **Try the wardrobe inventory**
 to equip the cloak and move items between characters and their bags. The sample's

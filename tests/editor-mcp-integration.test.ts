@@ -11,6 +11,10 @@ import { EditorCoordinator } from '../apps/editor-server/src/editorCoordinator.j
 import { EditorProjectService } from '../apps/editor-server/src/editorProjectService.js'
 import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProjectRepository.js'
 import { createEditorServer } from '../apps/editor-server/src/server.js'
+import { WorkspaceGameExporter } from '../apps/editor-server/src/gameExports.js'
+import { buildGame } from '../apps/editor-server/src/buildGame.js'
+import { writeGameArchive } from '../apps/editor-server/src/gameArchive.js'
+import { unzipSync, strFromU8 } from 'fflate'
 import { EditorApiClient } from '../apps/editor-mcp/src/editorApiClient.js'
 import { createMcpServer } from '../apps/editor-mcp/src/mcpServer.js'
 import {
@@ -60,10 +64,11 @@ describe('MCP and shared editor integration', () => {
     const workspace = await FileWorkspace.open(root)
     repository = new WorkspaceProjectRepository(workspace)
     const projects = new EditorProjectService(repository, new EditorCoordinator())
+    await mkdir(join(root, '.exports'))
     server = createEditorServer(
       { workFolder: root, host: '127.0.0.1', port: 3100 },
       workspace,
-      undefined,
+      new WorkspaceGameExporter(workspace, buildGame, writeGameArchive, join(root, '.exports')),
       projects,
     )
     server.listen(0, '127.0.0.1')
@@ -106,6 +111,72 @@ describe('MCP and shared editor integration', () => {
 
     return gameSummarySchema.parse(object(result.structuredContent).data)
   }
+
+  it('exports the selected starter with saved edits and exact assets, preserving revision and history', async () => {
+    const created = await client.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'second', title: 'Exported game' },
+    })
+
+    expect(created.isError).toBe(false)
+
+    const switched = await client.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'second' },
+    })
+
+    expect(switched.isError).toBe(false)
+    let selected = await game()
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>'
+
+    const uploaded = await client.callTool({
+      name: 'ancadeba_upload_asset',
+      arguments: {
+        expectedRevision: selected.revision,
+        id: 'art',
+        format: 'svg',
+        dataBase64: Buffer.from(svg).toString('base64'),
+      },
+    })
+
+    expect(uploaded.isError, JSON.stringify(uploaded.structuredContent)).toBe(false)
+    selected = await game()
+    const discovery = await client.callTool({ name: 'ancadeba_get_capabilities', arguments: {} })
+    expect(object(object(discovery.structuredContent).data).operations).toMatchObject({
+      gameExport: { supported: true },
+    })
+    const exported = await client.callTool({ name: 'ancadeba_export_game', arguments: {} })
+    expect(exported.isError).toBe(false)
+    expect(exported.structuredContent).toMatchObject({
+      ok: true,
+      data: { gamePath: 'second', fileName: 'second.zip', mimeType: 'application/zip' },
+    })
+    const binary = exported.content.find((item) => item.type === 'resource')
+
+    if (binary?.type !== 'resource' || !('blob' in binary.resource))
+      throw new Error('Expected embedded ZIP')
+    expect(binary.resource.uri).toBe(object(object(exported.structuredContent).data).resourceUri)
+    const files = unzipSync(Buffer.from(binary.resource.blob, 'base64'))
+    expect(strFromU8(files['index.html']!)).toContain('./assets/')
+    expect(JSON.parse(strFromU8(files['config.json']!))).toEqual({ gameUrl: './game/' })
+    expect(JSON.parse(strFromU8(files['game/game.json']!))).toEqual(selected.game)
+    const source = selected.assets!.images.art!.source
+    expect(strFromU8(files[`game/${source}`]!)).toBe(svg)
+    expect(await game()).toEqual(selected)
+    await vi.waitFor(async () => expect(await readdir(join(root, '.exports'))).toEqual([]))
+    await writeFile(join(root, 'second/game.json'), '[]')
+    const failed = await client.callTool({ name: 'ancadeba_export_game', arguments: {} })
+    expect(failed.structuredContent).toMatchObject({
+      ok: false,
+      error: {
+        status: 422,
+        outcome: 'not_applied',
+        recovery: expect.stringContaining('did not change project files'),
+      },
+    })
+    expect(await readFile(join(root, 'second/game.json'), 'utf8')).toBe('[]')
+    expect(await readdir(join(root, '.exports'))).toEqual([])
+  }, 60_000)
 
   it('switches to a created project and isolates edits, uploads, history and creation metadata', async () => {
     const initial = await game()

@@ -15,6 +15,14 @@ export const listProjectsInputSchema = z.strictObject({})
 export const createProjectInputSchema = createProjectRequestSchema
 export const switchProjectInputSchema = z.strictObject({ path: workspaceProjectPathSchema })
 
+// A base64 archive plus its envelope must fit clients' default 10 MiB MCP message limit.
+export const maxExportBytes = 6 * 1024 * 1024
+export const defaultExportTimeoutMs = 120_000
+
+export const exportGameInputSchema = z.strictObject({
+  timeoutMs: z.number().int().min(1).max(300_000).default(defaultExportTimeoutMs),
+})
+
 export const assetUploadInputSchema = assetImportMetadataSchema.omit({ path: true }).extend({
   dataBase64: z
     .string()
@@ -35,6 +43,7 @@ export const editorFeaturesSchema = z.object({
   assetImport: z.boolean().default(false),
   projectDiscovery: z.boolean().optional(),
   projectCreation: z.boolean().optional(),
+  gameExport: z.boolean().optional(),
 })
 
 const toolOperation = <T extends string>(tool: T) =>
@@ -45,6 +54,10 @@ const toolOperation = <T extends string>(tool: T) =>
   })
 
 export const operationsSchema = z.object({
+  gameExport: toolOperation('ancadeba_export_game').extend({
+    maxArchiveBytes: z.number().int().positive(),
+    defaultTimeoutMs: z.number().int().positive(),
+  }),
   undo: toolOperation('ancadeba_undo'),
   redo: toolOperation('ancadeba_redo'),
   projectDiscovery: toolOperation('ancadeba_list_projects'),
@@ -60,6 +73,13 @@ export const operationsSchema = z.object({
 
 export function mcpOperations(features?: z.infer<typeof editorFeaturesSchema>) {
   return {
+    gameExport: {
+      tool: 'ancadeba_export_game' as const,
+      supported: features?.gameExport === true,
+      requestSchema: z.toJSONSchema(exportGameInputSchema, { io: 'input' }),
+      maxArchiveBytes: maxExportBytes,
+      defaultTimeoutMs: defaultExportTimeoutMs,
+    },
     projectSwitching: {
       tool: 'ancadeba_switch_project' as const,
       supported: features?.projectDiscovery === true,

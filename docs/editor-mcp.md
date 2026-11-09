@@ -6,7 +6,7 @@ visual editor. The editor server remains responsible for revision checks,
 validation, coordinating writes, and saving files.
 
 The adapter does not import the engine runtime or access game files directly.
-Its implementation is in `apps/editor-mcp`; adapter version 0.5.0 uses editor API version 1.
+Its implementation is in `apps/editor-mcp`; adapter version 0.6.0 uses editor API version 1.
 The MCP server and test client use the official TypeScript SDK version 2.4.0.
 
 ## Build
@@ -76,7 +76,7 @@ Arguments:
 | --------------------- | -------------------------------------------------------------- |
 | `--editor-server-url` | Required loopback HTTP origin, such as `http://127.0.0.1:3100` |
 | `--game`              | Required initial game folder relative to the editor workspace  |
-| `--timeout-ms`        | Per-HTTP-request timeout, 1 to 60000; default 10000            |
+| `--timeout-ms`        | HTTP timeout except export builds, 1 to 60000; default 10000   |
 | `--help`              | Print usage to stderr and exit                                 |
 
 Use an empty string argument for `--game` when the workspace itself is the game.
@@ -118,6 +118,7 @@ raw-file, shell, or process tools.
 | `ancadeba_list_projects`         | Empty object                                                                                 | Workspace project paths/titles and configured `gamePath`                                                |
 | `ancadeba_switch_project`        | `path` from discovery, including empty for the workspace root                                | Full selected project view, fresh revision, diagnostics, `gamePath` and `previousGamePath`              |
 | `ancadeba_create_project`        | `path`, `title`, optional `description`                                                      | Complete created project, its `gamePath`/revision and unchanged `configuredGamePath`                    |
+| `ancadeba_export_game`           | Optional `timeoutMs` (default 120000, maximum 300000)                                        | ZIP metadata and an embedded binary `application/zip` resource                                          |
 | `ancadeba_inspect_game`          | Empty object                                                                                 | Game metadata, scene summaries, source definitions, revision, diagnostics                               |
 | `ancadeba_inspect_scene`         | `sceneId`                                                                                    | Scene definition, revision, diagnostics                                                                 |
 | `ancadeba_inspect_assets`        | Empty object                                                                                 | Asset catalogue, parts, compositions, revision, source diagnostics                                      |
@@ -144,7 +145,7 @@ complete scene format, including `schema-version: 1.0.0`, scene type, grid scree
 and a `components` array. Components can be empty or contain any supported scene
 component type, including text with game bindings in game scenes. Grid bounds, unique component
 IDs, and binding rules are validated by the shared scene schema. The four inspection
-tools and workspace discovery are annotated as read-only. Switching is marked as
+tools, workspace discovery and game export are annotated as read-only. Switching is marked as
 modifying session selection, although it does not write files. Editing and creation tools are annotated as modifying and are not advertised as
 safe to retry automatically.
 
@@ -152,6 +153,61 @@ safe to retry automatically.
 editor schema. The existing editing tools remain available as aliases for their
 specific operations. These tools use the same validation, revision checks,
 persistence and project history as the visual editor.
+
+## Export the active game
+
+Call `ancadeba_export_game` with `{}` to build the active project's saved files
+using the same standalone export pipeline as the visual editor. No editor UI is
+needed. The editor server must have export support enabled and the development
+dependencies described in the [export guide](../README.md#standalone-game-exports).
+Capability discovery reports `features.gameExport` and `operations.gameExport`,
+including support, request schema, archive limit and default build timeout. A
+missing feature flag means unsupported; older servers need an update.
+
+The successful result's `structuredContent.data` contains `gamePath`, `fileName`,
+`mimeType`, `size` in bytes and `resourceUri`. The matching `content` entry with
+`type: 'resource'` contains the complete ZIP in `resource.blob` as base64. The
+archive appears once in the response, alongside a small JSON metadata text entry.
+Hosts can expose the binary resource as a downloadable attachment. Programmatic
+clients can save it explicitly, for example:
+
+```ts
+const result = await client.callTool({ name: 'ancadeba_export_game', arguments: {} })
+if (result.isError) throw new Error(JSON.stringify(result.structuredContent))
+const entry = result.content.find((item) => item.type === 'resource')
+if (entry?.type !== 'resource' || !('blob' in entry.resource)) {
+  throw new Error('Missing ZIP resource')
+}
+await writeFile('my-game.zip', Buffer.from(entry.resource.blob, 'base64'), { flag: 'wx' })
+```
+
+Here `writeFile` is the client's `node:fs/promises` import. The adapter accepts no
+destination path and writes no game or output files itself. `resourceUri` identifies
+this embedded result; it is not a retained server download or a `resources/read`
+endpoint. Keep the returned blob to retain the export. Extract the ZIP and serve
+its contents over HTTP(S) to play it, as with editor exports.
+
+ZIPs are limited to **6 MiB** so base64 and the MCP envelope fit a client's default
+10 MiB message limit. Both declared and streamed lengths are checked; oversized
+responses return `export_too_large`. Use the visual editor or `pnpm export:game`
+for larger exports. The export build/download timeout is separate from
+`--timeout-ms`: it defaults to two minutes and can be set per call with
+`{ "timeoutMs": 300000 }` (1–300000 ms). The capability preflight still uses the
+ordinary HTTP timeout. MCP hosts must also allow enough time for the tool call.
+
+Export captures the active project before its first asynchronous request; switching
+during a build does not retarget it. It does not change the project's revision or
+undo history and requires no `expectedRevision`. It reads saved files during the
+build rather than a revision-pinned snapshot, so await edits and avoid concurrent
+edits until it finishes. Unsaved visual editor drafts are not included.
+
+Only one server export runs at a time. Busy (409), invalid-game (422) and unavailable
+(503) responses are reported without retries. Cancellation, shutdown or timeout
+stops waiting and downloading; the server may finish building before cleaning up
+its temporary files and releasing its export slot. All export failures report
+`outcome: not_applied` because export does not mutate project files. No ZIP is
+returned on failure. Inspect capability availability or correct the game before
+another deliberate attempt; a busy server may need time to finish.
 
 | Area                | Supported command operations                                                                                                                             |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -182,14 +238,15 @@ Every mutation rechecks server capabilities, so a command removed after discover
 is rejected before posting the edit. Aliases resolve command schemas by name,
 independently of command-list order.
 
-Workspace, history and upload tools are separate operations, not command types. Discovery adds
-`operations.projectDiscovery`, `operations.projectCreation` and
-`operations.projectSwitching` alongside
+Workspace, export, history and upload tools are separate operations, not command types. Discovery adds
+`operations.projectDiscovery`, `operations.projectCreation`,
+`operations.projectSwitching` and `operations.gameExport` alongside
 `operations.undo`, `operations.redo` and `operations.assetUpload`, each with a
 tool name, `supported` flag and MCP input schema. Upload discovery includes
 `maxMultipartBytes` (10485760). The HTTP server advertises optional
-`features.history`, `features.assetImport`, `features.projectDiscovery` and
-`features.projectCreation`. Discovery is available through the workspace service;
+`features.history`, `features.assetImport`, `features.projectDiscovery`,
+`features.projectCreation` and `features.gameExport`. Export availability reflects
+the server's configured export service. Discovery is available through the workspace service;
 creation and other writes depend on the configured project repository.
 Missing flags from older servers mean unsupported; commands still work. Update
 an older server if a required feature flag is absent, and load the updated adapter.
@@ -467,6 +524,8 @@ Tests are under root `tests/`:
   bytes, canonical base64 and size limits, feature checks and uncertain outcomes.
 - `editor-mcp-projects.test.ts`: workspace list/create request mapping, local
   validation, feature availability, cancellation and uncertain creation outcomes.
+- `editor-mcp-export.test.ts`: ZIP bytes, feature gating, fixed request scope,
+  build deadlines, cancellation, malformed responses and bounded downloads.
 - `editor-mcp-switching.test.ts`: selection validation, root/nested projects,
   per-connection isolation, immutable HTTP scopes, all tool routes, in-flight
   request labels, competing switches and cancellation.
@@ -485,7 +544,7 @@ Only test-owned processes are closed.
 
 The adapter exposes the command endpoint, not every editor HTTP endpoint. It
 does not expose changing the editor server URL, the component clipboard-export endpoint,
-preview controls, exports, raw file access, command batches, shell/process tools
+preview controls, raw file access, command batches, shell/process tools
 or remote MCP hosting. Component duplication and paste are available as shared
 commands; inspect a scene to obtain a source component. Declarative rules are
 authorable; arbitrary executable scripts are not added by the adapter.

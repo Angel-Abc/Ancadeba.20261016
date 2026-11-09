@@ -15,6 +15,9 @@ import { EditorCoordinator } from '../apps/editor-server/src/editorCoordinator.j
 import { EditorProjectService } from '../apps/editor-server/src/editorProjectService.js'
 import { WorkspaceProjectRepository } from '../apps/editor-server/src/editorProjectRepository.js'
 import { createEditorServer } from '../apps/editor-server/src/server.js'
+import { WorkspaceGameExporter } from '../apps/editor-server/src/gameExports.js'
+import { writeGameArchive } from '../apps/editor-server/src/gameArchive.js'
+import { unzipSync, strFromU8 } from 'fflate'
 import { object } from '@ancadeba/editor-core'
 import {
   historyResultSchema,
@@ -59,7 +62,15 @@ describe('MCP stdio process', () => {
     server = createEditorServer(
       { workFolder: root, host: '127.0.0.1', port: 3100 },
       workspace,
-      undefined,
+      new WorkspaceGameExporter(
+        workspace,
+        async (source, output) => {
+          await mkdir(output)
+          await writeFile(join(output, 'game.json'), await readFile(join(source, 'game.json')))
+        },
+        writeGameArchive,
+        root,
+      ),
       projects,
     )
     server.listen(0, '127.0.0.1')
@@ -111,7 +122,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(16)
+    expect((await activeClient.listTools()).tools).toHaveLength(17)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -175,6 +186,31 @@ describe('MCP stdio process', () => {
     await activeClient.close()
 
     if (pid !== null) expect(() => process.kill(pid, 0)).toThrow()
+  })
+
+  it('delivers a binary export over stdio from the selected project without filesystem access in the adapter', async () => {
+    const { activeClient, errors, stderr } = await connect()
+    await activeClient.callTool({
+      name: 'ancadeba_create_project',
+      arguments: { path: 'exported', title: 'Selected for export' },
+    })
+    await activeClient.callTool({
+      name: 'ancadeba_switch_project',
+      arguments: { path: 'exported' },
+    })
+    const result = await activeClient.callTool({ name: 'ancadeba_export_game', arguments: {} })
+    expect(result.isError).toBe(false)
+    expect(result.structuredContent).toMatchObject({
+      data: { gamePath: 'exported', fileName: 'exported.zip' },
+    })
+    const binary = result.content.find((item) => item.type === 'resource')
+
+    if (binary?.type !== 'resource' || !('blob' in binary.resource))
+      throw new Error('Expected embedded ZIP')
+    const files = unzipSync(Buffer.from(binary.resource.blob, 'base64'))
+    expect(JSON.parse(strFromU8(files['game.json']!)).title).toBe('Selected for export')
+    expect(errors).toEqual([])
+    expect(stderr).toEqual([])
   })
   it('uploads images whose base64 message exceeds the SDK default stdio buffer', async () => {
     const { activeClient, errors, stderr } = await connect()
@@ -277,7 +313,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(16)
+    expect((await activeClient.listTools()).tools).toHaveLength(17)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({

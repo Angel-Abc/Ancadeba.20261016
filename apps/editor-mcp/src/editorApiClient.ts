@@ -1,7 +1,6 @@
 import {
   commandRequestSchema,
   type EditorCommand,
-  type Diagnostic,
   type EditorWriteOutcome,
 } from '@ancadeba/editor-core'
 import type { z } from 'zod'
@@ -12,7 +11,10 @@ import {
   historyInputSchema,
   maxUploadBytes,
   createProjectInputSchema,
+  exportGameInputSchema,
 } from './operationSupport.js'
+import { EditorApiError } from './editorApiError.js'
+import { readExportArchive, type ExportArchive } from './exportArchive.js'
 import {
   apiErrorSchema,
   appliedChangeSchema,
@@ -21,6 +23,8 @@ import {
   sceneViewSchema,
   projectListSchema,
 } from './protocol.js'
+
+export { EditorApiError } from './editorApiError.js'
 
 // These editor errors are raised before persistence. Other failures may come from
 // the server's reread after saving, including legacy workspace errors with a 4xx status.
@@ -46,20 +50,12 @@ const jsonBody = (value: unknown): RequestBody => ({
   headers: { 'Content-Type': 'application/json' },
 })
 
-export class EditorApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly diagnostics: Diagnostic[] = [],
-    readonly outcome: EditorWriteOutcome = 'not_applied',
-    readonly status?: number,
-  ) {
-    super(message)
-  }
-}
-
 export interface IEditorApi {
   forProject(path: string): IEditorApi
+  exportGame(
+    input: z.input<typeof exportGameInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<ExportArchive>
   listProjects(signal?: AbortSignal): Promise<z.infer<typeof projectListSchema>>
   createProject(
     input: z.infer<typeof createProjectInputSchema>,
@@ -128,6 +124,26 @@ export class EditorApiClient implements IEditorApi {
       )
 
     return this.request('/api/editor/projects', projectListSchema, undefined, signal)
+  }
+
+  async exportGame(input: z.input<typeof exportGameInputSchema>, signal?: AbortSignal) {
+    const parsed = exportGameInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError('invalid_request', 'Export timeoutMs must be 1 to 300000')
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.gameExport)
+      throw new EditorApiError(
+        'unsupported_export',
+        'The connected editor does not advertise game export support',
+      )
+
+    return this.request('/api/exports', undefined, jsonBody({ path: this.config.game }), signal, {
+      readResponse: readExportArchive,
+      timeoutMs: parsed.data.timeoutMs,
+      readOnly: true,
+    })
   }
 
   async createProject(input: z.infer<typeof createProjectInputSchema>, signal?: AbortSignal) {
@@ -288,12 +304,17 @@ export class EditorApiClient implements IEditorApi {
 
   private async request<T>(
     path: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T> | undefined,
     body?: RequestBody,
     requestSignal?: AbortSignal,
+    options?: {
+      readResponse: (response: Response) => Promise<T>
+      timeoutMs: number
+      readOnly: boolean
+    },
   ): Promise<T> {
     const signals = [
-      AbortSignal.timeout(this.config.timeoutMs),
+      AbortSignal.timeout(options?.timeoutMs ?? this.config.timeoutMs),
       requestSignal,
       this.shutdownSignal,
     ].filter((signal): signal is AbortSignal => signal !== undefined)
@@ -302,7 +323,7 @@ export class EditorApiClient implements IEditorApi {
 
     if (signal.aborted)
       throw new EditorApiError('cancelled', 'Request was cancelled before sending')
-    const writing = body !== undefined
+    const writing = body !== undefined && !options?.readOnly
     let sent = false
 
     try {
@@ -310,12 +331,14 @@ export class EditorApiClient implements IEditorApi {
       sent = true
 
       const response = await fetcher(`${this.config.editorServerUrl}${path}`, {
-        method: writing ? 'POST' : 'GET',
+        method: body ? 'POST' : 'GET',
         ...body,
         redirect: 'error',
         cache: 'no-store',
         signal,
       })
+
+      if (response.ok && options) return await options.readResponse(response)
 
       let value: unknown
 
@@ -360,9 +383,9 @@ export class EditorApiClient implements IEditorApi {
         )
       }
 
-      const parsed = schema.safeParse(value)
+      const parsed = schema?.safeParse(value)
 
-      if (!parsed.success)
+      if (!parsed?.success)
         throw new EditorApiError(
           'invalid_response',
           'Editor response did not match the expected API schema',

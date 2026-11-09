@@ -48,6 +48,12 @@ async function connection(api: IEditorApi) {
 function api(): IEditorApi {
   return {
     forProject: () => api(),
+    exportGame: async () => ({
+      fileName: 'game.zip',
+      mimeType: 'application/zip',
+      size: 4,
+      dataBase64: 'UEsDBA==',
+    }),
     listProjects: async () => ({ projects: [{ path: 'basic', title: 'Game' }] }),
     createProject: async () => view,
     capabilities: async () => ({
@@ -73,6 +79,53 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
+  it('rejects export scope overrides before running a build and includes bytes only as a binary resource', async () => {
+    const remote = api()
+    let exports = 0
+    remote.exportGame = async (input, signal) => {
+      expect(input).toEqual({ timeoutMs: 120000 })
+      expect(signal).toBeInstanceOf(AbortSignal)
+      exports++
+
+      return { fileName: 'game.zip', mimeType: 'application/zip', size: 4, dataBase64: 'UEsDBA==' }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      for (const args of [
+        { path: 'other' },
+        { url: 'http://other' },
+        { outputPath: 'game.zip' },
+        { expectedRevision: 'one' },
+        { timeoutMs: 0 },
+      ])
+        expect(
+          (await client.callTool({ name: 'ancadeba_export_game', arguments: args })).isError,
+        ).toBe(true)
+      expect(exports).toBe(0)
+      const result = await client.callTool({ name: 'ancadeba_export_game', arguments: {} })
+      expect(result.isError).toBe(false)
+      expect(exports).toBe(1)
+      expect(result.structuredContent).toMatchObject({
+        data: { gamePath: 'basic', fileName: 'game.zip', size: 4 },
+      })
+      expect(JSON.stringify(result.structuredContent)).not.toContain('UEsDBA==')
+      expect(result.content).toEqual([
+        { type: 'text', text: JSON.stringify(result.structuredContent) },
+        {
+          type: 'resource',
+          resource: {
+            uri: object(object(result.structuredContent).data).resourceUri,
+            mimeType: 'application/zip',
+            blob: 'UEsDBA==',
+          },
+        },
+      ])
+    } finally {
+      await close()
+    }
+  })
   it('lists workspace projects and creates starters without silently changing the configured binding', async () => {
     const remote = api()
     const created: unknown[] = []
@@ -384,6 +437,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_create_project',
         'ancadeba_create_scene',
         'ancadeba_edit_assets',
+        'ancadeba_export_game',
         'ancadeba_get_capabilities',
         'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
@@ -397,7 +451,10 @@ describe('MCP adapter tools', () => {
         'ancadeba_update_scene_metadata',
         'ancadeba_upload_asset',
       ])
-      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(5)
+      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(6)
+      expect(
+        tools.find((tool) => tool.name === 'ancadeba_export_game')?.inputSchema.required ?? [],
+      ).not.toContain('timeoutMs')
 
       for (const tool of tools) {
         expect(tool.outputSchema).toHaveProperty('type', 'object')
