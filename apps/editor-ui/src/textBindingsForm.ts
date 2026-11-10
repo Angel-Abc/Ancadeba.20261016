@@ -14,11 +14,11 @@ export interface TextBindingPending {
 }
 
 const sourceNames = {
-  'game.state': 'Game state',
-  'game.progression': 'Game time',
-  'game.quests': 'Quest progress',
-  'game.leveling': 'Character levels',
-  'game.combatStats': 'Combat stats',
+  'game.state': 'bindings.source.state',
+  'game.progression': 'bindings.source.time',
+  'game.quests': 'bindings.source.quests',
+  'game.leveling': 'leveling.heading',
+  'game.combatStats': 'bindings.source.combat',
 } as const
 
 /** Text placeholders opt into binding explicitly; removing a row never silently makes them literal. */
@@ -31,30 +31,28 @@ export function textBindingsForm(
   rerender: () => void,
   append: (placeholder: string) => void,
 ) {
-  const { group, create, input, select, button } = controls
-  const root = group('Dynamic text bindings')
+  const { group, create, input, select, button, t } = controls
+  const root = group(t('bindings.dynamic'))
   const error = create('p')
   error.className = 'error'
   error.setAttribute('role', 'alert')
   const preview = create('output')
   preview.className = 'text-binding-preview'
-  preview.setAttribute('aria-label', 'Starting-value text preview')
+  preview.setAttribute('aria-label', t('bindings.previewLabel'))
   const diagnostics = create('p')
   diagnostics.className = 'help'
   diagnostics.setAttribute('aria-live', 'polite')
   const help = create('p')
   help.className = 'help'
-  help.textContent = gameScene
-    ? 'Write {{name}} in text or a translation, then bind that name to a value. Gold is a numeric state field declared in Rules. Quest counters use their objective state fields. This preview uses authored starting values before actions run; other derived values are available during play.'
-    : 'Dynamic text bindings require a game scene. Text in this scene stays static.'
-  const choices = textBindingChoices(view)
+  help.textContent = gameScene ? t('bindings.help') : t('bindings.staticOnly')
+  const choices = textBindingChoices(view, t)
 
   const mode = select(
-    'Text binding mode',
+    t('bindings.mode'),
     draft.bindings === undefined ? 'static' : 'dynamic',
     [
-      ['static', 'Static text'],
-      ['dynamic', 'Dynamic placeholders'],
+      ['static', t('bindings.staticText')],
+      ['dynamic', t('bindings.placeholders')],
     ],
     (value) => {
       draft.bindings = value === 'dynamic' ? {} : undefined
@@ -75,7 +73,7 @@ export function textBindingsForm(
   }
 
   const heading = create('strong')
-  heading.textContent = 'Starting-value preview'
+  heading.textContent = t('bindings.preview')
   root.append(heading, preview, diagnostics)
 
   if (draft.bindings !== undefined && gameScene) {
@@ -85,13 +83,13 @@ export function textBindingsForm(
         : 'custom'
 
       const box = group(
-        `Binding ${alias}`,
+        t('bindings.binding', { alias }),
         select(
-          'Bound value',
+          t('bindings.boundValue'),
           selected,
           [
             ...choices.map((choice) => [choice.id, choice.label] as const),
-            ['custom', 'Custom path'],
+            ['custom', t('bindings.customPath')],
           ],
           (value) =>
             change(() => {
@@ -121,10 +119,10 @@ export function textBindingsForm(
       if (selected === 'custom') {
         box.append(
           select(
-            'Binding source',
+            t('bindings.sourceLabel'),
             binding.source,
             gameBindingSchema.shape.source.options.map(
-              (source) => [source, sourceNames[source]] as const,
+              (source) => [source, t(sourceNames[source])] as const,
             ),
             (value) => {
               binding.source = value
@@ -135,13 +133,13 @@ export function textBindingsForm(
         binding.path.forEach((segment, index) =>
           box.append(
             group(
-              `Path segment ${index + 1}`,
+              t('bindings.pathSegment', { number: index + 1 }),
               select(
-                'Path segment type',
+                t('bindings.segmentType'),
                 typeof segment === 'number' ? 'index' : 'key',
                 [
-                  ['key', 'Object key / Map key'],
-                  ['index', 'Array index'],
+                  ['key', t('bindings.objectKey')],
+                  ['index', t('bindings.arrayIndex')],
                 ],
                 (value) =>
                   change(() => {
@@ -149,7 +147,7 @@ export function textBindingsForm(
                   }),
               ),
               input(
-                typeof segment === 'number' ? 'Array index' : 'Path key',
+                typeof segment === 'number' ? t('bindings.arrayIndex') : t('bindings.pathKey'),
                 String(segment),
                 (value) => {
                   binding.path[index] =
@@ -159,7 +157,7 @@ export function textBindingsForm(
                 typeof segment === 'number' ? 'number' : 'text',
               ),
               button(
-                `Remove path segment ${index + 1}`,
+                t('bindings.removeSegment', { number: index + 1 }),
                 () =>
                   change(() => {
                     binding.path.splice(index, 1)
@@ -170,7 +168,7 @@ export function textBindingsForm(
           ),
         )
         box.append(
-          button('Add path segment', () =>
+          button(t('bindings.addSegment'), () =>
             change(() => {
               binding.path.push('')
             }),
@@ -179,22 +177,26 @@ export function textBindingsForm(
       }
 
       box.append(
-        select('Use fallback text', String(binding.fallback !== undefined), yesNoChoices, (value) =>
-          change(() => {
-            if (value === 'true') binding.fallback = ''
-            else delete binding.fallback
-          }),
+        select(
+          t('bindings.useFallback'),
+          String(binding.fallback !== undefined),
+          yesNoChoices(t),
+          (value) =>
+            change(() => {
+              if (value === 'true') binding.fallback = ''
+              else delete binding.fallback
+            }),
         ),
         ...(binding.fallback !== undefined
           ? [
-              input('Fallback text', binding.fallback, (value) => {
+              input(t('bindings.fallbackText'), binding.fallback, (value) => {
                 binding.fallback = value
                 refresh()
               }),
             ]
           : []),
         button(
-          `Append {{${alias}}}`,
+          t('bindings.append', { alias }),
           () => {
             append(`{{${alias}}}`)
             controls.markEdited()
@@ -202,7 +204,7 @@ export function textBindingsForm(
           },
           Boolean(draft.textKey),
         ),
-        button(`Remove binding ${alias}`, () =>
+        button(t('bindings.removeBinding', { alias }), () =>
           change(() => {
             if (draft.bindings) Reflect.deleteProperty(draft.bindings, alias)
           }),
@@ -216,11 +218,11 @@ export function textBindingsForm(
       : choices[0]!.id
 
     root.append(
-      input('New binding name', pending.alias, (value) => {
+      input(t('bindings.newName'), pending.alias, (value) => {
         pending.alias = value.trim()
       }),
       select(
-        'New binding value',
+        t('bindings.newValue'),
         value,
         choices.map((choice) => [choice.id, choice.label] as const),
         (value) => {
@@ -228,13 +230,12 @@ export function textBindingsForm(
         },
         false,
       ),
-      button('Add text binding', () => {
+      button(t('form.addTextBinding'), () => {
         if (
           !bindingAliasSchema.safeParse(pending.alias).success ||
           Object.hasOwn(draft.bindings ?? {}, pending.alias)
         ) {
-          error.textContent =
-            'Enter an unused binding name using letters, digits, underscores or hyphens.'
+          error.textContent = t('bindings.invalidName')
 
           return
         }
@@ -279,15 +280,11 @@ export function textBindingsForm(
         : []
 
     diagnostics.textContent = [
-      ...(missing.length ? [`Unbound placeholders: ${missing.join(', ')}.`] : []),
+      ...(missing.length ? [t('bindings.unbound', { names: missing.join(', ') })] : []),
       ...(resolution.diagnostics.some((diagnostic) => diagnostic.reason !== 'undeclared-binding')
-        ? ['Some values are available only during play; fallback text is shown when provided.']
+        ? [t('bindings.playOnly')]
         : []),
-      ...(draft.textKey
-        ? [
-            'This template comes from Localization. Edit its placeholders there; every language uses these binding names.',
-          ]
-        : []),
+      ...(draft.textKey ? [t('bindings.fromLocalization')] : []),
     ].join(' ')
   }
 

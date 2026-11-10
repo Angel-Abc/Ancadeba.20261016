@@ -1,13 +1,19 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import { combatDefinitionSchema, combatComponentSchema, type CombatSource } from '@ancadeba/schemas'
 import { bindCombatLibraryEditor } from './combatLibraryEditor.js'
 import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
-import { placementFields, ruleFormControls, saveBar } from './ruleFormControls.js'
+import { placementFields, ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
 import { sceneChoices } from './choiceLabels.js'
 
-export function bindCombatEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindCombatEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -15,7 +21,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
   const fields = document.createElement('fieldset')
   const libraryRoot = document.createElement('section')
   root.replaceChildren(error, fields, libraryRoot)
-  const libraryEditor = bindCombatLibraryEditor(libraryRoot, save)
+  const libraryEditor = bindCombatLibraryEditor(libraryRoot, save, t)
   let view: ProjectView | undefined
   let path: string | undefined
   let sceneId = ''
@@ -28,9 +34,15 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
   let playerHealth = ''
   let enemyHealth = ''
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const reset = () => {
     const scene = view?.scenes.find((scene) => scene.id === sceneId)
@@ -64,7 +76,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       return true
 
     if (dirty) {
-      error.textContent = 'Save or discard the combat draft before switching targets.'
+      error.textContent = t('combat.saveFirstTargets')
 
       return false
     }
@@ -86,7 +98,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
         (id) => id.toLowerCase() === command.encounter.id.toLowerCase(),
       )
     ) {
-      error.textContent = 'A combat encounter with this ID already exists. Choose a different ID.'
+      error.textContent = t('combat.encounterExists')
 
       return
     }
@@ -140,11 +152,10 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
 
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent =
-      'Before adding an encounter, declare two distinct numeric health fields with positive starting values in Rules (for example health = 40 and enemyHealth = 20). Select them below. Existing state values stay unchanged.'
+    help.textContent = t('combat.healthHelp')
 
     const picker = controls.select(
-      'Combat game scene',
+      t('combat.gameScene'),
       sceneId,
       sceneChoices(view, 'game'),
       (value) => {
@@ -156,9 +167,9 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     picker.className = 'context-picker'
 
     const encounters = controls.select(
-      'Combat encounter',
+      t('combat.encounter'),
       encounterId,
-      [['', 'Choose…'], ...Object.keys(view.combat ?? {})],
+      [['', t('form.choose')], ...Object.keys(view.combat ?? {})],
       (value) => {
         if (!navigate(sceneId, value)) encounters.querySelector('select')!.value = encounterId
       },
@@ -171,10 +182,10 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       picker,
       encounters,
       controls.group(
-        'New encounter health',
+        t('combat.newEncounterHealth'),
         help,
         controls.select(
-          'New player health field',
+          t('combat.newPlayerHealth'),
           playerHealth,
           healthChoices,
           (value) => {
@@ -183,7 +194,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           false,
         ),
         controls.select(
-          'New enemy health field',
+          t('combat.newEnemyHealth'),
           enemyHealth,
           healthChoices,
           (value) => {
@@ -192,9 +203,9 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           false,
         ),
       ),
-      controls.button('Add encounter', () => {
+      controls.button(t('combat.addEncounter'), () => {
         if (dirty) {
-          error.textContent = 'Save or discard the combat draft first.'
+          error.textContent = t('combat.saveFirst')
 
           return
         }
@@ -209,8 +220,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           !enemyField ||
           playerHealth === enemyHealth
         ) {
-          error.textContent =
-            'Choose a game scene and two distinct positive health fields from Rules before adding an encounter.'
+          error.textContent = t('combat.chooseSceneAndHealth')
 
           return
         }
@@ -271,7 +281,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     const form = document.createElement('form')
     const button = document.createElement('button')
     button.type = 'submit'
-    button.textContent = 'Save combat encounter'
+    button.textContent = t('combat.saveEncounter')
     form.append(
       saveBar(document, button),
       sharedCombatForm(
@@ -282,7 +292,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
         (library) => libraryEditor.navigate(library),
         (command) => {
           if (dirty) {
-            error.textContent = 'Save or discard the combat draft before making a local copy.'
+            error.textContent = t('combat.saveFirstCopy')
 
             return
           }
@@ -292,12 +302,12 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       ),
       ...combatForm(controls, view, draft, render, creating),
       controls.group(
-        'Combat view',
-        controls.input('Combat component ID', current.id, (value) => {
+        t('form.combatView'),
+        controls.input(t('combat.componentId'), current.id, (value) => {
           current.id = value.trim()
         }),
         controls.select(
-          'Combat main text target',
+          t('combat.mainTextTarget'),
           current.textTarget ?? '',
           [
             '',
@@ -310,7 +320,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
           },
         ),
         controls.select(
-          'Combat loot inventory',
+          t('combat.lootInventory'),
           current.lootInventory ?? '',
           [
             '',
@@ -322,7 +332,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
             current.lootInventory = value || undefined
           },
         ),
-        ...placementFields.map(([key, label]) =>
+        ...placementFields(t).map(([key, label]) =>
           controls.input(
             label,
             String(current.placement[key]),
@@ -347,12 +357,12 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     })
     fields.append(
       form,
-      controls.button('Discard combat draft', reset),
-      controls.button('Remove combat view', () =>
+      controls.button(t('combat.discard'), reset),
+      controls.button(t('combat.removeView'), () =>
         submit({ type: 'scene.setCombat', sceneId, component: null }),
       ),
       controls.button(
-        'Delete encounter definition',
+        t('combat.deleteEncounter'),
         () => {
           if (draft) submit({ type: 'game.removeCombat', encounterId: draft.id })
         },
@@ -365,6 +375,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
     navigate,
     hasDrafts: () => dirty || libraryEditor.hasDrafts(),
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       libraryEditor.render(state, replaceFields)
       const projectChanged = path !== state.path
       const changed = view !== state.view
@@ -389,7 +400,7 @@ export function bindCombatEditor(root: HTMLElement, save: (command: EditorComman
       }
 
       if (resetFields || saved || (changed && !dirty)) reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

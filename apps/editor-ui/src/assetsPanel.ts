@@ -64,7 +64,7 @@ export function bindAssetsPanel(
     }
   const document = panel.ownerDocument
   panel.innerHTML = `
-    <h3 data-i18n="assets.heading"></h3><p class="help" data-i18n="assets.help"></p>
+    <p id="asset-intro" class="help" data-i18n="assets.help"></p>
     <div id="asset-gallery" class="asset-gallery"></div>
     <div id="asset-empty" class="asset-empty" hidden><p id="asset-empty-text"></p><button type="button" id="asset-empty-action"></button></div><div id="asset-workshop">
     <label for="asset-select" data-i18n="assets.visual"></label><select id="asset-select"></select>
@@ -198,6 +198,7 @@ export function bindAssetsPanel(
             { document, assets, graphics: resources, bindingMode: 'editor' },
           )
         : undefined,
+    t,
   )
 
   const sceneGraphicEditor = bindSceneGraphicEditor(
@@ -215,6 +216,7 @@ export function bindAssetsPanel(
             ...(startingValues ? { bindings: startingGameBindings(view) } : {}),
           })
         : undefined,
+    t,
   )
 
   const updatePreview = () => preview?.setAppearance(appearance)
@@ -530,6 +532,8 @@ export function bindAssetsPanel(
       }
 
       const browsing = ['section', 'images', 'parts', 'compositions'].includes(kind)
+      // The pane heading names the selection; the introduction belongs to the galleries only.
+      find('asset-intro').hidden = !browsing
       find('asset-gallery').hidden = !browsing
       browsingKind = browsing ? kind : ''
 

@@ -8,7 +8,7 @@ export function combatRewardsForm(
   draft: CombatDefinition,
   render: () => void,
 ): HTMLElement {
-  const { group, select, input, button, translation } = controls
+  const { group, select, input, button, translation, t } = controls
   const owners = Object.keys(view.inventory?.owners ?? {})
 
   const fields = (view.rules?.state ?? [])
@@ -21,8 +21,8 @@ export function combatRewardsForm(
   const keys = translationChoices(view)
 
   const root = group(
-    'Victory rewards',
-    select('Enable victory rewards', draft.rewards ? 'yes' : 'no', ['no', 'yes'], (value) => {
+    t('combat.victoryRewards'),
+    select(t('combat.enableRewards'), draft.rewards ? 'yes' : 'no', ['no', 'yes'], (value) => {
       draft.rewards = value === 'yes' ? { recipient: owners[0], numeric: [], drops: [] } : undefined
       render()
     }),
@@ -32,43 +32,48 @@ export function combatRewardsForm(
 
   if (!rewards) return root
   root.append(
-    select('Reward recipient owner', rewards.recipient ?? '', ['', ...owners], (value) => {
+    select(t('combat.rewardRecipient'), rewards.recipient ?? '', ['', ...owners], (value) => {
       rewards.recipient = value || undefined
     }),
-    select('Reward loot owner', rewards.lootOwner ?? '', ['', ...owners], (value) => {
+    select(t('combat.lootOwner'), rewards.lootOwner ?? '', ['', ...owners], (value) => {
       rewards.lootOwner = value || undefined
     }),
   )
   rewards.numeric.forEach((entry, index) =>
     root.append(
       group(
-        `Numeric reward ${index + 1}`,
-        input(`Reward ${index + 1} ID`, entry.id, (value) => {
+        t('form.numericReward', { number: index + 1 }),
+        input(t('combat.rewardId', { number: index + 1 }), entry.id, (value) => {
           entry.id = value.trim()
         }),
-        input(`Reward ${index + 1} label`, entry.label, (value) => {
+        input(t('combat.rewardLabel', { number: index + 1 }), entry.label, (value) => {
           entry.label = value
         }),
         translation(
-          `Reward ${index + 1} label translation`,
+          t('combat.rewardLabelTranslation', { number: index + 1 }),
           entry.labelKey ?? '',
           keys,
           (value) => {
             entry.labelKey = value || undefined
           },
         ),
-        select(`Reward ${index + 1} field`, JSON.stringify(entry.field), fields, (value) => {
-          entry.field = numericRewardSchema.shape.field.parse(JSON.parse(value))
-        }),
+        select(
+          t('combat.rewardField', { number: index + 1 }),
+          JSON.stringify(entry.field),
+          fields,
+          (value) => {
+            entry.field = numericRewardSchema.shape.field.parse(JSON.parse(value))
+          },
+        ),
         input(
-          `Reward ${index + 1} amount`,
+          t('combat.rewardAmount', { number: index + 1 }),
           String(entry.amount),
           (value) => {
             entry.amount = Number(value)
           },
           'number',
         ),
-        button(`Remove numeric reward ${index + 1}`, () => {
+        button(t('combat.removeNumericReward', { number: index + 1 }), () => {
           rewards.numeric.splice(index, 1)
           controls.markEdited()
           render()
@@ -77,7 +82,7 @@ export function combatRewardsForm(
     ),
   )
   root.append(
-    button('Add numeric reward', () => {
+    button(t('form.addNumericReward'), () => {
       let id = 'reward'
       let index = 1
 
@@ -112,12 +117,12 @@ export function combatRewardsForm(
     let channel = channels.find((channel) => !Object.hasOwn(drop.colors, channel)) ?? ''
     root.append(
       group(
-        `Loot drop ${index + 1}`,
-        input(`Drop ${index + 1} ID`, drop.id, (value) => {
+        t('combat.lootDrop', { number: index + 1 }),
+        input(t('combat.dropId', { number: index + 1 }), drop.id, (value) => {
           drop.id = value.trim()
         }),
         select(
-          `Drop ${index + 1} item type`,
+          t('combat.dropItemType', { number: index + 1 }),
           drop.itemType,
           Object.keys(view.inventory?.itemTypes ?? {}),
           (value) => {
@@ -126,7 +131,7 @@ export function combatRewardsForm(
           },
         ),
         input(
-          `Drop ${index + 1} chance (0–10000)`,
+          t('combat.dropChance', { number: index + 1 }),
           String(drop.chance),
           (value) => {
             drop.chance = Number(value)
@@ -134,17 +139,21 @@ export function combatRewardsForm(
           'number',
         ),
         ...Object.entries(drop.colors).flatMap(([channel]) => [
-          input(`Drop ${index + 1} dye ${channel}`, drop.colors[channel]!, (value) => {
-            drop.colors[channel] = value
-          }),
-          button(`Remove drop ${index + 1} dye ${channel}`, () => {
+          input(
+            t('combat.dropDye', { number: index + 1, channel }),
+            drop.colors[channel]!,
+            (value) => {
+              drop.colors[channel] = value
+            },
+          ),
+          button(t('combat.removeDropDye', { number: index + 1, channel }), () => {
             delete drop.colors[channel]
             controls.markEdited()
             render()
           }),
         ]),
         select(
-          `Drop ${index + 1} new dye channel`,
+          t('combat.dropNewDye', { number: index + 1 }),
           channel,
           ['', ...channels.filter((channel) => !Object.hasOwn(drop.colors, channel))],
           (value) => {
@@ -153,7 +162,7 @@ export function combatRewardsForm(
           false,
         ),
         button(
-          `Add drop ${index + 1} dye`,
+          t('combat.addDropDye', { number: index + 1 }),
           () => {
             if (!channel) return
             drop.colors[channel] = '#ffffff'
@@ -162,7 +171,7 @@ export function combatRewardsForm(
           },
           !channels.some((channel) => !Object.hasOwn(drop.colors, channel)),
         ),
-        button(`Remove loot drop ${index + 1}`, () => {
+        button(t('combat.removeLootDrop', { number: index + 1 }), () => {
           rewards.drops.splice(index, 1)
           controls.markEdited()
           render()
@@ -171,7 +180,7 @@ export function combatRewardsForm(
     )
   })
   root.append(
-    button('Add loot drop', () => {
+    button(t('combat.addLootDrop'), () => {
       let id = 'drop'
       let index = 1
 

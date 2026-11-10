@@ -1,7 +1,9 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { ActionBarComponentDefinition, InputDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { actionBarForm } from './actionBarForm.js'
 import {
   createInputDraft,
@@ -25,7 +27,11 @@ function defaultInput(): InputDefinition {
   }
 }
 
-export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindActionBarPanel(
+  panel: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = panel.ownerDocument
   const navigation = document.createElement('div')
   const error = document.createElement('p')
@@ -46,16 +52,26 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
   let inputDirty = false
   let busy = false
 
-  const barControls = ruleFormControls(document, () => {
-    barDirty = true
-  })
+  const languageChanged = languageWatcher(t)
 
-  const inputControls = ruleFormControls(document, () => {
-    inputDirty = true
-  })
+  const barControls = ruleFormControls(
+    document,
+    () => {
+      barDirty = true
+    },
+    t,
+  )
 
-  const barTab = barControls.button('Scene action bar', () => showInputs(false))
-  const inputTab = inputControls.button('Game input bindings', () => showInputs(true))
+  const inputControls = ruleFormControls(
+    document,
+    () => {
+      inputDirty = true
+    },
+    t,
+  )
+
+  const barTab = barControls.button(t('controls.sceneActionBar'), () => showInputs(false))
+  const inputTab = inputControls.button(t('controls.inputBindings'), () => showInputs(true))
   navigation.append(barTab, inputTab)
 
   function showInputs(show: boolean) {
@@ -81,7 +97,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     if (!nextScene || nextScene === sceneId) return true
 
     if (barDirty) {
-      error.textContent = 'Save or discard the action-bar draft before switching scenes.'
+      error.textContent = t('controls.saveBarFirst')
 
       return false
     }
@@ -102,7 +118,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     const scene = view.scenes.find(({ id, type }) => id === sceneId && type === 'game')
 
     const picker = barControls.select(
-      'Game scene',
+      t('form.gameScene'),
       sceneId,
       sceneChoices(view, 'game'),
       (next) => {
@@ -116,14 +132,14 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     barFields.append(picker)
 
     if (!scene) {
-      barFields.append('Select a game scene to configure its action bar.')
+      barFields.append(t('controls.selectScene'))
 
       return
     }
 
     if (!barDraft) {
       barFields.append(
-        barControls.button('Add action bar', () => {
+        barControls.button(t('controls.addBar'), () => {
           const { rows, columns } = scene.screen.grid
           barDraft = {
             id: 'action-bar',
@@ -147,7 +163,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     const form = document.createElement('form')
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save action bar'
+    saveButton.textContent = t('controls.saveBar')
     form.append(
       saveBar(document, saveButton),
       ...actionBarForm(
@@ -174,12 +190,12 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     })
     barFields.append(
       form,
-      barControls.button('Discard action-bar draft', () => {
+      barControls.button(t('controls.discardBar'), () => {
         resetBar()
         error.textContent = ''
       }),
       barControls.button(
-        'Remove action bar',
+        t('controls.removeBar'),
         () => submit({ type: 'scene.setActionBar', sceneId, component: null }),
         !scene.components.some((component) => component.type === 'action-bar'),
       ),
@@ -210,7 +226,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
 
     if (!inputDraft) {
       inputFields.append(
-        inputControls.button('Create input configuration', () => {
+        inputControls.button(t('controls.createInput'), () => {
           inputDraft = createInputDraft(defaultInput())
           inputDirty = true
           renderInput()
@@ -224,18 +240,17 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
 
     if (!view.game.input)
       form.append(
-        inputControls.input('Input file ID', inputId, (value) => {
+        inputControls.input(t('controls.inputFileId'), inputId, (value) => {
           inputId = value.trim()
         }),
       )
     const location = document.createElement('p')
-    location.textContent = `Game input file · input/${view.game.input ?? inputId}.json`
+    location.textContent = t('controls.inputFile', { id: view.game.input ?? inputId })
     const help = document.createElement('p')
-    help.textContent =
-      'Physical key codes identify keyboard positions, such as KeyQ, Digit1, and ArrowUp. Save input changes before choosing new bindings for a slot.'
+    help.textContent = t('controls.inputHelp')
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save input bindings'
+    saveButton.textContent = t('controls.saveInput')
     form.append(
       location,
       help,
@@ -257,14 +272,14 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
       if (busy || !inputDraft) return
 
       try {
-        submit({ type: 'game.updateInput', inputId, input: readInputDraft(inputDraft) })
+        submit({ type: 'game.updateInput', inputId, input: readInputDraft(inputDraft, t) })
       } catch (failure) {
         error.textContent = failure instanceof Error ? failure.message : String(failure)
       }
     })
     inputFields.append(
       form,
-      inputControls.button('Discard input draft', () => {
+      inputControls.button(t('controls.discardInput'), () => {
         resetInput()
         error.textContent = ''
       }),
@@ -275,6 +290,7 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
     navigate,
     hasDrafts: () => barDirty || inputDirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = state.path !== loadedPath
       const viewChanged = view !== state.view
       view = state.view
@@ -289,10 +305,16 @@ export function bindActionBarPanel(panel: HTMLElement, save: (command: EditorCom
         selectedSlot = '1'
       }
 
+      if (translated) {
+        barTab.textContent = t('controls.sceneActionBar')
+        inputTab.textContent = t('controls.inputBindings')
+      }
+
       if (reset || barSaved || (viewChanged && !barDirty)) resetBar()
-      else if (viewChanged) renderBar()
+      else if (viewChanged || translated) renderBar()
 
       if (reset || inputSaved || (viewChanged && !inputDirty)) resetInput()
+      else if (translated) renderInput()
 
       if (reset || barSaved || inputSaved) error.textContent = ''
       barFields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)

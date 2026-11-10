@@ -1,12 +1,18 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import { languageTagSchema, translationKeySchema, type LanguageCatalog } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 
 type LocalizationCommand = Extract<EditorCommand, { type: 'game.updateLocalization' }>
 
 /** Languages and their source catalogs share a single draft and save transaction. */
-export function bindLocalizationEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindLocalizationEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -26,9 +32,15 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
   let busy = false
   let submitted: LocalizationCommand | undefined
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const keys = () => [...new Set(Object.values(catalogs).flatMap(Object.keys))].sort()
 
@@ -60,11 +72,16 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
       const shown = keys().filter((key) => matches(key) || key === selected)
 
       const options = [
-        ['', 'Choose a key'] as const,
+        ['', t('localization.chooseKey')] as const,
         ...shown.map((key) => {
           const absent = missing(key)
 
-          return [key, absent.length ? `${key} · no ${absent.join(', ')} text` : key] as const
+          return [
+            key,
+            absent.length
+              ? t('localization.keyMissing', { key, languages: absent.join(', ') })
+              : key,
+          ] as const
         }),
       ]
 
@@ -81,27 +98,31 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
       const gaps = keys().filter((key) => missing(key).length).length
 
       const status = gaps
-        ? `${gaps} use the ${languages.default} text because a translation is missing.`
-        : 'Every key is translated.'
+        ? t('localization.gaps', { count: gaps, language: languages.default })
+        : t('localization.complete')
 
-      count.textContent = `Showing ${keys().filter(matches).length} of ${keys().length} keys. ${status}`
+      count.textContent = t('localization.showing', {
+        shown: keys().filter(matches).length,
+        total: keys().length,
+        status,
+      })
     }
 
     const search = document.createElement('input')
     search.type = 'search'
     search.value = keyFilter
-    search.placeholder = 'Key or text'
+    search.placeholder = t('localization.keyOrText')
     search.addEventListener('input', () => {
       keyFilter = search.value.trim()
       fill()
     })
     const searchLabel = document.createElement('label')
-    searchLabel.append('Find translation key', search)
+    searchLabel.append(t('localization.find'), search)
     const scope = document.createElement('select')
 
     for (const [value, text] of [
-      ['all', 'All keys'],
-      ['missing', 'Keys missing a translation'],
+      ['all', t('localization.allKeys')],
+      ['missing', t('localization.missingKeys')],
     ] as const) {
       const option = document.createElement('option')
       option.value = value
@@ -115,12 +136,12 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
       fill()
     })
     const scopeLabel = document.createElement('label')
-    scopeLabel.append('Show', scope)
+    scopeLabel.append(t('localization.show'), scope)
     picker.addEventListener('change', () => {
       selected = picker.value
       render()
     })
-    label.append('Translation key', picker)
+    label.append(t('form.translationKey'), picker)
     fill()
 
     return [searchLabel, scopeLabel, label, count]
@@ -160,25 +181,24 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
     form.className = 'localization-editor-form'
     const submit = document.createElement('button')
     submit.type = 'submit'
-    submit.textContent = 'Save localization'
+    submit.textContent = t('localization.save')
     submit.disabled = !languages.available.length
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent =
-      'Add languages, then create translation keys and edit their text. Missing translations use the default language. Save to make keys available in other editors and restart the preview.'
-    form.append(saveBar(document, submit, button('Discard localization draft', reset)), help)
+    help.textContent = t('localization.help')
+    form.append(saveBar(document, submit, button(t('localization.discard'), reset)), help)
     form.append(
       group(
-        'Languages',
-        input('New language tag', newLanguage, (value) => {
+        t('localization.languages'),
+        input(t('localization.newTag'), newLanguage, (value) => {
           newLanguage = value.trim()
         }),
-        button('Add language', () => {
+        button(t('localization.addLanguage'), () => {
           if (
             !languageTagSchema.safeParse(newLanguage).success ||
             languages.available.some((tag) => tag.toLowerCase() === newLanguage.toLowerCase())
           ) {
-            error.textContent = 'Enter a unique language tag, such as en, nl or en-US.'
+            error.textContent = t('localization.invalidTag')
 
             return
           }
@@ -193,16 +213,21 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
         }),
         ...(languages.available.length
           ? [
-              select('Default language', languages.default, languages.available, (value) =>
-                change(() => makeDefault(value)),
+              select(
+                t('localization.defaultLanguage'),
+                languages.default,
+                languages.available,
+                (value) => change(() => makeDefault(value)),
               ),
             ]
           : []),
         ...languages.available.map((language) =>
           group(
-            language === languages.default ? `${language} (default)` : language,
+            language === languages.default
+              ? t('localization.languageDefault', { language })
+              : language,
             button(
-              `Remove language ${language}`,
+              t('localization.removeLanguage', { language }),
               () =>
                 change(() => {
                   languages.available = languages.available.filter((tag) => tag !== language)
@@ -218,17 +243,16 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
         ),
       ),
       group(
-        'Translation keys',
+        t('localization.keys'),
         ...keyPicker(),
-        input('New translation key', newKey, (value) => {
+        input(t('localization.newKey'), newKey, (value) => {
           newKey = value.trim()
         }),
         button(
-          'Add translation key',
+          t('localization.addKey'),
           () => {
             if (!translationKeySchema.safeParse(newKey).success || keys().includes(newKey)) {
-              error.textContent =
-                'Enter an unused key using letters, digits, underscores, hyphens and dot-separated segments.'
+              error.textContent = t('localization.invalidKey')
 
               return
             }
@@ -255,11 +279,11 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
         if (language !== languages.default)
           parts.push(
             select(
-              `Text source (${language})`,
+              t('localization.textSource', { language }),
               fallback ? 'default' : 'translated',
               [
-                ['default', `Use ${languages.default} text`],
-                ['translated', 'Translated text'],
+                ['default', t('localization.useDefault', { language: languages.default })],
+                ['translated', t('localization.translated')],
               ],
               (value) =>
                 change(() => {
@@ -286,20 +310,20 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
             for (const control of inherited) control.value = text.value
           dirty = true
         })
-        label.append(`Translation text (${language})`, text)
+        label.append(t('localization.translationText', { language }), text)
         parts.push(label)
         form.append(
           group(
             language === languages.default
-              ? `${language} — default text`
-              : `${language} — translation`,
+              ? t('localization.defaultText', { language })
+              : t('localization.languageTranslation', { language }),
             ...parts,
           ),
         )
       }
 
       form.append(
-        button('Remove translation key', () =>
+        button(t('localization.removeKey'), () =>
           change(() => {
             for (const catalog of Object.values(catalogs)) delete catalog[selected]
             selected = keys()[0] ?? ''
@@ -314,8 +338,7 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
       if (busy) return
 
       if (newLanguage || newKey) {
-        error.textContent =
-          'Add or clear the pending language tag or translation key before saving.'
+        error.textContent = t('localization.pendingSave')
 
         return
       }
@@ -346,6 +369,7 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
   return {
     hasDrafts: () => dirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -366,7 +390,7 @@ export function bindLocalizationEditor(root: HTMLElement, save: (command: Editor
         (changed && !dirty)
       )
         reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

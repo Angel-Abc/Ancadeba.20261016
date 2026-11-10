@@ -46,13 +46,11 @@ export function graphicAppearanceForm(
   change: (operation: () => void) => void,
   edited: () => void,
 ): HTMLElement {
-  const { group, select, button, input, create } = controls
-  const root = group('Graphic appearance')
+  const { group, select, button, input, create, t } = controls
+  const root = group(t('graphic.appearance'))
   const help = create('p')
   help.className = 'help'
-  help.textContent = gameScene
-    ? 'Static values supply fallbacks for bindings. Visibility expects true or false, colors expect #rrggbb, palettes expect a preset name, and part bindings expect an allowed part ID (or empty text for none).'
-    : 'This stand-alone scene uses static appearance. Game-state bindings require a game scene.'
+  help.textContent = gameScene ? t('graphic.appearanceHelp') : t('graphic.standaloneHelp')
   root.append(help)
 
   const bindings = (selection: Selection) => (selection.bindings ??= { colors: {} })
@@ -61,11 +59,11 @@ export function graphicAppearanceForm(
     const box = group(
       title,
       select(
-        'Static visibility',
+        t('graphic.staticVisibility'),
         String(selection.visible),
         [
-          ['true', 'Visible'],
-          ['false', 'Hidden'],
+          ['true', t('graphic.visible')],
+          ['false', t('graphic.hidden')],
         ],
         (value) =>
           change(() => {
@@ -80,7 +78,7 @@ export function graphicAppearanceForm(
         graphicBindingForm(
           controls,
           view,
-          `${title} visibility`,
+          t('graphic.visibilityOf', { title }),
           selection.bindings?.visible,
           'boolean',
           (value) => {
@@ -130,9 +128,9 @@ export function graphicAppearanceForm(
     const box = group(
       title,
       select(
-        'Static palette',
+        t('graphic.staticPalette'),
         selection.palette ?? '',
-        [['', 'Default colors'], ...palettes],
+        [['', t('form.defaultColors')], ...palettes],
         (value) =>
           change(() => {
             commit()
@@ -146,7 +144,7 @@ export function graphicAppearanceForm(
         graphicBindingForm(
           controls,
           view,
-          `${title} palette`,
+          t('graphic.paletteOf', { title }),
           selection.bindings?.palette,
           'string',
           (value) => {
@@ -165,13 +163,13 @@ export function graphicAppearanceForm(
 
     for (const color of colors) {
       const colorBox = group(
-        `Color ${color}`,
+        t('form.color', { id: color }),
         select(
-          'Static color',
+          t('graphic.staticColor'),
           Object.hasOwn(selection.colors, color) ? 'override' : 'inherit',
           [
-            ['inherit', 'Inherit palette / default'],
-            ['override', 'Override color'],
+            ['inherit', t('graphic.inherit')],
+            ['override', t('graphic.overrideColor')],
           ],
           (value) =>
             change(() => {
@@ -189,7 +187,7 @@ export function graphicAppearanceForm(
 
       if (Object.hasOwn(selection.colors, color)) {
         const swatch = input(
-          'Color picker',
+          t('graphic.colorPicker'),
           selection.colors[color]!,
           (value) => {
             commit()
@@ -200,7 +198,7 @@ export function graphicAppearanceForm(
           'color',
         )
 
-        const hex = input('Hex color', selection.colors[color]!, (value) => {
+        const hex = input(t('graphic.hexColor'), selection.colors[color]!, (value) => {
           commit()
           selection.colors[color] = value
 
@@ -238,10 +236,10 @@ export function graphicAppearanceForm(
     return box
   }
 
-  root.append(visibility(appearance, 'Graphic'))
+  root.append(visibility(appearance, t('tree.graphic')))
   const asset = catalog.images[visual] ?? catalog.parts[visual]
 
-  if (asset) root.append(colorsAndPalettes(appearance, [asset], 'Graphic colors'))
+  if (asset) root.append(colorsAndPalettes(appearance, [asset], t('graphic.colors')))
   const composition = catalog.compositions[visual]
 
   for (const [slot, definition] of Object.entries(composition?.slots ?? {})) {
@@ -262,17 +260,17 @@ export function graphicAppearanceForm(
     const assets = parts.flatMap((id) => (catalog.parts[id] ? [catalog.parts[id]!] : []))
 
     const box = group(
-      `Slot ${slot}`,
+      t('form.slot', { id: slot }),
       select(
-        'Static part',
+        t('graphic.staticPart'),
         selection.part === undefined
           ? 'inherit'
           : selection.part === null
             ? 'none'
             : `part:${selection.part}`,
         [
-          ['inherit', `Default (${definition.default ?? 'None'})`],
-          ['none', 'None'],
+          ['inherit', t('graphic.defaultPart', { part: definition.default ?? t('form.none') })],
+          ['none', t('form.none')],
           ...definition.parts.map((id) => [`part:${id}`, id] as const),
         ],
         (value) =>
@@ -303,7 +301,7 @@ export function graphicAppearanceForm(
         graphicBindingForm(
           controls,
           view,
-          `${slot} part`,
+          t('graphic.slotPart', { slot }),
           selection.partBinding,
           'string',
           (value) => {
@@ -323,9 +321,9 @@ export function graphicAppearanceForm(
         ),
       )
     box.append(
-      visibility(selection, `${slot} slot`, store),
-      colorsAndPalettes(selection, assets, `${slot} colors`, store),
-      button('Reset slot appearance', () =>
+      visibility(selection, t('graphic.slotTitle', { slot }), store),
+      colorsAndPalettes(selection, assets, t('graphic.slotColors', { slot }), store),
+      button(t('graphic.resetSlot'), () =>
         change(() => {
           delete appearance.slots[slot]
         }),

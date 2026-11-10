@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { gameIdSchema, type InputDefinition } from '@ancadeba/schemas'
 import type { RuleFormControls } from './ruleFormControls.js'
 
@@ -24,15 +26,22 @@ export function createInputDraft(input: InputDefinition): InputDraft {
   }
 }
 
-function uniqueMappings(entries: [string, string][], name: string): Record<string, string> {
+function uniqueMappings(
+  entries: [string, string][],
+  name: string,
+  t: Translate,
+): Record<string, string> {
   if (new Set(entries.map(([key]) => key)).size !== entries.length)
-    throw new Error(`${name} contains duplicate keys. Each key can have one mapping.`)
+    throw new Error(t('controls.duplicateKeys', { name }))
 
   return Object.fromEntries(entries)
 }
 
-export function readInputDraft(draft: InputDraft): InputDefinition {
-  if (draft.newContext) throw new Error('Add or clear the pending input context before saving.')
+export function readInputDraft(
+  draft: InputDraft,
+  t: Translate = editorLocalization().t,
+): InputDefinition {
+  if (draft.newContext) throw new Error(t('controls.pendingContext'))
 
   return {
     'schema-version': '1.0.0',
@@ -42,14 +51,16 @@ export function readInputDraft(draft: InputDraft): InputDefinition {
       .filter(Boolean),
     keyboard: uniqueMappings(
       draft.keyboard.map(({ code, key }) => [code, key]),
-      'Keyboard',
+      t('controls.keyboard'),
+      t,
     ),
     contexts: Object.fromEntries(
       Object.entries(draft.contexts).map(([id, mappings]) => [
         id,
         uniqueMappings(
           mappings.map(({ key, input }) => [key, input]),
-          `Context ${id}`,
+          t('controls.context', { id }),
+          t,
         ),
       ]),
     ),
@@ -63,9 +74,9 @@ export function inputDefinitionForm(
   edited: () => void,
   reportError: (message: string) => void,
 ): HTMLElement[] {
-  const { create, input, select, button, group } = controls
-  const keyboard = group('Physical keyboard mappings')
-  const contexts = group('Input contexts')
+  const { create, input, select, button, group, t } = controls
+  const keyboard = group(t('controls.keyboardMappings'))
+  const contexts = group(t('controls.inputContexts'))
   let selectedContext = draft.initialContext
 
   const keys = () =>
@@ -76,16 +87,16 @@ export function inputDefinitionForm(
 
   const renderKeyboard = () => {
     const rows = draft.keyboard.map((mapping, index) => {
-      const row = group(`Keyboard mapping ${index + 1}`)
+      const row = group(t('controls.keyboardMapping', { number: index + 1 }))
       row.className = 'control-mapping-row'
       row.append(
-        input('Physical key code', mapping.code, (value) => {
+        input(t('controls.keyCode'), mapping.code, (value) => {
           mapping.code = value.trim()
         }),
-        select('Virtual key', mapping.key, keys(), (value) => {
+        select(t('controls.virtualKey'), mapping.key, keys(), (value) => {
           mapping.key = value
         }),
-        button('Remove key mapping', () => {
+        button(t('controls.removeKeyMapping'), () => {
           draft.keyboard.splice(index, 1)
           edited()
           renderKeyboard()
@@ -96,11 +107,11 @@ export function inputDefinitionForm(
     })
 
     const heading = create('legend')
-    heading.textContent = 'Physical keyboard mappings'
+    heading.textContent = t('controls.keyboardMappings')
     keyboard.replaceChildren(
       heading,
       ...rows,
-      button('Add key mapping', () => {
+      button(t('controls.addKeyMapping'), () => {
         draft.keyboard.push({ code: '', key: keys()[0] ?? '' })
         edited()
         renderKeyboard()
@@ -112,14 +123,14 @@ export function inputDefinitionForm(
     const ids = Object.keys(draft.contexts)
     const mappings = draft.contexts[selectedContext] ?? []
     const heading = create('legend')
-    heading.textContent = 'Input contexts'
+    heading.textContent = t('controls.inputContexts')
     contexts.replaceChildren(
       heading,
-      select('Initial context', draft.initialContext, ids, (value) => {
+      select(t('controls.initialContext'), draft.initialContext, ids, (value) => {
         draft.initialContext = value
       }),
       select(
-        'Edit context',
+        t('controls.editContext'),
         selectedContext,
         ids,
         (value) => {
@@ -129,16 +140,16 @@ export function inputDefinitionForm(
         false,
       ),
       ...mappings.map((mapping, index) => {
-        const row = group(`Context mapping ${index + 1}`)
+        const row = group(t('controls.contextMapping', { number: index + 1 }))
         row.className = 'control-mapping-row'
         row.append(
-          select('Virtual key', mapping.key, keys(), (value) => {
+          select(t('controls.virtualKey'), mapping.key, keys(), (value) => {
             mapping.key = value
           }),
-          input('Virtual input ID', mapping.input, (value) => {
+          input(t('controls.virtualInputId'), mapping.input, (value) => {
             mapping.input = value.trim()
           }),
-          button('Remove context mapping', () => {
+          button(t('controls.removeContextMapping'), () => {
             mappings.splice(index, 1)
             edited()
             renderContexts()
@@ -147,13 +158,13 @@ export function inputDefinitionForm(
 
         return row
       }),
-      button('Add context mapping', () => {
+      button(t('controls.addContextMapping'), () => {
         mappings.push({ key: keys()[0] ?? '', input: '' })
         edited()
         renderContexts()
       }),
       button(
-        'Remove context',
+        t('controls.removeContext'),
         () => {
           delete draft.contexts[selectedContext]
           selectedContext = Object.keys(draft.contexts)[0] ?? ''
@@ -165,15 +176,15 @@ export function inputDefinitionForm(
         },
         ids.length < 2,
       ),
-      input('New context ID', draft.newContext, (value) => {
+      input(t('controls.newContextId'), draft.newContext, (value) => {
         draft.newContext = value.trim()
       }),
-      button('Add context', () => {
+      button(t('controls.addContext'), () => {
         if (
           !gameIdSchema.safeParse(draft.newContext).success ||
           Object.hasOwn(draft.contexts, draft.newContext)
         ) {
-          reportError('Enter a unique context ID using letters, numbers, underscores, or hyphens.')
+          reportError(t('controls.invalidContextId'))
 
           return
         }
@@ -187,7 +198,7 @@ export function inputDefinitionForm(
     )
   }
 
-  const virtualKeys = input('Virtual keys (comma-separated)', draft.virtualKeys, (value) => {
+  const virtualKeys = input(t('controls.virtualKeys'), draft.virtualKeys, (value) => {
     draft.virtualKeys = value
     renderKeyboard()
     renderContexts()
@@ -207,7 +218,7 @@ export function inputDefinitionForm(
 
   return [
     virtualKeys,
-    section('Physical keyboard mappings', keyboard),
-    section('Input contexts', contexts),
+    section(t('controls.keyboardMappings'), keyboard),
+    section(t('controls.inputContexts'), contexts),
   ]
 }

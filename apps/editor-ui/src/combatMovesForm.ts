@@ -11,7 +11,7 @@ export function combatMovesForm(
   onAdd?: (id: string) => void,
   availableStatuses = draft.statuses,
 ): HTMLElement[] {
-  const { input, select, button, group, translation } = controls
+  const { input, select, button, group, translation, t } = controls
   const keys = translationChoices(view)
   const result: HTMLElement[] = []
 
@@ -31,17 +31,17 @@ export function combatMovesForm(
       descriptionKey?: string | undefined
     },
   ) => [
-    input(scoped(prefix, 'Name'), value.label, (next) => {
+    input(scoped(prefix, t('form.name')), value.label, (next) => {
       value.label = next
     }),
-    translation(scoped(prefix, 'Name translation'), value.labelKey ?? '', keys, (next) => {
+    translation(scoped(prefix, t('form.nameTranslation')), value.labelKey ?? '', keys, (next) => {
       value.labelKey = next || undefined
     }),
-    input(scoped(prefix, 'Description'), value.description, (next) => {
+    input(scoped(prefix, t('metadata.description')), value.description, (next) => {
       value.description = next
     }),
     translation(
-      scoped(prefix, 'Description translation'),
+      scoped(prefix, t('form.descriptionTranslation')),
       value.descriptionKey ?? '',
       keys,
       (next) => {
@@ -53,17 +53,17 @@ export function combatMovesForm(
   for (const [id, move] of Object.entries(draft.moves))
     result.push(
       group(
-        `Move: ${id}`,
+        t('combat.moveTitle', { id }),
         ...presentation('', move),
-        number('AP cost', move.apCost, (value) => {
+        number(t('combat.apCost'), move.apCost, (value) => {
           move.apCost = value
         }),
-        number('Cooldown (subsequent rounds)', move.cooldown ?? 0, (value) => {
+        number(t('combat.cooldown'), move.cooldown ?? 0, (value) => {
           move.cooldown = value || undefined
         }),
         ...(move.type === 'ability'
           ? [
-              select('Ability target', move.target, ['self', 'enemy'], (value) => {
+              select(t('combat.abilityTarget'), move.target, ['self', 'enemy'], (value) => {
                 move.target = value
               }),
               ...abilityEffectsForm(
@@ -76,21 +76,21 @@ export function combatMovesForm(
           : []),
         ...(move.type === 'attack'
           ? [
-              number('Minimum damage', move.damage.min, (value) => {
+              number(t('combat.minDamage'), move.damage.min, (value) => {
                 move.damage.min = value
               }),
-              number('Maximum damage', move.damage.max, (value) => {
+              number(t('combat.maxDamage'), move.damage.max, (value) => {
                 move.damage.max = value
               }),
             ]
           : move.type === 'guard'
             ? [
-                number('Guard points', move.guard, (value) => {
+                number(t('combat.guardPoints'), move.guard, (value) => {
                   move.guard = value
                 }),
               ]
             : []),
-        button(`Remove move ${id}`, () => {
+        button(t('combat.removeMove', { id }), () => {
           delete draft.moves[id]
           controls.markEdited()
           render()
@@ -100,14 +100,14 @@ export function combatMovesForm(
 
   let nextId = ''
   result.push(
-    input('New move ID', nextId, (value) => {
+    input(t('combat.newMoveId'), nextId, (value) => {
       nextId = value.trim()
     }),
   )
 
   for (const type of ['attack', 'guard', 'ability'] as const)
     result.push(
-      button(`Add ${type} move`, () => {
+      button(t('combat.addMove', { type }), () => {
         let id = nextId || type
         let index = 1
 

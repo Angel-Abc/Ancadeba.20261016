@@ -68,9 +68,13 @@ export function bindComponentEditor(
   let addLabel = t('component.add')
   const bindingPending: TextBindingPending = { alias: '', value: '' }
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const scene = () => view?.scenes.find((scene) => scene.id === sceneId)
   const component = () => scene()?.components.find((component) => component.id === componentId)
@@ -193,8 +197,8 @@ export function bindComponentEditor(
       ),
       ...componentFields(controls, view, sceneId, draft, render, bindingPending),
       controls.group(
-        'Placement',
-        ...placementFields.map(([key, label]) =>
+        t('component.placement'),
+        ...placementFields(t).map(([key, label]) =>
           controls.input(
             label,
             String(draft!.placement[key]),
@@ -219,7 +223,7 @@ export function bindComponentEditor(
       }
 
       if (draft.type === 'text' && bindingPending.alias) {
-        error.textContent = 'Add or clear the pending text binding before saving.'
+        error.textContent = t('component.pendingBinding')
 
         return
       }
@@ -317,7 +321,7 @@ function componentFields(
   render: () => void,
   bindingPending: TextBindingPending,
 ): HTMLElement[] {
-  const { input, select, translation, create } = controls
+  const { input, select, translation, create, t } = controls
 
   const literal = (title: string, emptyLabel: string) =>
     translation(
@@ -354,14 +358,14 @@ function componentFields(
       bindings.refresh()
     })
     const textField = create('label')
-    textField.append('Text', text)
+    textField.append(t('tree.text'), text)
 
     return [
       textField,
       translation(
-        'Text translation',
+        t('component.textTranslation'),
         draft.textKey ?? '',
-        translationChoices(view, 'Use literal text'),
+        translationChoices(view, t('metadata.literalText')),
         (value) => {
           draft.textKey = value || undefined
           bindings.refresh()
@@ -369,23 +373,23 @@ function componentFields(
       ),
       bindings.element,
       select(
-        'Style',
+        t('component.style'),
         draft.presentation.variant,
         [
-          ['body', 'Body text'],
-          ['heading', 'Heading'],
+          ['body', t('component.bodyText')],
+          ['heading', t('component.headingStyle')],
         ],
         (value) => {
           draft.presentation.variant = value
         },
       ),
       select(
-        'Alignment',
+        t('component.alignment'),
         draft.presentation.align,
         [
-          ['start', 'Start'],
-          ['center', 'Center'],
-          ['end', 'End'],
+          ['start', t('component.alignStart')],
+          ['center', t('component.alignCenter')],
+          ['end', t('component.alignEnd')],
         ],
         (value) => {
           draft.presentation.align = value
@@ -395,20 +399,20 @@ function componentFields(
   }
 
   const label = [
-    input('Label', draft.label, (value) => {
+    input(t('form.label'), draft.label, (value) => {
       draft.label = value
     }),
-    literal('Label translation', 'Use literal label'),
+    literal(t('form.labelTranslation'), t('form.literalLabel')),
   ]
 
   if (draft.type === 'quest-log')
     return [
       ...label,
-      input('Quest IDs (empty means all)', draft.quests?.join(', ') ?? '', (value) => {
+      input(t('component.questIds'), draft.quests?.join(', ') ?? '', (value) => {
         draft.quests = value.trim() ? value.split(',').map((id) => id.trim()) : undefined
       }),
       select(
-        'Main text target',
+        t('component.mainTextTarget'),
         draft.textTarget ?? '',
         [
           '',
@@ -423,7 +427,7 @@ function componentFields(
       ),
       ...(['not-started', 'active', 'ready', 'completed'] as const).map((status) =>
         select(
-          `Show ${status}`,
+          t('component.showStatus', { status }),
           String(draft.statuses.includes(status)),
           ['true', 'false'],
           (value) => {
@@ -443,7 +447,7 @@ function componentFields(
 
     return [
       ...label,
-      select('Map', draft.map, view.game?.maps ?? [], (value) => {
+      select(t('maps.map'), draft.map, view.game?.maps ?? [], (value) => {
         draft.map = value
         const map = view.maps?.[value]
 
@@ -455,24 +459,24 @@ function componentFields(
         render()
       }),
       select(
-        'Interactive',
+        t('component.interactive'),
         String(draft.interactive !== false),
         [
-          ['true', 'Yes, the player moves on this map'],
-          ['false', 'No, display only'],
+          ['true', t('component.interactiveYes')],
+          ['false', t('component.interactiveNo')],
         ],
         (value) => {
           draft.interactive = value === 'true' ? undefined : false
         },
       ),
       controls.group(
-        'Visible area',
+        t('component.visibleArea'),
         ...(
           [
-            ['columns', 'Columns'],
-            ['rows', 'Rows'],
-            ['x', 'Left column'],
-            ['y', 'Top row'],
+            ['columns', t('grid.columns')],
+            ['rows', t('grid.rows')],
+            ['x', t('component.leftColumn')],
+            ['y', t('component.topRow')],
           ] as const
         ).map(([key, title]) =>
           input(
@@ -486,13 +490,13 @@ function componentFields(
         ),
       ),
       controls.group(
-        'Player marker',
+        t('component.playerMarker'),
         select(
-          'Show player',
+          t('component.showPlayer'),
           String(Boolean(draft.playerSpawn)),
           [
-            ['false', 'No, pan the map'],
-            ['true', 'Yes, move a player'],
+            ['false', t('component.panMap')],
+            ['true', t('component.movePlayer')],
           ],
           (value) => {
             draft.playerSpawn = value === 'true' ? { x: 0, y: 0 } : undefined
@@ -502,7 +506,7 @@ function componentFields(
         ...(draft.playerSpawn
           ? (['x', 'y'] as const).map((key) =>
               input(
-                key === 'x' ? 'Player column' : 'Player row',
+                key === 'x' ? t('component.playerColumn') : t('component.playerRow'),
                 String(draft.playerSpawn![key]),
                 (value) => {
                   draft.playerSpawn![key] = Number(value)
@@ -544,16 +548,16 @@ function componentFields(
   return [
     ...label,
     select(
-      'Action',
+      t('form.action'),
       action?.type ?? '',
       [
-        ['', 'No action (button is disabled)'],
-        ['new-game', 'Start a new game'],
-        ['enter-scene', 'Go to a scene'],
-        ['request-action', 'Run a rule action'],
-        ['move-map', 'Move on a map'],
-        ['save-game', 'Save progress'],
-        ['load-game', 'Load saved progress'],
+        ['', t('component.noAction')],
+        ['new-game', t('component.startNewGame')],
+        ['enter-scene', t('component.goToScene')],
+        ['request-action', t('component.runAction')],
+        ['move-map', t('component.moveOnMap')],
+        ['save-game', t('component.saveProgress')],
+        ['load-game', t('component.loadProgress')],
       ],
       (value) => {
         draft.action = defaults(value)
@@ -563,7 +567,7 @@ function componentFields(
     ...(action?.type === 'new-game' || action?.type === 'enter-scene'
       ? [
           select(
-            'Target scene',
+            t('form.targetScene'),
             action.scene,
             sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
             (value) => {
@@ -573,23 +577,23 @@ function componentFields(
         ]
       : action?.type === 'request-action'
         ? [
-            select('Rule action', action.action, actions, (value) => {
+            select(t('component.ruleAction'), action.action, actions, (value) => {
               action.action = value
             }),
           ]
         : action?.type === 'move-map'
           ? [
-              select('Map view', action.mapView, mapViews, (value) => {
+              select(t('tree.map-view'), action.mapView, mapViews, (value) => {
                 action.mapView = value
               }),
               select(
-                'Direction',
+                t('form.direction'),
                 action.direction,
                 [
-                  ['north', 'North'],
-                  ['east', 'East'],
-                  ['south', 'South'],
-                  ['west', 'West'],
+                  ['north', t('component.north')],
+                  ['east', t('component.east')],
+                  ['south', t('component.south')],
+                  ['west', t('component.west')],
                 ],
                 (value) => {
                   action.direction = value

@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import {
   assetIdSchema,
@@ -9,16 +11,18 @@ import {
   inventoryIssues,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { displayLabel, ruleFormControls, saveBar } from './ruleFormControls.js'
+import { displayLabel, ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import {
   inventoryDefinitionForms,
   type InventoryEntrySelection,
 } from './inventoryDefinitionForms.js'
 
-const labels = { itemTypes: 'item type', owners: 'owner', items: 'starting item' } as const
-
 /** Owns one inventory file draft, including all of its related definitions and placements. */
-export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindInventoryEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -44,9 +48,15 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
   let busy = false
   let submitted: Extract<EditorCommand, { type: 'game.upsertInventory' }> | undefined
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const report = (cause: unknown) => {
     error.textContent = cause instanceof Error ? cause.message : String(cause)
@@ -111,7 +121,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     if (file === selectedFile) return true
 
     if (dirty) {
-      error.textContent = 'Save or discard the inventory draft before switching files.'
+      error.textContent = t('items.saveInventoryFirst')
 
       return false
     }
@@ -125,7 +135,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
 
   const canSwitchEntry = () => {
     if (!slot.id && !slot.label) return true
-    error.textContent = 'Add or clear the pending equipment slot before switching entries.'
+    error.textContent = t('items.pendingSlotSwitch')
 
     return false
   }
@@ -139,35 +149,37 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     form.className = 'inventory-editor-form'
 
     const picker = controls.select(
-      'Inventory file',
+      t('items.inventoryFile'),
       selectedFile,
-      [['', 'New inventory'], ...(view.game.inventory ?? []).map((id) => [id, id] as const)],
+      [
+        ['', t('items.newInventory')],
+        ...(view.game.inventory ?? []).map((id) => [id, id] as const),
+      ],
       (value) => {
         if (!navigate(value)) picker.querySelector('select')!.value = selectedFile
       },
       false,
     )
 
-    const name = controls.input('Inventory ID', id, (value) => {
+    const name = controls.input(t('items.inventoryId'), id, (value) => {
       id = value.trim()
     })
 
     name.querySelector('input')!.readOnly = Boolean(selectedFile)
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save inventory'
+    saveButton.textContent = t('items.saveInventory')
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent =
-      'Create item types and owners, then add starting items. All entries in this inventory are saved together. Changes to starting items apply to new games; existing playthroughs keep their runtime inventory.'
+    help.textContent = t('items.inventoryHelp')
 
     const kind = controls.select(
-      'Inventory entry kind',
+      t('items.entryKind'),
       selected.kind,
       [
-        ['itemTypes', 'Item types'],
-        ['owners', 'Owners'],
-        ['items', 'Starting items'],
+        ['itemTypes', t('items.itemTypes')],
+        ['owners', t('items.owners')],
+        ['items', t('items.startingItems')],
       ],
       (value) => {
         if (value === selected.kind) return
@@ -202,10 +214,10 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     }
 
     const entry = controls.select(
-      'Inventory entry',
+      t('items.entry'),
       selected.id,
       [
-        ['', 'Choose an entry'],
+        ['', t('items.chooseEntry')],
         ...Object.keys(draft[selected.kind]).map((id) => [id, entryLabel(id)] as const),
       ],
       (value) => {
@@ -224,7 +236,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     )
 
     form.append(
-      saveBar(document, saveButton, controls.button('Discard inventory draft', reset)),
+      saveBar(document, saveButton, controls.button(t('items.discardInventory'), reset)),
       picker,
       name,
       help,
@@ -234,12 +246,12 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
 
     // Creating an entry comes after the selected entry, so the picker sits next to its form.
     const adding = controls.group(
-      `New ${labels[selected.kind]}`,
-      controls.input('New entry ID', newId, (value) => {
+      t(`items.new.${selected.kind}`),
+      controls.input(t('items.newEntryId'), newId, (value) => {
         newId = value.trim()
       }),
       controls.button(
-        `Add ${labels[selected.kind]}`,
+        t(`items.add.${selected.kind}`),
         () =>
           change(() => {
             if (
@@ -248,7 +260,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
                 (id) => id.toLowerCase() === newId.toLowerCase(),
               )
             )
-              throw new Error('Choose a valid, unused entry ID.')
+              throw new Error(t('items.invalidEntryId'))
 
             if (selected.kind === 'itemTypes')
               draft.itemTypes[newId] = inventoryItemTypeSchema.parse({ label: newId })
@@ -258,8 +270,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
               const itemType = Object.keys(merged.itemTypes)[0]
               const owner = Object.keys(merged.owners)[0]
 
-              if (!itemType || !owner)
-                throw new Error('Create an item type and an owner before adding starting items.')
+              if (!itemType || !owner) throw new Error(t('items.typeAndOwnerFirst'))
               draft.items[newId] = inventoryStartingItemSchema.parse({
                 itemType,
                 placement: { type: 'carried', owner },
@@ -275,7 +286,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     )
 
     if (selected.id && Object.hasOwn(draft[selected.kind], selected.id)) {
-      const selectedId = controls.input('Selected entry ID', selected.id, () => {})
+      const selectedId = controls.input(t('items.selectedEntryId'), selected.id, () => {})
       selectedId.querySelector('input')!.readOnly = true
       form.append(
         selectedId,
@@ -288,7 +299,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
           change,
           render,
         ),
-        controls.button(`Remove ${labels[selected.kind]}`, () =>
+        controls.button(t(`items.remove.${selected.kind}`), () =>
           change(() => {
             const entries = draft[selected.kind]
             Reflect.deleteProperty(entries, selected.id)
@@ -307,7 +318,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
       if (busy) return
 
       if (newId || slot.id || slot.label) {
-        error.textContent = 'Add or clear the pending entry or equipment slot before saving.'
+        error.textContent = t('items.pendingSave')
 
         return
       }
@@ -351,6 +362,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
     hasDrafts: () => dirty,
     navigate,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -378,7 +390,7 @@ export function bindInventoryEditor(root: HTMLElement, save: (command: EditorCom
         (changed && !dirty)
       )
         reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

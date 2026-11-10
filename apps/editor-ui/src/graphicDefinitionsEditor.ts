@@ -1,7 +1,9 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import { assetCatalogSchema, graphicAppearanceSchema } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { partDefinitionForm } from './partDefinitionForm.js'
 import { compositionDefinitionForm } from './compositionDefinitionForm.js'
 import { requireDefinitionId, type GraphicDefinitionPending } from './graphicDefinitionForms.js'
@@ -19,6 +21,7 @@ export function bindGraphicDefinitionsEditor(
   root: HTMLElement,
   save: (command: EditorCommand) => void,
   createPreview?: GraphicDefinitionPreviewFactory,
+  t: Translate = editorLocalization().t,
 ) {
   const document = root.ownerDocument
   const error = document.createElement('p')
@@ -27,7 +30,7 @@ export function bindGraphicDefinitionsEditor(
   const fields = document.createElement('fieldset')
   const previewRoot = document.createElement('div')
   previewRoot.className = 'definition-preview'
-  const preview = graphicDefinitionPreview(previewRoot, createPreview)
+  const preview = graphicDefinitionPreview(previewRoot, createPreview, t)
   root.replaceChildren(error, fields)
   let view: ProjectView | undefined
   let path: string | undefined
@@ -55,15 +58,21 @@ export function bindGraphicDefinitionsEditor(
 
   const hasPending = () => Object.values(pending).some(Boolean)
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const updatePreview = () => {
     const parsed = assetCatalogSchema.safeParse(catalog)
 
     if (!selected) {
-      preview.clear('Create or select a part or composition to preview it.')
+      preview.clear(t('definitions.previewEmpty'))
 
       return
     }
@@ -117,8 +126,7 @@ export function bindGraphicDefinitionsEditor(
     if (nextKind === kind && id === selected) return true
 
     if (hasPending()) {
-      error.textContent =
-        'Add or clear the pending piece, layer, anchor, slot, color or palette before switching entries.'
+      error.textContent = t('definitions.pendingSwitch')
 
       return false
     }
@@ -140,14 +148,14 @@ export function bindGraphicDefinitionsEditor(
     form.className = 'graphic-definitions-form'
     const submit = document.createElement('button')
     submit.type = 'submit'
-    submit.textContent = 'Save parts and compositions'
+    submit.textContent = t('definitions.save')
 
     const type = select(
-      'Definition kind',
+      t('definitions.kind'),
       kind,
       [
-        ['parts', 'Parts'],
-        ['compositions', 'Compositions'],
+        ['parts', t('tree.parts')],
+        ['compositions', t('tree.compositions')],
       ],
       (value) => {
         if (!switchEntry(value, '')) type.querySelector('select')!.value = kind
@@ -156,41 +164,47 @@ export function bindGraphicDefinitionsEditor(
     )
 
     const picker = select(
-      'Graphic definition',
+      t('definitions.definition'),
       selected,
-      [['', 'Choose a definition'], ...Object.keys(catalog[kind])],
+      [['', t('form.chooseDefinition')], ...Object.keys(catalog[kind])],
       (value) => {
         if (!switchEntry(kind, value)) picker.querySelector('select')!.value = selected
       },
       false,
     )
 
-    const newDefinition = input('New graphic definition ID', newId, (value) => {
+    const newDefinition = input(t('definitions.newId'), newId, (value) => {
       newId = value.trim()
     })
 
-    const add = button(kind === 'parts' ? 'Add part' : 'Add composition', () =>
-      change(() => {
-        requireDefinitionId(newId, [
-          ...Object.keys(catalog.images),
-          ...Object.keys(catalog.parts),
-          ...Object.keys(catalog.compositions),
-        ])
-        const bounds = { x: 0, y: 0, width: 100, height: 100 }
+    const add = button(
+      kind === 'parts' ? t('definitions.addPart') : t('definitions.addComposition'),
+      () =>
+        change(() => {
+          requireDefinitionId(
+            newId,
+            [
+              ...Object.keys(catalog.images),
+              ...Object.keys(catalog.parts),
+              ...Object.keys(catalog.compositions),
+            ],
+            t,
+          )
+          const bounds = { x: 0, y: 0, width: 100, height: 100 }
 
-        if (kind === 'parts')
-          catalog.parts[newId] = { bounds, pieces: [], colors: {}, palettes: {} }
-        else
-          catalog.compositions[newId] = {
-            bounds,
-            layers: ['body'],
-            anchors: { origin: { x: 0, y: 0 } },
-            slots: {},
-          }
-        selected = newId
-        newId = ''
-        palette = ''
-      }),
+          if (kind === 'parts')
+            catalog.parts[newId] = { bounds, pieces: [], colors: {}, palettes: {} }
+          else
+            catalog.compositions[newId] = {
+              bounds,
+              layers: ['body'],
+              anchors: { origin: { x: 0, y: 0 } },
+              slots: {},
+            }
+          selected = newId
+          newId = ''
+          palette = ''
+        }),
     )
 
     // A definition chosen in the explorer needs no kind, definition or new-ID pickers.
@@ -199,10 +213,9 @@ export function bindGraphicDefinitionsEditor(
         control.setAttribute('data-explorer-chosen', '')
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent =
-      'Edit parts and compositions together, then save. Layers run back to front. Markers show source attachment points on parts and destination anchors on compositions. Invalid drafts stay editable.'
+    help.textContent = t('definitions.help')
     form.append(
-      saveBar(document, submit, button('Discard graphic definitions draft', reset)),
+      saveBar(document, submit, button(t('definitions.discard'), reset)),
       help,
       type,
       picker,
@@ -220,9 +233,12 @@ export function bindGraphicDefinitionsEditor(
     if (part && Object.keys(part.palettes).length)
       visual.append(
         select(
-          'Preview palette',
+          t('definitions.previewPalette'),
           palette,
-          [['', 'Default colors'], ...Object.keys(part.palettes).map((id) => [id, id] as const)],
+          [
+            ['', t('form.defaultColors')],
+            ...Object.keys(part.palettes).map((id) => [id, id] as const),
+          ],
           (value) => {
             palette = value
             updatePreview()
@@ -240,12 +256,14 @@ export function bindGraphicDefinitionsEditor(
 
     if (part || composition)
       definitions.append(
-        button(kind === 'parts' ? 'Remove part' : 'Remove composition', () =>
-          change(() => {
-            Reflect.deleteProperty(catalog[kind], selected)
-            selected = ''
-            clearPending()
-          }),
+        button(
+          kind === 'parts' ? t('definitions.removePart') : t('definitions.removeComposition'),
+          () =>
+            change(() => {
+              Reflect.deleteProperty(catalog[kind], selected)
+              selected = ''
+              clearPending()
+            }),
         ),
       )
     layout.append(visual, definitions)
@@ -256,7 +274,7 @@ export function bindGraphicDefinitionsEditor(
       if (busy) return
 
       if (newId || hasPending()) {
-        error.textContent = 'Add or clear pending identifiers before saving.'
+        error.textContent = t('definitions.pendingSave')
 
         return
       }
@@ -295,7 +313,7 @@ export function bindGraphicDefinitionsEditor(
       if (nextKind === kind && id === selected) return true
 
       if (dirty) {
-        error.textContent = 'Save or discard the graphic definitions draft before changing assets.'
+        error.textContent = t('definitions.saveFirst')
 
         return false
       }
@@ -307,6 +325,7 @@ export function bindGraphicDefinitionsEditor(
       return true
     },
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -327,7 +346,7 @@ export function bindGraphicDefinitionsEditor(
         (changed && !dirty)
       )
         reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
     dispose: () => preview.clear(),

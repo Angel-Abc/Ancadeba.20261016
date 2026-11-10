@@ -8,39 +8,49 @@ export function combatItemUseForm(
   draft: CombatSource,
   render: () => void,
 ) {
-  const { group, select, input, create } = controls
+  const { group, select, input, create, t } = controls
 
   const rows: HTMLElement[] = [
-    select('Combat item use', draft.itemUse ? 'enabled' : 'disabled', onOffChoices, (value) => {
-      draft.itemUse =
-        value === 'enabled'
-          ? {
-              owner:
-                draft.player.equipmentOwner ?? Object.keys(view.inventory?.owners ?? {})[0] ?? '',
-              itemTypes: Object.entries(view.inventory?.itemTypes ?? {})
-                .filter(([, item]) => item.use?.contexts.includes('combat'))
-                .map(([id]) => id),
-            }
-          : undefined
-      render()
-    }),
+    select(
+      t('combat.itemUse'),
+      draft.itemUse ? 'enabled' : 'disabled',
+      onOffChoices(t),
+      (value) => {
+        draft.itemUse =
+          value === 'enabled'
+            ? {
+                owner:
+                  draft.player.equipmentOwner ?? Object.keys(view.inventory?.owners ?? {})[0] ?? '',
+                itemTypes: Object.entries(view.inventory?.itemTypes ?? {})
+                  .filter(([, item]) => item.use?.contexts.includes('combat'))
+                  .map(([id]) => id),
+              }
+            : undefined
+        render()
+      },
+    ),
   ]
 
   const use = draft.itemUse
 
   if (use) {
     const hint = create('p')
-    hint.textContent = `Available types: ${Object.entries(view.inventory?.itemTypes ?? {})
-      .filter(([, item]) => item.use?.contexts.includes('combat'))
-      .map(([id]) => id)
-      .join(
-        ', ',
-      )}. Shared abilities and statuses are included automatically; actor learned moves stay separate.`
+    hint.textContent = t('combat.itemUseHelp', {
+      types: Object.entries(view.inventory?.itemTypes ?? {})
+        .filter(([, item]) => item.use?.contexts.includes('combat'))
+        .map(([id]) => id)
+        .join(', '),
+    })
     rows.push(
-      select('Combat item owner', use.owner, Object.keys(view.inventory?.owners ?? {}), (value) => {
-        use.owner = value
-      }),
-      input('Combat usable item types (IDs)', use.itemTypes.join(', '), (value) => {
+      select(
+        t('combat.itemOwner'),
+        use.owner,
+        Object.keys(view.inventory?.owners ?? {}),
+        (value) => {
+          use.owner = value
+        },
+      ),
+      input(t('combat.usableTypes'), use.itemTypes.join(', '), (value) => {
         use.itemTypes = value
           .split(',')
           .map((id) => id.trim())
@@ -50,5 +60,5 @@ export function combatItemUseForm(
     )
   }
 
-  return group('Player item use', ...rows)
+  return group(t('combat.playerItemUse'), ...rows)
 }

@@ -342,6 +342,7 @@ export function bindProjectPanel(
 
     const dataFile = view ? dataFileContent(view, node) : undefined
     const dataGroup = node.kind === 'data-group'
+    const dataRoot = node.section === 'data' && node.kind === 'section'
 
     const usesMapEditor =
       node.section === 'maps' || (node.kind === 'data-file' && node.parentId === 'maps')
@@ -462,6 +463,7 @@ export function bindProjectPanel(
       usesMapEditor ||
       (!dataFile &&
         !dataGroup &&
+        !dataRoot &&
         (node.section !== 'scenes' ||
           node.kind !== 'component' ||
           graphic ||
@@ -474,11 +476,13 @@ export function bindProjectPanel(
           editableComponent))
     const editSection = sections.find((section) => section.id === dataFile?.editSection)
 
-    find('component-help').textContent = dataGroup
-      ? t('tree.dataGroup')
-      : editSection
-        ? t('tree.editFileIn', { section: t(editSection.labelKey) })
-        : t(dataFile ? 'tree.readOnlyFile' : 'tree.readOnly')
+    find('component-help').textContent = dataRoot
+      ? t('tree.dataRoot')
+      : dataGroup
+        ? t('tree.dataGroup')
+        : editSection
+          ? t('tree.editFileIn', { section: t(editSection.labelKey) })
+          : t(dataFile ? 'tree.readOnlyFile' : 'tree.readOnly')
     find('component-json').textContent = dataFile
       ? JSON.stringify(dataFile.content, null, 2)
       : component && !graphic
@@ -990,9 +994,13 @@ export function bindProjectPanel(
     })
 
   if (rulesElement)
-    rulesPanel = bindRulesPanel(rulesElement, (command) => {
-      void controller.save(command)
-    })
+    rulesPanel = bindRulesPanel(
+      rulesElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (mapElement)
     mapEditor = bindMapEditor(
@@ -1025,24 +1033,40 @@ export function bindProjectPanel(
     )
 
   if (actionBarElement)
-    actionBarPanel = bindActionBarPanel(actionBarElement, (command) => {
-      void controller.save(command)
-    })
+    actionBarPanel = bindActionBarPanel(
+      actionBarElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (statusPanelElement)
-    statusPanel = bindStatusPanelEditor(statusPanelElement, (command) => {
-      void controller.save(command)
-    })
+    statusPanel = bindStatusPanelEditor(
+      statusPanelElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (levelingElement)
-    levelingEditor = bindLevelingEditor(levelingElement, (command) => {
-      void controller.save(command)
-    })
+    levelingEditor = bindLevelingEditor(
+      levelingElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (localizationElement)
-    localizationEditor = bindLocalizationEditor(localizationElement, (command) => {
-      void controller.save(command)
-    })
+    localizationEditor = bindLocalizationEditor(
+      localizationElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (stylesheetElement)
     stylesheetEditor = bindStylesheetEditor(
@@ -1065,24 +1089,40 @@ export function bindProjectPanel(
     )
 
   if (storyElement)
-    storyEditor = bindStoryEditor(storyElement, (command) => {
-      void controller.save(command)
-    })
+    storyEditor = bindStoryEditor(
+      storyElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (combatElement)
-    combatEditor = bindCombatEditor(combatElement, (command) => {
-      void controller.save(command)
-    })
+    combatEditor = bindCombatEditor(
+      combatElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (shopElement)
-    shopEditor = bindShopEditor(shopElement, (command) => {
-      void controller.save(command)
-    })
+    shopEditor = bindShopEditor(
+      shopElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (itemElement)
-    itemEditor = bindItemEditor(itemElement, (command) => {
-      void controller.save(command)
-    })
+    itemEditor = bindItemEditor(
+      itemElement,
+      (command) => {
+        void controller.save(command)
+      },
+      t,
+    )
 
   if (componentElement)
     componentEditor = bindComponentEditor(

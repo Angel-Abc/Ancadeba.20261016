@@ -33,7 +33,7 @@ export function actionBarForm(
   change: (edit: () => void) => void,
   sceneId?: string,
 ): HTMLElement[] {
-  const { create, input, select, button, group, translation } = controls
+  const { create, input, select, button, group, translation, t } = controls
   const grid = create('div')
   grid.className = 'action-bar-slot-grid'
 
@@ -41,10 +41,10 @@ export function actionBarForm(
     const id = String(index)
     const slot = draft.slots[id]
     const keys = shortcut(view, slot?.inputBinding)
-    const label = slot?.label || slot?.labelKey || 'Empty'
+    const label = slot?.label || slot?.labelKey || t('controls.empty')
     const control = button('', () => selectSlot(id))
     control.className = 'action-bar-slot'
-    const title = `Slot ${id} · ${label}${keys ? ` · ${keys}` : ''}`
+    const title = `${t('form.slot', { id })} · ${label}${keys ? ` · ${keys}` : ''}`
     control.title = title
     control.setAttribute('aria-label', title)
     const heading = create('span')
@@ -95,25 +95,25 @@ export function actionBarForm(
           component.type === 'map-view' && component.interactive !== false && component.playerSpawn,
       ) ?? []
 
-  const detail = group(`Slot ${selectedSlot}`)
+  const detail = group(t('form.slot', { id: selectedSlot }))
   detail.append(
     select(
-      'Action type',
+      t('controls.actionType'),
       slot?.action.type ?? '',
       [
-        ['', 'Empty slot'],
-        ['request-action', 'Request game action'],
-        ['enter-scene', 'Enter scene'],
-        ['new-game', 'New game'],
-        ['inventory-action', 'Selected inventory item'],
-        ['item-use', 'Use selected item'],
-        ['nearby-action', 'Selected nearby target'],
-        ['move-map', 'Move on map'],
-        ['equipment-action', 'Equipment command'],
-        ['shop-action', 'Shop command'],
-        ['combat-action', 'Combat command'],
-        ['dialogue-action', 'Dialogue command'],
-        ['quest-action', 'Quest command'],
+        ['', t('controls.emptySlot')],
+        ['request-action', t('controls.requestAction')],
+        ['enter-scene', t('controls.enterScene')],
+        ['new-game', t('controls.newGame')],
+        ['inventory-action', t('controls.selectedItem')],
+        ['item-use', t('controls.useSelectedItem')],
+        ['nearby-action', t('controls.selectedTarget')],
+        ['move-map', t('controls.moveOnMap')],
+        ['equipment-action', t('controls.equipmentCommand')],
+        ['shop-action', t('controls.shopCommand')],
+        ['combat-action', t('controls.combatCommand')],
+        ['dialogue-action', t('controls.dialogueCommand')],
+        ['quest-action', t('controls.questCommand')],
       ],
       (type) =>
         change(() => {
@@ -161,13 +161,13 @@ export function actionBarForm(
 
   if (slot) {
     detail.append(
-      input('Slot label', slot.label, (value) => {
+      input(t('controls.slotLabel'), slot.label, (value) => {
         slot.label = value
       }),
       translation(
-        'Label translation',
+        t('form.labelTranslation'),
         slot.labelKey ?? '',
-        translationChoices(view, 'Use literal label'),
+        translationChoices(view, t('form.literalLabel')),
         (value) => {
           if (value) slot.labelKey = value
           else delete slot.labelKey
@@ -179,7 +179,7 @@ export function actionBarForm(
     if (action.type === 'dialogue-action') {
       detail.append(
         select(
-          'Dialogue nearby panel',
+          t('controls.dialogueNearbyPanel'),
           action.nearby,
           nearbyPanels.map((panel) => panel.id),
           (value) => {
@@ -187,7 +187,7 @@ export function actionBarForm(
           },
         ),
         select(
-          'Dialogue command',
+          t('controls.dialogueCommand'),
           action.command.type,
           ['start', 'choose', 'end', 'previous-page', 'next-page'],
           (value) =>
@@ -202,7 +202,7 @@ export function actionBarForm(
       if (action.command.type === 'choose')
         detail.append(
           input(
-            'Reply position',
+            t('controls.replyPosition'),
             String(action.command.position),
             (value) => {
               if (action.command.type === 'choose') action.command.position = Number(value)
@@ -215,7 +215,7 @@ export function actionBarForm(
     if (action.type === 'quest-action') {
       detail.append(
         select(
-          'Quest target mode',
+          t('controls.questTargetMode'),
           action.journal ? 'journal' : 'quest',
           ['quest', 'journal'],
           (value) =>
@@ -230,21 +230,26 @@ export function actionBarForm(
                   : undefined
             }),
         ),
-        select('Quest operation', action.operation, questOperationSchema.options, (value) => {
-          action.operation = value
-        }),
+        select(
+          t('controls.questOperation'),
+          action.operation,
+          questOperationSchema.options,
+          (value) => {
+            action.operation = value
+          },
+        ),
       )
 
       if (action.quest !== undefined)
         detail.append(
-          select('Fixed quest', action.quest, questChoices(view), (value) => {
+          select(t('controls.fixedQuest'), action.quest, questChoices(view), (value) => {
             action.quest = value
           }),
         )
       else
         detail.append(
           select(
-            'Quest journal',
+            t('controls.questJournal'),
             action.journal ?? '',
             view.scenes
               .find((scene) => scene.id === sceneId)
@@ -260,7 +265,7 @@ export function actionBarForm(
     if (action.type === 'item-use') {
       detail.append(
         select(
-          'Item-use inventory',
+          t('controls.itemUseInventory'),
           action.inventory,
           inventoryPanels.map((panel) => panel.id),
           (value) => {
@@ -268,7 +273,7 @@ export function actionBarForm(
           },
         ),
         select(
-          'Item-use combat view',
+          t('controls.itemUseCombatView'),
           action.combat ?? '',
           ['', ...combats.map((entry) => entry.id)],
           (value) => {
@@ -281,7 +286,7 @@ export function actionBarForm(
     if (action.type === 'combat-action') {
       detail.append(
         select(
-          'Combat view',
+          t('form.combatView'),
           action.combat,
           combats.map((component) => component.id),
           (value) =>
@@ -290,7 +295,7 @@ export function actionBarForm(
             }),
         ),
         select(
-          'Combat command',
+          t('controls.combatCommand'),
           action.command.type,
           [
             'queue-move',
@@ -318,7 +323,7 @@ export function actionBarForm(
         const component = combats.find((component) => component.id === action.combat)
         detail.append(
           select(
-            'Combat move',
+            t('controls.combatMove'),
             command.move,
             component ? (view.combat?.[component.encounter]?.player.moves ?? []) : [],
             (value) => {
@@ -330,80 +335,88 @@ export function actionBarForm(
     } else if (action.type === 'shop-action') {
       detail.append(
         select(
-          'Shop',
+          t('tree.shop'),
           action.shop,
           shops.map((shop) => shop.id),
           (value) => {
             action.shop = value
           },
         ),
-        select('Trade operation', action.operation, ['buy', 'sell'], (value) => {
+        select(t('controls.tradeOperation'), action.operation, ['buy', 'sell'], (value) => {
           action.operation = value
         }),
       )
     } else if (action.type === 'equipment-action') {
       detail.append(
         select(
-          'Equipment view',
+          t('controls.equipmentView'),
           action.equipment,
           equipmentViews.map((view) => view.id),
           (value) => {
             action.equipment = value
           },
         ),
-        select('Equipment operation', action.operation, ['equip', 'unequip'], (value) => {
-          action.operation = value
-        }),
+        select(
+          t('controls.equipmentOperation'),
+          action.operation,
+          ['equip', 'unequip'],
+          (value) => {
+            action.operation = value
+          },
+        ),
       )
     } else if (action.type === 'nearby-action') {
       detail.append(
         select(
-          'Nearby panel',
+          t('controls.nearbyPanel'),
           action.nearby,
           nearbyPanels.map(({ id }) => id),
           (value) => {
             action.nearby = value
           },
         ),
-        input('Target action ID', action.action, (value) => {
+        input(t('controls.targetActionId'), action.action, (value) => {
           action.action = value.trim()
         }),
       )
     } else if (action.type === 'move-map') {
       detail.append(
         select(
-          'Target map view',
+          t('controls.targetMapView'),
           action.mapView,
           mapViews.map(({ id }) => id),
           (value) => {
             action.mapView = value
           },
         ),
-        select('Direction', action.direction, ['north', 'east', 'south', 'west'], (value) => {
-          if (value === 'north' || value === 'east' || value === 'south' || value === 'west')
-            action.direction = value
-        }),
+        select(
+          t('form.direction'),
+          action.direction,
+          ['north', 'east', 'south', 'west'],
+          (value) => {
+            if (value === 'north' || value === 'east' || value === 'south' || value === 'west')
+              action.direction = value
+          },
+        ),
       )
 
-      if (!mapViews.length)
-        detail.append('Add an interactive map view with a player spawn in this scene first.')
+      if (!mapViews.length) detail.append(t('controls.mapViewFirst'))
     } else if (action.type === 'inventory-action') {
       detail.append(
         select(
-          'Inventory panel',
+          t('controls.inventoryPanel'),
           action.inventory,
           inventoryPanels.map(({ id }) => id),
           (value) => {
             action.inventory = value
           },
         ),
-        input('Item action ID', action.action, (value) => {
+        input(t('form.itemActionId'), action.action, (value) => {
           action.action = value.trim()
         }),
       )
       const help = create('p')
-      help.textContent =
-        'The slot appears when a selected item supports this action. The inspect ID uses its existing inspection action.'
+      help.textContent = t('controls.itemActionHelp')
       detail.append(help)
     } else if (action.type === 'request-action') {
       const binding = action.enabledWhen
@@ -417,13 +430,13 @@ export function actionBarForm(
       if (binding && !options.some(([value]) => value === JSON.stringify(binding)))
         options.push([JSON.stringify(binding), `${binding.source} · ${binding.path.join('.')}`])
       detail.append(
-        input('Requested action ID', action.action, (value) => {
+        input(t('controls.requestedActionId'), action.action, (value) => {
           action.action = value.trim()
         }),
         select(
-          'Enable when true',
+          t('form.enableWhenTrue'),
           binding ? JSON.stringify(binding) : '',
-          [['', 'Always'], ...options],
+          [['', t('form.always')], ...options],
           (value) => {
             if (value) action.enabledWhen = gameBindingSchema.parse(JSON.parse(value))
             else delete action.enabledWhen
@@ -433,7 +446,7 @@ export function actionBarForm(
     } else if (action.type === 'new-game' || action.type === 'enter-scene')
       detail.append(
         select(
-          'Target scene',
+          t('form.targetScene'),
           action.scene,
           sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
           (value) => {
@@ -444,9 +457,9 @@ export function actionBarForm(
 
     detail.append(
       select(
-        'Input context',
+        t('controls.inputContext'),
         slot.inputBinding?.context ?? '',
-        [['', 'Click only'], ...Object.keys(view.input?.contexts ?? {})],
+        [['', t('controls.clickOnly')], ...Object.keys(view.input?.contexts ?? {})],
         (context) =>
           change(() => {
             if (context)
@@ -463,7 +476,7 @@ export function actionBarForm(
       const binding = slot.inputBinding
       detail.append(
         select(
-          'Virtual input',
+          t('controls.virtualInput'),
           binding.input,
           [...new Set(Object.values(view.input?.contexts[binding.context] ?? {}))],
           (value) =>
@@ -473,17 +486,19 @@ export function actionBarForm(
         ),
       )
       const keys = create('p')
-      keys.textContent = `Keyboard shortcuts · ${shortcut(view, binding) || 'No physical keys mapped'}`
+      keys.textContent = t('controls.shortcuts', {
+        keys: shortcut(view, binding) || t('controls.noKeys'),
+      })
       detail.append(keys)
     }
   }
 
   const placement = group(
-    'Bar placement',
-    input('Component ID', draft.id, (value) => {
+    t('controls.barPlacement'),
+    input(t('component.id'), draft.id, (value) => {
       draft.id = value.trim()
     }),
-    ...placementFields.map(([key, label]) =>
+    ...placementFields(t).map(([key, label]) =>
       input(
         label,
         String(draft.placement[key]),
@@ -497,7 +512,7 @@ export function actionBarForm(
 
   const placementDetails = create('details')
   const summary = create('summary')
-  summary.textContent = 'Bar placement'
+  summary.textContent = t('controls.barPlacement')
   placementDetails.append(summary, placement)
 
   return [grid, detail, placementDetails]

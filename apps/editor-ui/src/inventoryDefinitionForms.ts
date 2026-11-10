@@ -31,7 +31,7 @@ export function inventoryDefinitionForms(
   change: (operation: () => void) => void,
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, button, group } = controls
+  const { input, select, button, group, t } = controls
   const merged = view.inventory ?? draft
   const type = draft.itemTypes[selected.id]
 
@@ -44,12 +44,12 @@ export function inventoryDefinitionForms(
     ]
 
     const equipment = group(
-      'Item behavior',
-      select('Can contain items', String(type.container), yesNoChoices, (value) => {
+      t('items.behavior'),
+      select(t('items.canContain'), String(type.container), yesNoChoices(t), (value) => {
         type.container = value === 'true'
       }),
       select(
-        'Inventory icon',
+        t('items.icon'),
         type.icon ?? '',
         ['', ...Object.keys(view.assets?.images ?? {}), ...Object.keys(view.assets?.parts ?? {})],
         (value) => {
@@ -57,7 +57,7 @@ export function inventoryDefinitionForms(
         },
       ),
       select(
-        'Equipped graphic part',
+        t('items.equippedPart'),
         type.wornPart ?? '',
         ['', ...Object.keys(view.assets?.parts ?? {})],
         (value) => {
@@ -66,9 +66,9 @@ export function inventoryDefinitionForms(
       ),
       ...slots.map((id) =>
         select(
-          `Fits slot ${id}`,
+          t('items.fitsSlot', { id }),
           String(type.equipmentSlots.includes(id)),
-          yesNoChoices,
+          yesNoChoices(t),
           (value) => {
             type.equipmentSlots =
               value === 'true'
@@ -79,8 +79,7 @@ export function inventoryDefinitionForms(
       ),
     )
 
-    if (!slots.length)
-      equipment.append('Add equipment slots to an owner to make this item equippable.')
+    if (!slots.length) equipment.append(t('items.slotsFirst'))
 
     return [
       ...itemPresentationForm(controls, view, type, render),
@@ -93,45 +92,45 @@ export function inventoryDefinitionForms(
 
   if (selected.kind === 'owners' && owner) {
     const fields: HTMLElement[] = [
-      input('Owner name', owner.label, (value) => {
+      input(t('items.ownerName'), owner.label, (value) => {
         owner.label = value
       }),
       ...Object.entries(owner.equipmentSlots).map(([id, label]) =>
         group(
-          `Equipment slot ${id}`,
-          input('Equipment slot name', label, (value) => {
+          t('items.equipmentSlot', { id }),
+          input(t('items.equipmentSlotName'), label, (value) => {
             owner.equipmentSlots[id] = value
           }),
-          button('Remove equipment slot', () =>
+          button(t('items.removeEquipmentSlot'), () =>
             change(() => {
               delete owner.equipmentSlots[id]
             }),
           ),
         ),
       ),
-      input('New slot ID', slot.id, (value) => {
+      input(t('form.newSlotId'), slot.id, (value) => {
         slot.id = value.trim()
       }),
-      input('New slot name', slot.label, (value) => {
+      input(t('items.newSlotName'), slot.label, (value) => {
         slot.label = value
       }),
-      button('Add equipment slot', () =>
+      button(t('items.addEquipmentSlot'), () =>
         change(() => {
           if (
             !assetIdSchema.safeParse(slot.id).success ||
             !slot.label.trim() ||
             Object.hasOwn(owner.equipmentSlots, slot.id)
           )
-            throw new Error('Use a unique slot ID and a nonempty slot name.')
+            throw new Error(t('items.invalidSlot'))
           owner.equipmentSlots[slot.id] = slot.label.trim()
           slot.id = ''
           slot.label = ''
         }),
       ),
       select(
-        'Owner combat stats',
+        t('items.ownerStats'),
         owner.combatStats ? 'enabled' : 'disabled',
-        onOffChoices,
+        onOffChoices(t),
         (value) => {
           if (value === 'disabled') delete owner.combatStats
           else {
@@ -150,12 +149,7 @@ export function inventoryDefinitionForms(
     if (owner.combatStats)
       fields.push(...combatStatsForm(controls, view, owner.combatStats, render))
     else if (!view.rules?.state.some((field) => typeof field.value === 'number'))
-      fields.push(
-        group(
-          'Combat stat setup',
-          'Create numeric health state in Rules before enabling a combat stat profile.',
-        ),
-      )
+      fields.push(group(t('items.statSetup'), t('items.healthFirst')))
 
     return fields
   }
@@ -178,7 +172,7 @@ export function inventoryDefinitionForms(
 
   const fields: HTMLElement[] = [
     select(
-      'Starting item type',
+      t('items.startingType'),
       item.itemType,
       Object.entries(merged.itemTypes).map(([id, type]) => [id, type.label || id] as const),
       (value) => {
@@ -187,12 +181,12 @@ export function inventoryDefinitionForms(
       },
     ),
     select(
-      'Starting placement',
+      t('items.startingPlacement'),
       placement.type,
       [
-        ['carried', 'Carried by an owner'],
-        ['equipped', 'Equipped in a slot'],
-        ['inside', 'Inside a container'],
+        ['carried', t('items.carried')],
+        ['equipped', t('items.equipped')],
+        ['inside', t('items.inContainer')],
       ],
       (value) => {
         item.placement =
@@ -208,14 +202,14 @@ export function inventoryDefinitionForms(
 
   if (placement.type === 'inside')
     fields.push(
-      select('Starting container', placement.container, containers, (value) => {
+      select(t('items.startingContainer'), placement.container, containers, (value) => {
         placement.container = value
       }),
     )
   else {
     fields.push(
       select(
-        'Starting owner',
+        t('items.startingOwner'),
         placement.owner,
         Object.entries(merged.owners).map(([id, owner]) => [id, owner.label] as const),
         (value) => {
@@ -227,7 +221,7 @@ export function inventoryDefinitionForms(
 
     if (placement.type === 'equipped')
       fields.push(
-        select('Starting equipment slot', placement.slot, slots, (value) => {
+        select(t('items.startingSlot'), placement.slot, slots, (value) => {
           placement.slot = value
         }),
       )
@@ -240,12 +234,12 @@ export function inventoryDefinitionForms(
   const names = [...new Set([...Object.keys(defaults), ...Object.keys(item.colors)])]
   fields.push(
     group(
-      'Starting item colors',
+      t('items.startingColors'),
       ...names.flatMap((name) => [
         select(
-          `Override ${name}`,
+          t('items.overrideColor', { name }),
           String(Object.hasOwn(item.colors, name)),
-          yesNoChoices,
+          yesNoChoices(t),
           (value) => {
             if (value === 'true') item.colors[name] = defaults[name] ?? '#ffffff'
             else delete item.colors[name]
@@ -255,7 +249,7 @@ export function inventoryDefinitionForms(
         ...(Object.hasOwn(item.colors, name)
           ? [
               input(
-                `Color ${name}`,
+                t('form.color', { id: name }),
                 item.colors[name]!,
                 (value) => {
                   item.colors[name] = value

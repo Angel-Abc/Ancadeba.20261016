@@ -13,7 +13,7 @@ export function itemPresentationForm(
   draft: InventoryDefinition['itemTypes'][string],
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, group, button, translation } = controls
+  const { input, select, group, button, translation, t } = controls
   const keys = translationChoices(view)
 
   const art = [
@@ -25,9 +25,9 @@ export function itemPresentationForm(
 
   const fields: HTMLElement[] = [
     select(
-      'Combat equipment effects',
+      t('items.equipmentEffects'),
       draft.combatBonuses ? 'enabled' : 'disabled',
-      onOffChoices,
+      onOffChoices(t),
       (value) => {
         draft.combatBonuses = value === 'enabled' ? combatBonusesSchema.parse({}) : undefined
         render()
@@ -36,7 +36,7 @@ export function itemPresentationForm(
     ...(draft.combatBonuses
       ? combatStatNames.map((stat) =>
           input(
-            `Equipment ${stat} bonus`,
+            t('items.statBonus', { stat }),
             String(draft.combatBonuses![stat]),
             (value) => {
               draft.combatBonuses![stat] = Number(value)
@@ -45,19 +45,19 @@ export function itemPresentationForm(
           ),
         )
       : []),
-    input('Item name', draft.label, (value) => {
+    input(t('items.itemName'), draft.label, (value) => {
       draft.label = value
     }),
-    translation('Name translation', draft.labelKey ?? '', keys, (value) => {
+    translation(t('form.nameTranslation'), draft.labelKey ?? '', keys, (value) => {
       draft.labelKey = value || undefined
     }),
-    input('Description', draft.description, (value) => {
+    input(t('metadata.description'), draft.description, (value) => {
       draft.description = value
     }),
-    translation('Description translation', draft.descriptionKey ?? '', keys, (value) => {
+    translation(t('form.descriptionTranslation'), draft.descriptionKey ?? '', keys, (value) => {
       draft.descriptionKey = value || undefined
     }),
-    select('Large artwork', draft.artwork ?? '', art, (value) => {
+    select(t('items.largeArtwork'), draft.artwork ?? '', art, (value) => {
       draft.artwork = value || undefined
     }),
   ]
@@ -66,23 +66,23 @@ export function itemPresentationForm(
     const type = typeof property.value === 'object' ? 'binding' : typeof property.value
 
     const box = group(
-      `Property ${index + 1}`,
-      input('Property ID', property.id, (value) => {
+      t('items.property', { number: index + 1 }),
+      input(t('items.propertyId'), property.id, (value) => {
         property.id = value.trim()
       }),
-      input('Property label', property.label, (value) => {
+      input(t('items.propertyLabel'), property.label, (value) => {
         property.label = value
       }),
-      translation('Property label translation', property.labelKey ?? '', keys, (value) => {
+      translation(t('items.propertyLabelTranslation'), property.labelKey ?? '', keys, (value) => {
         property.labelKey = value || undefined
       }),
       select(
-        'Property value type',
+        t('items.propertyValueType'),
         type,
         [
-          ['string', 'Text'],
-          ['number', 'Number'],
-          ['binding', 'Game value'],
+          ['string', t('tree.text')],
+          ['number', t('form.number')],
+          ['binding', t('items.gameValue')],
         ],
         (value) => {
           property.value =
@@ -115,14 +115,14 @@ export function itemPresentationForm(
         )
 
       box.append(
-        select('Property binding', JSON.stringify(binding), choices, (value) => {
+        select(t('items.propertyBinding'), JSON.stringify(binding), choices, (value) => {
           property.value = gameBindingSchema.parse(JSON.parse(value))
         }),
       )
     } else
       box.append(
         input(
-          'Property value',
+          t('items.propertyValue'),
           String(property.value),
           (value) => {
             property.value = type === 'number' ? Number(value) : value
@@ -133,13 +133,13 @@ export function itemPresentationForm(
 
     if (typeof property.value === 'string')
       box.append(
-        translation('Property value translation', property.valueKey ?? '', keys, (value) => {
+        translation(t('items.propertyValueTranslation'), property.valueKey ?? '', keys, (value) => {
           property.valueKey = value || undefined
         }),
       )
     box.append(
       button(
-        'Move property up',
+        t('items.movePropertyUp'),
         () => {
           ;[draft.properties[index - 1], draft.properties[index]] = [
             property,
@@ -150,7 +150,7 @@ export function itemPresentationForm(
         },
         index === 0,
       ),
-      button('Remove property', () => {
+      button(t('items.removeProperty'), () => {
         draft.properties.splice(index, 1)
         controls.markEdited()
         render()
@@ -159,7 +159,7 @@ export function itemPresentationForm(
     fields.push(box)
   })
   fields.push(
-    button('Add property', () => {
+    button(t('items.addProperty'), () => {
       let id = 'property'
       let number = 1
 

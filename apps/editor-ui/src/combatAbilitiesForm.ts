@@ -13,16 +13,16 @@ export function abilityEffectsForm(
   effects: AbilityEffect[],
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, button, group } = controls
+  const { input, select, button, group, t } = controls
 
   const fields = effects.map((effect, index) =>
     group(
-      `Effect ${index + 1}`,
-      input('Effect ID', effect.id, (value) => {
+      t('form.effectNumber', { number: index + 1 }),
+      input(t('combat.effectId'), effect.id, (value) => {
         effect.id = value.trim()
       }),
       select(
-        'Effect type',
+        t('form.effectType'),
         effect.type,
         ['damage', 'heal', 'guard', 'apply-status', 'remove-status'],
         (type) => {
@@ -38,11 +38,11 @@ export function abilityEffectsForm(
         },
       ),
       select(
-        'Effect recipient',
+        t('combat.effectRecipient'),
         effect.target ?? 'target',
         [
-          ['target', 'Ability target'],
-          ['self', 'User'],
+          ['target', t('combat.abilityTarget')],
+          ['self', t('combat.user')],
         ],
         (value) => {
           effect.target = value
@@ -51,7 +51,7 @@ export function abilityEffectsForm(
       ...(effect.type === 'damage'
         ? [
             input(
-              'Minimum damage',
+              t('combat.minDamage'),
               String(effect.damage.min),
               (v) => {
                 effect.damage.min = Number(v)
@@ -59,7 +59,7 @@ export function abilityEffectsForm(
               'number',
             ),
             input(
-              'Maximum damage',
+              t('combat.maxDamage'),
               String(effect.damage.max),
               (v) => {
                 effect.damage.max = Number(v)
@@ -70,7 +70,7 @@ export function abilityEffectsForm(
         : effect.type === 'heal' || effect.type === 'guard'
           ? [
               input(
-                'Amount',
+                t('form.amount'),
                 String(effect.amount),
                 (v) => {
                   effect.amount = Number(v)
@@ -79,11 +79,11 @@ export function abilityEffectsForm(
               ),
             ]
           : [
-              select('Status', effect.status, Object.keys(draft.statuses ?? {}), (v) => {
+              select(t('form.status'), effect.status, Object.keys(draft.statuses ?? {}), (v) => {
                 effect.status = v
               }),
             ]),
-      button('Move effect up', () => {
+      button(t('combat.moveEffectUp'), () => {
         if (!index) return
         const previous = effects[index - 1]!
         effects[index - 1] = effect
@@ -91,7 +91,7 @@ export function abilityEffectsForm(
         controls.markEdited()
         render()
       }),
-      button('Remove effect', () => {
+      button(t('form.removeEffect'), () => {
         effects.splice(index, 1)
         controls.markEdited()
         render()
@@ -101,7 +101,7 @@ export function abilityEffectsForm(
 
   return [
     ...fields,
-    button('Add ability effect', () => {
+    button(t('combat.addAbilityEffect'), () => {
       let id = 'effect'
       let n = 1
 
@@ -119,7 +119,7 @@ export function combatStatusesForm(
   draft: Pick<CombatDefinition, 'statuses'>,
   render: () => void,
 ): HTMLElement {
-  const { input, select, button, group, translation } = controls
+  const { input, select, button, group, translation, t } = controls
 
   const art = [
     '',
@@ -130,38 +130,48 @@ export function combatStatusesForm(
 
   const rows = Object.entries(draft.statuses ?? {}).map(([id, status]) =>
     group(
-      `Status: ${id}`,
-      select('Status type', status.type, ['damage', 'regeneration', 'modifier', 'stun'], (type) => {
-        draft.statuses![id] = combatStatusSchema.parse({
-          ...status,
-          type,
-          amount: 3,
-          modifiers: { attack: 2 },
-        })
-        render()
-      }),
-      input('Name', status.label, (value) => {
+      t('combat.statusTitle', { id }),
+      select(
+        t('combat.statusType'),
+        status.type,
+        ['damage', 'regeneration', 'modifier', 'stun'],
+        (type) => {
+          draft.statuses![id] = combatStatusSchema.parse({
+            ...status,
+            type,
+            amount: 3,
+            modifiers: { attack: 2 },
+          })
+          render()
+        },
+      ),
+      input(t('form.name'), status.label, (value) => {
         status.label = value
       }),
-      translation('Name translation', status.labelKey ?? '', translationChoices(view), (value) => {
-        status.labelKey = value || undefined
-      }),
-      input('Description', status.description, (value) => {
+      translation(
+        t('form.nameTranslation'),
+        status.labelKey ?? '',
+        translationChoices(view),
+        (value) => {
+          status.labelKey = value || undefined
+        },
+      ),
+      input(t('metadata.description'), status.description, (value) => {
         status.description = value
       }),
       translation(
-        'Description translation',
+        t('form.descriptionTranslation'),
         status.descriptionKey ?? '',
         translationChoices(view),
         (value) => {
           status.descriptionKey = value || undefined
         },
       ),
-      select('Icon', status.icon ?? '', art, (value) => {
+      select(t('combat.icon'), status.icon ?? '', art, (value) => {
         status.icon = value || undefined
       }),
       input(
-        'Duration (affected turns)',
+        t('combat.duration'),
         String(status.duration),
         (value) => {
           status.duration = Number(value)
@@ -171,7 +181,7 @@ export function combatStatusesForm(
       ...(status.type === 'damage' || status.type === 'regeneration'
         ? [
             input(
-              'Amount',
+              t('form.amount'),
               String(status.amount),
               (value) => {
                 status.amount = Number(value)
@@ -182,7 +192,7 @@ export function combatStatusesForm(
         : status.type === 'modifier'
           ? (['attack', 'defense', 'guard'] as const).map((stat) =>
               input(
-                `${stat} modifier`,
+                t('combat.statModifier', { stat }),
                 String(status.modifiers[stat] ?? 0),
                 (value) => {
                   status.modifiers[stat] = Number(value)
@@ -191,7 +201,7 @@ export function combatStatusesForm(
               ),
             )
           : []),
-      button(`Remove status ${id}`, () => {
+      button(t('combat.removeStatus', { id }), () => {
         delete draft.statuses![id]
         controls.markEdited()
         render()
@@ -202,12 +212,12 @@ export function combatStatusesForm(
   let nextId = 'status'
 
   return group(
-    'Combat statuses',
+    t('combat.statuses'),
     ...rows,
-    input('New status ID', nextId, (value) => {
+    input(t('combat.newStatusId'), nextId, (value) => {
       nextId = value.trim()
     }),
-    button('Add status', () => {
+    button(t('combat.addStatus'), () => {
       let id = nextId
       let n = 1
 

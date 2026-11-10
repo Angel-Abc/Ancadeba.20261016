@@ -10,11 +10,11 @@ import { textBindingChoices, textBindingId } from './textBindingChoices.js'
 type VisualBinding = Omit<GameBindingDefinition, 'fallback'>
 
 const sources = {
-  'game.state': 'Game state',
-  'game.progression': 'Game time',
-  'game.quests': 'Quest progress',
-  'game.leveling': 'Character levels',
-  'game.combatStats': 'Combat stats',
+  'game.state': 'bindings.source.state',
+  'game.progression': 'bindings.source.time',
+  'game.quests': 'bindings.source.quests',
+  'game.leveling': 'leveling.heading',
+  'game.combatStats': 'bindings.source.combat',
 } as const
 
 /** Binds a typed appearance property while its static value remains the fallback. */
@@ -28,9 +28,9 @@ export function graphicBindingForm(
   change: (operation: () => void) => void,
   edited: () => void,
 ) {
-  const { group, select, input, button } = controls
+  const { group, select, input, button, t } = controls
 
-  const choices = textBindingChoices(view).filter((choice) => {
+  const choices = textBindingChoices(view, t).filter((choice) => {
     if (choice.initial !== undefined) return typeof choice.initial === expected
 
     if (choice.binding.source === 'game.leveling')
@@ -50,14 +50,14 @@ export function graphicBindingForm(
     : ''
 
   const box = group(
-    `${title} binding`,
+    t('bindings.bindingOf', { title }),
     select(
-      'Bound value',
+      t('bindings.boundValue'),
       selected,
       [
-        ['', 'Use static value'],
+        ['', t('bindings.useStatic')],
         ...choices.map((choice) => [choice.id, choice.label] as const),
-        ['custom', 'Custom path'],
+        ['custom', t('bindings.customPath')],
       ],
       (value) =>
         change(() => {
@@ -76,9 +76,11 @@ export function graphicBindingForm(
   if (binding && selected === 'custom') {
     box.append(
       select(
-        'Binding source',
+        t('bindings.sourceLabel'),
         binding.source,
-        gameBindingSchema.shape.source.options.map((source) => [source, sources[source]] as const),
+        gameBindingSchema.shape.source.options.map(
+          (source) => [source, t(sources[source])] as const,
+        ),
         (value) => {
           binding.source = value
           edited()
@@ -88,13 +90,13 @@ export function graphicBindingForm(
     binding.path.forEach((segment, index) =>
       box.append(
         group(
-          `Path segment ${index + 1}`,
+          t('bindings.pathSegment', { number: index + 1 }),
           select(
-            'Path segment type',
+            t('bindings.segmentType'),
             typeof segment === 'number' ? 'index' : 'key',
             [
-              ['key', 'Object key / Map key'],
-              ['index', 'Array index'],
+              ['key', t('bindings.objectKey')],
+              ['index', t('bindings.arrayIndex')],
             ],
             (value) =>
               change(() => {
@@ -102,7 +104,7 @@ export function graphicBindingForm(
               }),
           ),
           input(
-            typeof segment === 'number' ? 'Array index' : 'Path key',
+            typeof segment === 'number' ? t('bindings.arrayIndex') : t('bindings.pathKey'),
             String(segment),
             (value) => {
               binding.path[index] =
@@ -112,7 +114,7 @@ export function graphicBindingForm(
             typeof segment === 'number' ? 'number' : 'text',
           ),
           button(
-            `Remove path segment ${index + 1}`,
+            t('bindings.removeSegment', { number: index + 1 }),
             () =>
               change(() => {
                 binding.path.splice(index, 1)
@@ -123,7 +125,7 @@ export function graphicBindingForm(
       ),
     )
     box.append(
-      button('Add path segment', () =>
+      button(t('bindings.addSegment'), () =>
         change(() => {
           binding.path.push('')
         }),

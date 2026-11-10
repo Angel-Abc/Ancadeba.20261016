@@ -1,3 +1,4 @@
+import type { Translate } from '@ancadeba/utilities'
 import type { AssetCatalog, GraphicAppearance } from '@ancadeba/schemas'
 import type { RenderedGraphic } from '@ancadeba/ui-components'
 
@@ -10,7 +11,8 @@ export type GraphicDefinitionPreviewFactory = (
 /** Uses the runtime renderer and overlays attachment markers in the same coordinate system. */
 export function graphicDefinitionPreview(
   root: HTMLElement,
-  create?: GraphicDefinitionPreviewFactory,
+  create: GraphicDefinitionPreviewFactory | undefined,
+  t: Translate,
 ) {
   let graphic: RenderedGraphic | undefined
 
@@ -51,7 +53,7 @@ export function graphicDefinitionPreview(
       overlay.setAttribute('viewBox', `${x} ${y} ${width} ${height}`)
       overlay.setAttribute('preserveAspectRatio', 'xMidYMid meet')
       overlay.setAttribute('role', 'img')
-      overlay.setAttribute('aria-label', 'Attachment points')
+      overlay.setAttribute('aria-label', t('definitions.attachmentPoints'))
       overlay.classList.add('definition-anchor-overlay')
       const size = Math.max(width, height) / 60
 

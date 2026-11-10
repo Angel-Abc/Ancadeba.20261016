@@ -1,3 +1,4 @@
+import type { Translate } from '@ancadeba/utilities'
 import { assetIdSchema, type GraphicPart, type GraphicComposition } from '@ancadeba/schemas'
 import type { RuleFormControls } from './ruleFormControls.js'
 
@@ -17,11 +18,9 @@ export interface GraphicDefinitionControls {
   edited: () => void
 }
 
-export function requireDefinitionId(id: string, ids: readonly string[]) {
+export function requireDefinitionId(id: string, ids: readonly string[], t: Translate) {
   if (!assetIdSchema.safeParse(id).success || ids.includes(id))
-    throw new Error(
-      'Choose a valid, unused identifier using letters, digits, underscores or hyphens.',
-    )
+    throw new Error(t('definitions.invalidId'))
 }
 
 export function boundsForm(
@@ -29,12 +28,13 @@ export function boundsForm(
   definition: GraphicPart | GraphicComposition,
 ) {
   const { controls, edited } = context
+  const { t } = controls
 
   return controls.group(
-    'Preview bounds',
+    t('definitions.previewBounds'),
     ...(['x', 'y', 'width', 'height'] as const).map((key) =>
       controls.input(
-        `Bounds ${key}`,
+        t('definitions.bounds', { key }),
         String(definition.bounds[key]),
         (value) => {
           definition.bounds[key] = Number(value)
@@ -56,16 +56,16 @@ export function moveDefinitionEntry<T>(entries: T[], index: number, offset: numb
 
 export function partColorsForm(context: GraphicDefinitionControls, part: GraphicPart): HTMLElement {
   const { controls, pending, change, edited } = context
-  const { group, input, select, button } = controls
+  const { group, input, select, button, t } = controls
   const colors = Object.keys(part.colors)
 
   return group(
-    'Part colors and palettes',
+    t('definitions.partColors'),
     ...colors.map((id) =>
       group(
-        `Color ${id}`,
+        t('form.color', { id }),
         input(
-          'Default color',
+          t('definitions.defaultColor'),
           part.colors[id]!,
           (value) => {
             part.colors[id] = value
@@ -73,7 +73,7 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
           },
           'color',
         ),
-        button(`Remove color ${id}`, () =>
+        button(t('definitions.removeColor', { id }), () =>
           change(() => {
             delete part.colors[id]
 
@@ -86,27 +86,27 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
         ),
       ),
     ),
-    input('New part color ID', pending.color, (value) => {
+    input(t('definitions.newColorId'), pending.color, (value) => {
       pending.color = value.trim()
     }),
-    button('Add part color', () =>
+    button(t('definitions.addColor'), () =>
       change(() => {
-        requireDefinitionId(pending.color, colors)
+        requireDefinitionId(pending.color, colors, t)
         part.colors[pending.color] = '#ffffff'
         pending.color = ''
       }),
     ),
     ...Object.entries(part.palettes).map(([id, palette]) =>
       group(
-        `Palette ${id}`,
+        t('definitions.palette', { id }),
         ...colors.flatMap((color) => [
           select(
             // The palette group names the palette; each row only names its color.
             color,
             String(Object.hasOwn(palette, color)),
             [
-              ['false', 'Use default color'],
-              ['true', 'Custom color'],
+              ['false', t('definitions.useDefaultColor')],
+              ['true', t('definitions.customColor')],
             ],
             (value) =>
               change(() => {
@@ -117,7 +117,7 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
           ...(Object.hasOwn(palette, color)
             ? [
                 input(
-                  `${color} color`,
+                  t('definitions.colorOf', { color }),
                   palette[color]!,
                   (value) => {
                     palette[color] = value
@@ -128,19 +128,19 @@ export function partColorsForm(context: GraphicDefinitionControls, part: Graphic
               ]
             : []),
         ]),
-        button(`Remove palette ${id}`, () =>
+        button(t('definitions.removePalette', { id }), () =>
           change(() => {
             delete part.palettes[id]
           }),
         ),
       ),
     ),
-    input('New part palette ID', pending.palette, (value) => {
+    input(t('definitions.newPaletteId'), pending.palette, (value) => {
       pending.palette = value.trim()
     }),
-    button('Add part palette', () =>
+    button(t('definitions.addPalette'), () =>
       change(() => {
-        requireDefinitionId(pending.palette, Object.keys(part.palettes))
+        requireDefinitionId(pending.palette, Object.keys(part.palettes), t)
         part.palettes[pending.palette] = {}
         pending.palette = ''
       }),

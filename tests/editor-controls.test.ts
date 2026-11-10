@@ -1561,6 +1561,35 @@ describe('action bar editor controls', () => {
       },
     })
   })
+  it('follows the editor language in section editors and keeps the draft when it changes', () => {
+    const { initial, root, edit, click, field } = panel()
+    const view = structuredClone(initial.view!)
+    view.inventory = inventorySchema.parse({
+      'schema-version': '1.0.0',
+      itemTypes: {},
+      owners: { player: { label: 'Player' }, merchant: { label: 'Merchant' } },
+      items: {},
+    })
+    let language = 'nl'
+
+    const editor = bindShopEditor(
+      root.asElement(),
+      () => {},
+      (key, values) => editorLocalization([language]).t(key, values),
+    )
+
+    const state = { ...initial, view }
+    editor.render(state, true)
+    click('Winkel toevoegen')
+    edit('Winkeltitel', 'Marktkraam')
+    expect(field('Winkeltitel').value).toBe('Marktkraam')
+
+    language = 'en'
+    editor.render(state, false)
+    expect(field('Shop title').value).toBe('Marktkraam')
+    expect(() => field('Winkeltitel')).toThrow('Missing field')
+    expect(editor.hasDrafts()).toBe(true)
+  })
   it('authors shop participants and prices, preserves conflicting drafts, and binds trade shortcuts', () => {
     const { initial, root, edit, click, submit, commands, field } = panel()
     const view = structuredClone(initial.view!)

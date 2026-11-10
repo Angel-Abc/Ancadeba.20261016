@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import {
   combatStatsProfileSchema,
@@ -18,6 +20,7 @@ import {
   ruleFormControls,
   saveBar,
   translationChoices,
+  languageWatcher,
 } from './ruleFormControls.js'
 import { itemUseForm } from './itemUseForm.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
@@ -26,7 +29,11 @@ import { bindInventoryEditor } from './inventoryEditor.js'
 import { sceneChoices } from './choiceLabels.js'
 
 /** Revision conflicts preserve this independent draft, including edits to ordered properties. */
-export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindItemEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -36,7 +43,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   const navigation = document.createElement('div')
   navigation.className = 'editor-mode-controls'
   root.replaceChildren(navigation, error, inventoryRoot, fields)
-  const inventoryEditor = bindInventoryEditor(inventoryRoot, save)
+  const inventoryEditor = bindInventoryEditor(inventoryRoot, save, t)
   let definitions = true
   let view: ProjectView | undefined
   let path: string | undefined
@@ -58,14 +65,19 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
   let submitted: EditorCommand | undefined
   let hiddenPreviews: InventoryComponentDefinition['previews'] = {}
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const showDefinitions = (value: boolean) => {
     if (value !== definitions && (dirty || inventoryEditor.hasDrafts())) {
-      error.textContent =
-        'Save or discard the current inventory or item draft before switching editors.'
+      error.textContent = t('items.saveBeforeEditors')
 
       return false
     }
@@ -80,11 +92,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     return true
   }
 
-  const definitionButton = controls.button('Inventory definitions', () => showDefinitions(true))
+  const definitionButton = controls.button(t('items.definitions'), () => showDefinitions(true))
 
-  const viewButton = controls.button('Item views and advanced settings', () =>
-    showDefinitions(false),
-  )
+  const viewButton = controls.button(t('items.views'), () => showDefinitions(false))
 
   navigation.append(definitionButton, viewButton)
   showDefinitions(true)
@@ -138,7 +148,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if ((!nextScene || nextScene === sceneId) && nextTarget === target) return true
 
     if (dirty) {
-      error.textContent = 'Save or discard the item draft before switching targets.'
+      error.textContent = t('items.saveFirstTargets')
 
       return false
     }
@@ -157,7 +167,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     const scene = view.scenes.find((scene) => scene.id === sceneId)
 
     const scenePicker = controls.select(
-      'Items game scene',
+      t('items.gameScene'),
       sceneId,
       sceneChoices(view, 'game'),
       (value) => {
@@ -170,10 +180,10 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
     const targets = [
       ...Object.keys(view.inventory?.itemTypes ?? {}).map(
-        (id) => [`item:${id}`, `Item: ${id}`] as const,
+        (id) => [`item:${id}`, t('items.itemTitle', { id })] as const,
       ),
       ...Object.keys(view.inventory?.owners ?? {}).map(
-        (id) => [`owner:${id}`, `Owner slots: ${id}`] as const,
+        (id) => [`owner:${id}`, t('items.ownerSlots', { id })] as const,
       ),
       ...(scene?.components
         .filter((component) => ['inventory', 'item-details', 'equipment'].includes(component.type))
@@ -183,12 +193,12 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     ]
 
     const picker = controls.select(
-      'Item editing target',
+      t('items.editingTarget'),
       target,
-      [['', 'Choose…'], ...targets],
+      [['', t('form.choose')], ...targets],
       (value) => {
         if (dirty) {
-          error.textContent = 'Save or discard the item draft before switching targets.'
+          error.textContent = t('items.saveFirstTargets')
           picker.querySelector('select')!.value = target
 
           return
@@ -207,9 +217,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if (scene)
       for (const type of ['inventory', 'item-details', 'equipment'] as const)
         fields.append(
-          controls.button(`Add ${type}`, () => {
+          controls.button(t('items.addView', { type }), () => {
             if (dirty) {
-              error.textContent = 'Save or discard the item draft first.'
+              error.textContent = t('items.saveFirst')
 
               return
             }
@@ -224,9 +234,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
             if ((type === 'inventory' && !owner) || (type !== 'inventory' && !inventory)) {
               error.textContent =
-                type === 'inventory'
-                  ? 'Create and save an inventory owner first.'
-                  : 'Add an inventory panel to this scene first.'
+                type === 'inventory' ? t('items.ownerFirst') : t('items.panelFirst')
 
               return
             }
@@ -262,7 +270,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     const form = document.createElement('form')
     const button = document.createElement('button')
     button.type = 'submit'
-    button.textContent = 'Save items and equipment'
+    button.textContent = t('items.save')
     form.append(saveBar(document, button))
 
     if (item)
@@ -274,9 +282,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if (slots) {
       form.append(
         controls.select(
-          'Combat stat profile',
+          t('items.statProfile'),
           combatStats ? 'enabled' : 'disabled',
-          onOffChoices,
+          onOffChoices(t),
           (value) => {
             const fields =
               view?.rules?.state.filter((field) => typeof field.value === 'number') ?? []
@@ -297,14 +305,14 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       slots.forEach((slot, index) =>
         form.append(
           controls.group(
-            `Slot ${index + 1}`,
-            controls.input('Slot ID', slot[0], (value) => {
+            t('form.slot', { id: index + 1 }),
+            controls.input(t('items.slotId'), slot[0], (value) => {
               slot[0] = value.trim()
             }),
-            controls.input('Slot name', slot[1], (value) => {
+            controls.input(t('items.slotName'), slot[1], (value) => {
               slot[1] = value
             }),
-            controls.button('Remove slot', () => {
+            controls.button(t('items.removeSlot'), () => {
               slots!.splice(index, 1)
               controls.markEdited()
               render()
@@ -313,7 +321,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         ),
       )
       form.append(
-        controls.button('Add slot', () => {
+        controls.button(t('items.addSlot'), () => {
           slots!.push(['', ''])
           controls.markEdited()
           render()
@@ -326,7 +334,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     if (component && scene) {
       const draft = component
 
-      const identity = controls.input('View ID', draft.id, (value) => {
+      const identity = controls.input(t('items.viewId'), draft.id, (value) => {
         if (creating) draft.id = value.trim()
       })
 
@@ -335,9 +343,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         ...(draft.type !== 'inventory'
           ? [
               controls.select(
-                'Show equipment stats',
+                t('items.showStats'),
                 String(draft.showCombatStats ?? false),
-                yesNoChoices,
+                yesNoChoices(t),
                 (value) => {
                   draft.showCombatStats = value === 'true'
                 },
@@ -345,11 +353,11 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             ]
           : []),
         identity,
-        controls.input('View label', draft.label, (value) => {
+        controls.input(t('items.viewLabel'), draft.label, (value) => {
           draft.label = value
         }),
         controls.translation(
-          'View label translation',
+          t('items.viewLabelTranslation'),
           draft.labelKey ?? '',
           translationChoices(view),
           (value) => {
@@ -359,7 +367,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         ...(draft.type !== 'inventory'
           ? [
               controls.select(
-                'Source inventory',
+                t('items.sourceInventory'),
                 draft.inventory,
                 scene.components
                   .filter((entry) => entry.type === 'inventory')
@@ -371,7 +379,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
               ),
             ]
           : []),
-        ...placementFields.map(([key, label]) =>
+        ...placementFields(t).map(([key, label]) =>
           controls.input(
             label,
             String(draft.placement[key]),
@@ -386,7 +394,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
       if (draft.type === 'item-details')
         form.append(
           controls.select(
-            'Comparison equipment',
+            t('items.comparisonEquipment'),
             draft.equipment ?? '',
             [
               '',
@@ -400,11 +408,11 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
               draft.equipment = value || undefined
             },
           ),
-          controls.input('Empty selection text', draft.emptyText, (value) => {
+          controls.input(t('items.emptyText'), draft.emptyText, (value) => {
             draft.emptyText = value
           }),
           controls.translation(
-            'Empty text translation',
+            t('items.emptyTextTranslation'),
             draft.emptyTextKey ?? '',
             translationChoices(view),
             (value) => {
@@ -416,9 +424,9 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         form.append(
           ...Object.entries(view.inventory?.owners ?? {}).map(([id, owner]) =>
             controls.select(
-              `Show owner ${owner.label}`,
+              t('items.showOwner', { owner: owner.label }),
               String(draft.owners.includes(id)),
-              yesNoChoices,
+              yesNoChoices(t),
               (value) => {
                 draft.owners =
                   value === 'true'
@@ -436,15 +444,15 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             ),
           ),
           controls.select(
-            'Inventory read only',
+            t('items.readOnlyInventory'),
             String(draft.readOnly ?? false),
-            yesNoChoices,
+            yesNoChoices(t),
             (value) => {
               draft.readOnly = value === 'true'
             },
           ),
           controls.select(
-            'Main text details target',
+            t('items.detailsTarget'),
             draft.descriptionTarget ?? '',
             [
               '',
@@ -462,7 +470,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
 
         form.append(
           controls.select(
-            'Equipment owner',
+            t('items.equipmentOwner'),
             draft.owner,
             inventory?.type === 'inventory' ? inventory.owners : [],
             (value) => {
@@ -472,7 +480,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             },
           ),
           controls.input(
-            'Grid columns',
+            t('items.gridColumns'),
             String(draft.columns),
             (value) => {
               draft.columns = Number(value)
@@ -480,17 +488,17 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
             'number',
           ),
           controls.select(
-            'Equipment changes',
+            t('items.equipmentChanges'),
             String(draft.readOnly),
             [
-              ['false', 'Allow changes'],
-              ['true', 'Read only'],
+              ['false', t('items.allowChanges')],
+              ['true', t('items.readOnly')],
             ],
             (value) => {
               draft.readOnly = value === 'true'
             },
           ),
-          controls.input('Slot order (comma separated IDs)', draft.order.join(', '), (value) => {
+          controls.input(t('items.slotOrder'), draft.order.join(', '), (value) => {
             draft.order = value
               .split(',')
               .map((value) => value.trim())
@@ -514,7 +522,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         })
       else if (slots) {
         if (new Set(slots.map((slot) => slot[0])).size !== slots.length) {
-          error.textContent = 'Slot IDs must be unique'
+          error.textContent = t('items.uniqueSlotIds')
 
           return
         }
@@ -529,7 +537,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         const id = component.id
 
         if (creating && scene?.components.some((entry) => entry.id === id)) {
-          error.textContent = 'A component with this ID already exists. Choose a different ID.'
+          error.textContent = t('form.componentExists')
 
           return
         }
@@ -537,11 +545,11 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         submit({ type: 'scene.upsertItemView', sceneId, component, createOnly: creating })
       }
     })
-    fields.append(form, controls.button('Discard item draft', reset))
+    fields.append(form, controls.button(t('items.discard'), reset))
 
     if (component && source && !creating)
       fields.append(
-        controls.button('Remove item view', () =>
+        controls.button(t('items.removeView'), () =>
           submit({ type: 'scene.removeItemView', sceneId, componentId: source.id }),
         ),
       )
@@ -556,6 +564,7 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
     },
     hasDrafts: () => dirty || inventoryEditor.hasDrafts(),
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       inventoryEditor.render(state, replaceFields)
       const changed = view !== state.view
       const projectChanged = path !== state.path
@@ -578,8 +587,13 @@ export function bindItemEditor(root: HTMLElement, save: (command: EditorCommand)
         target = ''
       }
 
+      if (translated) {
+        definitionButton.textContent = t('items.definitions')
+        viewButton.textContent = t('items.views')
+      }
+
       if (resetFields || saved || (changed && !dirty)) reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

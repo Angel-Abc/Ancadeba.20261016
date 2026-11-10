@@ -30,8 +30,8 @@ export function statusPanelForm(
   rerender: () => void,
   existing: boolean,
 ): HTMLElement[] {
-  const { input, select, button, group, translation } = controls
-  const keys = translationChoices(view, 'Use literal text')
+  const { input, select, button, group, translation, t } = controls
+  const keys = translationChoices(view, t('metadata.literalText'))
 
   const visuals = [
     ...new Set([
@@ -55,7 +55,10 @@ export function statusPanelForm(
           (stat) =>
             [
               JSON.stringify({ source: 'game.combatStats', path: [id, stat] }),
-              `Combat stats · ${combatOwnerLabel(view, id)} · ${bindingFieldLabel(stat)}`,
+              t('bindings.combatStat', {
+                owner: combatOwnerLabel(view, id),
+                field: bindingFieldLabel(stat, t),
+              }),
             ] as const,
         ),
       ),
@@ -66,7 +69,10 @@ export function statusPanelForm(
           ([key]) =>
             [
               JSON.stringify({ source: 'game.leveling', path: [id, key] }),
-              `Character · ${displayLabel(view, id, profile)} · ${bindingFieldLabel(key)}`,
+              t('bindings.character', {
+                profile: displayLabel(view, id, profile),
+                field: bindingFieldLabel(key, t),
+              }),
             ] as const,
         ),
     ),
@@ -87,14 +93,14 @@ export function statusPanelForm(
       ? []
       : (
           [
-            ['turn', 'Turn'],
-            ['worldTimeMs', 'World time (ms)'],
+            ['turn', t('status.turn')],
+            ['worldTimeMs', t('status.worldTime')],
           ] as const
         ).map(
           ([key, name]) =>
             [
               JSON.stringify({ source: 'game.progression', path: [key] }),
-              `Game time · ${name}`,
+              t('bindings.gameTime', { name }),
             ] as const,
         )),
   ]
@@ -109,9 +115,9 @@ export function statusPanelForm(
 
     const result = [
       select(
-        `${title} source`,
+        t('status.sourceOf', { title }),
         value,
-        [['', 'Constant'], ...bindings(numeric ? 'number' : 'value')],
+        [['', t('form.constant')], ...bindings(numeric ? 'number' : 'value')],
         (next) =>
           edit(() => update(next ? gameBindingSchema.parse(JSON.parse(next)) : numeric ? 0 : '')),
       ),
@@ -121,7 +127,7 @@ export function statusPanelForm(
       if (!numeric)
         result.push(
           select(
-            `${title} constant type`,
+            t('status.constantType', { title }),
             typeof current === 'number' ? 'number' : 'text',
             ['text', 'number'],
             (next) => edit(() => update(next === 'number' ? 0 : '')),
@@ -152,69 +158,74 @@ export function statusPanelForm(
   }
 
   const identity = group(
-    'Panel',
+    t('status.panel'),
     ...(existing
       ? []
       : [
-          input('Status component ID', draft.id, (value) => {
+          input(t('status.componentId'), draft.id, (value) => {
             draft.id = value.trim()
           }),
         ]),
-    input('Status panel title', draft.label, (value) => {
+    input(t('status.title'), draft.label, (value) => {
       draft.label = value
     }),
-    translation('Status title translation', draft.labelKey ?? '', keys, (value) => {
+    translation(t('status.titleTranslation'), draft.labelKey ?? '', keys, (value) => {
       draft.labelKey = value || undefined
     }),
-    input('Character name', draft.name, (value) => {
+    input(t('status.characterName'), draft.name, (value) => {
       draft.name = value
     }),
-    translation('Character name translation', draft.nameKey ?? '', keys, (value) => {
+    translation(t('status.characterNameTranslation'), draft.nameKey ?? '', keys, (value) => {
       draft.nameKey = value || undefined
     }),
-    select('Portrait', draft.portrait ?? '', [['', 'None'], ...visuals], (value) => {
-      draft.portrait = value || undefined
-    }),
+    select(
+      t('form.portrait'),
+      draft.portrait ?? '',
+      [['', t('form.none')], ...visuals],
+      (value) => {
+        draft.portrait = value || undefined
+      },
+    ),
   )
 
   const rows = draft.rows.map((row, index) => {
-    const title = `Row ${index + 1}`
+    const title = t('status.row', { number: index + 1 })
 
     return group(
       title,
-      input(`${title} ID`, row.id, (value) => {
+      input(t('status.idOf', { title }), row.id, (value) => {
         row.id = value.trim()
       }),
-      input(`${title} label`, row.label, (value) => {
+      input(t('status.labelOf', { title }), row.label, (value) => {
         row.label = value
       }),
-      translation(`${title} translation`, row.labelKey ?? '', keys, (value) => {
+      translation(t('status.translationOf', { title }), row.labelKey ?? '', keys, (value) => {
         row.labelKey = value || undefined
       }),
-      ...source(`${title} value`, row.value, row.type === 'bar', (value) => {
+      ...source(t('status.valueOf', { title }), row.value, row.type === 'bar', (value) => {
         if (row.type === 'value' || typeof value !== 'string') row.value = value
       }),
       ...(row.type === 'bar'
         ? [
-            ...source(`${title} maximum`, row.maximum, true, (value) => {
+            ...source(t('status.maximumOf', { title }), row.maximum, true, (value) => {
               if (typeof value !== 'string') row.maximum = value
             }),
-            input(`${title} color`, row.color ?? '', (value) => {
+            input(t('status.colorOf', { title }), row.color ?? '', (value) => {
               row.color = value || undefined
             }),
           ]
         : []),
       button(
-        `Move row ${index + 1} up`,
+        t('status.moveRowUp', { number: index + 1 }),
         () => edit(() => reorder(draft.rows, index, -1)),
         index === 0,
       ),
       button(
-        `Move row ${index + 1} down`,
+        t('status.moveRowDown', { number: index + 1 }),
         () => edit(() => reorder(draft.rows, index, 1)),
         index === draft.rows.length - 1,
       ),
-      button(`Remove row ${index + 1}`, () =>
+      button(t('status.removeRow', { number: index + 1 }), () =>
         edit(() => {
           draft.rows.splice(index, 1)
         }),
@@ -223,52 +234,57 @@ export function statusPanelForm(
   })
 
   const effects = draft.effects.map((effect, index) => {
-    const title = `Effect ${index + 1}`
+    const title = t('form.effectNumber', { number: index + 1 })
 
     return group(
       title,
       input(`${title} ID`, effect.id, (value) => {
         effect.id = value.trim()
       }),
-      input(`${title} label`, effect.label, (value) => {
+      input(t('status.labelOf', { title }), effect.label, (value) => {
         effect.label = value
       }),
-      translation(`${title} translation`, effect.labelKey ?? '', keys, (value) => {
+      translation(t('status.translationOf', { title }), effect.labelKey ?? '', keys, (value) => {
         effect.labelKey = value || undefined
       }),
-      input(`${title} description`, effect.description, (value) => {
+      input(t('status.descriptionOf', { title }), effect.description, (value) => {
         effect.description = value
       }),
       translation(
-        `${title} description translation`,
+        t('status.descriptionTranslationOf', { title }),
         effect.descriptionKey ?? '',
         keys,
         (value) => {
           effect.descriptionKey = value || undefined
         },
       ),
-      select(`${title} icon`, effect.icon ?? '', [['', 'None'], ...visuals], (value) => {
-        effect.icon = value || undefined
-      }),
       select(
-        `${title} visibility`,
+        t('status.iconOf', { title }),
+        effect.icon ?? '',
+        [['', t('form.none')], ...visuals],
+        (value) => {
+          effect.icon = value || undefined
+        },
+      ),
+      select(
+        t('status.visibilityOf', { title }),
         effect.visibleWhen ? JSON.stringify(effect.visibleWhen) : '',
-        [['', 'Always visible'], ...bindings('boolean')],
+        [['', t('status.alwaysVisible')], ...bindings('boolean')],
         (value) => {
           effect.visibleWhen = value ? gameBindingSchema.parse(JSON.parse(value)) : undefined
         },
       ),
       button(
-        `Move effect ${index + 1} up`,
+        t('status.moveEffectUp', { number: index + 1 }),
         () => edit(() => reorder(draft.effects, index, -1)),
         index === 0,
       ),
       button(
-        `Move effect ${index + 1} down`,
+        t('status.moveEffectDown', { number: index + 1 }),
         () => edit(() => reorder(draft.effects, index, 1)),
         index === draft.effects.length - 1,
       ),
-      button(`Remove effect ${index + 1}`, () =>
+      button(t('status.removeEffect', { number: index + 1 }), () =>
         edit(() => {
           draft.effects.splice(index, 1)
         }),
@@ -279,9 +295,9 @@ export function statusPanelForm(
   return [
     identity,
     group(
-      'Values and resource bars',
+      t('status.rows'),
       ...rows,
-      button('Add value row', () =>
+      button(t('status.addValue'), () =>
         edit(() => {
           draft.rows.push({
             id: nextId('value', draft.rows),
@@ -291,7 +307,7 @@ export function statusPanelForm(
           })
         }),
       ),
-      button('Add resource bar', () =>
+      button(t('status.addBar'), () =>
         edit(() => {
           draft.rows.push({
             id: nextId('bar', draft.rows),
@@ -304,9 +320,9 @@ export function statusPanelForm(
       ),
     ),
     group(
-      'Status effects',
+      t('status.effects'),
       ...effects,
-      button('Add status effect', () =>
+      button(t('status.addEffect'), () =>
         edit(() => {
           draft.effects.push({
             id: nextId('effect', draft.effects),
@@ -317,10 +333,10 @@ export function statusPanelForm(
       ),
     ),
     group(
-      'Status panel placement',
-      ...placementFields.map(([key, label]) =>
+      t('status.placement'),
+      ...placementFields(t).map(([key, label]) =>
         input(
-          `Status ${label.toLowerCase()}`,
+          t('status.placementField', { field: label.toLowerCase() }),
           String(draft.placement[key]),
           (value) => {
             draft.placement[key] = Number(value)

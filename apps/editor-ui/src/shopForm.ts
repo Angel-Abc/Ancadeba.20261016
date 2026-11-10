@@ -21,14 +21,14 @@ export function shopForm(
   panels: InventoryComponentDefinition[],
   render: () => void,
 ): HTMLElement[] {
-  const { input, select, group, button, create, translation } = controls
+  const { input, select, group, button, create, translation, t } = controls
   const keys = translationChoices(view)
 
   const existing = view.scenes
     .find((scene) => scene.id === sceneId)
     ?.components.some((component) => component.type === 'shop')
 
-  const identity = input('Shop ID', shop.id, (value) => {
+  const identity = input(t('shops.id'), shop.id, (value) => {
     if (!existing) shop.id = value.trim()
   })
 
@@ -50,7 +50,7 @@ export function shopForm(
     )
 
   const placement = (component: ShopComponentDefinition | InventoryComponentDefinition) =>
-    placementFields.map(([key, label]) =>
+    placementFields(t).map(([key, label]) =>
       input(
         label,
         String(component.placement[key]),
@@ -63,22 +63,22 @@ export function shopForm(
 
   const result: HTMLElement[] = [
     identity,
-    input('Shop title', shop.label, (value) => {
+    input(t('shops.title'), shop.label, (value) => {
       shop.label = value
     }),
-    translation('Shop title translation', shop.labelKey ?? '', keys, (value) => {
+    translation(t('shops.titleTranslation'), shop.labelKey ?? '', keys, (value) => {
       shop.labelKey = value || undefined
     }),
-    input('Currency label', shop.currency, (value) => {
+    input(t('shops.currency'), shop.currency, (value) => {
       shop.currency = value
     }),
-    translation('Currency translation', shop.currencyKey ?? '', keys, (value) => {
+    translation(t('shops.currencyTranslation'), shop.currencyKey ?? '', keys, (value) => {
       shop.currencyKey = value || undefined
     }),
-    balance('Player balance field', shop.playerBalance, (value) => {
+    balance(t('shops.playerBalance'), shop.playerBalance, (value) => {
       shop.playerBalance = value
     }),
-    select('Merchant funds policy', shop.merchantFunds.type, ['finite', 'unlimited'], (value) => {
+    select(t('shops.fundsPolicy'), shop.merchantFunds.type, ['finite', 'unlimited'], (value) => {
       shop.merchantFunds =
         value === 'finite'
           ? {
@@ -97,14 +97,14 @@ export function shopForm(
 
   if (shop.merchantFunds.type === 'finite')
     result.push(
-      balance('Merchant balance field', shop.merchantFunds.balance, (value) => {
+      balance(t('shops.merchantBalance'), shop.merchantFunds.balance, (value) => {
         shop.merchantFunds = { type: 'finite', balance: value }
       }),
     )
   const scene = view.scenes.find((scene) => scene.id === sceneId)
   result.push(
     select(
-      'Trade feedback text target',
+      t('shops.feedbackTarget'),
       shop.feedbackTarget ?? '',
       [
         '',
@@ -118,14 +118,14 @@ export function shopForm(
     ),
   )
 
-  for (const [index, side] of ['Player', 'Merchant'].entries()) {
+  for (const [index, side] of [t('form.player'), t('shops.merchant')].entries()) {
     const panel = panels[index]!
     const link = index === 0 ? 'playerInventory' : 'merchantInventory'
     result.push(
       group(
-        `${side} inventory (saved read-only)`,
+        t('shops.inventoryReadOnly', { side }),
         select(
-          `${side} inventory panel`,
+          t('shops.inventoryPanel', { side }),
           panel.id,
           scene?.components
             .filter((component) => component.type === 'inventory')
@@ -140,15 +140,15 @@ export function shopForm(
             }
           },
         ),
-        input(`${side} panel ID`, panel.id, (value) => {
+        input(t('shops.panelId', { side }), panel.id, (value) => {
           panel.id = value.trim()
           shop[link] = panel.id
         }),
-        input(`${side} panel label`, panel.label, (value) => {
+        input(t('shops.panelLabel', { side }), panel.label, (value) => {
           panel.label = value
         }),
         select(
-          `${side} owner`,
+          t('shops.ownerOf', { side }),
           panel.owners[0] ?? '',
           Object.keys(view.inventory?.owners ?? {}),
           (owner) => {
@@ -163,7 +163,7 @@ export function shopForm(
   }
 
   for (const [id, prices] of Object.entries(shop.prices)) {
-    const box = group(`Prices: ${id}`)
+    const box = group(t('shops.prices', { id }))
 
     for (const operation of ['buy', 'sell'] as const) {
       const value = prices[operation]
@@ -173,7 +173,7 @@ export function shopForm(
 
       box.append(
         select(
-          `${humanizeCode(operation)} price source`,
+          t('shops.priceSource', { operation: humanizeCode(operation) }),
           type,
           ['disabled', 'fixed', 'binding'],
           (type) => {
@@ -189,7 +189,7 @@ export function shopForm(
       if (typeof value === 'number')
         box.append(
           input(
-            `${humanizeCode(operation)} amount`,
+            t('shops.amountOf', { operation: humanizeCode(operation) }),
             String(value),
             (value) => {
               prices[operation] = Number(value)
@@ -200,7 +200,7 @@ export function shopForm(
       else if (value)
         box.append(
           select(
-            `${humanizeCode(operation)} price binding`,
+            t('shops.priceBinding', { operation: humanizeCode(operation) }),
             JSON.stringify(value),
             bindings,
             (value) => {
@@ -211,7 +211,7 @@ export function shopForm(
     }
 
     box.append(
-      button(`Remove prices for ${id}`, () => {
+      button(t('shops.removePrices', { id }), () => {
         delete shop.prices[id]
         controls.markEdited()
         render()
@@ -225,9 +225,9 @@ export function shopForm(
 
   result.push(
     group(
-      'Add item prices',
+      t('shops.addItemPrices'),
       select(
-        'Price item type',
+        t('shops.priceItemType'),
         itemType,
         Object.keys(view.inventory?.itemTypes ?? {}).filter(
           (id) => !Object.hasOwn(shop.prices, id),
@@ -238,7 +238,7 @@ export function shopForm(
         false,
       ),
       button(
-        'Add prices',
+        t('shops.addPrices'),
         () => {
           if (itemType) {
             shop.prices[itemType] = { buy: 1 }
@@ -252,18 +252,18 @@ export function shopForm(
   )
   const messages = create('details')
   const summary = create('summary')
-  summary.textContent = 'Trade feedback and translations'
+  summary.textContent = t('shops.feedback')
   messages.append(summary)
 
   for (const code of shopMessageSchema.options)
     messages.append(
       group(
         humanizeCode(code),
-        input(`${humanizeCode(code)} message`, shop.messages[code], (value) => {
+        input(t('shops.messageOf', { code: humanizeCode(code) }), shop.messages[code], (value) => {
           shop.messages[code] = value
         }),
         translation(
-          `${humanizeCode(code)} translation`,
+          t('shops.translationOf', { code: humanizeCode(code) }),
           shop.messageKeys[code] ?? '',
           keys,
           (value) => {
@@ -273,7 +273,7 @@ export function shopForm(
         ),
       ),
     )
-  result.push(messages, group('Shop placement', ...placement(shop)))
+  result.push(messages, group(t('shops.placement'), ...placement(shop)))
 
   return result
 }

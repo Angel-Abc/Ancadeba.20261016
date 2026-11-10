@@ -1,12 +1,18 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { StatusPanelComponentDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { statusPanelForm } from './statusPanelForm.js'
 import { sceneChoices } from './choiceLabels.js'
 
 /** Owns status-panel drafts independently of scene metadata and other component editors. */
-export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindStatusPanelEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -23,9 +29,15 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
   let creating = false
   let submitted: EditorCommand | undefined
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const submit = (command: EditorCommand) => {
     if (busy) return
@@ -61,7 +73,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       return true
 
     if (dirty) {
-      error.textContent = 'Save or discard the status-panel draft before switching targets.'
+      error.textContent = t('status.saveFirstTargets')
 
       return false
     }
@@ -80,7 +92,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     const scene = view.scenes.find((scene) => scene.id === sceneId)
 
     const picker = controls.select(
-      'Status game scene',
+      t('status.gameScene'),
       sceneId,
       sceneChoices(view, 'game'),
       (value) => {
@@ -98,7 +110,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
 
     if (panels.length) {
       const picker = controls.select(
-        'Status panel',
+        t('tree.status-panel'),
         componentId,
         panels.map(({ id }) => id),
         (value) => {
@@ -113,9 +125,9 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     }
 
     fields.append(
-      controls.button('Add status panel', () => {
+      controls.button(t('status.add'), () => {
         if (dirty) {
-          error.textContent = 'Save or discard the status-panel draft first.'
+          error.textContent = t('status.saveFirst')
 
           return
         }
@@ -150,7 +162,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     const form = document.createElement('form')
     const submitButton = document.createElement('button')
     submitButton.type = 'submit'
-    submitButton.textContent = 'Save status panel'
+    submitButton.textContent = t('status.save')
     form.append(
       saveBar(document, submitButton),
       ...statusPanelForm(controls, view, draft, render, !creating),
@@ -163,7 +175,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       const id = draft.id
 
       if (creating && scene.components.some((component) => component.id === id)) {
-        error.textContent = 'A component with this ID already exists. Choose a different ID.'
+        error.textContent = t('form.componentExists')
 
         return
       }
@@ -172,9 +184,9 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     })
     fields.append(
       form,
-      controls.button('Discard status-panel draft', reset),
+      controls.button(t('status.discard'), reset),
       controls.button(
-        'Remove status panel',
+        t('status.remove'),
         () => {
           if (draft && !creating)
             submit({ type: 'scene.removeStatusPanel', sceneId, componentId: draft.id })
@@ -188,6 +200,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
     navigate,
     hasDrafts: () => dirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -210,7 +223,7 @@ export function bindStatusPanelEditor(root: HTMLElement, save: (command: EditorC
       }
 
       if (resetFields || saved || (changed && !dirty)) reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

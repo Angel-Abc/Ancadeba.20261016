@@ -13,7 +13,7 @@ export function itemUseForm(
   item: InventoryDefinition['itemTypes'][string],
   render: () => void,
 ) {
-  const { group, select, input, create, translation } = controls
+  const { group, select, input, create, translation, t } = controls
 
   const abilities = Object.entries(view.combatLibraries ?? {}).flatMap(([library, data]) =>
     Object.entries(data.moves).flatMap(([id, move]) =>
@@ -22,7 +22,7 @@ export function itemUseForm(
   )
 
   const rows: HTMLElement[] = [
-    select('Built-in item use', item.use ? 'enabled' : 'disabled', onOffChoices, (value) => {
+    select(t('items.builtInUse'), item.use ? 'enabled' : 'disabled', onOffChoices(t), (value) => {
       const [library, id] = (abilities[0] ?? '/').split('/')
       item.use =
         value === 'enabled'
@@ -41,11 +41,15 @@ export function itemUseForm(
     const move = view.combatLibraries?.[use.ability.library]?.moves[use.ability.id]
     const summary = create('p')
     summary.textContent = move
-      ? `${move.labelKey ? (view.translations?.[move.labelKey] ?? move.label) : move.label} · ${move.apCost} AP · cooldown ${move.cooldown ?? 0}. Edit this definition in Combat libraries.`
-      : 'Select an existing shared ability.'
+      ? t('items.abilitySummary', {
+          label: move.labelKey ? (view.translations?.[move.labelKey] ?? move.label) : move.label,
+          cost: move.apCost,
+          cooldown: move.cooldown ?? 0,
+        })
+      : t('items.selectAbility')
     rows.push(
       select(
-        'Item shared ability',
+        t('items.sharedAbility'),
         `${use.ability.library}/${use.ability.id}`,
         abilities,
         (value) => {
@@ -56,16 +60,16 @@ export function itemUseForm(
         },
       ),
       summary,
-      select('Item consumption', use.consumption, ['consume', 'keep'], (value) => {
+      select(t('items.consumption'), use.consumption, ['consume', 'keep'], (value) => {
         use.consumption = value
       }),
       select(
-        'Item availability',
+        t('items.availability'),
         use.contexts.join(','),
         [
-          ['combat', 'Combat only'],
-          ['outside-combat', 'Outside combat only'],
-          ['combat,outside-combat', 'Combat and outside combat'],
+          ['combat', t('items.combatOnly')],
+          ['outside-combat', t('items.outsideCombat')],
+          ['combat,outside-combat', t('items.both')],
         ],
         (value) => {
           use.contexts =
@@ -77,7 +81,7 @@ export function itemUseForm(
         },
       ),
       select(
-        'Item-use enablement',
+        t('items.useEnablement'),
         use.enabledWhen ? JSON.stringify(use.enabledWhen) : '',
         [
           '',
@@ -100,18 +104,18 @@ export function itemUseForm(
     const messages = create('details'),
       heading = create('summary')
 
-    heading.textContent = 'Item-use text and translations'
+    heading.textContent = t('items.useTexts')
     messages.append(heading)
 
     for (const key of itemUseTextSchema.keyof().options)
       messages.append(
         group(
           key,
-          input(`Item use ${key} text`, use.messages[key], (value) => {
+          input(t('items.useText', { key }), use.messages[key], (value) => {
             use.messages[key] = value
           }),
           translation(
-            `Item use ${key} translation`,
+            t('items.useTranslation', { key }),
             use.messageKeys[key] ?? '',
             translationChoices(view),
             (value) => {
@@ -124,5 +128,5 @@ export function itemUseForm(
     rows.push(messages)
   }
 
-  return group('Usable item', ...rows)
+  return group(t('items.usable'), ...rows)
 }

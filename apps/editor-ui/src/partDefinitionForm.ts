@@ -14,16 +14,16 @@ export function partDefinitionForm(
   part: GraphicPart,
 ): HTMLElement[] {
   const { controls, pending, change, edited } = context
-  const { group, input, select, button } = controls
+  const { group, input, select, button, t } = controls
 
   return [
     boundsForm(context, part),
     group(
-      'Image pieces',
+      t('definitions.pieces'),
       ...part.pieces.map((piece, index) =>
         group(
-          `Piece ${piece.id}`,
-          select('Piece image', piece.image, Object.keys(catalog.images), (value) =>
+          t('definitions.piece', { id: piece.id }),
+          select(t('definitions.pieceImage'), piece.image, Object.keys(catalog.images), (value) =>
             change(() => {
               piece.image = value
               piece.slots = Object.fromEntries(
@@ -33,17 +33,17 @@ export function partDefinitionForm(
               )
             }),
           ),
-          input('Piece layer', piece.layer, (value) => {
+          input(t('definitions.pieceLayer'), piece.layer, (value) => {
             piece.layer = value.trim()
             edited()
           }),
-          input('Destination anchor', piece.anchor, (value) => {
+          input(t('definitions.destinationAnchor'), piece.anchor, (value) => {
             piece.anchor = value.trim()
             edited()
           }),
           ...(['x', 'y'] as const).map((key) =>
             input(
-              `Source anchor ${key}`,
+              t('definitions.sourceAnchor', { axis: key }),
               String(piece.sourceAnchor[key]),
               (value) => {
                 piece.sourceAnchor[key] = Number(value)
@@ -53,7 +53,7 @@ export function partDefinitionForm(
             ),
           ),
           input(
-            'Piece scale',
+            t('definitions.pieceScale'),
             String(piece.scale),
             (value) => {
               piece.scale = Number(value)
@@ -62,7 +62,7 @@ export function partDefinitionForm(
             'number',
           ),
           input(
-            'Piece rotation',
+            t('definitions.pieceRotation'),
             String(piece.rotation),
             (value) => {
               piece.rotation = Number(value)
@@ -72,9 +72,9 @@ export function partDefinitionForm(
           ),
           ...Object.keys(catalog.images[piece.image]?.colors ?? {}).map((id) =>
             select(
-              `Map image color ${id}`,
+              t('definitions.mapColor', { id }),
               piece.slots[id] ?? '',
-              [['', 'Use image default'], ...Object.keys(part.colors)],
+              [['', t('definitions.imageDefault')], ...Object.keys(part.colors)],
               (value) => {
                 if (value) piece.slots[id] = value
                 else delete piece.slots[id]
@@ -83,36 +83,37 @@ export function partDefinitionForm(
             ),
           ),
           button(
-            `Move piece ${piece.id} up`,
+            t('definitions.movePieceUp', { id: piece.id }),
             () => change(() => moveDefinitionEntry(part.pieces, index, -1)),
             index === 0,
           ),
           button(
-            `Move piece ${piece.id} down`,
+            t('definitions.movePieceDown', { id: piece.id }),
             () => change(() => moveDefinitionEntry(part.pieces, index, 1)),
             index === part.pieces.length - 1,
           ),
-          button(`Remove piece ${piece.id}`, () =>
+          button(t('definitions.removePiece', { id: piece.id }), () =>
             change(() => {
               part.pieces.splice(index, 1)
             }),
           ),
         ),
       ),
-      input('New piece ID', pending.piece, (value) => {
+      input(t('definitions.newPieceId'), pending.piece, (value) => {
         pending.piece = value.trim()
       }),
       button(
-        'Add image piece',
+        t('definitions.addPiece'),
         () =>
           change(() => {
             requireDefinitionId(
               pending.piece,
               part.pieces.map((piece) => piece.id),
+              t,
             )
             const image = Object.keys(catalog.images)[0]
 
-            if (!image) throw new Error('Import an image before adding pieces.')
+            if (!image) throw new Error(t('definitions.imageFirst'))
             part.pieces.push(partPieceSchema.parse({ id: pending.piece, image, layer: 'body' }))
             pending.piece = ''
           }),

@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type ProjectView, type EditorCommand } from '@ancadeba/editor-core'
 import {
   shopComponentSchema,
@@ -6,11 +8,15 @@ import {
   type InventoryComponentDefinition,
 } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { shopForm } from './shopForm.js'
 import { sceneChoices } from './choiceLabels.js'
 
-export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindShopEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
   error.className = 'error'
@@ -25,9 +31,15 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
   let dirty = false
   let busy = false
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const scene = () => view?.scenes.find((scene) => scene.id === sceneId)
 
@@ -50,7 +62,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     if (!id || id === sceneId) return true
 
     if (dirty) {
-      error.textContent = 'Save or discard the shop draft before switching scenes.'
+      error.textContent = t('shops.saveFirst')
 
       return false
     }
@@ -77,7 +89,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     if (!view?.game) return
 
     const picker = controls.select(
-      'Shop game scene',
+      t('shops.gameScene'),
       sceneId,
       sceneChoices(view, 'game'),
       (value) => {
@@ -94,7 +106,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
 
     if (!draft) {
       fields.append(
-        controls.button('Add shop', () => {
+        controls.button(t('shops.add'), () => {
           const owners = Object.keys(view?.inventory?.owners ?? {})
 
           const unique = (base: string) => {
@@ -142,7 +154,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     const form = document.createElement('form')
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save shop'
+    saveButton.textContent = t('shops.save')
     form.append(
       saveBar(document, saveButton),
       ...shopForm(controls, view, sceneId, draft, panels, render),
@@ -154,9 +166,9 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     })
     fields.append(
       form,
-      controls.button('Discard shop draft', reset),
+      controls.button(t('shops.discard'), reset),
       controls.button(
-        'Remove shop',
+        t('shops.remove'),
         () => {
           if (draft) submit({ type: 'scene.removeShop', sceneId, componentId: draft.id })
         },
@@ -169,6 +181,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
     navigate,
     hasDrafts: () => dirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -183,7 +196,7 @@ export function bindShopEditor(root: HTMLElement, save: (command: EditorCommand)
       if (replace) sceneId = view?.scenes.find((scene) => scene.type === 'game')?.id ?? ''
 
       if (replace || saved || (changed && !dirty)) reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

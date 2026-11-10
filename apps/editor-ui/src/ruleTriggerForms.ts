@@ -38,13 +38,18 @@ function buttonTriggers(
   view: ProjectView,
   save: (command: EditorCommand) => void,
 ): HTMLElement {
-  const buttons = owner.group('Scene buttons')
+  const { t } = owner
+  const buttons = owner.group(t('rules.sceneButtons'))
   let dirty = false
 
-  const controls = ruleFormControls(buttons.ownerDocument, () => {
-    dirty = true
-    owner.markEdited()
-  })
+  const controls = ruleFormControls(
+    buttons.ownerDocument,
+    () => {
+      dirty = true
+      owner.markEdited()
+    },
+    t,
+  )
 
   const { create, input, select, translation } = controls
   const actions = Object.keys(view.rules?.actions ?? {})
@@ -54,7 +59,7 @@ function buttonTriggers(
     .map(({ path }) => statePath(path))
 
   const scenes = view.scenes.filter(({ type }) => type === 'game')
-  const noAction = ['', 'No action'] as const
+  const noAction = ['', t('rules.noAction')] as const
   const error = create('p')
   error.className = 'error'
   error.setAttribute('role', 'alert')
@@ -90,15 +95,15 @@ function buttonTriggers(
       const form = create('form')
 
       const picker = select(
-        'Button',
+        t('tree.button'),
         target,
-        [['', 'New button'], ...available.map(({ id }) => id)],
+        [['', t('rules.newButton')], ...available.map(({ id }) => id)],
         (next) => {
           if (next === target) return
 
           if (dirty) {
             picker.querySelector('select')!.value = target
-            error.textContent = 'Save or discard the trigger draft before switching buttons.'
+            error.textContent = t('rules.triggerSaveFirstButtons')
 
             return
           }
@@ -115,22 +120,22 @@ function buttonTriggers(
         ...(current
           ? []
           : [
-              input('Button ID', id, (next) => {
+              input(t('rules.buttonId'), id, (next) => {
                 id = next.trim()
               }),
             ]),
-        input('Label', label, (next) => {
+        input(t('form.label'), label, (next) => {
           label = next
         }),
         translation(
-          'Label translation',
+          t('form.labelTranslation'),
           labelKey,
-          translationChoices(view, 'Use literal label'),
+          translationChoices(view, t('form.literalLabel')),
           (next) => {
             labelKey = next
           },
         ),
-        ...placementFields.map(([key, label]) =>
+        ...placementFields(t).map(([key, label]) =>
           input(
             label,
             String(placement[key]),
@@ -140,14 +145,19 @@ function buttonTriggers(
             'number',
           ),
         ),
-        select('Requested action', action, [noAction, ...actions], (next) => {
+        select(t('form.requestedAction'), action, [noAction, ...actions], (next) => {
           action = next
         }),
-        select('Enable when true', enabled, [['', 'Always'], ...enabledFields], (next) => {
-          enabled = next
-        }),
+        select(
+          t('form.enableWhenTrue'),
+          enabled,
+          [['', t('form.always')], ...enabledFields],
+          (next) => {
+            enabled = next
+          },
+        ),
       )
-      submit(form, 'Save button', () =>
+      submit(form, t('rules.saveButton'), () =>
         save({
           type: 'scene.upsertRuleButton',
           sceneId: scene.id,
@@ -173,7 +183,7 @@ function buttonTriggers(
     }
 
     const scenePicker = select(
-      'Game scene',
+      t('form.gameScene'),
       scene.id,
       sceneChoices(view, 'game'),
       (next) => {
@@ -181,7 +191,7 @@ function buttonTriggers(
 
         if (dirty) {
           scenePicker.querySelector('select')!.value = scene.id
-          error.textContent = 'Save or discard the trigger draft before switching scenes.'
+          error.textContent = t('rules.triggerSaveFirstScenes')
 
           return
         }
@@ -196,7 +206,7 @@ function buttonTriggers(
 
     buttons.append(scenePicker, formArea)
     render()
-  } else buttons.append('Add a game scene before linking a button.')
+  } else buttons.append(t('rules.sceneFirstButton'))
 
   return buttons
 }
@@ -206,13 +216,18 @@ function inspectionTriggers(
   view: ProjectView,
   save: (command: EditorCommand) => void,
 ): HTMLElement {
-  const inspection = owner.group('Inventory inspection')
+  const { t } = owner
+  const inspection = owner.group(t('rules.inspection'))
   let dirty = false
 
-  const controls = ruleFormControls(inspection.ownerDocument, () => {
-    dirty = true
-    owner.markEdited()
-  })
+  const controls = ruleFormControls(
+    inspection.ownerDocument,
+    () => {
+      dirty = true
+      owner.markEdited()
+    },
+    t,
+  )
 
   const { create, select } = controls
   const itemTypes = Object.entries(view.inventory?.itemTypes ?? {})
@@ -222,7 +237,7 @@ function inspectionTriggers(
   if (view.rules?.clock) details.push(statePath(view.rules.clock.path))
 
   if (view.rules?.log) details.push(statePath(view.rules.log.path))
-  const noAction = ['', 'No action'] as const
+  const noAction = ['', t('rules.noAction')] as const
   const error = create('p')
   error.className = 'error'
   error.setAttribute('role', 'alert')
@@ -239,28 +254,26 @@ function inspectionTriggers(
       let inline = previous?.inline !== false
       const form = create('form')
       form.append(
-        select('Requested action', action, [noAction, ...actions], (next) => {
+        select(t('form.requestedAction'), action, [noAction, ...actions], (next) => {
           action = next
         }),
-        select('Inspection details', path, details, (next) => {
+        select(t('rules.inspectionDetails'), path, details, (next) => {
           path = next
         }),
         select(
-          'Show inspection in inventory',
+          t('rules.showInspection'),
           inline ? 'yes' : 'no',
           [
-            ['yes', 'Show inline Inspect button and result'],
-            ['no', 'Hide inline inspection'],
+            ['yes', t('rules.inlineInspect')],
+            ['no', t('rules.hideInline')],
           ],
           (next) => {
             inline = next === 'yes'
           },
         ),
       )
-      form.append(
-        'To show results in the main text, have the action set a text state field and bind that field in a text component. Hiding inline inspection keeps the action available to the action bar.',
-      )
-      submit(form, 'Save inspection', () =>
+      form.append(t('rules.inspectionHelp'))
+      submit(form, t('rules.saveInspection'), () =>
         save({
           type: 'inventory.setRuleInspection',
           itemType,
@@ -271,7 +284,7 @@ function inspectionTriggers(
     }
 
     const picker = select(
-      'Item type',
+      t('form.itemType'),
       itemType,
       itemTypes.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
       (next) => {
@@ -279,7 +292,7 @@ function inspectionTriggers(
 
         if (dirty) {
           picker.querySelector('select')!.value = itemType
-          error.textContent = 'Save or discard the trigger draft before switching item types.'
+          error.textContent = t('rules.triggerSaveFirstTypes')
 
           return
         }
@@ -293,7 +306,7 @@ function inspectionTriggers(
 
     inspection.append(picker, formArea)
     render()
-  } else inspection.append('Add inventory item types before linking an inspection.')
+  } else inspection.append(t('rules.typesFirstInspection'))
 
   return inspection
 }

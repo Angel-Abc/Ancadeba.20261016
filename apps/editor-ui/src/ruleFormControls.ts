@@ -1,5 +1,7 @@
 import type { ProjectView } from '@ancadeba/editor-core'
 import type { RuleValue } from '@ancadeba/schemas'
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 
 /** A translation key with its default-language text; an empty key means "no translation". */
 export type TranslationChoice = readonly [key: string, text: string]
@@ -28,7 +30,11 @@ export function displayLabel(
 
 let suggestionLists = 0
 
-export function ruleFormControls(document: Document, onEdit: () => void) {
+export function ruleFormControls(
+  document: Document,
+  onEdit: () => void,
+  t: Translate = editorLocalization().t,
+) {
   const create = <T extends keyof HTMLElementTagNameMap>(tag: T) => document.createElement(tag)
 
   const label = (title: string, control: HTMLElement) => {
@@ -63,7 +69,7 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     const options: (T | readonly [T, string])[] = [...choices]
 
     if (!options.some((choice) => (typeof choice === 'string' ? choice : choice[0]) === value))
-      options.unshift([value, value || 'Choose…'])
+      options.unshift([value, value || t('form.choose')])
 
     for (const choice of options) {
       const option = create('option')
@@ -113,7 +119,7 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     control.value = value
     control.autocomplete = 'off'
     control.spellcheck = false
-    control.placeholder = emptyLabel || 'Search translation keys'
+    control.placeholder = emptyLabel || t('form.searchKeys')
     control.setAttribute('list', list.id)
     preview.className = 'translation-preview'
 
@@ -121,8 +127,8 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
       const known = texts.has(control.value)
       control.setAttribute('aria-invalid', String(!known))
       preview.textContent = known
-        ? texts.get(control.value) || (control.value ? '(empty text)' : '')
-        : 'Unknown translation key'
+        ? texts.get(control.value) || (control.value ? t('metadata.emptyTranslation') : '')
+        : t('form.unknownKey')
     }
 
     control.addEventListener('input', () => {
@@ -159,10 +165,22 @@ export function ruleFormControls(document: Document, onEdit: () => void) {
     return box
   }
 
-  return { create, input, select, translation, button, group, markEdited: onEdit }
+  return { create, input, select, translation, button, group, markEdited: onEdit, t }
 }
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>
+
+/** Reports, once per change, that the editor language differs from the previous check. */
+export function languageWatcher(t: Translate) {
+  let sample = t('form.choose')
+
+  return () => {
+    const previous = sample
+    sample = t('form.choose')
+
+    return sample !== previous
+  }
+}
 
 /** Groups a panel form's save action (and optional companions) into a bar that stays in view. */
 export function saveBar(document: Document, ...actions: HTMLElement[]) {
@@ -174,31 +192,36 @@ export function saveBar(document: Document, ...actions: HTMLElement[]) {
 }
 
 /** Readable choices for pickers that store `true`/`false`. */
-export const yesNoChoices = [
-  ['false', 'No'],
-  ['true', 'Yes'],
-] as const
+export const yesNoChoices = (t: Translate) =>
+  [
+    ['false', t('form.no')],
+    ['true', t('form.yes')],
+  ] as const
 
 /** Readable choices for optional features stored as `enabled`/`disabled`. */
-export const onOffChoices = [
-  ['disabled', 'Off'],
-  ['enabled', 'On'],
-] as const
+export const onOffChoices = (t: Translate) =>
+  [
+    ['disabled', t('form.off')],
+    ['enabled', t('form.on')],
+  ] as const
 
 const valueTypeLabels = new Map<string, string>([
-  ['text', 'Literal text'],
-  ['number', 'Number'],
-  ['boolean', 'Yes or no'],
-  ['translation', 'Translation key'],
+  ['text', 'form.literalText'],
+  ['number', 'form.number'],
+  ['boolean', 'form.yesOrNo'],
+  ['translation', 'form.translationKey'],
 ])
 
-/** Grid placement fields in form order, with their field labels. */
-export const placementFields = [
-  ['row', 'Row'],
-  ['column', 'Column'],
-  ['rowSpan', 'Row span'],
-  ['columnSpan', 'Column span'],
+const placementFieldLabels = [
+  ['row', 'form.row'],
+  ['column', 'form.column'],
+  ['rowSpan', 'form.rowSpan'],
+  ['columnSpan', 'form.columnSpan'],
 ] as const
+
+/** Grid placement fields in form order, with their field labels. */
+export const placementFields = (t: Translate) =>
+  placementFieldLabels.map(([field, label]) => [field, t(label)] as const)
 
 /** Turns a camelCase or kebab-case code such as `insufficientPlayerFunds` into a sentence-case label. */
 export const humanizeCode = (code: string) => {
@@ -222,7 +245,7 @@ export function ruleValueControls(
   rerender: () => void,
   types = ['text', 'number', 'boolean', 'translation'],
 ): HTMLElement[] {
-  const { input, select, translation } = controls
+  const { input, select, translation, t } = controls
 
   const type =
     typeof value === 'object' ? 'translation' : typeof value === 'string' ? 'text' : typeof value
@@ -237,8 +260,8 @@ export function ruleValueControls(
             title,
             String(typeof value === 'boolean' && value),
             [
-              ['true', 'True'],
-              ['false', 'False'],
+              ['true', t('form.true')],
+              ['false', t('form.false')],
             ],
             (next) => update(next === 'true'),
           )
@@ -250,10 +273,11 @@ export function ruleValueControls(
           )
 
   const typeChoices = types.map(
-    (choice) => [choice, valueTypeLabels.get(choice) ?? choice] as const,
+    (choice) =>
+      [choice, valueTypeLabels.has(choice) ? t(valueTypeLabels.get(choice)!) : choice] as const,
   )
 
-  const chooseType = select('Value type', type, typeChoices, (next) => {
+  const chooseType = select(t('form.valueType'), type, typeChoices, (next) => {
     if (next === 'translation') update({ textKey: keys.find(([key]) => key)?.[0] ?? '' })
     else if (next === 'boolean') update(false)
     else if (next === 'number') update(0)

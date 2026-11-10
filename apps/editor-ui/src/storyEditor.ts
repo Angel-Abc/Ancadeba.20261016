@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import {
   dialogueSchema,
@@ -15,6 +17,7 @@ import {
   saveBar,
   translationChoices,
   placementFields,
+  languageWatcher,
 } from './ruleFormControls.js'
 import { dialogueForm, questForm } from './storyForms.js'
 import { questChoices, questStatusLabels, sceneChoices } from './choiceLabels.js'
@@ -23,9 +26,14 @@ type Draft =
   | { kind: 'dialogue'; data: DialogueDefinition }
   | { kind: 'quest'; data: QuestDefinition }
 
-export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindStoryEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
+  error.className = 'error'
   error.setAttribute('role', 'alert')
   const fields = document.createElement('fieldset')
   root.replaceChildren(error, fields)
@@ -41,13 +49,23 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
   let journalId = ''
   let journal: QuestLogComponentDefinition | undefined
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
 
-  const journalControls = ruleFormControls(document, () => {
-    journalDirty = true
-  })
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
+
+  const journalControls = ruleFormControls(
+    document,
+    () => {
+      journalDirty = true
+    },
+    t,
+  )
 
   const resetJournal = () => {
     const existing = view?.scenes
@@ -98,7 +116,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
 
   const add = (kind: Draft['kind']) => {
     if (dirty) {
-      error.textContent = 'Save or discard the current dialogue or quest draft first.'
+      error.textContent = t('story.saveFirst')
 
       return
     }
@@ -157,20 +175,25 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
     const project = view
 
     const picker = controls.select(
-      'Dialogue or quest',
+      t('story.picker'),
       selection,
       [
-        ['', 'Choose a definition'],
+        ['', t('form.chooseDefinition')],
         ...Object.entries(view.dialogues ?? {}).map(
           ([id, dialogue]) =>
-            [`dialogue:${id}`, `Dialogue: ${displayLabel(project, id, dialogue)}`] as const,
+            [
+              `dialogue:${id}`,
+              t('story.dialogueTitle', { name: displayLabel(project, id, dialogue) }),
+            ] as const,
         ),
-        ...questChoices(view).map(([id, name]) => [`quest:${id}`, `Quest: ${name}`] as const),
+        ...questChoices(view).map(
+          ([id, name]) => [`quest:${id}`, t('story.questTitle', { name })] as const,
+        ),
       ],
       (value) => {
         if (dirty) {
           picker.querySelector('select')!.value = selection
-          error.textContent = 'Save or discard this draft before switching definitions.'
+          error.textContent = t('story.saveFirstSwitch')
 
           return
         }
@@ -183,21 +206,21 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
 
     fields.append(
       picker,
-      controls.button('Add dialogue', () => add('dialogue')),
-      controls.button('Add quest', () => add('quest')),
+      controls.button(t('story.addDialogue'), () => add('dialogue')),
+      controls.button(t('story.addQuest'), () => add('quest')),
     )
-    const journals = journalControls.group('Quest journal placement')
+    const journals = journalControls.group(t('story.journalPlacement'))
     journals.append(
       journalControls.select(
-        'Journal scene',
+        t('story.journalScene'),
         journalScene,
-        [['', 'No quest journal'], ...sceneChoices(view, 'game')],
+        [['', t('story.noJournal')], ...sceneChoices(view, 'game')],
         (value) => {
           if (journalDirty && value !== journalScene) {
             const picker = journals.querySelector('select')
 
             if (picker) picker.value = journalScene
-            error.textContent = 'Save or discard the journal draft first.'
+            error.textContent = t('story.journalSaveFirst')
 
             return
           }
@@ -216,17 +239,17 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       const form = document.createElement('form')
       const button = document.createElement('button')
       button.type = 'submit'
-      button.textContent = 'Save quest journal'
+      button.textContent = t('story.saveJournal')
       form.append(
         saveBar(document, button),
-        journalControls.input('Journal component ID', current.id, (value) => {
+        journalControls.input(t('story.journalId'), current.id, (value) => {
           current.id = value
         }),
-        journalControls.input('Journal label', current.label, (value) => {
+        journalControls.input(t('story.journalLabel'), current.label, (value) => {
           current.label = value
         }),
         journalControls.translation(
-          'Journal label translation',
+          t('story.journalLabelTranslation'),
           current.labelKey ?? '',
           translationChoices(view),
           (value) => {
@@ -234,7 +257,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
           },
         ),
         journalControls.select(
-          'Journal main text',
+          t('story.journalMainText'),
           current.textTarget ?? '',
           [
             '',
@@ -248,7 +271,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
           },
         ),
         journalControls.input(
-          'Journal quest IDs (empty means all)',
+          t('story.journalQuestIds'),
           current.quests?.join(', ') ?? '',
           (value) => {
             current.quests = value.trim() ? value.split(',').map((id) => id.trim()) : undefined
@@ -256,9 +279,11 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
         ),
         ...(['not-started', 'active', 'ready', 'completed'] as const).map((status) =>
           journalControls.select(
-            `Show ${questStatusLabels.get(status)?.toLowerCase()} quests`,
+            t('story.showQuests', {
+              status: t(questStatusLabels.get(status) ?? status).toLowerCase(),
+            }),
             String(current.statuses.includes(status)),
-            yesNoChoices,
+            yesNoChoices(t),
             (value) => {
               current.statuses =
                 value === 'true'
@@ -267,9 +292,9 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
             },
           ),
         ),
-        ...placementFields.map(([key, label]) =>
+        ...placementFields(t).map(([key, label]) =>
           journalControls.input(
-            `Journal ${label}`,
+            t('story.journalField', { field: label }),
             String(current.placement[key]),
             (value) => {
               current.placement[key] = Number(value)
@@ -284,7 +309,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       })
       journals.append(
         form,
-        journalControls.button('Discard journal draft', () => {
+        journalControls.button(t('story.discardJournal'), () => {
           resetJournal()
           error.textContent = ''
           render()
@@ -303,27 +328,28 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
     const form = document.createElement('form')
     const button = document.createElement('button')
     button.type = 'submit'
-    button.textContent = current.kind === 'dialogue' ? 'Save dialogue' : 'Save quest'
+    button.textContent =
+      current.kind === 'dialogue' ? t('story.saveDialogue') : t('story.saveQuest')
     form.append(
-      saveBar(document, button, controls.button('Discard story draft', reset)),
-      controls.input('Definition ID', current.data.id, (value) => {
+      saveBar(document, button, controls.button(t('story.discard'), reset)),
+      controls.input(t('story.definitionId'), current.data.id, (value) => {
         current.data.id = value.trim()
       }),
       ...(current.kind === 'dialogue'
         ? dialogueForm(controls, view, current.data, render)
         : questForm(controls, view, current.data, render)),
     )
-    const messages = controls.group('Feedback and translations')
+    const messages = controls.group(t('story.feedback'))
     const values: Record<string, string> = current.data.messages
     const keys: Record<string, string | undefined> = current.data.messageKeys
 
     for (const [key, value] of Object.entries(values))
       messages.append(
-        controls.input(`Message ${key}`, value, (value) => {
+        controls.input(t('story.message', { key }), value, (value) => {
           values[key] = value
         }),
         controls.translation(
-          `Message ${key} translation`,
+          t('story.messageTranslation', { key }),
           keys[key] ?? '',
           translationChoices(view),
           (value) => {
@@ -343,7 +369,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
     })
     fields.append(
       form,
-      controls.button('Delete definition', () =>
+      controls.button(t('story.deleteDefinition'), () =>
         submit(
           current.kind === 'dialogue'
             ? { type: 'game.removeDialogue', dialogueId: current.data.id }
@@ -357,6 +383,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
   return {
     hasDrafts: () => dirty || journalDirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -403,7 +430,7 @@ export function bindStoryEditor(root: HTMLElement, save: (command: EditorCommand
       if (resetFields || journalSaved || (changed && !journalDirty)) resetJournal()
 
       if (resetFields || storySaved || (changed && !dirty)) reset()
-      else if (changed || journalSaved) render()
+      else if (changed || journalSaved || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

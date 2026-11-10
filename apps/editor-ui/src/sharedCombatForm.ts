@@ -2,8 +2,6 @@ import { resolveCombatSource, type CombatSource } from '@ancadeba/schemas'
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { ruleFormControls, type RuleFormControls } from './ruleFormControls.js'
 
-const kindNames = { moves: ['move', 'moves'], statuses: ['status', 'statuses'] } as const
-
 /** Lists shared library entries once each, with import, removal and local-copy actions. */
 export function sharedCombatForm(
   controls: RuleFormControls,
@@ -13,15 +11,14 @@ export function sharedCombatForm(
   openLibrary: (id: string) => void,
   copy: (command: EditorCommand) => void,
 ): HTMLElement {
-  const { group, select, button, create } = controls
-  const copyControls = ruleFormControls(create('div').ownerDocument, () => {})
+  const { group, select, button, create, t } = controls
+  const copyControls = ruleFormControls(create('div').ownerDocument, () => {}, t)
   const libraries = new Map(Object.entries(view.combatLibraries ?? {}))
   const resolved = resolveCombatSource(draft, libraries, undefined, view.inventory)
   const usedLibraries = new Set<string>()
   const rows: HTMLElement[] = []
 
   for (const kind of ['moves', 'statuses'] as const) {
-    const [single, plural] = kindNames[kind]
     const key = kind === 'moves' ? 'sharedMoves' : 'sharedStatuses'
     const refs = draft[key] ?? []
 
@@ -56,19 +53,19 @@ export function sharedCombatForm(
       const title = create('strong')
       title.textContent = name
       const source = create('small')
-      source.textContent = `${library}/${id}${index < 0 ? ' · automatic ability dependency' : ''}`
+      source.textContent = `${library}/${id}${index < 0 ? t('combat.shared.dependency') : ''}`
       const description = create('p')
       description.className = 'help'
       description.textContent = text
       const local = create('details')
       const summary = create('summary')
-      summary.textContent = 'Make a local copy'
+      summary.textContent = t('combat.shared.localCopy')
       local.append(
         summary,
-        copyControls.input(`Local copy ID for ${single} ${id}`, localId, (value) => {
+        copyControls.input(t(`combat.shared.localCopyId.${kind}`, { id }), localId, (value) => {
           localId = value.trim()
         }),
-        button(`Make local copy of ${single} ${id}`, () =>
+        button(t(`combat.shared.makeLocalCopy.${kind}`, { id }), () =>
           copy({
             type: 'combat.copySharedEntry',
             encounterId: draft.id,
@@ -83,7 +80,7 @@ export function sharedCombatForm(
 
       if (index >= 0)
         item.append(
-          button(`Remove shared ${single} ${id}`, () => {
+          button(t(`combat.shared.remove.${kind}`, { id }), () => {
             draft[key]?.splice(index, 1)
             controls.markEdited()
             render()
@@ -100,11 +97,11 @@ export function sharedCombatForm(
       const title = create('strong')
       title.textContent = `${ref.library}/${ref.id}`
       const source = create('small')
-      source.textContent = 'Not used: missing from the library or replaced by a local entry'
+      source.textContent = t('combat.shared.unused')
       item.append(
         title,
         source,
-        button(`Remove shared ${single} ${ref.id}`, () => {
+        button(t(`combat.shared.remove.${kind}`, { id: ref.id }), () => {
           draft[key]?.splice(index, 1)
           controls.markEdited()
           render()
@@ -115,21 +112,23 @@ export function sharedCombatForm(
 
     const empty = create('p')
     empty.className = 'help'
-    empty.textContent = `No shared ${plural} are used.`
+    empty.textContent = t(`combat.shared.none.${kind}`)
 
     // Long shared lists stay folded so the encounter's own fields remain within reach.
     const folded = create('details')
     const count = create('summary')
     const total = list.children.length
-    count.textContent = `${total} shared ${total === 1 ? single : plural} in use`
+    count.textContent = t(`combat.shared.${total === 1 ? 'inUseOne' : 'inUse'}.${kind}`, {
+      count: total,
+    })
     folded.append(count, list)
 
     rows.push(
       group(
-        `Shared ${plural}`,
+        t(`combat.shared.title.${kind}`),
         total ? folded : empty,
         select(
-          `Shared ${kind} to import`,
+          t(`combat.shared.toImport.${kind}`),
           choice,
           choices,
           (value) => {
@@ -138,7 +137,7 @@ export function sharedCombatForm(
           false,
         ),
         button(
-          `Import shared ${kind}`,
+          t(`combat.shared.import.${kind}`),
           () => {
             if (!choice) return
             const [library, id] = choice.split('/')
@@ -157,11 +156,11 @@ export function sharedCombatForm(
   if (usedLibraries.size) {
     const help = create('p')
     help.className = 'help'
-    help.textContent = 'Shared entries are read-only here. Change them in their library.'
+    help.textContent = t('combat.shared.readOnly')
     rows.push(
       help,
       ...[...usedLibraries].map((library) =>
-        button(`Edit library ${library}`, () => openLibrary(library)),
+        button(t('combat.shared.editLibrary', { library }), () => openLibrary(library)),
       ),
     )
   }
@@ -175,5 +174,5 @@ export function sharedCombatForm(
     rows.push(errors)
   }
 
-  return group('Shared combat definitions', ...rows)
+  return group(t('combat.shared.heading'), ...rows)
 }

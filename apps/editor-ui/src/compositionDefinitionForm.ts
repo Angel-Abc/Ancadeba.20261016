@@ -23,32 +23,32 @@ export function compositionDefinitionForm(
   composition: GraphicComposition,
 ): HTMLElement[] {
   const { controls, pending, change, edited } = context
-  const { group, input, select, button } = controls
+  const { group, input, select, button, t } = controls
   const parts = Object.keys(catalog.parts)
 
   return [
     boundsForm(context, composition),
     group(
-      'Layers — back to front',
+      t('definitions.layers'),
       ...composition.layers.map((id, index) =>
         group(
-          `Layer ${index + 1}`,
-          input('Layer ID', id, (value) => {
+          t('definitions.layerNumber', { number: index + 1 }),
+          input(t('definitions.layerId'), id, (value) => {
             composition.layers[index] = value.trim()
             edited()
           }),
           button(
-            `Move layer ${id} back`,
+            t('definitions.moveLayerBack', { id }),
             () => change(() => moveDefinitionEntry(composition.layers, index, -1)),
             index === 0,
           ),
           button(
-            `Move layer ${id} forward`,
+            t('definitions.moveLayerForward', { id }),
             () => change(() => moveDefinitionEntry(composition.layers, index, 1)),
             index === composition.layers.length - 1,
           ),
           button(
-            `Remove layer ${id}`,
+            t('definitions.removeLayer', { id }),
             () =>
               change(() => {
                 composition.layers.splice(index, 1)
@@ -57,25 +57,25 @@ export function compositionDefinitionForm(
           ),
         ),
       ),
-      input('New layer ID', pending.layer, (value) => {
+      input(t('definitions.newLayerId'), pending.layer, (value) => {
         pending.layer = value.trim()
       }),
-      button('Add layer', () =>
+      button(t('definitions.addLayer'), () =>
         change(() => {
-          requireDefinitionId(pending.layer, composition.layers)
+          requireDefinitionId(pending.layer, composition.layers, t)
           composition.layers.push(pending.layer)
           pending.layer = ''
         }),
       ),
     ),
     group(
-      'Destination anchors',
+      t('definitions.destinationAnchors'),
       ...Object.entries(composition.anchors).map(([id, point]) =>
         group(
-          `Anchor ${id}`,
+          t('definitions.anchor', { id }),
           ...(['x', 'y'] as const).map((key) =>
             input(
-              `Anchor ${key}`,
+              t('definitions.anchorAxis', { axis: key }),
               String(point[key]),
               (value) => {
                 point[key] = Number(value)
@@ -84,65 +84,74 @@ export function compositionDefinitionForm(
               'number',
             ),
           ),
-          button(`Remove anchor ${id}`, () =>
+          button(t('definitions.removeAnchor', { id }), () =>
             change(() => {
               delete composition.anchors[id]
             }),
           ),
         ),
       ),
-      input('New anchor ID', pending.anchor, (value) => {
+      input(t('definitions.newAnchorId'), pending.anchor, (value) => {
         pending.anchor = value.trim()
       }),
-      button('Add anchor', () =>
+      button(t('definitions.addAnchor'), () =>
         change(() => {
-          requireDefinitionId(pending.anchor, Object.keys(composition.anchors))
+          requireDefinitionId(pending.anchor, Object.keys(composition.anchors), t)
           composition.anchors[pending.anchor] = { x: 0, y: 0 }
           pending.anchor = ''
         }),
       ),
     ),
     group(
-      'Selectable slots',
+      t('definitions.slots'),
       ...Object.entries(composition.slots).map(([id, slot]) =>
         group(
-          `Slot ${id}`,
+          t('form.slot', { id }),
           ...parts.map((part) =>
-            select(`Allow part ${part}`, String(slot.parts.includes(part)), yesNoChoices, (value) =>
-              change(() => {
-                if (value === 'true') {
-                  slot.parts = [...new Set([...slot.parts, part])]
-                  includePart(composition, part, catalog)
-                } else {
-                  slot.parts = slot.parts.filter((value) => value !== part)
+            select(
+              t('definitions.allowPart', { part }),
+              String(slot.parts.includes(part)),
+              yesNoChoices(t),
+              (value) =>
+                change(() => {
+                  if (value === 'true') {
+                    slot.parts = [...new Set([...slot.parts, part])]
+                    includePart(composition, part, catalog)
+                  } else {
+                    slot.parts = slot.parts.filter((value) => value !== part)
 
-                  if (slot.default === part) slot.default = null
-                }
-              }),
+                    if (slot.default === part) slot.default = null
+                  }
+                }),
             ),
           ),
-          select('Default part', slot.default ?? '', [['', 'None'], ...slot.parts], (value) => {
-            slot.default = value || null
-            edited()
-          }),
-          button(`Remove slot ${id}`, () =>
+          select(
+            t('definitions.defaultPart'),
+            slot.default ?? '',
+            [['', t('form.none')], ...slot.parts],
+            (value) => {
+              slot.default = value || null
+              edited()
+            },
+          ),
+          button(t('definitions.removeSlot', { id }), () =>
             change(() => {
               delete composition.slots[id]
             }),
           ),
         ),
       ),
-      input('New slot ID', pending.slot, (value) => {
+      input(t('form.newSlotId'), pending.slot, (value) => {
         pending.slot = value.trim()
       }),
       button(
-        'Add composition slot',
+        t('definitions.addSlot'),
         () =>
           change(() => {
-            requireDefinitionId(pending.slot, Object.keys(composition.slots))
+            requireDefinitionId(pending.slot, Object.keys(composition.slots), t)
             const part = parts[0]
 
-            if (!part) throw new Error('Create a part before adding a slot.')
+            if (!part) throw new Error(t('definitions.partFirst'))
             composition.slots[pending.slot] = { parts: [part], default: part }
             includePart(composition, part, catalog)
             pending.slot = ''

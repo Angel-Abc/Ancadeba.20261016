@@ -9,12 +9,12 @@ export function inventoryActionsForm(
   save: (command: EditorCommand) => void,
   onDiscard: () => void = () => {},
 ): HTMLElement {
-  const { create, select, input, button, group } = controls
-  const root = group('Selected-item actions')
+  const { create, select, input, button, group, t } = controls
+  const root = group(t('items.selectedActions'))
   const types = Object.entries(view.inventory?.itemTypes ?? {})
 
   if (!types.length) {
-    root.append('Add inventory item types before configuring their actions.')
+    root.append(t('items.typesFirstActions'))
 
     return root
   }
@@ -36,31 +36,31 @@ export function inventoryActionsForm(
     const form = create('form')
     form.append(
       ...rows.map((row, index) => {
-        const field = group(`Item action ${index + 1}`)
+        const field = group(t('items.itemAction', { number: index + 1 }))
         const current = row.enabledWhen
         const options: (readonly [string, string])[] = [...conditions]
 
         if (current && !options.some(([value]) => value === JSON.stringify(current)))
           options.push([JSON.stringify(current), `${current.source} · ${current.path.join('.')}`])
         field.append(
-          input('Item action ID', row.id, (value) => {
+          input(t('form.itemActionId'), row.id, (value) => {
             row.id = value.trim()
             dirty = true
           }),
-          select('Requested action', row.action, actions, (value) => {
+          select(t('form.requestedAction'), row.action, actions, (value) => {
             row.action = value
             dirty = true
           }),
           select(
-            'Enable when true',
+            t('form.enableWhenTrue'),
             current ? JSON.stringify(current) : '',
-            [['', 'Always'], ...options],
+            [['', t('form.always')], ...options],
             (value) => {
               row.enabledWhen = value ? gameBindingSchema.parse(JSON.parse(value)) : undefined
               dirty = true
             },
           ),
-          button('Remove item action', () => {
+          button(t('items.removeItemAction'), () => {
             rows.splice(index, 1)
             dirty = true
             controls.markEdited()
@@ -70,7 +70,7 @@ export function inventoryActionsForm(
 
         return field
       }),
-      button('Add item action', () => {
+      button(t('items.addItemAction'), () => {
         rows.push({ id: '', action: actions[0] ?? '' })
         dirty = true
         controls.markEdited()
@@ -79,10 +79,10 @@ export function inventoryActionsForm(
     )
     const submit = create('button')
     submit.type = 'submit'
-    submit.textContent = 'Save item actions'
+    submit.textContent = t('items.saveItemActions')
     form.append(
       submit,
-      button('Discard item-action draft', () => {
+      button(t('items.discardItemActions'), () => {
         reset()
         onDiscard()
       }),
@@ -91,7 +91,7 @@ export function inventoryActionsForm(
       event.preventDefault()
 
       if (new Set(rows.map(({ id }) => id)).size !== rows.length) {
-        error.textContent = 'Item action IDs must be unique.'
+        error.textContent = t('items.uniqueActionIds')
 
         return
       }
@@ -121,13 +121,13 @@ export function inventoryActionsForm(
   }
 
   const picker = select(
-    'Item type',
+    t('form.itemType'),
     selected,
     types.map(([id, type]) => [id, displayLabel(view, id, type)] as const),
     (value) => {
       if (dirty) {
         picker.querySelector('select')!.value = selected
-        error.textContent = 'Save or discard the item-action draft before switching item types.'
+        error.textContent = t('items.saveActionsFirst')
 
         return
       }

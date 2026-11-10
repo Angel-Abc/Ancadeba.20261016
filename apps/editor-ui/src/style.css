@@ -404,9 +404,12 @@ code {
   white-space: pre-wrap;
 }
 
+/* The tree scrolls on its own so the message below it never lands on top of its rows. */
 #project-tree {
+  flex: 1 1 auto;
   min-height: 9rem;
   margin: 0 -0.375rem;
+  overflow-y: auto;
 }
 
 .project-tree-row {
@@ -611,6 +614,8 @@ label[for='graphic-existing'] {
     #shop-editor,
     #combat-editor,
     #component-editor,
+    #story-editor,
+    #leveling-editor,
     #assets-panel
   )
   label {
@@ -627,6 +632,8 @@ label[for='graphic-existing'] {
     #shop-editor,
     #combat-editor,
     #component-editor,
+    #story-editor,
+    #leveling-editor,
     #assets-panel
   )
   button {
@@ -641,6 +648,8 @@ label[for='graphic-existing'] {
     #shop-editor,
     #combat-editor,
     #component-editor,
+    #story-editor,
+    #leveling-editor,
     #assets-panel
   )
   fieldset {
@@ -655,7 +664,9 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   fieldset
   fieldset {
@@ -673,7 +684,9 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   :is(form, fieldset) {
   display: flex;
@@ -689,7 +702,9 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   :is(form, fieldset)
   > label {
@@ -704,7 +719,9 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   :is(form, fieldset)
   > :is(input, select, textarea) {
@@ -720,10 +737,12 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   :is(form, fieldset)
-  > :is(fieldset, form, details, div, p, pre, table, h3, h4) {
+  > :is(fieldset, form, details, div, p, pre, table, ul, ol, h3, h4) {
   flex: 1 1 100%;
   min-width: 0;
 }
@@ -735,7 +754,9 @@ label[for='graphic-existing'] {
     #item-editor,
     #shop-editor,
     #combat-editor,
-    #component-editor
+    #component-editor,
+    #story-editor,
+    #leveling-editor
   )
   :is(form, fieldset)
   > button {
@@ -929,12 +950,6 @@ input[aria-invalid='true'] + datalist + .translation-preview {
 }
 
 /* Asset authoring uses the same renderer and resources as game preview. */
-#assets-panel {
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--ed-border);
-}
-
 #assets-panel form {
   margin-top: 1.2rem;
 }

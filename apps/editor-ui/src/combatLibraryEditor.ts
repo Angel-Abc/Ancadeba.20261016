@@ -1,13 +1,20 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import { combatLibrarySchema, resolveCombatSource, type CombatLibrary } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { combatMovesForm } from './combatMovesForm.js'
 import { combatStatusesForm } from './combatAbilitiesForm.js'
 
-export function bindCombatLibraryEditor(root: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindCombatLibraryEditor(
+  root: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = root.ownerDocument
   const error = document.createElement('p')
+  error.className = 'error'
   error.setAttribute('role', 'alert')
   const fields = document.createElement('fieldset')
   root.replaceChildren(error, fields)
@@ -20,9 +27,15 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
   let submittedId: string | undefined
   let creating = false
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const reset = () => {
     draft = view?.combatLibraries?.[libraryId]
@@ -42,7 +55,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     }
 
     if (dirty && id !== libraryId) {
-      error.textContent = 'Save or discard the library draft before switching libraries.'
+      error.textContent = t('combat.librarySaveFirstSwitch')
 
       return false
     }
@@ -64,7 +77,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
         (id) => id.toLowerCase() === command.library.id.toLowerCase(),
       )
     ) {
-      error.textContent = 'A combat library with this ID already exists. Choose a different ID.'
+      error.textContent = t('combat.libraryExists')
 
       return
     }
@@ -87,7 +100,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     if (!view?.game) return
 
     const picker = controls.select(
-      'Combat library',
+      t('combat.library'),
       libraryId,
       ['', ...Object.keys(view.combatLibraries ?? {})],
       (value) => {
@@ -98,11 +111,11 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
 
     fields.append(
       controls.group(
-        'Combat libraries',
+        t('tree.files.combatLibraries'),
         picker,
-        controls.button('Add combat library', () => {
+        controls.button(t('combat.addLibrary'), () => {
           if (dirty) {
-            error.textContent = 'Save or discard the library draft first.'
+            error.textContent = t('combat.librarySaveFirst')
 
             return
           }
@@ -141,7 +154,10 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
       ([, item]) => item.use?.ability.library === libraryId,
     )
 
-    usage.textContent = `Affected encounters: ${encounters.map((source) => source.id).join(', ') || 'none'}. Items: ${items.map(([id]) => id).join(', ') || 'none'}. Changes apply after reloading play.`
+    usage.textContent = t('combat.libraryUsage', {
+      encounters: encounters.map((source) => source.id).join(', ') || t('combat.none'),
+      items: items.map(([id]) => id).join(', ') || t('combat.none'),
+    })
     const entryUsage = document.createElement('ul')
 
     const resolved = Object.values(view.combatSources ?? {}).map((source) => ({
@@ -161,7 +177,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
           resolved
             .filter((entry) => entry.origins[kind][id]?.library === libraryId)
             .map((entry) => entry.id)
-            .join(', ') || 'unused'
+            .join(', ') || t('combat.unused')
         }`
         entryUsage.append(row)
       }
@@ -169,9 +185,9 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     const form = document.createElement('form')
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save combat library'
+    saveButton.textContent = t('combat.saveLibrary')
 
-    const identity = controls.input('Library ID', current.id, (value) => {
+    const identity = controls.input(t('combat.libraryId'), current.id, (value) => {
       if (creating) current.id = value.trim()
     })
 
@@ -190,9 +206,9 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     })
     fields.append(
       form,
-      controls.button('Discard library draft', reset),
+      controls.button(t('combat.discardLibrary'), reset),
       controls.button(
-        'Delete combat library',
+        t('combat.deleteLibrary'),
         () => submit({ type: 'game.removeCombatLibrary', libraryId }),
         creating,
       ),
@@ -203,6 +219,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
     navigate,
     hasDrafts: () => dirty,
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -227,7 +244,7 @@ export function bindCombatLibraryEditor(root: HTMLElement, save: (command: Edito
         (changed && !dirty)
       )
         reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
   }

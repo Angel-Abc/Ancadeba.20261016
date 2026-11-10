@@ -39,7 +39,7 @@ export function rulesDefinitionForm(
   rerender: () => void,
   otherFields: GameRulesDefinition['state'],
 ): HTMLElement[] {
-  const { button, create, group, input, select } = controls
+  const { button, create, group, input, select, t } = controls
   const keys = translationChoices(view, false)
   const scenes = view.scenes.filter(({ type }) => type === 'game')
   const sceneIds = scenes.map(({ id }) => id)
@@ -129,7 +129,7 @@ export function rulesDefinitionForm(
           : undefined
 
     return [
-      select('State field', statePath(entry.path), fields, (next) => {
+      select(t('form.stateField'), statePath(entry.path), fields, (next) => {
         entry.path = parseStatePath(next)
         entry.value = defaultValue(
           availableFields.find(({ path }) => statePath(path) === next)?.value ?? '',
@@ -138,7 +138,7 @@ export function rulesDefinitionForm(
       }),
       ...ruleValueControls(
         controls,
-        'Value',
+        t('form.value'),
         entry.value,
         keys,
         (next) => {
@@ -152,16 +152,16 @@ export function rulesDefinitionForm(
   }
 
   const state = group(
-    'Initial state',
+    t('rules.initialState'),
     ...rules.state.map((field, index) =>
       group(
-        `Field ${index + 1}`,
-        input('Binding path (dot-separated)', statePath(field.path), (next) => {
+        t('rules.field', { number: index + 1 }),
+        input(t('rules.bindingPathDotted'), statePath(field.path), (next) => {
           field.path = parseStatePath(next)
         }),
         ...ruleValueControls(
           controls,
-          'Initial value',
+          t('rules.initialValue'),
           field.value,
           keys,
           (next) => {
@@ -169,14 +169,14 @@ export function rulesDefinitionForm(
           },
           rerender,
         ),
-        button('Remove field', () =>
+        button(t('rules.removeField'), () =>
           change(() => {
             rules.state.splice(index, 1)
           }),
         ),
       ),
     ),
-    button('Add field', () =>
+    button(t('rules.addField'), () =>
       change(() => {
         rules.state.push({ path: [''], value: '' })
       }),
@@ -187,15 +187,15 @@ export function rulesDefinitionForm(
   const log = rules.log
 
   const display = group(
-    'Clock and activity log',
+    t('rules.clockAndLog'),
     clock
       ? group(
-          'Clock',
-          input('Binding path', statePath(clock.path), (next) => {
+          t('rules.clock'),
+          input(t('form.bindingPath'), statePath(clock.path), (next) => {
             clock.path = parseStatePath(next)
           }),
           input(
-            'Start time',
+            t('rules.startTime'),
             `${String(Math.floor(clock.startMinute / 60)).padStart(2, '0')}:${String(clock.startMinute % 60).padStart(2, '0')}`,
             (next) => {
               const [hours, minutes] = next.split(':').map(Number)
@@ -203,25 +203,25 @@ export function rulesDefinitionForm(
             },
             'time',
           ),
-          button('Remove clock', () =>
+          button(t('rules.removeClock'), () =>
             change(() => {
               delete rules.clock
             }),
           ),
         )
-      : button('Add clock', () =>
+      : button(t('rules.addClock'), () =>
           change(() => {
             rules.clock = { path: ['clock'], startMinute: 540 }
           }),
         ),
     log
       ? group(
-          'Activity log',
-          input('Binding path', statePath(log.path), (next) => {
+          t('rules.log'),
+          input(t('form.bindingPath'), statePath(log.path), (next) => {
             log.path = parseStatePath(next)
           }),
           input(
-            'Maximum entries',
+            t('rules.maxEntries'),
             String(log.capacity),
             (next) => {
               log.capacity = Number(next)
@@ -230,50 +230,49 @@ export function rulesDefinitionForm(
           ),
           ...log.initial.map((value, index) =>
             group(
-              `Initial entry ${index + 1}`,
-              ...text('Message', value, (next) => {
+              t('rules.initialEntry', { number: index + 1 }),
+              ...text(t('rules.message'), value, (next) => {
                 log.initial[index] = next
               }),
-              button('Remove entry', () =>
+              button(t('rules.removeEntry'), () =>
                 change(() => {
                   log.initial.splice(index, 1)
                 }),
               ),
             ),
           ),
-          button('Add initial entry', () =>
+          button(t('rules.addInitialEntry'), () =>
             change(() => {
               log.initial.push('')
             }),
           ),
-          button('Remove activity log', () =>
+          button(t('rules.removeLog'), () =>
             change(() => {
               delete rules.log
             }),
           ),
         )
-      : button('Add activity log', () =>
+      : button(t('rules.addLog'), () =>
           change(() => {
             rules.log = { path: ['log'], capacity: 8, initial: [] }
           }),
         ),
   )
 
-  const actions = group('Actions')
+  const actions = group(t('rules.actions'))
   const actionIds = Object.keys(rules.actions)
 
-  if (actionIds.length) actions.append(select('Action', selected, actionIds, selectAction, false))
+  if (actionIds.length)
+    actions.append(select(t('form.action'), selected, actionIds, selectAction, false))
   const newId = create('input')
-  newId.setAttribute('aria-label', 'New action ID')
-  newId.placeholder = 'New action ID'
+  newId.setAttribute('aria-label', t('rules.newActionId'))
+  newId.placeholder = t('rules.newActionId')
 
-  const addAction = button('Add action', () => {
+  const addAction = button(t('rules.addAction'), () => {
     const id = newId.value.trim()
 
     if (!/^[a-zA-Z0-9_-]+$/.test(id) || Object.hasOwn(rules.actions, id)) {
-      newId.setCustomValidity(
-        'Enter a unique action ID using letters, digits, dashes, or underscores',
-      )
+      newId.setCustomValidity(t('rules.invalidActionId'))
       newId.reportValidity()
 
       return
@@ -298,9 +297,9 @@ export function rulesDefinitionForm(
   if (branches) {
     branches.forEach((branch, index) => {
       const row = group(
-        `Branch ${index + 1}`,
+        t('rules.branch', { number: index + 1 }),
         button(
-          'Move up',
+          t('rules.moveUp'),
           () =>
             change(() => {
               branches.splice(index - 1, 0, branches.splice(index, 1)[0]!)
@@ -308,7 +307,7 @@ export function rulesDefinitionForm(
           index === 0,
         ),
         button(
-          'Move down',
+          t('rules.moveDown'),
           () =>
             change(() => {
               branches.splice(index + 1, 0, branches.splice(index, 1)[0]!)
@@ -316,7 +315,7 @@ export function rulesDefinitionForm(
           index === branches.length - 1,
         ),
         button(
-          'Remove branch',
+          t('rules.removeBranch'),
           () =>
             change(() => {
               branches.splice(index, 1)
@@ -325,12 +324,12 @@ export function rulesDefinitionForm(
         ),
       )
 
-      const conditions = group('When all match')
+      const conditions = group(t('rules.whenAll'))
       branch.when.forEach((entry, position) => {
         const field = group(
-          `Condition ${position + 1}`,
+          t('form.conditionNumber', { number: position + 1 }),
           select(
-            'Condition',
+            t('rules.condition'),
             entry.type,
             labelled(
               [
@@ -345,6 +344,7 @@ export function rulesDefinitionForm(
                 'payload-is-target',
               ] as const,
               conditionTypeLabels,
+              t,
             ),
             (next) =>
               change(() => {
@@ -355,7 +355,7 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'scene-is')
           field.append(
-            select('Scene', entry.scene, sceneChoices(view, 'game'), (next) => {
+            select(t('scene.label'), entry.scene, sceneChoices(view, 'game'), (next) => {
               entry.scene = next
             }),
           )
@@ -364,19 +364,19 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'state-compare')
           field.append(
-            select('State field', statePath(entry.path), fields, (value) => {
+            select(t('form.stateField'), statePath(entry.path), fields, (value) => {
               entry.path = parseStatePath(value)
             }),
             select(
-              'Comparison',
+              t('form.comparison'),
               entry.operator,
-              labelled(['eq', 'gte', 'lte', 'gt', 'lt'] as const, comparisonLabels),
+              labelled(['eq', 'gte', 'lte', 'gt', 'lt'] as const, comparisonLabels, t),
               (value) => {
                 entry.operator = value
               },
             ),
             input(
-              'Required amount',
+              t('form.requiredAmount'),
               String(entry.value),
               (value) => {
                 entry.value = Number(value)
@@ -387,31 +387,40 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'quest-state')
           field.append(
-            select('Quest', entry.quest, questChoices(view), (value) => {
+            select(t('form.quest'), entry.quest, questChoices(view), (value) => {
               entry.quest = value
             }),
             select(
-              'Quest status',
+              t('form.questStatus'),
               entry.status,
-              labelled(['not-started', 'active', 'ready', 'completed'] as const, questStatusLabels),
+              labelled(
+                ['not-started', 'active', 'ready', 'completed'] as const,
+                questStatusLabels,
+                t,
+              ),
               (value) => {
                 entry.status = value
               },
             ),
-            input('Optional stage ID', entry.stage ?? '', (value) => {
+            input(t('form.optionalStageId'), entry.stage ?? '', (value) => {
               entry.stage = value || undefined
             }),
           )
 
         if (entry.type === 'combat-outcome')
           field.append(
-            select('Encounter', entry.encounter, Object.keys(view.combat ?? {}), (value) => {
-              entry.encounter = value
-            }),
             select(
-              'Outcome',
+              t('form.encounter'),
+              entry.encounter,
+              Object.keys(view.combat ?? {}),
+              (value) => {
+                entry.encounter = value
+              },
+            ),
+            select(
+              t('form.outcome'),
               entry.outcome,
-              labelled(['victory', 'defeat', 'escaped'] as const, combatOutcomeLabels),
+              labelled(['victory', 'defeat', 'escaped'] as const, combatOutcomeLabels, t),
               (value) => {
                 entry.outcome = value
               },
@@ -421,7 +430,7 @@ export function rulesDefinitionForm(
         if (entry.type === 'payload-is-target')
           field.append(
             select(
-              'Target',
+              t('rules.target'),
               entry.target,
               [
                 ...new Set(
@@ -440,19 +449,19 @@ export function rulesDefinitionForm(
 
         if ('item' in entry)
           field.append(
-            select('Item', entry.item, items, (next) => {
+            select(t('rules.item'), entry.item, items, (next) => {
               entry.item = next
             }),
           )
 
         if ('owner' in entry)
           field.append(
-            select('Owner', entry.owner, owners, (next) => {
+            select(t('rules.owner'), entry.owner, owners, (next) => {
               entry.owner = next
             }),
           )
         field.append(
-          button('Remove condition', () =>
+          button(t('form.removeCondition'), () =>
             change(() => {
               branch.when.splice(position, 1)
             }),
@@ -461,19 +470,19 @@ export function rulesDefinitionForm(
         conditions.append(field)
       })
       conditions.append(
-        button('Add condition', () =>
+        button(t('form.addCondition'), () =>
           change(() => {
             branch.when.push(condition('scene-is'))
           }),
         ),
       )
 
-      const effects = group('Effects')
+      const effects = group(t('rules.effects'))
       branch.effects.forEach((entry, position) => {
         const field = group(
-          `Effect ${position + 1}`,
+          t('form.effectNumber', { number: position + 1 }),
           select(
-            'Effect',
+            t('rules.effect'),
             entry.type,
             labelled(
               [
@@ -485,6 +494,7 @@ export function rulesDefinitionForm(
                 'complete-quest',
               ] as const,
               effectTypeLabels,
+              t,
             ),
             (next) =>
               change(() => {
@@ -497,17 +507,17 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'start-quest' || entry.type === 'complete-quest')
           field.append(
-            select('Quest', entry.quest, questChoices(view), (value) => {
+            select(t('form.quest'), entry.quest, questChoices(view), (value) => {
               entry.quest = value
             }),
           )
 
         if (entry.type === 'move-item')
           field.append(
-            select('Item', entry.item, items, (next) => {
+            select(t('rules.item'), entry.item, items, (next) => {
               entry.item = next
             }),
-            select('Destination owner', entry.owner, owners, (next) => {
+            select(t('rules.destinationOwner'), entry.owner, owners, (next) => {
               entry.owner = next
             }),
           )
@@ -522,15 +532,15 @@ export function rulesDefinitionForm(
               .map(({ id }) => id) ?? []
 
           field.append(
-            select('Destination scene', entry.scene, sceneChoices(view, 'game'), (next) => {
+            select(t('rules.destinationScene'), entry.scene, sceneChoices(view, 'game'), (next) => {
               entry.scene = next
               delete entry.mapView
               rerender()
             }),
             select(
-              'Charge time from map view',
+              t('rules.chargeTime'),
               entry.mapView ?? '',
-              [['', 'None'], ...mapViews],
+              [['', t('form.none')], ...mapViews],
               (next) => {
                 if (next) entry.mapView = next
                 else delete entry.mapView
@@ -541,12 +551,12 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'append-log')
           field.append(
-            ...text('Message', entry.text, (next) => {
+            ...text(t('rules.message'), entry.text, (next) => {
               entry.text = next
             }),
           )
         field.append(
-          button('Remove effect', () =>
+          button(t('form.removeEffect'), () =>
             change(() => {
               branch.effects.splice(position, 1)
             }),
@@ -555,7 +565,7 @@ export function rulesDefinitionForm(
         effects.append(field)
       })
       effects.append(
-        button('Add effect', () =>
+        button(t('form.addEffect'), () =>
           change(() => {
             branch.effects.push(effect('set-state'))
           }),
@@ -565,12 +575,12 @@ export function rulesDefinitionForm(
       actions.append(row)
     })
     actions.append(
-      button('Add branch', () =>
+      button(t('rules.addBranch'), () =>
         change(() => {
           branches.push({ when: [], effects: [] })
         }),
       ),
-      button('Remove action', () =>
+      button(t('rules.removeAction'), () =>
         change(() => {
           delete rules.actions[selected]
           selectAction(Object.keys(rules.actions)[0] ?? '')

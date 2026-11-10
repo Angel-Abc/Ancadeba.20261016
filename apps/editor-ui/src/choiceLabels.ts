@@ -1,4 +1,6 @@
 import type { ProjectView } from '@ancadeba/editor-core'
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { sceneTreeLabel } from './projectTree.js'
 import { displayLabel, humanizeCode } from './ruleFormControls.js'
 
@@ -6,50 +8,57 @@ import { displayLabel, humanizeCode } from './ruleFormControls.js'
 export function labelled<T extends string>(
   codes: readonly T[],
   labels: ReadonlyMap<string, string>,
+  t: Translate = editorLocalization().t,
 ): (readonly [T, string])[] {
-  return codes.map((code) => [code, labels.get(code) ?? humanizeCode(code)] as const)
+  return codes.map((code) => {
+    const key = labels.get(code)
+
+    return [code, key ? t(key) : humanizeCode(code)] as const
+  })
 }
 
+/** Label maps below hold editor message keys, so pickers follow the editor language. */
+
 export const conditionTypeLabels = new Map<string, string>([
-  ['scene-is', 'Active scene'],
-  ['state-is', 'State equals'],
-  ['state-compare', 'Compare numeric state'],
-  ['quest-state', 'Quest status'],
-  ['combat-outcome', 'Recorded combat outcome'],
-  ['item-owned-by', 'Item owned, including containers'],
-  ['item-carried-by', 'Item carried by owner'],
-  ['payload-is-item', 'Request is for item'],
-  ['payload-is-target', 'Request is for nearby target'],
+  ['scene-is', 'choices.sceneIs'],
+  ['state-is', 'choices.stateIs'],
+  ['state-compare', 'choices.stateCompare'],
+  ['quest-state', 'form.questStatus'],
+  ['combat-outcome', 'choices.combatOutcome'],
+  ['item-owned-by', 'choices.itemOwnedBy'],
+  ['item-carried-by', 'choices.itemCarriedBy'],
+  ['payload-is-item', 'choices.payloadIsItem'],
+  ['payload-is-target', 'choices.payloadIsTarget'],
 ])
 
 export const effectTypeLabels = new Map<string, string>([
-  ['set-state', 'Set state'],
-  ['move-item', 'Move carried item'],
-  ['enter-scene', 'Enter game scene'],
-  ['append-log', 'Append to activity log'],
-  ['start-quest', 'Start quest'],
-  ['complete-quest', 'Complete ready quest'],
+  ['set-state', 'choices.setState'],
+  ['move-item', 'choices.moveItem'],
+  ['enter-scene', 'choices.enterGameScene'],
+  ['append-log', 'choices.appendLog'],
+  ['start-quest', 'choices.startQuest'],
+  ['complete-quest', 'choices.completeQuest'],
 ])
 
 export const comparisonLabels = new Map<string, string>([
-  ['eq', 'Equal to'],
-  ['gte', 'At least'],
-  ['lte', 'At most'],
-  ['gt', 'More than'],
-  ['lt', 'Less than'],
+  ['eq', 'choices.eq'],
+  ['gte', 'choices.gte'],
+  ['lte', 'choices.lte'],
+  ['gt', 'choices.gt'],
+  ['lt', 'choices.lt'],
 ])
 
 export const questStatusLabels = new Map<string, string>([
-  ['not-started', 'Not started'],
-  ['active', 'Active'],
-  ['ready', 'Ready to hand in'],
-  ['completed', 'Completed'],
+  ['not-started', 'choices.notStarted'],
+  ['active', 'choices.active'],
+  ['ready', 'choices.ready'],
+  ['completed', 'choices.completed'],
 ])
 
 export const combatOutcomeLabels = new Map<string, string>([
-  ['victory', 'Victory'],
-  ['defeat', 'Defeat'],
-  ['escaped', 'Escaped'],
+  ['victory', 'choices.victory'],
+  ['defeat', 'choices.defeat'],
+  ['escaped', 'choices.escaped'],
 ])
 
 /** Scene picker choices showing explorer names, optionally limited to one scene type. */

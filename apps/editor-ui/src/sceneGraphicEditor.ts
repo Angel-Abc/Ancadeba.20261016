@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import {
   graphicComponentSchema,
@@ -13,6 +15,7 @@ import {
   placementFields,
   saveBar,
   translationChoices,
+  languageWatcher,
 } from './ruleFormControls.js'
 import { graphicAppearanceForm } from './graphicAppearanceForm.js'
 import { startingGameBindings } from './textBindingChoices.js'
@@ -28,6 +31,7 @@ export function bindSceneGraphicEditor(
   root: HTMLElement,
   save: (command: EditorCommand) => void,
   createPreview?: SceneGraphicPreviewFactory,
+  t: Translate = editorLocalization().t,
 ) {
   const document = root.ownerDocument
   const fields = document.createElement('fieldset')
@@ -36,10 +40,10 @@ export function bindSceneGraphicEditor(
   error.setAttribute('role', 'alert')
   const previewRoot = document.createElement('div')
   previewRoot.className = 'scene-graphic-preview'
-  previewRoot.setAttribute('aria-label', 'Scene graphic appearance preview')
+  previewRoot.setAttribute('aria-label', t('graphic.previewLabel'))
   const previewStatus = document.createElement('p')
   previewStatus.setAttribute('role', 'status')
-  previewStatus.setAttribute('aria-label', 'Graphic preview status')
+  previewStatus.setAttribute('aria-label', t('graphic.previewStatus'))
   root.replaceChildren(error, fields)
   let view: ProjectView | undefined
   let path: string | undefined
@@ -63,7 +67,7 @@ export function bindSceneGraphicEditor(
     clearPreview()
 
     if (!draft || !view?.assets) {
-      previewStatus.textContent = 'Import or register artwork in Assets first.'
+      previewStatus.textContent = t('graphic.artFirst')
 
       return
     }
@@ -95,8 +99,17 @@ export function bindSceneGraphicEditor(
         startingValues ? startingGameBindings(view) : undefined,
       )
 
-      const mode = startingValues ? 'Starting game values' : 'Static fallback values'
-      previewStatus.textContent = `${mode}: ${resolution.visible ? `${resolution.pieces.length} image piece(s)` : 'Graphic hidden'}.${resolution.diagnostics.length ? ` ${resolution.diagnostics.map((entry) => `${entry.target}: ${entry.message}`).join('; ')}` : ''}`
+      const mode = startingValues ? t('graphic.startingValues') : t('graphic.staticValues')
+
+      const summary = resolution.visible
+        ? t('graphic.statusPieces', { mode, count: resolution.pieces.length })
+        : t('graphic.statusHidden', { mode })
+
+      const diagnostics = resolution.diagnostics
+        .map((entry) => `${entry.target}: ${entry.message}`)
+        .join('; ')
+
+      previewStatus.textContent = diagnostics ? `${summary} ${diagnostics}` : summary
       preview = createPreview?.(component, view, startingValues)
 
       if (preview) previewRoot.append(preview.element)
@@ -110,7 +123,9 @@ export function bindSceneGraphicEditor(
     updatePreview()
   }
 
-  const controls = ruleFormControls(document, edited)
+  const languageChanged = languageWatcher(t)
+
+  const controls = ruleFormControls(document, edited, t)
 
   const change = (operation: () => void) => {
     operation()
@@ -164,7 +179,7 @@ export function bindSceneGraphicEditor(
     const scene = view.scenes.find((scene) => scene.id === sceneId)
 
     if (!draft || !scene) {
-      fields.append('Select a scene graphic or choose Add graphic in the scene explorer.')
+      fields.append(t('graphic.selectHelp'))
 
       return
     }
@@ -175,17 +190,16 @@ export function bindSceneGraphicEditor(
     form.className = 'scene-graphic-form'
     const submit = document.createElement('button')
     submit.type = 'submit'
-    submit.textContent = 'Save scene graphic'
+    submit.textContent = t('graphic.save')
 
-    const identity = input('Graphic component ID', current.id, (value) => {
+    const identity = input(t('graphic.componentId'), current.id, (value) => {
       if (creating) current.id = value.trim()
     })
 
     identity.querySelector('input')!.readOnly = !creating
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent =
-      'Edit this scene instance without changing the shared artwork. Choosing a different visual resets its appearance. Changing a slot part keeps compatible overrides and clears incompatible colors or palettes. Save to update the game preview.'
+    help.textContent = t('graphic.help')
     const assets = view.assets
 
     const visuals = [
@@ -195,45 +209,45 @@ export function bindSceneGraphicEditor(
     ]
 
     form.append(
-      saveBar(document, submit, button('Discard scene graphic draft', reset)),
+      saveBar(document, submit, button(t('graphic.discard'), reset)),
       help,
       identity,
-      select('Graphic visual', current.visual, visuals, (value) =>
+      select(t('graphic.visual'), current.visual, visuals, (value) =>
         change(() => {
           current.visual = value
           current.appearance = graphicAppearanceSchema.parse({})
         }),
       ),
-      input('Graphic alternative text', current.alt, (value) => {
+      input(t('graphic.alt'), current.alt, (value) => {
         current.alt = value
       }),
       translation(
-        'Graphic alternative text translation',
+        t('graphic.altTranslation'),
         current.altKey ?? '',
-        translationChoices(view, 'Use literal text'),
+        translationChoices(view, t('metadata.literalText')),
         (value) => {
           current.altKey = value || undefined
         },
       ),
       select(
-        'Graphic fit',
+        t('graphic.fit'),
         current.fit,
         [
-          ['contain', 'Contain'],
-          ['cover', 'Cover'],
+          ['contain', t('assets.contain')],
+          ['cover', t('assets.cover')],
         ],
         (value) => {
           current.fit = value
         },
       ),
       group(
-        'Graphic preview',
+        t('graphic.preview'),
         select(
-          'Preview values',
+          t('graphic.previewValues'),
           startingValues ? 'starting' : 'static',
           [
-            ['static', 'Static fallback values'],
-            ['starting', 'Starting game values'],
+            ['static', t('graphic.staticValues')],
+            ['starting', t('graphic.startingValues')],
           ],
           (value) => {
             startingValues = value === 'starting'
@@ -261,8 +275,8 @@ export function bindSceneGraphicEditor(
       )
     form.append(
       group(
-        'Graphic placement',
-        ...placementFields.map(([key, label]) =>
+        t('graphic.placement'),
+        ...placementFields(t).map(([key, label]) =>
           input(
             label,
             String(current.placement[key]),
@@ -295,13 +309,13 @@ export function bindSceneGraphicEditor(
       }
 
       if (!assets) {
-        error.textContent = 'Import or register artwork in Assets first.'
+        error.textContent = t('graphic.artFirst')
 
         return
       }
 
       if (creating && scene.components.some((component) => component.id === current.id)) {
-        error.textContent = 'A component with this ID already exists. Choose a different ID.'
+        error.textContent = t('form.componentExists')
 
         return
       }
@@ -322,7 +336,7 @@ export function bindSceneGraphicEditor(
 
     if (!creating)
       fields.append(
-        button('Remove scene graphic', () => {
+        button(t('graphic.remove'), () => {
           if (!busy) {
             submitted = { type: 'scene.removeGraphic', sceneId, componentId }
             save(submitted)
@@ -339,7 +353,7 @@ export function bindSceneGraphicEditor(
       if (nextScene === sceneId && nextComponent === componentId) return true
 
       if (dirty) {
-        error.textContent = 'Save or discard the scene graphic draft before switching targets.'
+        error.textContent = t('graphic.saveFirst')
 
         return false
       }
@@ -352,6 +366,7 @@ export function bindSceneGraphicEditor(
       return true
     },
     render(state: ProjectEditorState, replace: boolean) {
+      const translated = languageChanged()
       const projectChanged = path !== state.path
       const changed = view !== state.view
       path = state.path
@@ -375,7 +390,7 @@ export function bindSceneGraphicEditor(
 
       if (projectChanged || saved || (replace && !state.preserveDrafts) || (changed && !dirty))
         reset()
-      else if (changed) render()
+      else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
     },
     dispose: clearPreview,

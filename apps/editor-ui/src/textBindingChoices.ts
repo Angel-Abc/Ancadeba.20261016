@@ -1,3 +1,5 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   combatStatNames,
@@ -23,18 +25,20 @@ export function textBindingId(binding: {
 }
 
 const valueNames = new Map<string, string>([
-  ['xp', 'Total XP'],
-  ['maximumLevel', 'Maximum level'],
-  ['nextLevelXp', 'XP for next level'],
-  ['xpIntoLevel', 'XP into this level'],
-  ['xpToNextLevel', 'XP still needed'],
-  ['capped', 'At maximum level'],
-  ['maximumHealth', 'Maximum health'],
+  ['xp', 'bindings.field.xp'],
+  ['maximumLevel', 'bindings.field.maximumLevel'],
+  ['nextLevelXp', 'bindings.field.nextLevelXp'],
+  ['xpIntoLevel', 'bindings.field.xpIntoLevel'],
+  ['xpToNextLevel', 'bindings.field.xpToNextLevel'],
+  ['capped', 'bindings.field.capped'],
+  ['maximumHealth', 'form.maxHealth'],
 ])
 
 /** A readable name for a leveling field or combat stat, such as `xpToNextLevel`. */
-export function bindingFieldLabel(field: string): string {
-  return valueNames.get(field) ?? humanizeCode(field)
+export function bindingFieldLabel(field: string, t: Translate = editorLocalization().t): string {
+  const key = valueNames.get(field)
+
+  return key ? t(key) : humanizeCode(field)
 }
 
 /** A combat stat owner's name; the ID is added when another owner shares that name. */
@@ -54,7 +58,10 @@ export function combatOwnerLabel(view: ProjectView, id: string): string {
 }
 
 /** Authorable scalar values; gold uses its declared game-state path like any other number. */
-export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
+export function textBindingChoices(
+  view: ProjectView,
+  t: Translate = editorLocalization().t,
+): TextBindingChoice[] {
   const choice = (
     source: GameBindingDefinition['source'],
     path: (string | number)[],
@@ -72,29 +79,29 @@ export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
       choice(
         'game.state',
         field.path,
-        `State · ${field.path.join('.')}`,
+        t('bindings.state', { path: field.path.join('.') }),
         typeof field.value === 'object' ? view.translations?.[field.value.textKey] : field.value,
       ),
     ),
-    choice('game.progression', ['turn'], 'Game time · Turn', 0),
-    choice('game.progression', ['worldTimeMs'], 'Game time · World time (ms)', 0),
+    choice('game.progression', ['turn'], t('bindings.timeTurn'), 0),
+    choice('game.progression', ['worldTimeMs'], t('bindings.timeWorld'), 0),
     ...Object.entries(view.quests ?? {}).flatMap(([id, quest]) => [
       choice(
         'game.quests',
         [id, 'status'],
-        `Quest · ${displayLabel(view, id, quest)} · Status`,
+        t('bindings.questStatus', { quest: displayLabel(view, id, quest) }),
         'not-started',
       ),
       choice(
         'game.quests',
         [id, 'stage'],
-        `Quest · ${displayLabel(view, id, quest)} · Current stage`,
+        t('bindings.questStage', { quest: displayLabel(view, id, quest) }),
         '',
       ),
       choice(
         'game.quests',
         [id, 'tracked'],
-        `Quest · ${displayLabel(view, id, quest)} · Tracked`,
+        t('bindings.questTracked', { quest: displayLabel(view, id, quest) }),
         false,
       ),
     ]),
@@ -103,7 +110,10 @@ export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
         choice(
           'game.leveling',
           [id, field],
-          `Character · ${displayLabel(view, id, profile)} · ${bindingFieldLabel(field)}`,
+          t('bindings.character', {
+            profile: displayLabel(view, id, profile),
+            field: bindingFieldLabel(field, t),
+          }),
         ),
       ),
     ),
@@ -114,7 +124,10 @@ export function textBindingChoices(view: ProjectView): TextBindingChoice[] {
           choice(
             'game.combatStats',
             [id, field],
-            `Combat stats · ${combatOwnerLabel(view, id)} · ${bindingFieldLabel(field)}`,
+            t('bindings.combatStat', {
+              owner: combatOwnerLabel(view, id),
+              field: bindingFieldLabel(field, t),
+            }),
           ),
         ),
       ),

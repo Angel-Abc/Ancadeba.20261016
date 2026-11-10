@@ -1,7 +1,9 @@
+import type { Translate } from '@ancadeba/utilities'
+import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { GameRulesDefinition } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { rulesDefinitionForm } from './rulesDefinitionForm.js'
 import {
   ruleTriggerForms,
@@ -11,7 +13,11 @@ import {
 
 const defaultRuleId = 'rules'
 
-export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand) => void) {
+export function bindRulesPanel(
+  panel: HTMLElement,
+  save: (command: EditorCommand) => void,
+  t: Translate = editorLocalization().t,
+) {
   const document = panel.ownerDocument
   const rulesFields = document.createElement('fieldset')
   const triggerFields = document.createElement('fieldset')
@@ -46,14 +52,20 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
     }
   }
 
-  const rulesControls = ruleFormControls(document, () => {
-    rulesDirty = true
-  })
+  const languageChanged = languageWatcher(t)
 
-  const triggerControls = ruleFormControls(document, () => {})
+  const rulesControls = ruleFormControls(
+    document,
+    () => {
+      rulesDirty = true
+    },
+    t,
+  )
 
-  const definitions = rulesControls.button('Rule definitions', () => showTriggers(false))
-  const triggers = rulesControls.button('Trigger links', () => showTriggers(true))
+  const triggerControls = ruleFormControls(document, () => {}, t)
+
+  const definitions = rulesControls.button(t('rules.definitions'), () => showTriggers(false))
+  const triggers = rulesControls.button(t('rules.triggers'), () => showTriggers(true))
   navigation.append(definitions, triggers)
   showTriggers(false)
 
@@ -83,13 +95,13 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
     const choices = ids.length ? ids : [defaultRuleId]
 
     const filePicker = rulesControls.select(
-      'Rule file',
+      t('rules.file'),
       ruleId,
-      [...choices, ['', 'New rule file…']],
+      [...choices, ['', t('rules.newFile')]],
       (next) => {
         if (rulesDirty) {
           filePicker.querySelector('select')!.value = ruleId
-          error.textContent = 'Save or discard this draft before switching rule files.'
+          error.textContent = t('rules.saveFirstFiles')
 
           return
         }
@@ -106,7 +118,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     if (!ruleId)
       form.append(
-        rulesControls.input('New rule ID', newRuleId, (value) => {
+        rulesControls.input(t('rules.newId'), newRuleId, (value) => {
           newRuleId = value.trim()
         }),
       )
@@ -117,12 +129,12 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     const saveButton = document.createElement('button')
     saveButton.type = 'submit'
-    saveButton.textContent = 'Save rules'
+    saveButton.textContent = t('rules.save')
     form.append(
       saveBar(
         document,
         saveButton,
-        rulesControls.button('Discard rule draft', () => {
+        rulesControls.button(t('rules.discard'), () => {
           newRuleId = ''
           resetRules()
           error.textContent = ''
@@ -146,7 +158,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
       event.preventDefault()
 
       if (!ruleId && ids.some((id) => id.toLowerCase() === newRuleId.toLowerCase())) {
-        error.textContent = 'Choose a rule ID that is not already listed.'
+        error.textContent = t('rules.idExists')
 
         return
       }
@@ -168,7 +180,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     const forms = ruleTriggerForms(triggerControls, view, submit, {
       retained,
-      controls: (section) => ruleFormControls(document, () => dirtyTriggers.add(section)),
+      controls: (section) => ruleFormControls(document, () => dirtyTriggers.add(section), t),
       discarded: (section) => {
         dirtyTriggers.delete(section)
         renderTriggers()
@@ -177,7 +189,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
     triggerForms = new Map(ruleTriggerSections.map((section, index) => [section, forms[index]!]))
     triggerFields.replaceChildren(
-      triggerControls.button('Discard trigger draft', () => {
+      triggerControls.button(t('rules.discardTrigger'), () => {
         dirtyTriggers.clear()
         error.textContent = ''
         renderTriggers()
@@ -201,6 +213,7 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
   return {
     render(state: ProjectEditorState, replaceFields: boolean) {
+      const translated = languageChanged()
       const projectChanged = state.path !== loadedPath
       const viewChanged = view !== state.view
       view = state.view
@@ -240,11 +253,16 @@ export function bindRulesPanel(panel: HTMLElement, save: (command: EditorCommand
 
       if (triggerSection) dirtyTriggers.delete(triggerSection)
 
-      if (reset || rulesSaved || (viewChanged && !rulesDirty)) {
-        resetRules()
+      if (translated) {
+        definitions.textContent = t('rules.definitions')
+        triggers.textContent = t('rules.triggers')
       }
 
-      if (reset || triggerSection || viewChanged) {
+      if (reset || rulesSaved || (viewChanged && !rulesDirty)) {
+        resetRules()
+      } else if (translated) renderRules()
+
+      if (reset || triggerSection || viewChanged || translated) {
         renderTriggers()
       }
 

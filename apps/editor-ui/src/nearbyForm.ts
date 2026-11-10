@@ -17,11 +17,12 @@ export function nearbyForm(
   initialScene?: string,
   { componentId, onDiscard }: { componentId?: string; onDiscard?: () => void } = {},
 ): HTMLElement {
-  const root = controls.group('Nearby characters and objects')
+  const { t } = controls
+  const root = controls.group(t('nearby.heading'))
   const scenes = view.scenes.filter((scene) => scene.type === 'game')
 
   if (!scenes.length) {
-    root.append('Add a game scene before configuring nearby targets.')
+    root.append(t('nearby.sceneFirst'))
 
     return root
   }
@@ -37,10 +38,14 @@ export function nearbyForm(
   error.className = 'error'
   error.setAttribute('role', 'alert')
 
-  const fields = ruleFormControls(root.ownerDocument, () => {
-    dirty = true
-    controls.markEdited()
-  })
+  const fields = ruleFormControls(
+    root.ownerDocument,
+    () => {
+      dirty = true
+      controls.markEdited()
+    },
+    t,
+  )
 
   const { create, input, select, button, group, translation } = fields
 
@@ -54,7 +59,7 @@ export function nearbyForm(
         ] as const,
     )
 
-  const keys = translationChoices(view, 'Use literal text')
+  const keys = translationChoices(view, t('metadata.literalText'))
   const actionIds = Object.keys(view.rules?.actions ?? {})
 
   const condition = (
@@ -65,7 +70,7 @@ export function nearbyForm(
     select(
       label,
       current ? JSON.stringify(current) : '',
-      [['', 'Always'], ...conditions],
+      [['', t('form.always')], ...conditions],
       (value) => update(value ? gameBindingSchema.parse(JSON.parse(value)) : undefined),
     )
 
@@ -76,19 +81,19 @@ export function nearbyForm(
 
     if (!existing)
       form.append(
-        input('Nearby component ID', draft.id, (value) => {
+        input(t('nearby.componentId'), draft.id, (value) => {
           draft.id = value.trim()
         }),
       )
     form.append(
-      input('Nearby title', draft.label, (value) => {
+      input(t('nearby.title'), draft.label, (value) => {
         draft.label = value
       }),
-      translation('Nearby title translation', draft.labelKey ?? '', keys, (value) => {
+      translation(t('nearby.titleTranslation'), draft.labelKey ?? '', keys, (value) => {
         draft.labelKey = value || undefined
       }),
       select(
-        'Description text component',
+        t('nearby.descriptionComponent'),
         draft.descriptionTarget,
         scene.components.filter((component) => component.type === 'text').map(({ id }) => id),
         (value) => {
@@ -96,10 +101,10 @@ export function nearbyForm(
         },
       ),
       group(
-        'Nearby panel placement',
-        ...placementFields.map(([key, label]) =>
+        t('nearby.placement'),
+        ...placementFields(t).map(([key, label]) =>
           input(
-            `Nearby ${label.toLowerCase()}`,
+            t('nearby.placementField', { field: label.toLowerCase() }),
             String(draft.placement[key]),
             (value) => {
               draft.placement[key] = Number(value)
@@ -109,7 +114,7 @@ export function nearbyForm(
         ),
       ),
       select(
-        'Nearby target',
+        t('nearby.target'),
         selected,
         Object.entries(draft.entries).map(
           ([id, entry]) => [id, `${id} · ${entry.label || entry.labelKey}`] as const,
@@ -132,23 +137,28 @@ export function nearbyForm(
         dirty = true
         controls.markEdited()
       })
-      label.append('Target description', description)
+      label.append(t('nearby.targetDescription'), description)
       form.append(
-        select('Target kind', entry.kind, ['character', 'object'], (value) => {
+        select(t('nearby.targetKind'), entry.kind, ['character', 'object'], (value) => {
           entry.kind = value
         }),
-        input('Target label', entry.label, (value) => {
+        input(t('nearby.targetLabel'), entry.label, (value) => {
           entry.label = value
         }),
-        translation('Target label translation', entry.labelKey ?? '', keys, (value) => {
+        translation(t('nearby.targetLabelTranslation'), entry.labelKey ?? '', keys, (value) => {
           entry.labelKey = value || undefined
         }),
         label,
-        translation('Target description translation', entry.descriptionKey ?? '', keys, (value) => {
-          entry.descriptionKey = value || undefined
-        }),
+        translation(
+          t('nearby.targetDescriptionTranslation'),
+          entry.descriptionKey ?? '',
+          keys,
+          (value) => {
+            entry.descriptionKey = value || undefined
+          },
+        ),
         select(
-          'Dialogue definition',
+          t('nearby.dialogue'),
           entry.dialogue ?? '',
           ['', ...Object.keys(view.dialogues ?? {})],
           (value) => {
@@ -157,10 +167,10 @@ export function nearbyForm(
             if (!value) entry.conversationId = undefined
           },
         ),
-        input('Shared conversation ID (optional)', entry.conversationId ?? '', (value) => {
+        input(t('nearby.conversationId'), entry.conversationId ?? '', (value) => {
           entry.conversationId = value || undefined
         }),
-        condition('Visible when true', entry.visibleWhen, (value) => {
+        condition(t('nearby.visibleWhen'), entry.visibleWhen, (value) => {
           entry.visibleWhen = value
         }),
       )
@@ -168,14 +178,14 @@ export function nearbyForm(
       for (const [id, action] of Object.entries(entry.actions))
         form.append(
           group(
-            `Nearby action ${id}`,
-            select(`Requested action for ${id}`, action.action, actionIds, (value) => {
+            t('nearby.action', { id }),
+            select(t('nearby.requestedAction', { id }), action.action, actionIds, (value) => {
               action.action = value
             }),
-            condition(`Enable ${id} when true`, action.enabledWhen, (value) => {
+            condition(t('nearby.enableWhen', { id }), action.enabledWhen, (value) => {
               action.enabledWhen = value
             }),
-            button(`Remove nearby action ${id}`, () => {
+            button(t('nearby.removeAction', { id }), () => {
               delete entry.actions[id]
               dirty = true
               controls.markEdited()
@@ -184,15 +194,15 @@ export function nearbyForm(
           ),
         )
       form.append(
-        input('New nearby action ID', newAction, (value) => {
+        input(t('nearby.newActionId'), newAction, (value) => {
           newAction = value.trim()
         }),
-        button('Add nearby action', () => {
+        button(t('nearby.addAction'), () => {
           if (
             !gameIdSchema.safeParse(newAction).success ||
             Object.hasOwn(entry.actions, newAction)
           ) {
-            error.textContent = 'Choose a unique action ID.'
+            error.textContent = t('nearby.uniqueActionId')
 
             return
           }
@@ -203,7 +213,7 @@ export function nearbyForm(
           controls.markEdited()
           render()
         }),
-        button('Remove nearby target', () => {
+        button(t('nearby.removeTarget'), () => {
           delete draft.entries[selected]
           selected = Object.keys(draft.entries)[0] ?? ''
           dirty = true
@@ -214,12 +224,12 @@ export function nearbyForm(
     }
 
     form.append(
-      input('New nearby target ID', newTarget, (value) => {
+      input(t('nearby.newTargetId'), newTarget, (value) => {
         newTarget = value.trim()
       }),
-      button('Add nearby target', () => {
+      button(t('nearby.addTarget'), () => {
         if (!gameIdSchema.safeParse(newTarget).success || Object.hasOwn(draft.entries, newTarget)) {
-          error.textContent = 'Choose a unique target ID.'
+          error.textContent = t('nearby.uniqueTargetId')
 
           return
         }
@@ -242,10 +252,10 @@ export function nearbyForm(
     )
     const submit = create('button')
     submit.type = 'submit'
-    submit.textContent = 'Save nearby targets'
+    submit.textContent = t('nearby.save')
     form.append(
       submit,
-      button('Discard nearby draft', () => {
+      button(t('nearby.discard'), () => {
         reset()
         onDiscard?.()
       }),
@@ -290,13 +300,13 @@ export function nearbyForm(
   }
 
   const picker = controls.select(
-    'Nearby game scene',
+    t('nearby.gameScene'),
     sceneId,
     sceneChoices(view, 'game'),
     (value) => {
       if (dirty) {
         picker.querySelector('select')!.value = sceneId
-        error.textContent = 'Save or discard the nearby draft before switching scenes.'
+        error.textContent = t('nearby.saveFirst')
 
         return
       }

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vite-plus/test'
 import { GameLoader, resolveText, type GameLanguagePreferences } from '@ancadeba/game-runtime'
 import { gameSchema, languageCatalogSchema, selectLanguage } from '@ancadeba/schemas'
@@ -370,5 +370,40 @@ describe('application localization', () => {
     expect(t('project.load')).toBe('Project openen')
     expect(t('export.ready', { file: 'game.zip' })).toBe('Export gereed: game.zip')
     expect(editorLocalization(['fr']).t('project.load')).toBe('Open project')
+  })
+
+  it('keeps the editor catalogs aligned and defines every message key the editor requests', async () => {
+    const editor = new URL('../apps/editor-ui/', import.meta.url)
+
+    const catalog = async (language: string) =>
+      languageCatalogSchema.parse(
+        JSON.parse(await readFile(new URL(`languages/${language}/messages.json`, editor), 'utf8')),
+      )
+
+    const en = await catalog('en')
+    const nl = await catalog('nl')
+
+    const placeholders = (text: string) =>
+      [...text.matchAll(/\{([a-zA-Z0-9_]+)\}/g)]
+        .map(([, name]) => name ?? '')
+        .sort((a, b) => a.localeCompare(b))
+
+    expect(Object.keys(nl).sort()).toEqual(Object.keys(en).sort())
+
+    for (const [key, text] of Object.entries(en))
+      expect(placeholders(nl[key] ?? ''), key).toEqual(placeholders(text))
+
+    const sources = new URL('src/', editor)
+    const missing: string[] = []
+
+    for (const file of await readdir(sources)) {
+      if (!file.endsWith('.ts')) continue
+      const source = await readFile(new URL(file, sources), 'utf8')
+
+      for (const [, key] of source.matchAll(/\bt\(\s*'([^']+)'/g))
+        if (!Object.hasOwn(en, key!)) missing.push(`${file}: ${key}`)
+    }
+
+    expect(missing).toEqual([])
   })
 })

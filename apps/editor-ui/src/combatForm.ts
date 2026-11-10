@@ -21,7 +21,7 @@ export function combatForm(
   render: () => void,
   creating = false,
 ): HTMLElement[] {
-  const { input, select, group, button, create, translation } = controls
+  const { input, select, group, button, create, translation, t } = controls
   const keys = translationChoices(view)
 
   const fields = (view.rules?.state ?? [])
@@ -54,17 +54,17 @@ export function combatForm(
       descriptionKey?: string | undefined
     },
   ) => [
-    input(scoped(prefix, 'Name'), value.label, (next) => {
+    input(scoped(prefix, t('form.name')), value.label, (next) => {
       value.label = next
     }),
-    translation(scoped(prefix, 'Name translation'), value.labelKey ?? '', keys, (next) => {
+    translation(scoped(prefix, t('form.nameTranslation')), value.labelKey ?? '', keys, (next) => {
       value.labelKey = next || undefined
     }),
-    input(scoped(prefix, 'Description'), value.description, (next) => {
+    input(scoped(prefix, t('metadata.description')), value.description, (next) => {
       value.description = next
     }),
     translation(
-      scoped(prefix, 'Description translation'),
+      scoped(prefix, t('form.descriptionTranslation')),
       value.descriptionKey ?? '',
       keys,
       (next) => {
@@ -76,15 +76,15 @@ export function combatForm(
   const actorForm = (actor: CombatActorDefinition, title: string, ...actions: HTMLElement[]) =>
     group(
       title,
-      input('ID', actor.id, (value) => {
+      input(t('metadata.id'), actor.id, (value) => {
         actor.id = value.trim()
       }),
       ...presentation('', actor),
-      select('Portrait', actor.portrait ?? '', art, (value) => {
+      select(t('form.portrait'), actor.portrait ?? '', art, (value) => {
         actor.portrait = value || undefined
       }),
       select(
-        'Equipment stat owner',
+        t('combat.statOwner'),
         actor.equipmentOwner ?? '',
         [
           '',
@@ -104,11 +104,11 @@ export function combatForm(
           render()
         },
       ),
-      select('Health field', JSON.stringify(actor.health), fields, (value) => {
+      select(t('combat.healthField'), JSON.stringify(actor.health), fields, (value) => {
         actor.health = combatHealthSchema.parse(JSON.parse(value))
       }),
       select(
-        'Maximum health source',
+        t('combat.maxHealthSource'),
         typeof actor.maximumHealth === 'number' ? 'fixed' : 'binding',
         ['fixed', 'binding'],
         (value) => {
@@ -117,16 +117,16 @@ export function combatForm(
         },
       ),
       typeof actor.maximumHealth === 'number'
-        ? number('Maximum health', actor.maximumHealth, (value) => {
+        ? number(t('form.maxHealth'), actor.maximumHealth, (value) => {
             actor.maximumHealth = value
           })
-        : select('Maximum health field', JSON.stringify(actor.maximumHealth), fields, (value) => {
+        : select(t('form.maxHealthField'), JSON.stringify(actor.maximumHealth), fields, (value) => {
             actor.maximumHealth = gameBindingSchema.parse(JSON.parse(value))
           }),
       number('AP', actor.ap, (value) => {
         actor.ap = value
       }),
-      input('Available moves (IDs)', actor.moves.join(', '), (value) => {
+      input(t('combat.availableMoves'), actor.moves.join(', '), (value) => {
         actor.moves = value
           .split(',')
           .map((id) => id.trim())
@@ -135,7 +135,7 @@ export function combatForm(
       ...(actor === draft.player
         ? [
             select(
-              'Leveling profile',
+              t('form.levelingProfile'),
               actor.leveling ?? '',
               ['', ...Object.keys(view.leveling ?? {})],
               (value) => {
@@ -147,14 +147,18 @@ export function combatForm(
             ),
             ...(actor.leveling
               ? actor.moves.map((move) =>
-                  number(`Move ${move} minimum level`, actor.moveLevels?.[move] ?? 1, (value) => {
-                    actor.moveLevels = { ...actor.moveLevels, [move]: value }
-                  }),
+                  number(
+                    t('combat.moveMinLevel', { move }),
+                    actor.moveLevels?.[move] ?? 1,
+                    (value) => {
+                      actor.moveLevels = { ...actor.moveLevels, [move]: value }
+                    },
+                  ),
                 )
               : []),
           ]
         : [
-            input('Rotation (IDs)', actor.rotation.join(', '), (value) => {
+            input(t('combat.rotation'), actor.rotation.join(', '), (value) => {
               actor.rotation = value
                 .split(',')
                 .map((id) => id.trim())
@@ -164,7 +168,7 @@ export function combatForm(
       ...actions,
     )
 
-  const identity = input('Encounter ID', draft.id, (value) => {
+  const identity = input(t('combat.encounterId'), draft.id, (value) => {
     if (creating) draft.id = value.trim()
   })
 
@@ -172,37 +176,37 @@ export function combatForm(
 
   const result: HTMLElement[] = [
     identity,
-    ...presentation('Encounter', draft),
-    number('Encounter seed', draft.seed, (value) => {
+    ...presentation(t('form.encounter'), draft),
+    number(t('combat.seed'), draft.seed, (value) => {
       draft.seed = value
     }),
-    number('Round world-time cost (ms)', draft.roundTimeMs, (value) => {
+    number(t('combat.roundCost'), draft.roundTimeMs, (value) => {
       draft.roundTimeMs = value
     }),
-    number('Combat log capacity', draft.logCapacity, (value) => {
+    number(t('combat.logCapacity'), draft.logCapacity, (value) => {
       draft.logCapacity = value
     }),
     select(
-      'Allow escape',
+      t('combat.allowEscape'),
       String(draft.allowEscape),
       [
-        ['false', 'No'],
-        ['true', 'Yes'],
+        ['false', t('form.no')],
+        ['true', t('form.yes')],
       ],
       (value) => {
         draft.allowEscape = value === 'true'
       },
     ),
     combatItemUseForm(controls, view, draft, render),
-    actorForm(draft.player, 'Player'),
+    actorForm(draft.player, t('form.player')),
   ]
 
   draft.enemies.forEach((actor, index) =>
     result.push(
       actorForm(
         actor,
-        `Enemy ${index + 1}`,
-        button(`Remove enemy ${index + 1}`, () => {
+        t('combat.enemyNumber', { number: index + 1 }),
+        button(t('combat.removeEnemy', { number: index + 1 }), () => {
           draft.enemies.splice(index, 1)
           controls.markEdited()
           render()
@@ -211,7 +215,7 @@ export function combatForm(
     ),
   )
   result.push(
-    button('Add enemy', () => {
+    button(t('combat.addEnemy'), () => {
       let id = 'enemy'
       let index = 1
 
@@ -250,12 +254,12 @@ export function combatForm(
   )
   result.push(
     group(
-      'Outcome destinations',
+      t('combat.outcomeDestinations'),
       ...(['victory', 'defeat', 'escaped'] as const).map((outcome) =>
         select(
-          `${humanizeCode(outcome)} destination`,
+          t('combat.outcomeDestination', { outcome: humanizeCode(outcome) }),
           draft.outcomes[outcome] ?? '',
-          [['', 'Not set'], ...sceneChoices(view)],
+          [['', t('combat.notSet')], ...sceneChoices(view)],
           (value) => {
             draft.outcomes[outcome] = value || undefined
           },
@@ -267,18 +271,18 @@ export function combatForm(
   result.push(combatStatusesForm(controls, view, draft, render))
   const messages = create('details')
   const summary = create('summary')
-  summary.textContent = 'Combat text and translations'
+  summary.textContent = t('combat.texts')
   messages.append(summary)
 
   for (const code of combatTextSchema.keyof().options)
     messages.append(
       group(
         humanizeCode(code),
-        input(`${humanizeCode(code)} text`, draft.messages[code], (value) => {
+        input(t('combat.codeText', { code: humanizeCode(code) }), draft.messages[code], (value) => {
           draft.messages[code] = value
         }),
         translation(
-          `${humanizeCode(code)} translation`,
+          t('combat.codeTranslation', { code: humanizeCode(code) }),
           draft.messageKeys[code] ?? '',
           keys,
           (value) => {
