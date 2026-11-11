@@ -152,8 +152,72 @@ errors retain the existing file API's status and error-message conventions.
 | 500    | Storage or cleanup failure                        |
 
 Project inspection reports malformed JSON and missing referenced files as
-diagnostics. A missing project manifest is a 404. Commands require a valid
-project; repair invalid source files externally before retrying.
+diagnostics. An existing folder without a manifest opens for recovery; a missing
+folder remains a 404. Commands require a valid
+project; use the repair panel below to correct invalid source files before retrying.
+
+## Repairing invalid projects
+
+Opening a project with diagnostics shows **Repair project** above the normal
+editing forms, even when `game.json` cannot be parsed. Select a **Project file**
+to see its original JSON or CSS and file-specific diagnostics. Referenced missing
+files appear as missing entries and can be created by supplying their contents.
+When the manifest itself is damaged, repair it first; saving it discovers the
+definitions referenced by the corrected manifest.
+
+Folders containing recognizable game-resource directories remain in the project
+list with a **missing game.json — recover** label. Open one normally, or choose
+**Recover project** to enter another existing workspace-relative folder path.
+Leave the path blank for the workspace root. Inspection never creates folders or
+files, and opening recovery uses the usual unsaved-draft guard.
+
+In **Repair project**, paste a backup into the missing `game.json` entry, or choose
+**Generate manifest draft**. The draft lists surviving scene, map, inventory, rule,
+story, leveling, and combat JSON filenames. It selects an asset catalogue, input
+file, or root stylesheet only when there is exactly one candidate, and includes
+language directories. It may include unused definitions; review references,
+game ID, title, version, and startup scene before checking and saving. Original
+metadata and the intended startup scene cannot be reconstructed from filenames.
+Ambiguous references can be edited directly. Generating a draft never writes
+files or replaces an existing repair draft.
+
+**Check repair** previews the selected manifest against surviving resources.
+**Save repair** creates only `game.json` and leaves all other files unchanged.
+If another client creates the manifest first, recovery refuses to overwrite it.
+Undo removes the newly recovered manifest and returns to recovery; Redo restores
+it. Missing-manifest views include `recoveryManifest`, an optional suggested JSON
+text, and discovery entries use `missingManifest: true`. Recovery uses the same
+revision-checked repair endpoints and draft recovery as other repairs.
+
+Edit **Repair source**, then choose **Check repair**. This reads a candidate project
+without writing files and previews all remaining diagnostics, including problems
+revealed by new manifest references. **Save repair** becomes available after a
+check; further typing requires another check. JSON must be syntactically valid,
+but schema and reference problems may be fixed incrementally. The save button
+shows when problems remain. Ordinary authoring resumes when diagnostics are clear.
+Image source bytes can be replaced through Assets; the repair panel edits the
+catalogue and other text definitions.
+Multiple missing or invalid images can be replaced one at a time in Assets.
+Each replacement must validate; diagnostics for other broken images remain until
+they are repaired. Unused broken images can also be removed incrementally.
+
+Repairs retain exact submitted text, use the inspected revision, and participate
+in shared Undo/Redo. Undo restores even malformed original bytes or removes a
+newly created missing definition. Conflicts and failed saves keep the repair
+draft. **Reload latest (keep entries)** preserves its text and updates the saved
+source available for comparison; check the draft again before saving. Repair
+drafts also participate in browser draft recovery, close warnings, and export's
+unsaved-changes warning.
+
+`POST /api/editor/repair/check` and `POST /api/editor/repair` accept
+`{ path, expectedRevision, file, text }`. Check returns `{ revision, diagnostics }`;
+save returns the updated `ProjectView`. An invalid project's view includes
+`repairFiles`, mapping inspected definition paths to original text or `null` for
+missing files. Only those paths are eligible for repair, with a 4 MiB text limit.
+Both operations recheck revisions; writes use guarded publication and history.
+The server advertises `features.projectRepair` when this support is available.
+A post-save reread failure reports `repair_save_uncertain` and asks callers to
+reload and inspect before retrying.
 
 ## Revisions and persistence
 
@@ -163,8 +227,10 @@ They survive server restarts and detect direct file edits, including
 formatting changes. Unreferenced files do not affect the revision. Asset catalogues
 and all registered image source bytes do affect it. Inspection validates source
 bounds, format, SVG profile, and color-slot declarations. Replacing or unregistering
-an unused broken image is permitted as a targeted repair; the resulting project
-must be valid.
+unused broken images is permitted incrementally; existing source diagnostics for
+other images may remain. A repaired image and all structural references must validate.
+While the manifest is missing, the recovery revision also covers its suggested
+reference list, so discovering different candidate filenames requires a fresh check.
 
 Server commands and raw file-API writes use one queue per server. Competing
 commands based on the same revision cannot overwrite each other silently.
@@ -196,10 +262,36 @@ Referenced definitions must have their incoming links removed before deletion.
 
 ## Visual editor
 
+The editor keeps local recovery copies of unsaved drafts, including maps, gameplay
+definitions, components, localization, stylesheets, and metadata. Copies are scoped
+to the project and browser tab. After reopening the editor at the same address,
+open the same project and choose **Restore drafts** or **Discard recovery copy**
+in the project explorer. Restoring never saves game files automatically; save each
+edited section when ready. Successful saves and explicit draft discards clear that
+tab's recovery copy once no unsaved work remains.
+
+Recovered drafts retain their original project revision. If saved files changed
+since the copy was made, the editor reports the change and revision checks prevent
+an overwrite. Review the newer files with **Reload latest (keep entries)** before
+deliberately saving recovered edits. Other tabs' recovery copies remain separate.
+
+Closing or reloading the browser with unsaved edits requests the browser's normal
+leave-page warning. Recovery is checkpointed during editing and when hiding or
+leaving the page. Browser storage can be unavailable or full; the editor reports
+that condition and still requests the warning. Recovery is local to this browser
+and address. Image import form entries are recoverable, but selected image files
+must be chosen again after reopening. Map recovery keeps the painted draft and
+pending fields; it starts a new local undo history from the saved map.
+
 The editor starts with only the Project explorer visible. Select an existing game
 and choose Open project. The folder and load controls collapse after opening a
 project, and the navigation tree remains visible. Use Open another project to
 show the folder controls again.
+
+Choosing **Play** with unsaved edits asks whether to preview the saved files.
+Cancelling keeps the drafts and does not load a game. Continuing leaves drafts
+intact and previews only saved content. Automatic refreshes of an already-running
+preview continue to use saved files without showing this start confirmation again.
 
 Choose **New project** beside **Open project** to create a game, including when the
 workspace is empty. Enter a title, a new folder name, and an optional description.
@@ -445,6 +537,18 @@ ID** and **Add terrain**. Set its color, walkability, and movement time in
 milliseconds. Removing a terrain replaces its painted cells with the selected
 replacement terrain; the last terrain cannot be removed.
 
+During play, each completed tile step advances the progression turn counter once,
+including steps with zero movement time. The destination terrain's movement time
+also advances action-driven world time. Code-hosted elapsed mode uses elapsed host
+time instead; hybrid mode adds both. Position, progression, and the Rules clock
+update together before movement observers or tile-entry actions run, so logs use
+the arrival time. Blocked or cancelled steps consume no movement turn or time cost;
+elapsed time can still pass. Spawning, returning, explicit entrance placement, and
+loading saved positions add no step charge. An exit's Rules travel-time effect is
+an additional authored cost. Map steps leave actor roster turns and phases alone.
+Text and status panels can display `game.progression` fields `turn` and
+`worldTimeMs`; saved progress preserves both counters with the player's position.
+
 For image tiles, import a PNG, WebP, JPEG, or SVG image in **Assets**, then return
 to **Maps**. In **Tilesets**, enter a **New tileset ID** and choose **Add tileset**.
 Select its **Tileset image** and set **Tile width (pixels)** and **Tile height
@@ -574,6 +678,129 @@ Saved maps retain their original `tiles` grid as Ground. Optional `layers` store
 up to 32 overlays in draw order, each with a unique `id`, optional `name`,
 `visible` and `collision` flags, and a matching grid of terrain IDs or `null`
 for empty cells. Existing single-layer maps need no conversion.
+
+In **Tile-entry triggers**, choose **Add tile-entry trigger**, set a unique
+**Trigger ID**, zero-based **Trigger tile X/Y**, and an **Entry action** saved in
+**Rules**. The editor starts each trigger on an unused walkable tile. Each tile
+can have one trigger. To create an exit, give its Rules action an **Enter scene**
+effect. Normal action conditions support scene-specific exits and one-time events.
+The grid shows a **T** badge on every trigger tile; its tooltip includes the
+trigger ID, action, and zero-based coordinates. Choose **Edit tile-entry triggers**
+above the grid, or **Paint tool → Tile-entry triggers**, then click a tile to
+add a trigger or focus its existing fields. The selected tile and trigger form
+are highlighted together. Arrow keys navigate and **Enter/Space** opens a tile;
+**Escape** returns to painting. Dragging in trigger mode does not paint or create
+more triggers. New triggers require a walkable tile and a saved Rules action.
+Editing the ID, coordinates, or action updates the grid immediately. Undo/Redo,
+removal, and draft recovery also update the badges.
+Triggers run after a completed step, including terrain delays, and run again on
+later re-entry. Spawning, returning to a scene, and loading a save do not activate
+them. Cancelled steps and requests from a scene that has been left do not activate
+them either. Trigger edits support draft recovery and map undo/redo. When shrinking
+a map, move or remove any triggers that fall outside its new bounds before saving.
+
+To connect an exit to a particular entrance, edit its **Enter scene** effect in
+**Rules**, select the **Destination scene** and its map under **Charge time from
+map view**, then set **Place player at destination tile → Yes** and enter
+**Destination tile X/Y**. Coordinates start at zero and must identify a walkable
+tile on an interactive map with a player spawn. The selected view arrives at that
+tile even if the player previously visited a different location there; other map
+views keep their remembered positions. Arrival does not activate a tile trigger,
+so opposing exits do not automatically bounce the player between scenes. Rules
+travel time uses the destination tile's terrain. Choose **No** to preserve normal
+resume/spawn behavior; existing Rules effects with a map selected still charge
+time using its spawn terrain. Scene buttons and action-bar **Enter scene** actions
+offer the same entrance coordinates under **Destination map view**.
+Navigation buttons and action-bar slots disable while their destination tile is
+blocked by the current object state, and explain the unavailable destination in
+their tooltip. They update when flags change and recheck collision on activation.
+
+Use **Place or edit map objects** above the grid, or **Paint tool → Map objects**,
+to place an object by clicking a tile. Click an **O** badge to edit an existing
+object. Keyboard users can navigate with arrows and open a tile with Enter/Space;
+Escape returns to painting. New blocking objects cannot be placed directly on a
+player spawn through the grid. The **Map objects** section also offers **Add map
+object** and **Remove map object**. Set its **Object label**, **Object appearance
+terrain**, **Object action**, and zero-based **Object tile X/Y**. Create and save
+the Rules action first. Its appearance uses a terrain color or image tile; the
+separate **Object blocks movement** setting defaults to Yes. Permanently blocking
+objects invalidate spawns, tile-entry triggers, and scene entrances on their tile.
+
+Under each object's **Object states**, use **Add object state** after saving a
+boolean state field in Rules. Choose its flag and required value, then override
+the appearance terrain, label, blocking setting, or visibility. Each state needs a unique ID
+and at least one override. Blank labels and **Use object default** selections
+inherit the base object. Move states up/down to set priority: only the first
+matching state applies. No match uses the base object. The grid shows the base
+appearance for all objects, including hidden ones; use the game preview to exercise
+the live states. **Object visible** sets base visibility (Yes by default).
+**State visible** can inherit that setting or explicitly show/hide the object.
+Hidden objects disappear during play, stop blocking movement, and are excluded
+from automatic and explicit interaction targets. Already queued interactions
+recheck visibility before running. This allows a collected pickup to disappear
+by setting its collected flag and matching a state with **State visible → No**;
+no separate blocking override is needed. Visibility-only states are valid.
+
+State changes immediately repaint the object and update movement controls.
+Nonblocking objects still respect underlying ground and collision layers. A
+spawn must be walkable using the initial Rules flags, while scene entrances use
+their current values. Tile-entry triggers may share conditionally passable tiles.
+If a destination becomes blocked during a timed step, the step is cancelled on
+arrival and its trigger does not run. A player already on a newly blocked tile
+can leave it and can save/load there. States participate in map saving,
+Undo/Redo, and draft recovery; removing or changing the type of a referenced
+Rules flag is rejected until its object states are updated.
+
+Players can click or keyboard-activate an adjacent object's map button. Add an
+**Interact with map object** action to a scene button or action-bar slot to expose
+a separate control, then choose its map view and **Interaction target**. The
+automatic **Only adjacent object** option works when exactly one object is one
+tile north, east, south, or west of the player. Choose a specific target or click
+the object when several are nearby. Interaction never activates from a diagonal,
+the same tile, or during movement. Bind an action-bar Interact slot to a virtual
+input to provide an E key or another authored keyboard binding. The action's
+payload is the object ID, available in Rules target conditions. State conditions
+can make an action one-time. Undo/Redo and draft recovery include object edits.
+
+The `square-map` sample connects Coast Road and Pine Village with gold exit
+tiles. From the coast spawn, move west once and north twice to visit the village,
+then west once to return. Its [sample guide](../sample-games/square-map/README.md)
+lists both exit tiles, destination coordinates, and the map and Rules files to
+inspect in the editor.
+
+The sample also places a signpost north of the coast spawn and a chest north of
+`(2, 4)` in Pine Village. Press **E** at the coast spawn to read the sign; from the
+village entrance, move east once and press E for the chest's one-time 25-coin
+reward. Both scenes expose an **Interact** slot and bound feedback text. Inspect
+`rules/interactions.json` for the object-target conditions, collected flag, and
+empty-chest branch, and `input/movement.json` for the shared E binding. The chest's
+**Object states** entry uses `chestOpened` to select an open sprite and allow
+walking onto its tile. Closed/open artwork comes from `assets/chests.svg`.
+The purple berry basket at `(4, 5)` uses a visibility-only state. Move three tiles
+east from the village entrance to `(4, 4)` and press **E** to collect three berries.
+The basket disappears, and its tile becomes passable. `berriesCollected` and
+the three berry inventory items persist across scene visits and saves; a new game
+restores the pickup and returns the items to their starting container.
+
+To author an inventory pickup, define its item instances and destination owner in
+Inventory first. Keep uncollected items with a world owner or inside a world
+container. In the object's Rules action, add an effect and choose **Collect
+inventory items**. Select **Destination owner** (usually `player`) and add one or
+more **Pickup item** entries. Select each instance once. Add **Set state** for the
+collected flag in the same branch, and hide the object when that flag is true.
+
+Collection moves the finite instances into the recipient's carried inventory.
+Every item must be available and not already owned by the recipient. If one item
+is missing, reserved, or cannot transfer, nothing transfers and the state/log
+effects do not run; the pickup remains available to retry. Inventory observers
+see both the complete reward and updated flags. Each branch permits one inventory
+operation or scene transition, plus state/log effects. Quest transactions cannot
+be mixed with collection effects in the same branch.
+
+The berry sample uses `inventory/supplies.json`: `berry-1`, `berry-2`, and `berry-3`
+start inside `berry-basket`, owned by the village. `collect-berries` transfers them
+to `player` and sets `berriesCollected`. Both sample scenes show the player's
+**Backpack** so the three **Wild berry** entries are visible after collection.
 
 Choose **Create map** or **Save map** to persist the draft. Pending dimensions are
 applied during saving too. Save or discard a draft before switching maps or
@@ -738,7 +965,10 @@ original revision and show that saved files changed. Draft state is checked when
 the background read completes, so text entered during that read is preserved.
 Background reads do not block saves and cannot replace a newer save or project load.
 
-Preview and export read saved files. Accepting a changed revision through a save,
+Preview and export read saved files. Export warns when any editor has unsaved
+drafts: cancel to save them first, or confirm to export the last saved version.
+Cancelling keeps the current drafts and any previous download available.
+Accepting a changed revision through a save,
 undo/redo, reload, or clean background refresh restarts a running or loading preview
 with a fresh playthrough. This applies to every authored resource, including story,
 leveling, and combat libraries. Unchanged reads and external changes held back by

@@ -7,8 +7,9 @@ import {
   type EditorCommand,
   type ProjectView,
 } from '@ancadeba/editor-core'
-import { assetCatalogSchema, mapDefinitionSchema } from '@ancadeba/schemas'
+import { assetCatalogSchema, mapDefinitionSchema, sceneComponentSchema } from '@ancadeba/schemas'
 import { MapDraft } from '../apps/editor-ui/src/mapDraft.js'
+import { captureEditorDrafts, restoreEditorDrafts } from '../apps/editor-ui/src/editorDraftState.js'
 import { bindMapEditor } from '../apps/editor-ui/src/mapEditor.js'
 import { mapConfirmation } from '../apps/editor-ui/src/mapConfirmation.js'
 import { mapFileNodes } from '../apps/editor-ui/src/projectTree.js'
@@ -288,6 +289,593 @@ describe('map drafts', () => {
 })
 
 describe('visual map editor', () => {
+  const triggerView = (): ProjectView => {
+    const draft = new MapDraft()
+    draft.resize(3, 3, 'ground')
+    draft.paint(1, 0, 'wall')
+    draft.data.entryTriggers = [
+      { id: 'depart', x: 0, y: 0, action: 'travel' },
+      { id: 'return', x: 2, y: 2, action: 'inspect' },
+    ]
+
+    return {
+      ...view,
+      game: { ...view.game!, maps: ['gates'] },
+      maps: { gates: draft.data },
+      rules: {
+        state: [],
+        actions: { travel: [{ when: [], effects: [] }], inspect: [{ when: [], effects: [] }] },
+      },
+      scenes: view.scenes.map((scene) =>
+        scene.type === 'game'
+          ? {
+              ...scene,
+              components: [
+                ...scene.components,
+                sceneComponentSchema.parse({
+                  type: 'map-view',
+                  id: 'gate-view',
+                  map: 'gates',
+                  label: 'Gates',
+                  placement: { row: 1, column: 1 },
+                  viewport: { columns: 3, rows: 3 },
+                  playerSpawn: { x: 0, y: 0 },
+                }),
+              ],
+            }
+          : scene,
+      ),
+    }
+  }
+
+  const hasMarker = (tile: Element) =>
+    tile.all().some((element) => element.className === 'map-entry-trigger-marker')
+
+  it('authors visibility-only object states, keeps hidden objects editable and recovers visibility drafts', async () => {
+    const view = triggerView()
+    view.rules!.state = [{ path: ['collected'], value: false }]
+    const ui = setup(view)
+    const recovered = setup(view)
+
+    try {
+      ui.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      ui.edit('Object visible', 'no', 'change')
+      expect(
+        ui
+          .tile(1, 1)
+          .all()
+          .some((element) => element.dataset.mapObject === 'object'),
+      ).toBe(true)
+      ui.button('Add object state').dispatchEvent(new Event('click'))
+      ui.edit('Object state ID', 'collected')
+      ui.edit('State appearance terrain', '', 'change')
+      ui.edit('State visible', 'false', 'change')
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: {
+          objects: [
+            {
+              visible: false,
+              states: [
+                { id: 'collected', when: { path: ['collected'], value: true }, visible: false },
+              ],
+            },
+          ],
+        },
+      })
+      ui.edit('Object state ID', '')
+      expect(
+        restoreEditorDrafts(
+          recovered.root.asElement(),
+          JSON.parse(JSON.stringify(captureEditorDrafts(ui.root.asElement()))),
+        ),
+      ).toEqual([])
+      expect(recovered.control('Object visible').value).toBe('no')
+      expect(recovered.control('State visible').value).toBe('false')
+      recovered.edit('Object state ID', 'reveal')
+      recovered.edit('State visible', 'true', 'change')
+      await recovered.submit()
+      expect(recovered.saved[0]).toMatchObject({
+        map: { objects: [{ states: [{ id: 'reveal', visible: true }] }] },
+      })
+      recovered.edit('State label override', 'Inherited visibility')
+      recovered.edit('State visible', '', 'change')
+      recovered.editor.restoreDraft('undo')
+      expect(recovered.control('State visible').value).toBe('true')
+      recovered.editor.restoreDraft('redo')
+      expect(recovered.control('State visible').value).toBe('')
+      await recovered.submit()
+      expect(recovered.saved.at(-1)).toMatchObject({
+        map: { objects: [{ states: [{ id: 'reveal', label: 'Inherited visibility' }] }] },
+      })
+      const saved = recovered.saved.at(-1)!
+      expect(
+        saved.type === 'game.upsertMap' && saved.map.objects![0]!.states![0]!.visible,
+      ).toBeUndefined()
+    } finally {
+      ui.editor.dispose()
+      recovered.editor.dispose()
+    }
+  })
+
+  it('authors ordered boolean object states, recovers incomplete state drafts and undoes removal', async () => {
+    const view = triggerView()
+    view.rules!.state = [{ path: ['opened'], value: false }]
+    const ui = setup(view)
+    const recovered = setup(view)
+
+    try {
+      ui.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      ui.button('Add object state').dispatchEvent(new Event('click'))
+      ui.edit('Object state ID', 'open')
+      ui.edit('State appearance terrain', 'wall', 'change')
+      ui.edit('State label override', 'Open chest')
+      ui.edit('State blocks movement', 'false', 'change')
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: {
+          objects: [
+            {
+              states: [
+                {
+                  id: 'open',
+                  when: { path: ['opened'], value: true },
+                  terrain: 'wall',
+                  label: 'Open chest',
+                  blocking: false,
+                },
+              ],
+            },
+          ],
+        },
+      })
+      ui.edit('Object state ID', '')
+      expect(
+        restoreEditorDrafts(
+          recovered.root.asElement(),
+          JSON.parse(JSON.stringify(captureEditorDrafts(ui.root.asElement()))),
+        ),
+      ).toEqual([])
+      expect(recovered.control('Object state ID').value).toBe('')
+      recovered.edit('Object state ID', 'restored')
+      recovered.button('Add object state').dispatchEvent(new Event('click'))
+      recovered.button('Move object state down').dispatchEvent(new Event('click'))
+      expect(recovered.control('Object state ID').value).toBe('state')
+      recovered.button('Remove object state').dispatchEvent(new Event('click'))
+      expect(recovered.control('Object state ID').value).toBe('restored')
+      recovered.editor.restoreDraft('undo')
+      expect(recovered.control('Object state ID').value).toBe('state')
+      await recovered.submit()
+      expect(recovered.saved[0]).toMatchObject({
+        map: { objects: [{ states: [{ id: 'state' }, { id: 'restored' }] }] },
+      })
+    } finally {
+      ui.editor.dispose()
+      recovered.editor.dispose()
+    }
+  })
+
+  it('requires a boolean Rules flag before adding object states and replaces state-only terrain references', () => {
+    const ui = setup(triggerView())
+
+    try {
+      ui.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      expect(ui.button('Add object state').disabled).toBe(true)
+      const model = new MapDraft()
+      model.addTerrain('open-art')
+      model.data.objects = [
+        {
+          id: 'chest',
+          label: 'Chest',
+          terrain: 'ground',
+          action: 'inspect',
+          x: 1,
+          y: 1,
+          states: [{ id: 'open', when: { path: ['opened'], value: true }, terrain: 'open-art' }],
+        },
+      ]
+      expect(() => model.removeTerrain('open-art')).toThrow('replacementRequired')
+      model.removeTerrain('open-art', 'ground')
+      expect(model.data.objects[0]!.states![0]!.terrain).toBe('ground')
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('places and edits map objects on the grid, recovers unfinished fields and restores removal through undo', async () => {
+    const ui = setup(triggerView())
+    const recovered = setup(triggerView())
+
+    try {
+      ui.edit('Paint terrain', 'wall', 'change')
+      ui.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      expect(ui.document.activeElement?.value).toBe('object')
+      expect(ui.control('Paint tool').value).toBe('object')
+      ui.edit('Object label', 'Chest')
+      ui.edit('Object action', 'inspect', 'change')
+      expect(ui.tile(1, 1).title).toContain('Chest')
+      expect(
+        ui
+          .tile(1, 1)
+          .all()
+          .some((node) => node.dataset.mapObject === 'object'),
+      ).toBe(true)
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: {
+          objects: [
+            {
+              id: 'object',
+              label: 'Chest',
+              x: 1,
+              y: 1,
+              terrain: 'wall',
+              action: 'inspect',
+              blocking: true,
+            },
+          ],
+        },
+      })
+      ui.edit('Object label', '')
+      expect(
+        restoreEditorDrafts(
+          recovered.root.asElement(),
+          JSON.parse(JSON.stringify(captureEditorDrafts(ui.root.asElement()))),
+        ),
+      ).toEqual([])
+      expect(recovered.control('Paint tool').value).toBe('object')
+      expect(recovered.control('Object label').value).toBe('')
+      recovered.edit('Object label', 'Recovered chest')
+      recovered.button('Remove map object').dispatchEvent(new Event('click'))
+      expect(
+        recovered
+          .tile(1, 1)
+          .all()
+          .some((node) => node.dataset.mapObject === 'object'),
+      ).toBe(false)
+      recovered.editor.restoreDraft('undo')
+      expect(recovered.tile(1, 1).title).toContain('Recovered chest')
+      recovered.editor.restoreDraft('redo')
+      await recovered.submit()
+      expect(recovered.saved[0]).toMatchObject({ map: { objects: [] } })
+    } finally {
+      ui.editor.dispose()
+      recovered.editor.dispose()
+    }
+  })
+
+  it('requires saved actions for new objects and protects spawn tiles during grid placement', () => {
+    const ui = setup(triggerView())
+    const empty = setup()
+
+    try {
+      ui.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      ui.tile(0, 0).dispatchEvent(new Event('click'))
+      expect(ui.root.textContent).toContain('Choose a tile away from player spawns')
+      expect(ui.editor.hasDrafts()).toBe(false)
+      empty.button('Place or edit map objects').dispatchEvent(new Event('click'))
+      empty.tile(1, 1).dispatchEvent(new Event('click'))
+      expect(empty.root.textContent).toContain('Create and save an action in Rules')
+      expect(empty.button('Add map object').disabled).toBe(true)
+      const model = new MapDraft()
+      model.addTerrain('object-art')
+      model.data.objects = [
+        { id: 'art', label: 'Art', terrain: 'object-art', action: 'inspect', x: 1, y: 1 },
+      ]
+      expect(() => model.removeTerrain('object-art')).toThrow('replacementRequired')
+      model.removeTerrain('object-art', 'ground')
+      expect(model.data.objects[0]!.terrain).toBe('ground')
+    } finally {
+      ui.editor.dispose()
+      empty.editor.dispose()
+    }
+  })
+
+  it('shows trigger badges with action details alongside spawn markers and opens existing triggers without dirtying the map', async () => {
+    const ui = setup(triggerView())
+
+    try {
+      expect(hasMarker(ui.tile(0, 0))).toBe(true)
+      expect(
+        ui
+          .tile(0, 0)
+          .all()
+          .some((element) => element.className === 'map-spawn-marker'),
+      ).toBe(true)
+      expect(ui.tile(0, 0).title).toContain('Trigger depart: travel, zero-based tile (0, 0)')
+      expect(ui.tile(2, 2).attributes.get('aria-label')).toContain('Trigger return: inspect')
+      ui.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+      expect(ui.control('Paint tool').value).toBe('trigger')
+      ui.tile(2, 2).dispatchEvent(new Event('click'))
+      expect(ui.document.activeElement?.value).toBe('return')
+      expect(ui.tile(2, 2).attributes.get('aria-selected')).toBe('true')
+      expect(ui.editor.hasDrafts()).toBe(false)
+      expect(ui.editor.draftHistory().canUndo).toBe(false)
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: { entryTriggers: [{ id: 'depart' }, { id: 'return' }] },
+      })
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('adds exactly one trigger with a pointer gesture without painting, dragging or duplicating an existing trigger', async () => {
+    const current = triggerView()
+    current.maps!.gates!.entryTriggers = []
+    const ui = setup(current)
+
+    try {
+      ui.edit('Paint terrain', 'wall', 'change')
+      ui.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+      ui.tile(1, 2).dispatchEvent(
+        Object.assign(new Event('pointerdown', { cancelable: true }), { button: 0, pointerId: 1 }),
+      )
+      ui.tile(2, 1).dispatchEvent(Object.assign(new Event('pointerenter'), { buttons: 1 }))
+      ui.document.dispatchEvent(new Event('pointerup'))
+      ui.tile(1, 2).dispatchEvent(Object.assign(new Event('click'), { detail: 1 }))
+      expect(ui.control('Trigger tile X').value).toBe('1')
+      expect(ui.control('Trigger tile Y').value).toBe('2')
+      expect(ui.tile(1, 2).attributes.get('aria-label')).toContain('ground')
+      expect(ui.tile(2, 1).attributes.get('aria-label')).toContain('ground')
+      expect(hasMarker(ui.tile(2, 1))).toBe(false)
+      ui.tile(1, 2).dispatchEvent(new Event('click'))
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: { entryTriggers: [{ id: 'entry', x: 1, y: 2, action: 'travel' }] },
+      })
+      ui.editor.restoreDraft('undo')
+      expect(hasMarker(ui.tile(1, 2))).toBe(false)
+      expect(ui.editor.hasDrafts()).toBe(false)
+      ui.editor.restoreDraft('redo')
+      expect(hasMarker(ui.tile(1, 2))).toBe(true)
+      ui.button('Remove tile-entry trigger').dispatchEvent(new Event('click'))
+      expect(hasMarker(ui.tile(1, 2))).toBe(false)
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('updates markers immediately after form edits and restores the selected trigger through draft recovery', () => {
+    const ui = setup(triggerView())
+    const recovered = setup(triggerView())
+
+    try {
+      ui.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+      ui.tile(0, 0).dispatchEvent(new Event('click'))
+      ui.edit('Trigger ID', 'new-exit')
+      ui.edit('Trigger tile X', '1')
+      ui.edit('Trigger tile Y', '2')
+      ui.edit('Entry action', 'inspect', 'change')
+      expect(hasMarker(ui.tile(0, 0))).toBe(false)
+      expect(ui.tile(1, 2).title).toContain('Trigger new-exit: inspect, zero-based tile (1, 2)')
+      expect(ui.tile(1, 2).attributes.get('aria-selected')).toBe('true')
+      ui.edit('Trigger ID', '')
+      const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(ui.root.asElement())))
+      expect(restoreEditorDrafts(recovered.root.asElement(), drafts)).toEqual([])
+      expect(recovered.control('Paint tool').value).toBe('trigger')
+      expect(recovered.tile(1, 2).title).toContain('inspect')
+      recovered.tile(1, 2).dispatchEvent(new Event('click'))
+      expect(recovered.document.activeElement?.value).toBe('')
+      expect(recovered.control('Trigger tile X').value).toBe('1')
+      expect(recovered.tile(1, 2).attributes.get('aria-selected')).toBe('true')
+    } finally {
+      ui.editor.dispose()
+      recovered.editor.dispose()
+    }
+  })
+
+  it('supports arrow navigation and Enter/Space activation, suppresses tile clipboard shortcuts, and exits trigger mode with Escape', async () => {
+    const ui = setup(triggerView())
+
+    const press = (x: number, y: number, key: string, extra: Record<string, boolean> = {}) => {
+      const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...extra })
+      ui.tile(x, y).dispatchEvent(event)
+
+      return event
+    }
+
+    try {
+      ui.edit('Paint tool', 'trigger', 'change')
+      ui.tile(0, 1).focus()
+      press(0, 1, 'ArrowRight', { shiftKey: true })
+      expect(ui.document.activeElement).toBe(ui.tile(1, 1))
+      press(1, 1, 'Enter')
+      expect(ui.document.activeElement?.value).toBe('entry')
+      expect(hasMarker(ui.tile(1, 1))).toBe(true)
+      expect(press(1, 1, 'x', { ctrlKey: true }).defaultPrevented).toBe(true)
+      press(2, 2, ' ')
+      expect(ui.document.activeElement?.value).toBe('return')
+      press(2, 2, 'Escape')
+      expect(ui.control('Paint tool').value).toBe('paint')
+      expect(hasMarker(ui.tile(1, 1))).toBe(true)
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        map: { entryTriggers: [{ id: 'depart' }, { id: 'return' }, { id: 'entry', x: 1, y: 1 }] },
+      })
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('rejects new triggers on blocked ground or collision layers and requires Rules while allowing existing triggers to be edited', () => {
+    const current = triggerView()
+    current.maps!.gates!.layers = [
+      {
+        id: 'objects',
+        tiles: [
+          [null, null, null],
+          [null, 'wall', null],
+          [null, null, null],
+        ],
+      },
+    ]
+    const ui = setup(current)
+    const withoutRules = setup({ ...current, rules: { state: [], actions: {} } })
+
+    try {
+      ui.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+
+      for (const [x, y] of [
+        [1, 0],
+        [1, 1],
+      ]) {
+        ui.tile(x!, y!).dispatchEvent(new Event('click'))
+        expect(ui.root.textContent).toContain('Choose a walkable tile')
+        expect(ui.editor.hasDrafts()).toBe(false)
+      }
+
+      withoutRules.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+      withoutRules.tile(0, 2).dispatchEvent(new Event('click'))
+      expect(withoutRules.root.textContent).toContain('Create and save an action in Rules')
+      expect(withoutRules.editor.hasDrafts()).toBe(false)
+      withoutRules.tile(2, 2).dispatchEvent(new Event('click'))
+      expect(withoutRules.document.activeElement?.value).toBe('return')
+      expect(withoutRules.editor.hasDrafts()).toBe(false)
+    } finally {
+      ui.editor.dispose()
+      withoutRules.editor.dispose()
+    }
+  })
+
+  it('edits map triggers independently of hidden paint layers and keeps badges through zoom while respecting busy state', () => {
+    const current = triggerView()
+    current.maps!.gates!.layers = [
+      {
+        id: 'hidden',
+        visible: false,
+        tiles: [
+          [null, null, null],
+          [null, 'wall', null],
+          [null, null, null],
+        ],
+      },
+    ]
+    const ui = setup(current)
+
+    try {
+      ui.edit('Paint layer', 'hidden', 'change')
+      ui.button('Edit tile-entry triggers').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      expect(hasMarker(ui.tile(1, 1))).toBe(true)
+      ui.button('Zoom in').dispatchEvent(new Event('click'))
+      expect(hasMarker(ui.tile(1, 1))).toBe(true)
+      expect(ui.tile(1, 1).attributes.get('aria-selected')).toBe('true')
+      ui.editor.render(state(current, { busy: true }), false)
+      ui.tile(0, 2).dispatchEvent(new Event('click'))
+      expect(hasMarker(ui.tile(0, 2))).toBe(false)
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('authors, recovers, undoes and removes tile-entry triggers without losing unfinished fields', async () => {
+    const current = {
+      ...view,
+      rules: { state: [], actions: { travel: [{ when: [], effects: [] }] } },
+    }
+
+    const first = setup(current)
+    const recovered = setup(current)
+
+    try {
+      first.button('Add tile-entry trigger').dispatchEvent(new Event('click'))
+      first.edit('Trigger ID', 'exit')
+      first.edit('Trigger tile X', '2')
+      first.edit('Trigger tile Y', '3')
+      expect(first.control('Entry action').value).toBe('travel')
+      await first.submit()
+      expect(first.saved[0]).toMatchObject({
+        type: 'game.upsertMap',
+        map: { entryTriggers: [{ id: 'exit', x: 2, y: 3, action: 'travel' }] },
+      })
+      first.edit('Trigger ID', '')
+      const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement())))
+      expect(restoreEditorDrafts(recovered.root.asElement(), drafts)).toEqual([])
+      expect(recovered.control('Trigger ID').value).toBe('')
+      expect(recovered.control('Trigger tile X').value).toBe('2')
+      expect(recovered.control('Trigger tile Y').value).toBe('3')
+      await recovered.submit()
+      expect(recovered.saved).toEqual([])
+      recovered.edit('Trigger ID', 'exit')
+      recovered.button('Remove tile-entry trigger').dispatchEvent(new Event('click'))
+      recovered.editor.restoreDraft('undo')
+      expect(recovered.control('Trigger ID').value).toBe('exit')
+      recovered.editor.restoreDraft('redo')
+      await recovered.submit()
+      expect(recovered.saved[0]).toMatchObject({
+        type: 'game.upsertMap',
+        map: { entryTriggers: [] },
+      })
+    } finally {
+      first.editor.dispose()
+      recovered.editor.dispose()
+    }
+  })
+
+  it('requires a saved Rules action before adding triggers', () => {
+    const ui = setup()
+
+    try {
+      expect(ui.button('Add tile-entry trigger').disabled).toBe(true)
+      expect(ui.root.textContent).toContain('Create and save an action in Rules')
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('chooses an unused tile after editing another trigger position', async () => {
+    const ui = setup({
+      ...view,
+      rules: { state: [], actions: { travel: [{ when: [], effects: [] }] } },
+    })
+
+    try {
+      ui.button('Add tile-entry trigger').dispatchEvent(new Event('click'))
+      ui.edit('Trigger tile X', '1')
+      ui.button('Add tile-entry trigger').dispatchEvent(new Event('click'))
+      await ui.submit()
+      expect(ui.saved[0]).toMatchObject({
+        type: 'game.upsertMap',
+        map: {
+          entryTriggers: [
+            { id: 'entry', x: 1, y: 0, action: 'travel' },
+            { id: 'entry-2', x: 0, y: 0, action: 'travel' },
+          ],
+        },
+      })
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
+  it('recovers painted tiles, an unsaved map ID and pending dimensions without saving', async () => {
+    const first = setup()
+    const second = setup()
+
+    try {
+      first.edit('Map ID', 'recovered-map')
+      first.edit('Paint terrain', 'wall', 'change')
+      first.tile(0, 0).dispatchEvent(new Event('click'))
+      first.edit('Width in tiles', '18')
+      const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement())))
+      expect(restoreEditorDrafts(second.root.asElement(), drafts)).toEqual([])
+      expect(second.control('Map ID').value).toBe('recovered-map')
+      expect(second.control('Width in tiles').value).toBe('18')
+      expect(second.tile(0, 0).attributes.get('aria-label')).toContain('wall')
+      expect(second.editor.hasDrafts()).toBe(true)
+      expect(second.saved).toEqual([])
+    } finally {
+      first.editor.dispose()
+      second.editor.dispose()
+    }
+  })
+
   it('selects rectangles by dragging, copies groups, previews keyboard paste, and moves only the active layer', async () => {
     const map = new MapDraft()
     map.resize(8, 6, 'ground')

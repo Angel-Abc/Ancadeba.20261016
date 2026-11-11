@@ -6,7 +6,7 @@ import {
   type TileMoveSource,
 } from './mapDraft.js'
 
-export type MapTileTool = 'paint' | 'select' | 'paste'
+export type MapTileTool = 'paint' | 'select' | 'paste' | 'trigger' | 'object'
 
 interface SelectedTiles {
   layer: string

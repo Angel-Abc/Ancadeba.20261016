@@ -12,10 +12,13 @@ export class EditorExportController {
     private readonly fetcher: typeof fetch,
     private readonly download: (archive: Blob, fileName: string) => void,
     private readonly onStateChange: ExportStateListener,
+    private readonly confirmExport: () => boolean = () => true,
   ) {}
 
   async export(folder: string): Promise<void> {
     if (this.disposed || this.request) return
+
+    if (!this.confirmExport()) return
 
     const request = new AbortController()
     this.request = request

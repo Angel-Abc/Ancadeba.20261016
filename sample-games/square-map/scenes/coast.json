@@ -6,11 +6,19 @@
   "screen": {
     "type": "grid",
     "grid": {
-      "rows": 12,
+      "rows": 17,
       "columns": 1
     }
   },
   "components": [
+    {
+      "id": "backpack",
+      "type": "inventory",
+      "label": "Backpack",
+      "owners": ["player"],
+      "readOnly": true,
+      "placement": { "row": 14, "column": 1, "rowSpan": 4 }
+    },
     {
       "id": "heading",
       "type": "text",
@@ -31,7 +39,7 @@
         "row": 2,
         "column": 1
       },
-      "text": "Use the direction buttons, WASD, or arrow keys to move. Sand is slower and forests block the way.",
+      "text": "Move with WASD, arrow keys or the direction buttons. Press E to read the signpost just north of the start. Go west once, then north twice to the gold gate for Pine Village.",
       "presentation": {
         "align": "center"
       }
@@ -56,10 +64,34 @@
       }
     },
     {
+      "id": "interaction-result",
+      "type": "text",
+      "placement": {
+        "row": 10,
+        "column": 1
+      },
+      "text": "{{message}} Coins: {{coins}}.",
+      "bindings": {
+        "message": {
+          "source": "game.state",
+          "path": ["interactionMessage"],
+          "fallback": "Press E beside an object to interact."
+        },
+        "coins": {
+          "source": "game.state",
+          "path": ["coins"],
+          "fallback": "0"
+        }
+      },
+      "presentation": {
+        "align": "center"
+      }
+    },
+    {
       "id": "movement-bar",
       "type": "action-bar",
       "placement": {
-        "row": 10,
+        "row": 11,
         "column": 1,
         "rowSpan": 3,
         "columnSpan": 1
@@ -111,6 +143,17 @@
           "inputBinding": {
             "context": "explore",
             "input": "east"
+          }
+        },
+        "12": {
+          "label": "Interact",
+          "action": {
+            "type": "interact-map",
+            "mapView": "coast-map"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "interact"
           }
         }
       }

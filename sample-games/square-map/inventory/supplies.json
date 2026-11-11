@@ -1,0 +1,29 @@
+{
+  "schema-version": "1.0.0",
+  "itemTypes": {
+    "berry": { "label": "Wild berry", "description": "A freshly picked Pine Village berry." },
+    "basket": { "label": "Village berry basket", "container": true }
+  },
+  "owners": {
+    "player": { "label": "Player" },
+    "village": { "label": "Village supplies" }
+  },
+  "items": {
+    "berry-basket": {
+      "itemType": "basket",
+      "placement": { "type": "carried", "owner": "village" }
+    },
+    "berry-1": {
+      "itemType": "berry",
+      "placement": { "type": "inside", "container": "berry-basket" }
+    },
+    "berry-2": {
+      "itemType": "berry",
+      "placement": { "type": "inside", "container": "berry-basket" }
+    },
+    "berry-3": {
+      "itemType": "berry",
+      "placement": { "type": "inside", "container": "berry-basket" }
+    }
+  }
+}

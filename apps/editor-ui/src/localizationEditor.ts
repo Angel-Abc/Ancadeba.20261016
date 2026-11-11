@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -365,6 +367,35 @@ export function bindLocalizationEditor(
     fields.append(form)
     fields.disabled = busy || Boolean(view.diagnostics.length)
   }
+
+  registerEditorDraft(
+    root,
+    'localization',
+    z.object({
+      languages: z.object({ default: z.string(), available: z.array(z.string()) }),
+      catalogs: z.record(z.string(), z.record(z.string(), z.string())),
+      selected: z.string(),
+      newLanguage: z.string(),
+      newKey: z.string(),
+      keyFilter: z.string(),
+      onlyMissing: z.boolean(),
+    }),
+    () =>
+      dirty
+        ? { languages, catalogs, selected, newLanguage, newKey, keyFilter, onlyMissing }
+        : undefined,
+    (saved) => {
+      languages = saved.languages
+      catalogs = saved.catalogs
+      selected = saved.selected
+      newLanguage = saved.newLanguage
+      newKey = saved.newKey
+      keyFilter = saved.keyFilter
+      onlyMissing = saved.onlyMissing
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,

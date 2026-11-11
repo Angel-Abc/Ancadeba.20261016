@@ -1,5 +1,6 @@
 import type { ProjectChoice } from '@ancadeba/editor-core'
 import { workspaceError, type WorkspaceService } from './workspace.js'
+import { hasRecoveryResources } from './manifestRecovery.js'
 
 function manifestTitle(bytes: Uint8Array): string {
   try {
@@ -48,7 +49,11 @@ export async function listWorkspaceProjects(
       if (entry.type === 'directory') pending.push(prefix + entry.name)
     }
 
-    if (!entries.some((entry) => entry.type === 'file' && entry.name === 'game.json')) continue
+    if (!entries.some((entry) => entry.type === 'file' && entry.name === 'game.json')) {
+      if (hasRecoveryResources(listing)) projects.push({ path, title: '', missingManifest: true })
+
+      continue
+    }
 
     try {
       const manifest = await workspace.read(prefix + 'game.json')

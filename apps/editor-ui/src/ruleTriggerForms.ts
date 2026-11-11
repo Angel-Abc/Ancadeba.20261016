@@ -1,3 +1,4 @@
+import { registerFormDraft } from './editorDraftState.js'
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import type { GameBindingDefinition, ButtonComponentDefinition } from '@ancadeba/schemas'
 import {
@@ -208,6 +209,8 @@ function buttonTriggers(
     render()
   } else buttons.append(t('rules.sceneFirstButton'))
 
+  registerFormDraft(buttons, 'rule-buttons', () => dirty)
+
   return buttons
 }
 
@@ -307,6 +310,8 @@ function inspectionTriggers(
     inspection.append(picker, formArea)
     render()
   } else inspection.append(t('rules.typesFirstInspection'))
+
+  registerFormDraft(inspection, 'rule-inspection', () => dirty)
 
   return inspection
 }

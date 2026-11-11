@@ -112,7 +112,15 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
       ] as const,
   )
 
+  const diagnostics = validateProject(project.documents, project.sourceDiagnostics)
+
   return {
+    ...(project.recoveryManifest === undefined
+      ? {}
+      : { recoveryManifest: project.recoveryManifest }),
+    ...(diagnostics.length && project.sourceTexts
+      ? { repairFiles: { ...project.sourceTexts } }
+      : {}),
     stylesheets: Object.fromEntries(
       Object.entries(project.documents).filter(
         (entry): entry is [string, string] =>
@@ -163,6 +171,6 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
           return result.success && result.data.id === id ? [result.data] : []
         })
       : [],
-    diagnostics: validateProject(project.documents, project.sourceDiagnostics),
+    diagnostics,
   }
 }

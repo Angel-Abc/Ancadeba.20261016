@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { Engine, GameLoader, type EngineMessages, type GameSaveStore } from '@ancadeba/game-runtime'
-import { gameSaveSchema } from '@ancadeba/schemas'
+import { gameSaveSchema, gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { BrowserGameSaveStore } from '@ancadeba/ui-components'
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
@@ -97,6 +97,68 @@ async function launch(
 }
 
 describe('persistent player progress', () => {
+  it('saves visited scene positions from a menu and restores them in a new engine', async () => {
+    const manifest = gameSchema.parse(
+      JSON.parse(
+        await readFile(new URL('../sample-games/square-map/game.json', import.meta.url), 'utf8'),
+      ),
+    )
+
+    const coast = sceneSchema.parse(
+      JSON.parse(
+        await readFile(
+          new URL('../sample-games/square-map/scenes/coast.json', import.meta.url),
+          'utf8',
+        ),
+      ),
+    )
+
+    const overrides = {
+      'game.json': { ...manifest, scenes: [...manifest.scenes, 'inland', 'menu'] },
+      'scenes/inland.json': { ...coast, id: 'inland' },
+      'scenes/menu.json': {
+        'schema-version': '1.0.0',
+        id: 'menu',
+        title: 'Menu',
+        type: 'stand-alone',
+        screen: { type: 'grid', grid: { rows: 1, columns: 1 } },
+        components: [],
+      },
+    }
+
+    const store = new MemorySaves()
+    const first = await launch(store, overrides, 'square-map')
+    const game = first.start('coast')
+    const movement = game.mapMovement!
+    const positions: Record<string, { x: number; y: number }> = {}
+
+    for (const id of ['coast', 'inland']) {
+      const scene = first.engine.lifecycle!.enterScene(id)
+
+      const direction = (['north', 'east', 'south', 'west'] as const).find((direction) =>
+        movement.canMove(scene, 'coast-map', direction),
+      )!
+
+      expect(movement.move(scene, 'coast-map', direction)).toBe(true)
+      first.advance(1000)
+      positions[id] = { ...movement.getPosition(scene, 'coast-map')! }
+    }
+
+    first.engine.lifecycle!.enterScene('menu')
+    expect(first.engine.saves!.save()).toBe(true)
+    first.engine.stop()
+    const second = await launch(store, overrides, 'square-map')
+    expect(second.engine.saves!.load()).toBe(true)
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('inland')
+
+    for (const id of ['inland', 'coast']) {
+      const scene = second.engine.lifecycle!.enterScene(id)
+      expect(
+        second.engine.lifecycle!.currentGame!.mapMovement!.getPosition(scene, 'coast-map'),
+      ).toEqual(positions[id])
+    }
+  })
+
   it('restores a new engine from durable storage, including queued actions, inventory, state, time, log and language', async () => {
     const store = new MemorySaves()
     const first = await launch(store)
@@ -155,14 +217,58 @@ describe('persistent player progress', () => {
     expect(store.read(engine.game!.id)).toBe(original)
     advance(1000)
     const position = movement!.getPosition(scene, map.id)
+    const progression = engine.lifecycle!.currentGame!.actions!.progression
+    expect(progression.turn).toBe(1)
+    expect(progression.worldTimeMs).toBeGreaterThan(0)
     expect(engine.saves!.save()).toBe(true)
     engine.lifecycle!.startGame()
     engine.lifecycle!.enterScene('coast')
     expect(engine.saves!.load()).toBe(true)
     const restored = engine.lifecycle!.activeScene!
+    expect(engine.lifecycle!.currentGame!.actions!.progression).toEqual(progression)
     expect(
       restored.type === 'game' && restored.game.mapMovement!.getPosition(restored, map.id),
     ).toEqual(position)
+    const legacy = gameSaveSchema.parse(JSON.parse(store.read(engine.game!.id)!))
+    delete legacy.mapPositions
+    store.write(engine.game!.id, JSON.stringify(legacy))
+    engine.lifecycle!.startGame()
+    engine.lifecycle!.enterScene('coast')
+    expect(engine.saves!.load()).toBe(true)
+    const legacyScene = engine.lifecycle!.activeScene!
+    expect(engine.lifecycle!.currentGame!.actions!.progression).toEqual(progression)
+    expect(engine.lifecycle!.currentGame!.mapMovement!.getPosition(legacyScene, map.id)).toEqual(
+      position,
+    )
+  })
+
+  it('rejects a step whose turn would overflow without publishing a new position', async () => {
+    const store = new MemorySaves()
+    const { engine, start, advance, logError } = await launch(store, {}, 'square-map')
+    start('coast')
+    expect(engine.saves!.save()).toBe(true)
+    const saved = gameSaveSchema.parse(JSON.parse(store.read(engine.game!.id)!))
+    saved.progression.turn = Number.MAX_SAFE_INTEGER
+    store.write(engine.game!.id, JSON.stringify(saved))
+    expect(engine.saves!.load()).toBe(true)
+    const scene = engine.lifecycle!.activeScene!
+    const game = engine.lifecycle!.currentGame!
+    const movement = game.mapMovement!
+    const position = movement.getPosition(scene, 'coast-map')
+
+    const direction = (['north', 'east', 'south', 'west'] as const).find((direction) =>
+      movement.canMove(scene, 'coast-map', direction),
+    )!
+
+    movement.move(scene, 'coast-map', direction)
+    advance(1000)
+    expect(movement.getPosition(scene, 'coast-map')).toEqual(position)
+    expect(game.actions!.progression).toEqual(saved.progression)
+    expect(logError).toHaveBeenCalledWith(
+      'MapMovement',
+      'Movement progression could not be prepared',
+      expect.any(RangeError),
+    )
   })
 
   it('restores quest stages and an active conversation without replaying its effects or rewards', async () => {
@@ -361,6 +467,8 @@ describe('persistent player progress', () => {
     'bad-scene',
     'bad-quest',
     'bad-map',
+    'bad-map-scene',
+    'bad-inactive-map',
     'bad-dialogue',
     'bad-combat',
     'unsupported-save',
@@ -390,6 +498,10 @@ describe('persistent player progress', () => {
       save.quests.records['harbour-survey'] = { index: 999, completed: false }
 
     if (failure === 'bad-map') save.maps['missing'] = { x: 0, y: 0 }
+
+    if (failure === 'bad-map-scene') save.mapPositions = { missing: { map: { x: 0, y: 0 } } }
+
+    if (failure === 'bad-inactive-map') save.mapPositions = { gallery: { missing: { x: 0, y: 0 } } }
 
     if (failure === 'bad-dialogue')
       save.dialogue['missing'] = {

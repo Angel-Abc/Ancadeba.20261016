@@ -109,6 +109,15 @@ images, grouped parts, and layered compositions. The editor's Assets panel impor
 edits palettes, previews compositions, and places graphics in scenes. MCP exposes
 the same revision-checked authoring commands.
 
+The editor also offers a **Repair project** panel for
+invalid projects: edit original JSON/CSS, preview the remaining diagnostics, and
+save incremental corrections with revision checks and exact Undo/Redo. Missing
+referenced definitions can be recreated there. See the
+[repair guide](docs/editor-authoring.md#repairing-invalid-projects).
+Folders missing `game.json` can be opened with **Recover project**. Paste a backup
+manifest or generate a draft from surviving files, review and check it, then save
+the manifest without replacing the rest of the project.
+
 The [MCP adapter](docs/editor-mcp.md) also exposes the shared editor's gameplay,
 map, inventory, localization, scene/component and stylesheet commands through
 `ancadeba_apply_command`. Capability discovery reports the commands supported by
@@ -389,10 +398,28 @@ Static fallbacks and starting game values can be previewed separately. See
 
 ## Scene rendering
 
-Open `square-map` in the editor preview to try Coast Road. Use its North, East,
-South, and West action-bar buttons, WASD, or arrow keys to move one tile at a time. The viewport
-follows the player and shows 9 columns and 6 rows of a
-16 by 10 map. For a standalone copy, run `pnpm export:game sample-games/square-map`.
+Open `square-map` in the editor preview to explore Coast Road and Pine Village.
+Use the North, East, South, and West action-bar buttons, WASD, or arrow keys to
+move one tile at a time. A 9-column, 6-row viewport follows the player across the
+16-by-10 coast and 12-by-8 village maps. Gold gates demonstrate tile-entry triggers
+with explicit entrance coordinates:
+
+| Exit tile             | Destination entrance  |
+| --------------------- | --------------------- |
+| Coast Road `(8, 2)`   | Pine Village `(1, 4)` |
+| Pine Village `(0, 4)` | Coast Road `(8, 3)`   |
+
+From the initial coast position, move west once and north twice to visit the
+village, then west once to return. Each entrance sits beside its return gate.
+Press **E** at the coast spawn to read the adjacent signpost. In the village,
+move east once from the entrance and press E to open the chest for 25 coins;
+subsequent interactions report it empty. Both scenes show feedback and the coin
+balance, and include an E-bound **Interact** action-bar slot. The sample's
+`rules/interactions.json` demonstrates object-target conditions and a reward
+that stays collected across visits and saves.
+Inspect `maps/coast.json`, `maps/village.json`, and `rules/travel.json` to see how
+the exits are authored. See the [sample guide](sample-games/square-map/README.md)
+for a walkthrough. For a standalone copy, run `pnpm export:game sample-games/square-map`.
 
 Choose **Maps** in the editor's Edit or Split layout to create and edit maps
 visually. **New map** sets its ID and size; the terrain palette controls colors,
@@ -444,13 +471,176 @@ sits in the bar. Slots use the game's existing `inputBinding` context/input pair
 physical keys remain in the game's input file. Coast Road demonstrates WASD and
 arrow keys mapped to the same directional inputs.
 
-The per-playthrough `mapMovement` service shares scene-local positions between
+The per-playthrough `mapMovement` service shares each map view's position between
 the map view, buttons, and keyboard. A movement button disables when the destination
 is blocked or outside the map, and all directions disable while a step is pending.
-Terrain delays use the injected scheduler, matching focused-map arrow movement;
-they do not advance game turns or world time. Leaving the scene cancels pending
-steps, and a new scene instance starts at its authored spawn. Display-only maps
-and standalone maps retain their existing behavior.
+Terrain delays use the injected scheduler, matching focused-map arrow movement.
+Each completed step adds one progression turn, including zero-delay terrain, and
+charges its destination terrain's `movementCostMs` under the world's time policy.
+Action-driven time adds that cost; elapsed time counts only elapsed host time;
+hybrid time counts both independently. Position, progression, and the authored
+clock commit together before movement observers and tile-entry actions run.
+Blocked or cancelled steps add no movement turn or time cost. Spawning, explicit
+scene-entrance placement, returning to a scene, and loading a save do not count as
+steps. Actor roster turns and phases remain independent, as with combat rounds.
+A tile-entry Rules action can charge its own additional scene-travel time.
+Leaving the scene cancels pending
+steps and retains the last completed tile. Returning to the same scene resumes
+each view's position; an unvisited view starts at its authored spawn. New games
+reset these positions. Display-only maps and standalone maps retain their existing
+behavior.
+
+Maps can run authored Rules actions when the player enters a tile. Add an optional
+`entryTriggers` array to `maps/<id>.json`, or use **Maps → Tile-entry triggers**.
+
+The editor grid marks trigger tiles with **T** badges. Choose **Edit tile-entry
+triggers** above the grid, then click a tile to add or edit its trigger. Arrow
+keys followed by Enter/Space work too; Escape returns to painting. Tooltips show
+the trigger ID, action, and zero-based coordinates. Marker changes follow form
+edits, undo/redo, and draft recovery.
+
+```json
+"entryTriggers": [{ "id": "north-exit", "x": 4, "y": 0, "action": "travel-north" }]
+```
+
+Define `travel-north` in a declared Rules file, for example:
+
+```json
+"travel-north": [{ "when": [], "effects": [{ "type": "enter-scene", "scene": "village" }] }]
+```
+
+Coordinates start at zero. IDs and trigger tiles must be unique within the map,
+and each trigger must reference an existing action and a walkable tile. All map
+movement routes run the action after the step completes, including terrain delays.
+Blocked or cancelled steps, spawning, returning to a remembered position, and save
+restoration do not fire triggers. Stepping away and back fires the trigger again;
+use normal Rules state conditions for one-time events, and `scene-is` conditions
+when a map is shared by scenes. Pending trigger requests are discarded if their
+scene is left before delivery. Entry actions receive a payload containing `scene`,
+`mapView`, `trigger`, `x`, and `y`.
+
+An `enter-scene` effect or navigation action can choose an entrance tile:
+
+```json
+{
+  "type": "enter-scene",
+  "scene": "village",
+  "mapView": "village-map",
+  "position": { "x": 2, "y": 8 }
+}
+```
+
+`mapView` identifies a player-enabled, interactive map-view component in the
+destination game scene. The zero-based `position` must be an in-bounds, walkable
+tile, including collisions from visible layers. An explicit position overrides
+that view's remembered location before the destination renders, without running
+tile-entry triggers or waiting for movement. Other map views keep their positions.
+Without `position`, transitions retain their existing resume/spawn behavior.
+For Rules effects with `mapView`, travel charges world time from the entrance
+terrain; legacy effects without coordinates continue to use the spawn's terrain.
+The editor exposes **Place player at destination tile** and **Destination tile X/Y**
+for Rules effects, scene buttons, and action-bar navigation. These positions are
+included in normal playthrough persistence and saved games.
+
+Maps also support placeable objects. In **Maps**, choose **Place or edit map
+objects**, then click a tile (or use arrow keys and Enter/Space). The **Map objects**
+form edits the object's ID, label, zero-based coordinates, appearance terrain,
+Rules action, and blocking flag. **O** badges mark objects in the editor. Object
+edits participate in map saving, undo/redo, and local draft recovery.
+
+```json
+"objects": [{
+  "id": "signpost", "label": "Signpost", "x": 3, "y": 2,
+  "terrain": "sign-art", "action": "read-sign", "blocking": true
+}]
+```
+
+The appearance terrain supplies a color or tileset image. Its walkability does
+not determine object collision: `blocking` defaults to true and independently
+prevents movement, spawning, and scene entrances on that tile. An object can be
+placed on blocked ground; its player must stand on a cardinally adjacent tile
+to interact. Diagonal and same-tile interaction are unavailable, including for
+passable objects. Objects have unique IDs and tiles within each map, and their
+actions must exist in the game's Rules files.
+
+In play, click an adjacent object or focus its button and press Enter/Space.
+Scene buttons and action-bar slots also offer **Interact with map object**:
+
+```json
+{ "type": "interact-map", "mapView": "world-map", "object": "signpost" }
+```
+
+Omit `object` for automatic targeting, which requires exactly one adjacent object.
+When several are adjacent, click a specific object or configure an explicit target.
+Action-bar input bindings can map an Interact slot to a key such as E through the
+existing input editor. Interaction is disabled during a pending step. Queued
+interactions capture the original target and recheck scene ownership and range
+before running. The Rules action receives the object ID as its payload, so
+`payload-is-target` conditions work for map objects as well as Nearby entries.
+Use state conditions for one-time interactions. An object's optional ordered
+`states` list can override its appearance terrain, label, blocking flag, and visibility:
+
+```json
+"states": [{
+  "id": "open",
+  "when": { "path": ["chestOpened"], "value": true },
+  "terrain": "chest-open", "label": "Open chest", "blocking": false
+}]
+```
+
+Declare the boolean flag in Rules first. The first matching state wins, and omitted
+overrides inherit the object's defaults. No matching state uses the defaults.
+The editor's **Object states** controls configure and reorder these overrides;
+the editor grid shows the default appearance. Runtime appearance and collision
+update immediately when Rules change the flag. Ground and collision layers still
+determine whether a nonblocking object's tile can be entered and its movement time.
+Spawns must be walkable in the initial state; entrances check the current state.
+A timed step checks collision again on arrival. A player already occupying a tile
+that becomes blocked can leave it, including after saving and loading.
+
+The Pine Village sample chest uses this mechanism with closed/open sprite tiles
+in `assets/chests.svg`. Looting it changes `chestOpened`, opens the chest visually,
+and makes its tile passable. Its flag and appearance persist across visits and saves.
+
+Set `visible: false` in a state to make a collected pickup disappear:
+
+```json
+"states": [{
+  "id": "collected",
+  "when": { "path": ["berriesCollected"], "value": true },
+  "visible": false
+}]
+```
+
+Objects are visible by default; the base object can also set `visible: false` and
+use a state with `visible: true` to reveal it. Hidden objects neither block movement
+nor participate in automatic targeting, direct interaction, or queued interactions.
+Ground and collision layers still apply. In **Maps**, use **Object visible** and
+**State visible**, choosing **Use object default** to inherit visibility. The grid
+keeps all objects selectable with their default appearance, including hidden ones.
+Pine Village's berry basket at `(4, 5)` demonstrates this: stand at `(4, 4)` and
+press **E** to collect three berries. It stays gone across visits and save/load;
+starting a new game restores it.
+
+Pickups can transfer real items into the player's inventory with an authored
+`collect-items` effect:
+
+```json
+{ "type": "collect-items", "items": ["berry-1", "berry-2", "berry-3"], "owner": "player" }
+```
+
+Declare these finite item instances in the game's inventory first. They may start
+with another owner or inside a world container. In **Rules → Effects**, choose
+**Collect inventory items**, select the destination owner, and add the item IDs.
+Combine this with a `set-state` effect for the collected flag and a hidden object
+state. The complete batch transfers before inventory observers run, together with
+the action's state/log updates. Missing, reserved, already-owned, or unavailable
+items reject the whole pickup without applying the collected flag. A branch can
+contain one inventory operation or scene transition, plus state/log effects.
+
+The sample defines three berry instances in `inventory/supplies.json`, initially
+inside a village-owned basket. Collection moves them into the player's **Backpack**,
+shown in both scenes. Inventory ownership and pickup visibility survive save/load.
 
 Both browser hosts use `mountGameView` and `SceneRenderer` from
 `@ancadeba/ui-components`. The engine opens the scene selected by `initial-scene`
@@ -828,8 +1018,10 @@ root and nested projects. Select a game and press Enter or click **Open project*
 Start loads the open project's `game.json` and referenced scenes through
 `/api/files` with caching disabled. The preview mounts after the game is
 validated and assembled. Stop also works while loading. Each new start
-uses a fresh instance and reads the latest saved files; unsaved edits are not yet
-part of the resource source. Failures appear beside the controls and allow retrying.
+uses a fresh instance and reads the latest saved files. Choosing **Play** with
+unsaved edits asks whether to preview those saved files; cancelling keeps all
+drafts and does not start the engine. Unsaved edits are not part of the resource
+source. Failures appear beside the controls and allow retrying.
 The preview renders the active scene and offers a selector for switching scenes.
 If the preview is running or loading when you switch projects, it starts over
 with the newly opened project. Accepting a changed project revision through a save,
@@ -1089,12 +1281,19 @@ Snapshots include authored state and activity logs, inventory placements and
 consumed/generated items, equipment, gold, XP and level receipts, turn/world-time
 progression, combat plans and RNG, statuses and cooldowns, item reservations,
 equipment locks, one-time rewards and remaining loot, quest stages and tracking,
-conversations and captured transcript values, current map positions, language,
+conversations and captured transcript values, map positions in all visited scenes, language,
 input context, and nearby/inventory selections. Loading reconstructs fresh runtime
 instances and subscriptions without replaying rewards or level gains. Pending
 message batches settle before saving. If a map step is still running, saving
 reports that the player should wait for movement to finish; the existing slot is
-preserved. Scene-local state otherwise follows the normal scene-lifetime rules.
+preserved. Each interactive map view remembers its last completed tile for the
+current playthrough, keyed by scene ID and component ID. Leaving for another scene,
+an inventory screen, or a stand-alone menu and returning resumes that location.
+Leaving during a timed step cancels the step and keeps the last completed tile.
+Unvisited views start at their authored spawn; starting a new game resets positions.
+Other scene-local state follows the normal scene-lifetime rules. Older save slots
+containing only the active scene's map positions still load; unrecorded scenes use
+their authored spawns.
 
 The save format is versioned and validated before replacing the current game.
 Saves must match the game ID, game version, and a fingerprint of its loaded
@@ -1291,6 +1490,8 @@ Every playthrough starts at turn zero and world time zero. An applied action wit
 `advanceTurn: true` increments the completed-turn counter by exactly one. With
 actor turns configured, advancing the final phase also completes one actor turn.
 Accepted actions, timer wakeups, and elapsed time never implicitly consume turns.
+Completed map steps and combat rounds each explicitly consume one progression
+turn through the same transaction API, without rotating the actor roster.
 
 `GameRules.worldTime` selects one static per-playthrough policy:
 

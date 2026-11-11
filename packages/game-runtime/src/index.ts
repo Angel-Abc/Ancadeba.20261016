@@ -161,3 +161,7 @@ export * from './storyState.js'
 export * from './storyConditions.js'
 
 export * from './gameSaves.js'
+
+export * from './mapObjects.js'
+
+export * from './sceneNavigation.js'

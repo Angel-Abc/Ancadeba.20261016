@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import type { CommandRequest, ProjectView } from '@ancadeba/editor-core'
+import type { CommandRequest, ProjectView, ProjectRepairRequest } from '@ancadeba/editor-core'
 import {
   EditorClientError,
   HttpEditorClient,
@@ -25,6 +25,85 @@ const view = (revision: string): ProjectView => ({
 })
 
 describe('project editor controller', () => {
+  it('checks and saves repair drafts with their original revision and preserves unrelated forms', async () => {
+    const requests: ProjectRepairRequest[] = []
+    const states: { state: ProjectEditorState; replace: boolean }[] = []
+
+    const client: IEditorClient = {
+      inspect: async () => view('one'),
+      apply: async () => view('two'),
+      checkRepair: async (request) => {
+        requests.push(request)
+
+        return { revision: request.expectedRevision, diagnostics: [] }
+      },
+      repair: async (request) => {
+        requests.push(request)
+
+        if (request.expectedRevision !== 'one')
+          throw new EditorClientError('revision_conflict', 'Changed')
+
+        return view('two')
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state, replace) =>
+      states.push({ state, replace }),
+    )
+
+    await controller.load('demo')
+    const request = { file: 'game.json', text: '{}', expectedRevision: 'one' }
+    expect(await controller.checkRepair(request)).toEqual({ revision: 'one', diagnostics: [] })
+    expect(states.at(-1)?.replace).toBe(false)
+    expect(await controller.repair(request)).toBe(true)
+    expect(states.at(-1)).toMatchObject({
+      state: { view: { revision: 'two' }, preserveDrafts: true },
+      replace: true,
+    })
+    expect(requests).toEqual([
+      { ...request, path: 'demo' },
+      { ...request, path: 'demo' },
+    ])
+    expect(await controller.repair({ ...request, expectedRevision: 'old' })).toBe(false)
+    expect(states.at(-1)).toMatchObject({
+      state: { conflict: true, view: { revision: 'two' } },
+      replace: false,
+    })
+    controller.dispose()
+  })
+
+  it('keeps a recovered draft on its original revision until an explicit reload', async () => {
+    const states: ProjectEditorState[] = []
+    const requests: CommandRequest[] = []
+
+    const client: IEditorClient = {
+      inspect: async () => view('new'),
+      apply: async (request) => {
+        requests.push(request)
+        throw new EditorClientError('revision_conflict', 'Changed')
+      },
+    }
+
+    const controller = new ProjectEditorController(client, (state) => states.push(state))
+    await controller.load('demo')
+    controller.recoverDrafts(view('old'))
+    expect(states.at(-1)).toMatchObject({ view: { revision: 'old' }, changedElsewhere: true })
+    await controller.save({
+      type: 'game.updateMetadata',
+      title: 'Recovered',
+      description: '',
+      version: '1',
+    })
+    expect(requests[0]?.expectedRevision).toBe('old')
+    expect(states.at(-1)?.conflict).toBe(true)
+    await controller.load('demo', true)
+    expect(states.at(-1)).toMatchObject({
+      view: { revision: 'new' },
+      changedElsewhere: false,
+      preserveDrafts: true,
+    })
+  })
+
   it('copies the inspected saved component without replacing fields and reports copy conflicts', async () => {
     const requests: unknown[] = []
     const states: { state: ProjectEditorState; replace: boolean }[] = []

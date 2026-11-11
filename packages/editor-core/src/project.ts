@@ -24,6 +24,10 @@ export interface ProjectSnapshot {
   revision: string
   documents: ProjectDocuments
   sourceDiagnostics?: readonly Diagnostic[]
+  /** Original text for loaded definitions; null identifies a missing referenced file. */
+  sourceTexts?: Readonly<Record<string, string | null>>
+  /** A suggested manifest for a missing game.json; never saved automatically. */
+  recoveryManifest?: string
 }
 
 export interface Diagnostic {
@@ -34,6 +38,9 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  recoveryManifest?: string | undefined
+  /** Available only while invalid; raw definitions support repairing syntax and schema errors. */
+  repairFiles?: Record<string, string | null> | undefined
   history?:
     | {
         canUndo: boolean

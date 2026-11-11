@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { gameRulesSchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -210,6 +213,45 @@ export function bindRulesPanel(
     rulesDirty = false
     renderRules()
   }
+
+  registerEditorDraft(
+    panel,
+    'rules',
+    z.object({
+      draft: gameRulesSchema,
+      ruleId: z.string(),
+      newRuleId: z.string(),
+      selected: z.string(),
+      rulesDirty: z.boolean(),
+      dirtyTriggers: z.array(z.enum(ruleTriggerSections)),
+      triggers: z.boolean(),
+    }),
+    () =>
+      rulesDirty || dirtyTriggers.size
+        ? {
+            draft,
+            ruleId,
+            newRuleId,
+            selected,
+            rulesDirty,
+            dirtyTriggers: [...dirtyTriggers],
+            triggers: !triggerFields.hidden,
+          }
+        : undefined,
+    (saved) => {
+      draft = saved.draft
+      ruleId = saved.ruleId
+      newRuleId = saved.newRuleId
+      selected = saved.selected
+      rulesDirty = saved.rulesDirty
+      dirtyTriggers.clear()
+
+      for (const section of saved.dirtyTriggers) dirtyTriggers.add(section)
+      renderRules()
+      renderTriggers()
+      showTriggers(saved.triggers)
+    },
+  )
 
   return {
     render(state: ProjectEditorState, replaceFields: boolean) {

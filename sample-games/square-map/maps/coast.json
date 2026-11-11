@@ -4,9 +4,29 @@
   "width": 16,
   "height": 10,
   "terrain": {
-    "road": { "color": "#8a8075", "walkable": true, "movementCostMs": 150 },
-    "forest": { "color": "#36794d", "walkable": false },
-    "beach": { "color": "#e9c982", "walkable": true, "movementCostMs": 300 }
+    "road": {
+      "color": "#8a8075",
+      "walkable": true,
+      "movementCostMs": 150
+    },
+    "forest": {
+      "color": "#36794d",
+      "walkable": false
+    },
+    "beach": {
+      "color": "#e9c982",
+      "walkable": true,
+      "movementCostMs": 300
+    },
+    "gate": {
+      "color": "#d4a83f",
+      "walkable": true,
+      "movementCostMs": 150
+    },
+    "signpost": {
+      "color": "#bd8c55",
+      "walkable": false
+    }
   },
   "tiles": [
     [
@@ -54,7 +74,7 @@
       "road",
       "road",
       "road",
-      "road",
+      "gate",
       "forest",
       "forest",
       "forest",
@@ -189,5 +209,24 @@
       "beach",
       "beach"
     ]
+  ],
+  "entryTriggers": [
+    {
+      "id": "village-exit",
+      "x": 8,
+      "y": 2,
+      "action": "enter-village"
+    }
+  ],
+  "objects": [
+    {
+      "id": "coast-signpost",
+      "label": "Signpost",
+      "x": 9,
+      "y": 3,
+      "terrain": "signpost",
+      "action": "read-signpost",
+      "blocking": true
+    }
   ]
 }

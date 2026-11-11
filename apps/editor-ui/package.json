@@ -14,6 +14,7 @@
     "@ancadeba/game-runtime": "workspace:*",
     "@ancadeba/schemas": "workspace:*",
     "@ancadeba/ui-components": "workspace:*",
-    "@ancadeba/utilities": "workspace:*"
+    "@ancadeba/utilities": "workspace:*",
+    "zod": "4.6.7"
   }
 }

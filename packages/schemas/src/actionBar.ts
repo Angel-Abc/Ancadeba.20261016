@@ -1,5 +1,7 @@
 import type { ActionBarComponentDefinition, SceneDefinition } from './scene.js'
 import type { InputDefinition } from './input.js'
+import type { MapDefinition } from './map.js'
+import { sceneTransitionIssues } from './sceneTransition.js'
 
 /** Shared checks for project diagnostics, startup, and export. */
 export function actionBarIssues(
@@ -7,6 +9,7 @@ export function actionBarIssues(
   input: InputDefinition | undefined,
   scenes: ReadonlyMap<string, SceneDefinition>,
   scene?: SceneDefinition,
+  maps: ReadonlyMap<string, MapDefinition> = new Map(),
 ): { path: (string | number)[]; message: string }[] {
   const issues: { path: (string | number)[]; message: string }[] = []
 
@@ -125,7 +128,12 @@ export function actionBarIssues(
       continue
     }
 
-    if (action.type === 'request-action' || action.type === 'move-map') continue
+    if (
+      action.type === 'request-action' ||
+      action.type === 'move-map' ||
+      action.type === 'interact-map'
+    )
+      continue
     const target = scenes.get(action.scene)
 
     if (!target || (action.type === 'new-game' && target.type !== 'game'))
@@ -133,6 +141,10 @@ export function actionBarIssues(
         path: ['slots', id, 'action'],
         message: `Invalid ${action.type} target: ${action.scene}`,
       })
+
+    if (action.type === 'enter-scene')
+      for (const issue of sceneTransitionIssues(action, scenes, maps))
+        issues.push({ path: ['slots', id, 'action', ...issue.path], message: issue.message })
   }
 
   return issues

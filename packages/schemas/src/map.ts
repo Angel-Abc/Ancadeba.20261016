@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { assetIdSchema, colorSchema, type AssetCatalog, type ImageAsset } from './assets.js'
 import { gameIdSchema } from './game.js'
+import { storyPathSchema } from './storyConditions.js'
 
 export const mapTilesetSchema = z.object({
   image: assetIdSchema,
@@ -36,6 +37,71 @@ export const mapLayerSchema = z.object({
   tiles: z.array(z.array(gameIdSchema.nullable())),
 })
 
+export const mapEntryTriggerSchema = z.object({
+  id: gameIdSchema,
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  action: gameIdSchema,
+})
+
+export type MapEntryTrigger = z.infer<typeof mapEntryTriggerSchema>
+
+export const mapObjectStateSchema = z
+  .object({
+    id: gameIdSchema,
+    when: z.object({ path: storyPathSchema, value: z.boolean() }),
+    terrain: assetIdSchema.optional(),
+    label: z.string().trim().min(1).max(100).optional(),
+    blocking: z.boolean().optional(),
+    visible: z.boolean().optional(),
+  })
+  .refine(
+    (state) =>
+      state.terrain !== undefined ||
+      state.label !== undefined ||
+      state.blocking !== undefined ||
+      state.visible !== undefined,
+    'Choose at least one object state override',
+  )
+
+export type MapObjectState = z.infer<typeof mapObjectStateSchema>
+
+export type MapObjectStateReader = (path: readonly string[]) => unknown
+
+export const mapObjectSchema = z.object({
+  id: gameIdSchema,
+  label: z.string().trim().min(1).max(100),
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  terrain: assetIdSchema,
+  action: gameIdSchema,
+  blocking: z.boolean().optional(),
+  visible: z.boolean().optional(),
+  states: z.array(mapObjectStateSchema).optional(),
+})
+
+export type MapObject = z.infer<typeof mapObjectSchema>
+
+/** Resolve authored overrides without mutating the base object or its captured action target. */
+export function resolveMapObject(object: MapObject, read?: MapObjectStateReader): MapObject {
+  const state = read && object.states?.find((state) => read(state.when.path) === state.when.value)
+
+  return state
+    ? {
+        ...object,
+        terrain: state.terrain ?? object.terrain,
+        label: state.label ?? object.label,
+        blocking: state.blocking ?? object.blocking,
+        visible: state.visible ?? object.visible,
+      }
+    : object
+}
+
+/** Hidden objects are absent from collision as well as rendering and interaction. */
+export function isBlockingMapObject(object: MapObject): boolean {
+  return object.visible !== false && object.blocking !== false
+}
+
 export const mapDefinitionSchema = z
   .object({
     'schema-version': z.literal('1.0.0'),
@@ -46,6 +112,8 @@ export const mapDefinitionSchema = z
     terrain: z.record(assetIdSchema, mapTerrainSchema),
     tiles: z.array(z.array(gameIdSchema)),
     layers: z.array(mapLayerSchema).max(32).optional(),
+    entryTriggers: z.array(mapEntryTriggerSchema).optional(),
+    objects: z.array(mapObjectSchema).optional(),
   })
   .superRefine((map, context) => {
     for (const [id, terrain] of Object.entries(map.terrain)) {
@@ -85,6 +153,80 @@ export const mapDefinitionSchema = z
     }
 
     checkTiles(map.tiles, ['tiles'])
+    const objectIds = new Set<string>()
+    const objectTiles = new Set<string>()
+    map.objects?.forEach((object, index) => {
+      const path = ['objects', index]
+
+      if (objectIds.has(object.id))
+        context.addIssue({
+          code: 'custom',
+          path: [...path, 'id'],
+          message: 'Map object IDs must be unique',
+        })
+      objectIds.add(object.id)
+      const tile = `${object.x},${object.y}`
+
+      if (objectTiles.has(tile))
+        context.addIssue({ code: 'custom', path, message: 'Use one object per tile' })
+      objectTiles.add(tile)
+
+      if (object.x >= map.width || object.y >= map.height)
+        context.addIssue({ code: 'custom', path, message: 'Object is outside the map' })
+
+      if (!Object.hasOwn(map.terrain, object.terrain))
+        context.addIssue({
+          code: 'custom',
+          path: [...path, 'terrain'],
+          message: 'Unknown object appearance terrain',
+        })
+      const stateIds = new Set<string>()
+      object.states?.forEach((state, stateIndex) => {
+        const statePath = [...path, 'states', stateIndex]
+
+        if (stateIds.has(state.id))
+          context.addIssue({
+            code: 'custom',
+            path: [...statePath, 'id'],
+            message: 'Object state IDs must be unique',
+          })
+        stateIds.add(state.id)
+
+        if (state.terrain && !Object.hasOwn(map.terrain, state.terrain))
+          context.addIssue({
+            code: 'custom',
+            path: [...statePath, 'terrain'],
+            message: 'Unknown object state appearance terrain',
+          })
+      })
+    })
+    const triggerIds = new Set<string>()
+    const triggerTiles = new Set<string>()
+    map.entryTriggers?.forEach((trigger, index) => {
+      if (triggerIds.has(trigger.id))
+        context.addIssue({
+          code: 'custom',
+          path: ['entryTriggers', index, 'id'],
+          message: 'Tile-entry trigger IDs must be unique',
+        })
+      triggerIds.add(trigger.id)
+      const tile = `${trigger.x},${trigger.y}`
+
+      if (triggerTiles.has(tile))
+        context.addIssue({
+          code: 'custom',
+          path: ['entryTriggers', index],
+          message: 'Use one entry trigger per tile',
+        })
+      triggerTiles.add(tile)
+
+      if (trigger.x >= map.width || trigger.y >= map.height)
+        context.addIssue({
+          code: 'custom',
+          path: ['entryTriggers', index],
+          message: 'Tile-entry trigger is outside the map',
+        })
+    })
     const ids = new Set<string>()
     map.layers?.forEach((layer, index) => {
       if (ids.has(layer.id))
@@ -232,11 +374,19 @@ export type MapPosition = z.infer<typeof mapPositionSchema>
 export function getMapMovementCostMs(
   map: MapDefinition,
   position: MapPosition,
+  isBlocking: (object: MapObject) => boolean = isBlockingMapObject,
 ): number | undefined {
   const id = map.tiles[position.y]?.[position.x]
   const terrain = id === undefined ? undefined : map.terrain[id]
 
   if (!terrain || terrain.walkable === false) return undefined
+
+  if (
+    map.objects?.some(
+      (object) => object.x === position.x && object.y === position.y && isBlocking(object),
+    )
+  )
+    return undefined
   let cost = terrain.movementCostMs ?? 0
 
   for (const layer of map.layers ?? []) {
@@ -257,6 +407,20 @@ export function isWalkableMapTile(map: MapDefinition, position: MapPosition): bo
   return getMapMovementCostMs(map, position) !== undefined
 }
 
+/** Resource validation permits entrances that can be unlocked later; runtime checks current state. */
+export function getMapPotentialMovementCostMs(
+  map: MapDefinition,
+  position: MapPosition,
+): number | undefined {
+  return getMapMovementCostMs(
+    map,
+    position,
+    (object) =>
+      isBlockingMapObject(object) &&
+      !object.states?.some((state) => state.blocking === false || state.visible === false),
+  )
+}
+
 export function resolveMapView(
   maps: ReadonlyMap<string, MapDefinition>,
   id: string,
@@ -273,7 +437,7 @@ export function resolveMapView(
   if (playerSpawn && (playerSpawn.x >= map.width || playerSpawn.y >= map.height))
     throw new Error(`Player spawn is outside map: ${id}`)
 
-  if (playerSpawn && !isWalkableMapTile(map, playerSpawn))
+  if (playerSpawn && getMapPotentialMovementCostMs(map, playerSpawn) === undefined)
     throw new Error(`Player spawn is on blocked terrain in map: ${id}`)
 
   return map

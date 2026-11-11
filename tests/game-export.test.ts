@@ -392,7 +392,7 @@ describe('standalone game export', () => {
     )
   })
 
-  it('moves the map player using configured inputs from a served standalone export', async () => {
+  it('plays the map sample exits and E-key object interactions from a served standalone export', async () => {
     const destination = join(temp, 'coast-output')
     await exportGame({
       gameDirectory: fileURLToPath(new URL('../sample-games/square-map/', import.meta.url)),
@@ -442,13 +442,121 @@ describe('standalone game export', () => {
       const scene = engine.lifecycle!.activeScene!
       const movement = engine.lifecycle!.currentGame!.mapMovement!
       expect(movement.getPosition(scene, 'coast-map')).toEqual({ x: 9, y: 4 })
+      engine.input!.pressKey('KeyE')
+      engine.input!.releaseKey('KeyE')
+
+      for (let batch = 0; batch < 6; batch++) engine.flushMessages()
+      expect(
+        engine.lifecycle!.currentGame!.bindings!.read({ source: 'game.state', path: ['signRead'] }),
+      ).toEqual({ status: 'resolved', value: true })
       engine.input!.pressKey('KeyD')
       engine.input!.releaseKey('KeyD')
 
       for (let batch = 0; batch < 4; batch++) engine.flushMessages()
       expect(steps).toHaveLength(1)
-      steps[0]!()
+      steps.shift()!()
       expect(movement.getPosition(scene, 'coast-map')).toEqual({ x: 10, y: 4 })
+
+      const flush = () => {
+        for (let batch = 0; batch < 6; batch++) engine!.flushMessages()
+      }
+
+      const walk = (code: string) => {
+        engine!.input!.pressKey(code)
+        engine!.input!.releaseKey(code)
+        flush()
+        expect(steps).toHaveLength(1)
+        steps.shift()!()
+        flush()
+      }
+
+      for (const code of ['KeyA', 'KeyA', 'KeyW', 'KeyW']) walk(code)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('village')
+      expect(movement.getPosition(engine.lifecycle!.activeScene!, 'village-map')).toEqual({
+        x: 1,
+        y: 4,
+      })
+      flush()
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('village')
+      walk('KeyD')
+
+      const interact = () => {
+        engine!.input!.pressKey('KeyE')
+        engine!.input!.releaseKey('KeyE')
+        flush()
+      }
+
+      interact()
+      expect(
+        engine.lifecycle!.currentGame!.bindings!.read({
+          source: 'game.state',
+          path: ['chestOpened'],
+        }),
+      ).toEqual({ status: 'resolved', value: true })
+      expect(
+        engine.lifecycle!.currentGame!.mapObjects!.getAppearance(
+          engine.lifecycle!.activeScene!,
+          'village-map',
+          'village-chest',
+        ),
+      ).toMatchObject({ terrain: 'chest-open', label: 'Open chest', blocking: false })
+      expect(movement.canMove(engine.lifecycle!.activeScene!, 'village-map', 'north')).toBe(true)
+      interact()
+      expect(
+        engine.lifecycle!.currentGame!.bindings!.read({ source: 'game.state', path: ['coins'] }),
+      ).toEqual({ status: 'resolved', value: 25 })
+      expect(
+        engine.lifecycle!.currentGame!.bindings!.read({
+          source: 'game.state',
+          path: ['interactionMessage'],
+        }),
+      ).toEqual({
+        status: 'resolved',
+        value: 'The chest is empty. You already collected its coins.',
+      })
+      walk('KeyA')
+      walk('KeyA')
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('coast')
+      expect(movement.getPosition(engine.lifecycle!.activeScene!, 'coast-map')).toEqual({
+        x: 8,
+        y: 3,
+      })
+      walk('KeyW')
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('village')
+      expect(movement.getPosition(engine.lifecycle!.activeScene!, 'village-map')).toEqual({
+        x: 1,
+        y: 4,
+      })
+      expect(
+        engine.lifecycle!.currentGame!.mapObjects!.getAppearance(
+          engine.lifecycle!.activeScene!,
+          'village-map',
+          'village-chest',
+        )?.terrain,
+      ).toBe('chest-open')
+
+      for (let step = 0; step < 3; step++) walk('KeyD')
+      const game = engine.lifecycle!.currentGame!
+      const village = engine.lifecycle!.activeScene!
+      expect(game.mapObjects!.getTarget(village, 'village-map')?.id).toBe('village-berries')
+      interact()
+
+      const berries = () =>
+        game.inventory!.snapshot.filter(
+          (item) =>
+            item.itemType === 'berry' &&
+            item.placement.type === 'carried' &&
+            item.placement.owner === 'player',
+        )
+
+      expect(berries()).toHaveLength(3)
+      expect(
+        game.mapObjects!.getAppearance(village, 'village-map', 'village-berries')?.visible,
+      ).toBe(false)
+      expect(game.mapObjects!.getTarget(village, 'village-map')).toBeUndefined()
+      expect(movement.canMove(village, 'village-map', 'south')).toBe(true)
+      interact()
+      expect(berries()).toHaveLength(3)
     } finally {
       engine?.stop()
       await server.close()

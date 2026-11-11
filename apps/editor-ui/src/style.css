@@ -308,6 +308,17 @@ code {
   min-height: 0;
 }
 
+.draft-recovery {
+  padding: 0.5rem;
+  border: 1px solid var(--ed-border);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.draft-recovery .preview-actions {
+  flex-wrap: wrap;
+}
+
 .editor-workspace,
 .welcome {
   grid-column: 3;
@@ -1561,6 +1572,33 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   pointer-events: none;
 }
 
+.map-entry-trigger-marker {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 6;
+  padding: 0 0.15em;
+  border-radius: 0 0 0 0.2em;
+  background: #512da8;
+  color: white;
+  font-size: calc(var(--map-editor-tile-size, 1.75rem) * 0.42);
+  font-weight: 700;
+  line-height: 1.1;
+  text-shadow: none;
+  pointer-events: none;
+}
+
+.map-entry-trigger-row.map-entry-trigger-selected {
+  border-color: var(--ed-accent);
+  box-shadow: 0 0 0 1px var(--ed-accent);
+}
+
+.map-object-marker {
+  left: 0;
+  right: auto;
+  background: #164e63;
+}
+
 .map-layers > .help {
   grid-column: 1 / -1;
 }
@@ -1589,6 +1627,11 @@ input[aria-invalid='true'] + datalist + .translation-preview {
 .map-tile-cut::before {
   border-color: var(--ed-accent);
   border-style: dashed;
+}
+
+.map-tile-trigger-selected::before {
+  border-color: #a855f7;
+  background: rgb(168 85 247 / 18%);
 }
 
 .map-editor .map-tile.map-tile-paste {
@@ -1684,4 +1727,47 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.project-repair {
+  border: 1px solid var(--ed-accent);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.project-repair fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.project-repair label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.repair-source {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-family: ui-monospace, Consolas, monospace;
+  resize: vertical;
+}
+
+.repair-diagnostics {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.repair-saved-source {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
 }

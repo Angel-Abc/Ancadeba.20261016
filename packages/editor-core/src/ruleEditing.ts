@@ -87,6 +87,17 @@ export function editRules(
       if (binding) checkBinding(next, gameBindingSchema.parse(binding), booleanOnly)
     }
 
+    for (const id of game.maps ?? []) {
+      const triggers = object(documents[`maps/${id}.json`]).entryTriggers
+
+      if (Array.isArray(triggers))
+        for (const trigger of triggers) checkLink(object(trigger).action, undefined, false)
+      const objects = object(documents[`maps/${id}.json`]).objects
+
+      if (Array.isArray(objects))
+        for (const entry of objects) checkLink(object(entry).action, undefined, false)
+    }
+
     for (const id of game.scenes) {
       for (const component of sceneComponents(`scenes/${id}.json`)) {
         const button = object(component)

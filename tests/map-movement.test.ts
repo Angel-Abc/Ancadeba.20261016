@@ -1,6 +1,13 @@
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
 import { gameSchema, inputSchema, mapDefinitionSchema, sceneSchema } from '@ancadeba/schemas'
-import { assembleGameData, Engine, type EngineMessages } from '@ancadeba/game-runtime'
+import {
+  assembleGameData,
+  Engine,
+  type EngineMessages,
+  type GameRules,
+  type GameActionHandler,
+  type WorldTimePolicy,
+} from '@ancadeba/game-runtime'
 import { MessageBus } from '@ancadeba/utilities'
 import { applyCommand, inspectProject } from '@ancadeba/editor-core'
 
@@ -19,7 +26,7 @@ const manifest = gameSchema.parse({
   id: 'movement',
   title: 'Movement',
   version: '1',
-  scenes: ['first', 'second'],
+  scenes: ['first', 'second', 'menu'],
   maps: ['terrain'],
   input: 'movement',
   'initial-scene': 'first',
@@ -90,7 +97,19 @@ const scenes = new Map(
   ]),
 )
 
-async function setup() {
+scenes.set(
+  'menu',
+  sceneSchema.parse({
+    'schema-version': '1.0.0',
+    id: 'menu',
+    title: 'Menu',
+    type: 'stand-alone',
+    screen: { type: 'grid', grid: { rows: 1, columns: 1 } },
+    components: [],
+  }),
+)
+
+async function setup(rules?: GameRules, now: () => number = () => 0) {
   const game = assembleGameData(manifest, scenes, input, undefined, new Map([['terrain', map]]))
   const tasks: { callback: () => void; delay: number; cancelled: boolean }[] = []
   const fallback = vi.fn(() => ({ status: 'applied' as const }))
@@ -101,7 +120,7 @@ async function setup() {
     { debug: () => '', info: () => '', warn: () => '', error: () => '' },
     () => new MessageBus<EngineMessages>(),
     {
-      clock: { now: () => 0 },
+      clock: { now },
       scheduler: {
         schedule(callback, delay) {
           if (delay === 0) return () => {}
@@ -114,17 +133,18 @@ async function setup() {
           }
         },
       },
-      createGameRules: () => ({
-        handlers: new Map([['fallback', fallback]]),
-        inputBindings: ['north', 'east'].flatMap((input) =>
-          (['pressed', 'released', 'cancelled'] as const).map((phase) => ({
-            context: 'explore',
-            input,
-            phase,
-            action: 'fallback',
-          })),
-        ),
-      }),
+      createGameRules: () =>
+        rules ?? {
+          handlers: new Map([['fallback', fallback]]),
+          inputBindings: ['north', 'east'].flatMap((input) =>
+            (['pressed', 'released', 'cancelled'] as const).map((phase) => ({
+              context: 'explore',
+              input,
+              phase,
+              action: 'fallback',
+            })),
+          ),
+        },
     },
   )
 
@@ -149,6 +169,173 @@ async function setup() {
 }
 
 describe('map movement actions', () => {
+  it('charges one turn and terrain time only on completed steps across input and map views', async () => {
+    const { engine, scene, movement, bar, tasks, press } = await setup()
+    const actions = engine.lifecycle!.currentGame!.actions!
+    expect(movement.move(scene, 'map', 'north')).toBe(false)
+    expect(actions.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    press('KeyL')
+    expect(movement.move(scene, 'map', 'west')).toBe(false)
+    expect(actions.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    tasks[0]!.callback()
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+    tasks[0]!.callback()
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+    bar.activate(scene, 'directions', '3')
+    expect(actions.progression).toEqual({ turn: 2, worldTimeMs: 100 })
+    movement.move(scene, 'other-map', 'east')
+    expect(actions.progression).toEqual({ turn: 3, worldTimeMs: 100 })
+  })
+
+  it.each<WorldTimePolicy['mode']>(['action-driven', 'elapsed', 'hybrid'])(
+    'uses the configured %s world clock when a timed step completes',
+    async (mode) => {
+      let now = 0
+
+      const { engine, scene, movement, tasks, flush } = await setup(
+        { handlers: new Map(), worldTime: { mode, rate: 2 } },
+        () => now,
+      )
+
+      movement.move(scene, 'map', 'east')
+      now = 100
+      tasks.find((task) => task.delay === 100)!.callback()
+      flush()
+      expect(engine.lifecycle!.currentGame!.actions!.progression).toEqual({
+        turn: 1,
+        worldTimeMs: mode === 'action-driven' ? 100 : mode === 'elapsed' ? 200 : 300,
+      })
+    },
+  )
+
+  it('commits position and progression before observers and world-time scheduled actions run', async () => {
+    const due = vi.fn<GameActionHandler>(() => ({ status: 'applied' }))
+
+    const { engine, scene, movement, tasks, flush } = await setup({
+      handlers: new Map([['due', due]]),
+    })
+
+    const actions = engine.lifecycle!.currentGame!.actions!
+    actions.scheduleWorld('due', 100)
+    const snapshots: unknown[] = []
+    movement.subscribeChanges(() => {
+      if (!movement.isMoving(scene, 'map'))
+        snapshots.push({
+          position: movement.getPosition(scene, 'map'),
+          progression: actions.progression,
+        })
+    })
+    movement.move(scene, 'map', 'east')
+    flush()
+    expect(due).not.toHaveBeenCalled()
+    tasks[0]!.callback()
+    expect(snapshots).toEqual([
+      { position: { x: 2, y: 1 }, progression: { turn: 1, worldTimeMs: 100 } },
+    ])
+    flush()
+    expect(due).toHaveBeenCalledTimes(1)
+    expect(due.mock.calls[0]?.[1].progression).toEqual({ turn: 1, worldTimeMs: 100 })
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+  })
+
+  it('preserves a committed step and charges once when a movement observer throws', async () => {
+    const { engine, scene, movement, tasks } = await setup()
+    const actions = engine.lifecycle!.currentGame!.actions!
+    movement.move(scene, 'map', 'east')
+
+    const unsubscribe = movement.subscribeChanges(() => {
+      expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+      expect(movement.getPosition(scene, 'map')).toEqual({ x: 2, y: 1 })
+      throw new Error('Observer failure')
+    })
+
+    expect(() => tasks[0]!.callback()).toThrow('Map arrival subscribers failed')
+    unsubscribe()
+    tasks[0]!.callback()
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+    expect(movement.getPosition(scene, 'map')).toEqual({ x: 2, y: 1 })
+  })
+
+  it('advances the progression counter without rotating independently configured actor turns', async () => {
+    const { engine, scene, movement, tasks } = await setup({
+      handlers: new Map(),
+      turns: { actors: ['player', 'enemy'], phases: ['act'], actionPolicies: new Map() },
+    })
+
+    const actions = engine.lifecycle!.currentGame!.actions!
+    const turn = actions.turnState
+    movement.move(scene, 'map', 'east')
+    tasks[0]!.callback()
+    expect(actions.progression).toEqual({ turn: 1, worldTimeMs: 100 })
+    expect(actions.turnState).toBe(turn)
+  })
+
+  it('does not charge cancelled steps, scene entrances, restores or new-game spawns', async () => {
+    const { engine, scene, movement, lifecycle, tasks } = await setup()
+    const actions = lifecycle.currentGame!.actions!
+    movement.move(scene, 'map', 'east')
+    lifecycle.enterScene('second')
+    tasks[0]!.callback()
+
+    const returned = lifecycle.enterScene('first', {
+      mapView: 'map',
+      position: { x: 2, y: 1 },
+    })
+
+    expect(actions.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    lifecycle.enterScene('first', { mapView: 'map', position: { x: 1, y: 1 } })
+    movement.move(returned, 'map', 'east')
+    lifecycle.startGame()
+    const fresh = lifecycle.enterScene('first')
+    tasks[1]!.callback()
+    expect(engine.lifecycle!.currentGame!.actions!.progression).toEqual({ turn: 0, worldTimeMs: 0 })
+    expect(lifecycle.currentGame!.mapMovement!.getPosition(fresh, 'map')).toEqual({ x: 1, y: 1 })
+  })
+
+  it('resumes each scene and map view independently, including after visiting a stand-alone menu', async () => {
+    const { scene, movement, lifecycle, tasks } = await setup()
+    expect(movement.move(scene, 'map', 'east')).toBe(true)
+    tasks[0]!.callback()
+    expect(movement.move(scene, 'other-map', 'east')).toBe(true)
+    const second = lifecycle.enterScene('second')
+    expect(movement.getPosition(second, 'map')).toEqual({ x: 1, y: 1 })
+    expect(movement.move(second, 'map', 'west')).toBe(true)
+    expect(movement.getPosition(second, 'other-map')).toEqual({ x: 0, y: 2 })
+    const returned = lifecycle.enterScene('first')
+    expect(movement.getPosition(returned, 'map')).toEqual({ x: 2, y: 1 })
+    expect(movement.getPosition(returned, 'other-map')).toEqual({ x: 1, y: 2 })
+    lifecycle.enterScene('menu')
+    const resumed = lifecycle.enterScene('first')
+    expect(movement.getPosition(resumed, 'map')).toEqual({ x: 2, y: 1 })
+    expect(movement.getPosition(lifecycle.enterScene('second'), 'map')).toEqual({ x: 0, y: 1 })
+    lifecycle.startGame()
+    const fresh = lifecycle.enterScene('first')
+    expect(lifecycle.currentGame!.mapMovement!.getPosition(fresh, 'map')).toEqual({ x: 1, y: 1 })
+    expect(lifecycle.currentGame!.mapMovement!.getPosition(fresh, 'other-map')).toEqual({
+      x: 0,
+      y: 2,
+    })
+    expect(movement.getPosition(fresh, 'map')).toBeUndefined()
+  })
+
+  it('cancels an unfinished step and retains the last completed position when returning', async () => {
+    const { scene, movement, lifecycle, tasks } = await setup()
+    movement.move(scene, 'map', 'east')
+    tasks[0]!.callback()
+    movement.move(scene, 'map', 'west')
+    movement.move(scene, 'map', 'east')
+    const unfinished = tasks[1]!
+    lifecycle.enterScene('second')
+    expect(unfinished.cancelled).toBe(true)
+    const returned = lifecycle.enterScene('first')
+    unfinished.callback()
+    expect(movement.getPosition(returned, 'map')).toEqual({ x: 1, y: 1 })
+    movement.move(returned, 'map', 'east')
+    tasks[2]!.callback()
+    lifecycle.leaveScene()
+    expect(movement.getPosition(lifecycle.enterScene('first'), 'map')).toEqual({ x: 2, y: 1 })
+  })
+
   it('shares timed steps across keyboard and click, respects walls and boundaries, and isolates map views', async () => {
     const { scene, movement, bar, tasks, press, fallback } = await setup()
     const changes = vi.fn()

@@ -7,6 +7,7 @@ import {
   type RuleValue,
 } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
+import { sceneEntranceFields } from './sceneEntranceFields.js'
 import {
   parseStatePath,
   type RuleFormControls,
@@ -45,6 +46,18 @@ export function rulesDefinitionForm(
   const sceneIds = scenes.map(({ id }) => id)
   const owners = Object.keys(view.inventory?.owners ?? {})
   const items = Object.keys(view.inventory?.items ?? {})
+
+  const targets = [
+    ...new Set([
+      ...view.scenes.flatMap((scene) =>
+        scene.components.flatMap((component) =>
+          component.type === 'nearby' ? Object.keys(component.entries) : [],
+        ),
+      ),
+      ...Object.values(view.maps ?? {}).flatMap((map) => map.objects?.map(({ id }) => id) ?? []),
+    ]),
+  ]
+
   const availableFields = [...rules.state, ...otherFields]
   const fields = availableFields.map(({ path }) => statePath(path))
   const firstPath = () => availableFields[0]?.path.slice() ?? ['']
@@ -87,12 +100,7 @@ export function rulesDefinitionForm(
       case 'payload-is-target':
         return {
           type,
-          target:
-            view.scenes.flatMap((scene) =>
-              scene.components.flatMap((component) =>
-                component.type === 'nearby' ? Object.keys(component.entries) : [],
-              ),
-            )[0] ?? '',
+          target: targets[0] ?? '',
         }
     }
   }
@@ -103,6 +111,8 @@ export function rulesDefinitionForm(
         return { type, path: firstPath(), value: firstValue() }
       case 'move-item':
         return { type, item: items[0] ?? '', owner: owners[0] ?? '' }
+      case 'collect-items':
+        return { type, items: items.length ? [items[0]!] : [], owner: owners[0] ?? '' }
       case 'enter-scene':
         return { type, scene: sceneIds[0] ?? '' }
       case 'start-quest':
@@ -267,6 +277,7 @@ export function rulesDefinitionForm(
   const newId = create('input')
   newId.setAttribute('aria-label', t('rules.newActionId'))
   newId.placeholder = t('rules.newActionId')
+  newId.addEventListener('input', controls.markEdited)
 
   const addAction = button(t('rules.addAction'), () => {
     const id = newId.value.trim()
@@ -429,22 +440,9 @@ export function rulesDefinitionForm(
 
         if (entry.type === 'payload-is-target')
           field.append(
-            select(
-              t('rules.target'),
-              entry.target,
-              [
-                ...new Set(
-                  view.scenes.flatMap((scene) =>
-                    scene.components.flatMap((component) =>
-                      component.type === 'nearby' ? Object.keys(component.entries) : [],
-                    ),
-                  ),
-                ),
-              ],
-              (next) => {
-                entry.target = next
-              },
-            ),
+            select(t('rules.target'), entry.target, targets, (next) => {
+              entry.target = next
+            }),
           )
 
         if ('item' in entry)
@@ -488,6 +486,7 @@ export function rulesDefinitionForm(
               [
                 'set-state',
                 'move-item',
+                'collect-items',
                 'enter-scene',
                 'append-log',
                 'start-quest',
@@ -522,30 +521,53 @@ export function rulesDefinitionForm(
             }),
           )
 
-        if (entry.type === 'enter-scene') {
-          const mapViews =
-            scenes
-              .find(({ id }) => id === entry.scene)
-              ?.components.filter(
-                (component) => component.type === 'map-view' && component.playerSpawn,
-              )
-              .map(({ id }) => id) ?? []
+        if (entry.type === 'collect-items') {
+          const help = create('p')
+          help.className = 'help'
+          help.textContent = t('rules.pickupHelp')
+          field.append(
+            help,
+            select(t('rules.destinationOwner'), entry.owner, owners, (next) => {
+              entry.owner = next
+            }),
+            ...entry.items.map((item, index) =>
+              group(
+                t('rules.pickupItem', { number: index + 1 }),
+                select(t('rules.item'), item, items, (next) => {
+                  entry.items[index] = next
+                }),
+                button(
+                  t('rules.removePickupItem'),
+                  () =>
+                    change(() => {
+                      entry.items.splice(index, 1)
+                    }),
+                  entry.items.length === 1,
+                ),
+              ),
+            ),
+            button(
+              t('rules.addPickupItem'),
+              () =>
+                change(() => {
+                  const item = items.find((id) => !entry.items.includes(id))
 
+                  if (item) entry.items.push(item)
+                }),
+              !items.some((id) => !entry.items.includes(id)) || entry.items.length >= 100,
+            ),
+          )
+        }
+
+        if (entry.type === 'enter-scene') {
           field.append(
             select(t('rules.destinationScene'), entry.scene, sceneChoices(view, 'game'), (next) => {
               entry.scene = next
               delete entry.mapView
+              delete entry.position
               rerender()
             }),
-            select(
-              t('rules.chargeTime'),
-              entry.mapView ?? '',
-              [['', t('form.none')], ...mapViews],
-              (next) => {
-                if (next) entry.mapView = next
-                else delete entry.mapView
-              },
-            ),
+            ...sceneEntranceFields(controls, view, entry, rerender, true),
           )
         }
 

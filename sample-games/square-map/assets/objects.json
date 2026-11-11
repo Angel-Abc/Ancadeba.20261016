@@ -1,0 +1,10 @@
+{
+  "schema-version": "1.0.0",
+  "images": {
+    "chests": {
+      "format": "svg",
+      "source": "assets/chests.svg",
+      "bounds": { "x": 0, "y": 0, "width": 64, "height": 32 }
+    }
+  }
+}

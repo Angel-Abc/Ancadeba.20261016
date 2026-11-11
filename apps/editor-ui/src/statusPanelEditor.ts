@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { statusPanelComponentSchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -195,6 +198,26 @@ export function bindStatusPanelEditor(
       ),
     )
   }
+
+  registerEditorDraft(
+    root,
+    'status',
+    z.object({
+      sceneId: z.string(),
+      componentId: z.string(),
+      draft: statusPanelComponentSchema.optional(),
+      creating: z.boolean(),
+    }),
+    () => (dirty ? { sceneId, componentId, draft, creating } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      componentId = saved.componentId
+      draft = saved.draft
+      creating = saved.creating
+      dirty = true
+      render()
+    },
+  )
 
   return {
     navigate,

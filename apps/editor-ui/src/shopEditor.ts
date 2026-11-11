@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type ProjectView, type EditorCommand } from '@ancadeba/editor-core'
@@ -176,6 +178,24 @@ export function bindShopEditor(
       ),
     )
   }
+
+  registerEditorDraft(
+    root,
+    'shop',
+    z.object({
+      sceneId: z.string(),
+      draft: shopComponentSchema.optional(),
+      panels: z.array(inventoryComponentSchema),
+    }),
+    () => (dirty ? { sceneId, draft, panels } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      draft = saved.draft
+      panels = saved.panels
+      dirty = true
+      render()
+    },
+  )
 
   return {
     navigate,

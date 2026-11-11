@@ -18,6 +18,8 @@ export * from './actionBar.js'
 
 export * from './scene.js'
 
+export * from './sceneTransition.js'
+
 export * from './statusPanel.js'
 
 export * from './map.js'

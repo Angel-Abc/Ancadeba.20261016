@@ -286,6 +286,10 @@ workspace-relative `path` and manifest `title` values. An empty path represents
 a game at the workspace root. Nested games are included; inaccessible paths are
 skipped according to the server's workspace boundary. A blank title can mean an
 missing/malformed manifest title; listing does not validate the whole game.
+Folders with recognizable game-resource directories and no manifest are also
+listed with `missingManifest: true`. They can be opened and recovered in the
+editor's **Repair project** panel; MCP editing commands still require a valid
+project.
 
 Call `ancadeba_create_project` without a revision:
 

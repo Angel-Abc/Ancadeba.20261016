@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, type GameBindingDefinition } from '@ancadeba/schemas'
 import { displayLabel, statePath, type RuleFormControls } from './ruleFormControls.js'
@@ -140,6 +142,25 @@ export function inventoryActionsForm(
 
   root.append(picker, error, area)
   reset()
+
+  registerEditorDraft(
+    root,
+    'inventory-actions',
+    z.object({
+      selected: z.string(),
+      rows: z.array(
+        z.object({ id: z.string(), action: z.string(), enabledWhen: gameBindingSchema.optional() }),
+      ),
+    }),
+    () => (dirty ? { selected, rows } : undefined),
+    (saved) => {
+      selected = saved.selected
+      rows = saved.rows
+      dirty = true
+      controls.markEdited()
+      render()
+    },
+  )
 
   return root
 }

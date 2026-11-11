@@ -16,6 +16,7 @@ import {
   colorSchema,
 } from './assets.js'
 import { mapPositionSchema, mapViewportSchema } from './map.js'
+import { sceneTransitionSchema } from './sceneTransition.js'
 import { inventoryPreviewSchema } from './inventory.js'
 import { combatCommandSchema } from './combat.js'
 
@@ -79,8 +80,13 @@ export const requestActionSchema = z.object({
 
 const gameplayButtonActions = [
   z.object({ type: z.literal('new-game'), scene: gameIdSchema }),
-  z.object({ type: z.literal('enter-scene'), scene: gameIdSchema }),
+  sceneTransitionSchema.strip(),
   requestActionSchema,
+  z.object({
+    type: z.literal('interact-map'),
+    mapView: gameIdSchema,
+    object: gameIdSchema.optional(),
+  }),
   z.object({
     type: z.literal('move-map'),
     mapView: gameIdSchema,
@@ -741,7 +747,7 @@ export const sceneSchema = z
             : []
 
       for (const { action, path } of movementActions) {
-        if (action.type !== 'move-map') continue
+        if (action.type !== 'move-map' && action.type !== 'interact-map') continue
         const map = scene.components.find((entry) => entry.id === action.mapView)
 
         if (

@@ -135,7 +135,10 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
                 : undefined
             : undefined
 
-        button.title = storyIssue ?? itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent
+        button.title =
+          action.type === 'enter-scene' && button.disabled
+            ? (context.navigationUnavailableMessage?.() ?? 'The destination is currently blocked.')
+            : (storyIssue ?? itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent)
         button.setAttribute('aria-description', button.title)
 
         if (empty) empty.hidden = available

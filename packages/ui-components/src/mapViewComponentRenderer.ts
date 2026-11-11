@@ -3,6 +3,8 @@ import { getMapMovementCostMs, type MapPosition } from '@ancadeba/schemas'
 import { createBrowserTiming } from './browserTiming.js'
 import { mapTileImages } from './mapTileAppearance.js'
 import { applyMapCellAppearance } from './mapCellAppearance.js'
+import { applyMapTileAppearance } from './mapTileAppearance.js'
+import type { MapObject } from '@ancadeba/schemas'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -34,6 +36,8 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
   ): RenderedComponent {
     const { map, viewport } = component
     const movement = scene?.type === 'game' ? scene.game.mapMovement : undefined
+    const objects = scene?.type === 'game' ? scene.game.mapObjects : undefined
+    let active = true
 
     const sharedMovement =
       movement && scene && movement.getPosition(scene, component.id) !== undefined
@@ -51,10 +55,27 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     clip.className = 'ancadeba-map-window'
     const grid = document.createElement('div')
     grid.className = 'ancadeba-map-grid'
-    grid.setAttribute('aria-hidden', 'true')
+
+    if (!map.objects?.length) grid.setAttribute('aria-hidden', 'true')
     grid.style.setProperty('--ge-map-columns', String(map.width))
     grid.style.setProperty('--ge-map-rows', String(map.height))
     const cells: { element: HTMLElement; x: number; y: number }[] = []
+
+    const objectButtons: { element: HTMLButtonElement; object: MapObject; activate: () => void }[] =
+      []
+
+    const paintObject = (entry: (typeof objectButtons)[number]) => {
+      const appearance =
+        (scene && objects?.getAppearance(scene, component.id, entry.object.id)) || entry.object
+
+      applyMapTileAppearance(entry.element, map, appearance.terrain, assets, images.url)
+      entry.element.textContent = map.terrain[appearance.terrain]?.tile
+        ? ''
+        : appearance.label.slice(0, 1)
+      entry.element.title = appearance.label
+      entry.element.setAttribute('aria-label', appearance.label)
+      entry.element.hidden = appearance.visible === false
+    }
 
     const images = mapTileImages(
       map,
@@ -62,7 +83,9 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
       graphics,
       () => {
         for (const cell of cells)
-          applyMapCellAppearance(cell.element, map, cell.x, cell.y, assets, images.url)
+          applyMapCellAppearance(cell.element, map, cell.x, cell.y, assets, images.url, false)
+
+        updateObjects()
       },
       (message) => {
         root.dataset.mapDiagnostics = message
@@ -75,16 +98,52 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
         const tile = document.createElement('div')
         tile.className = 'ancadeba-map-tile'
         tile.style.setProperty('--ge-map-tile-color', map.terrain[id]!.color ?? 'transparent')
-        applyMapCellAppearance(tile, map, x, y, assets, images.url)
+        applyMapCellAppearance(tile, map, x, y, assets, images.url, false)
+        tile.setAttribute('aria-hidden', 'true')
         cells.push({ element: tile, x, y })
         grid.append(tile)
       }
     }
 
+    for (const object of map.objects ?? []) {
+      const element = document.createElement('button')
+      element.type = 'button'
+      element.className = 'ancadeba-map-object'
+      element.dataset.mapObject = object.id
+      element.textContent = object.label.slice(0, 1)
+      element.title = object.label
+      element.setAttribute('aria-label', object.label)
+      element.style.setProperty('grid-column', `${object.x + 1} / span 1`)
+      element.style.setProperty('grid-row', `${object.y + 1} / span 1`)
+      applyMapTileAppearance(element, map, object.terrain, assets, images.url)
+
+      const activate = () => {
+        if (active && scene && objects?.interact(scene, component.id, object.id)) root.focus()
+      }
+
+      element.addEventListener('click', activate)
+      objectButtons.push({ element, object, activate })
+      grid.append(element)
+    }
+
+    const updateObjects = () => {
+      for (const entry of objectButtons) {
+        const focused = document.activeElement === entry.element
+        paintObject(entry)
+        entry.element.disabled = !scene || !objects?.getTarget(scene, component.id, entry.object.id)
+
+        if (focused && entry.element.disabled && active && scene && !scene.disposed) root.focus()
+      }
+    }
+
+    updateObjects()
+    const unsubscribeObjects = objects?.subscribeChanges(updateObjects)
+
     const player = component.playerSpawn && document.createElement('div')
 
     if (player) {
       player.className = 'ancadeba-map-player'
+      player.setAttribute('aria-hidden', 'true')
       grid.append(player)
     }
 
@@ -186,9 +245,14 @@ export class MapViewComponentRenderer implements IComponentRenderer<MapViewCompo
     return {
       element: root,
       dispose() {
+        active = false
+
+        for (const entry of objectButtons)
+          entry.element.removeEventListener('click', entry.activate)
         images.dispose()
         cancelStep?.()
         unsubscribeMovement?.()
+        unsubscribeObjects?.()
         root.removeEventListener('keydown', onKeyDown)
         root.remove()
       },

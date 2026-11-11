@@ -13,16 +13,32 @@ function archiveResponse(name = 'basic.zip') {
   })
 }
 
-function createController() {
+function createController(confirmExport?: () => boolean) {
   const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => archiveResponse())
   const download = vi.fn<(archive: Blob, fileName: string) => void>()
   const onStateChange = vi.fn<ExportStateListener>()
-  const controller = new EditorExportController(fetcher, download, onStateChange)
+  const controller = new EditorExportController(fetcher, download, onStateChange, confirmExport)
 
   return { controller, fetcher, download, onStateChange }
 }
 
 describe('editor export controller', () => {
+  it('leaves the current download intact when confirmation is cancelled and permits retrying', async () => {
+    const confirmExport = vi.fn(() => true)
+    const { controller, fetcher, download, onStateChange } = createController(confirmExport)
+    await controller.export('basic')
+    confirmExport.mockReturnValue(false)
+    await controller.export('basic')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(onStateChange.mock.calls).toEqual([['exporting'], ['ready', 'basic.zip']])
+    confirmExport.mockReturnValue(true)
+    await controller.export('basic')
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(download).toHaveBeenCalledTimes(2)
+    expect(confirmExport).toHaveBeenCalledTimes(3)
+  })
+
   it('exports the selected game folder and delivers the ZIP download', async () => {
     const { controller, fetcher, download, onStateChange } = createController()
     await controller.export(' basic/ ')

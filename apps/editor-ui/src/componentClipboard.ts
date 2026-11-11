@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { componentClipboardSchema } from '@ancadeba/editor-core'
 import {
   commandSchema,
   type ComponentClipboard,
@@ -223,6 +226,35 @@ export function bindComponentClipboard(
 
     return true
   }
+
+  registerEditorDraft(
+    root,
+    'component-clipboard',
+    z.object({
+      sceneId: z.string().optional(),
+      componentId: z.string().optional(),
+      clipboard: componentClipboardSchema.optional(),
+      sourceScene: z.string(),
+      newId: z.string(),
+      placement: z.object({
+        row: z.number(),
+        column: z.number(),
+        rowSpan: z.number(),
+        columnSpan: z.number(),
+      }),
+    }),
+    () => (dirty ? { sceneId, componentId, clipboard, sourceScene, newId, placement } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      componentId = saved.componentId
+      clipboard = saved.clipboard
+      sourceScene = saved.sourceScene
+      newId = saved.newId
+      placement = saved.placement
+      dirty = true
+      render()
+    },
+  )
 
   return {
     shortcut(action: 'copy' | 'paste'): boolean {

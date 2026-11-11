@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -379,6 +381,39 @@ export function bindStoryEditor(
       journals,
     )
   }
+
+  registerEditorDraft(
+    root,
+    'story',
+    z.object({
+      draft: z
+        .discriminatedUnion('kind', [
+          z.object({ kind: z.literal('dialogue'), data: dialogueSchema }),
+          z.object({ kind: z.literal('quest'), data: questSchema }),
+        ])
+        .optional(),
+      selection: z.string(),
+      dirty: z.boolean(),
+      journalDirty: z.boolean(),
+      journalScene: z.string(),
+      journalId: z.string(),
+      journal: questLogComponentSchema.optional(),
+    }),
+    () =>
+      dirty || journalDirty
+        ? { draft, selection, dirty, journalDirty, journalScene, journalId, journal }
+        : undefined,
+    (saved) => {
+      draft = saved.draft
+      selection = saved.selection
+      dirty = saved.dirty
+      journalDirty = saved.journalDirty
+      journalScene = saved.journalScene
+      journalId = saved.journalId
+      journal = saved.journal
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty || journalDirty,

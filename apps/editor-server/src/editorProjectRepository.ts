@@ -24,6 +24,7 @@ import { createWorkspaceProject } from './projectCreation.js'
 import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
 import { projectStylesheets } from './projectStylesheets.js'
+import { suggestRecoveryManifest } from './manifestRecovery.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
   createDirectory?(path: string): Promise<void>
@@ -33,13 +34,14 @@ export interface ProjectWorkspace extends WorkspaceService {
 }
 
 export interface EditorProjectRepository {
+  previewRepair?(folder: string, file: string, text: string): Promise<ProjectSnapshot>
   readHistoryFiles?(
     folder: string,
     files: readonly string[],
   ): Promise<Record<string, Uint8Array | undefined>>
   restoreHistoryFiles?(folder: string, files: readonly HistoryFile[]): Promise<void>
   create?(folder: string, documents: ProjectDocuments): Promise<void>
-  load(folder: string): Promise<ProjectSnapshot>
+  load(folder: string, overrides?: ReadonlyMap<string, string>): Promise<ProjectSnapshot>
   save(folder: string, change: CommandResult): Promise<void>
   validateAssets?(
     folder: string,
@@ -56,6 +58,10 @@ export function projectPath(folder: string, file: string): string {
 export class WorkspaceProjectRepository implements EditorProjectRepository {
   constructor(private readonly workspace: ProjectWorkspace) {}
 
+  previewRepair(folder: string, file: string, text: string): Promise<ProjectSnapshot> {
+    return this.load(folder, new Map([[file, text]]))
+  }
+
   readHistoryFiles(folder: string, files: readonly string[]) {
     return readHistoryFiles(this.workspace, folder, files)
   }
@@ -68,18 +74,27 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     return createWorkspaceProject(this.workspace, folder, documents)
   }
 
-  async load(folder: string): Promise<ProjectSnapshot> {
+  async load(
+    folder: string,
+    overrides: ReadonlyMap<string, string> = new Map(),
+  ): Promise<ProjectSnapshot> {
     const documents: Record<string, unknown> = {}
     const sources: [string, string | null][] = []
     const sourceDiagnostics: Diagnostic[] = []
+    const sourceTexts: Record<string, string | null> = {}
+    let recoveryManifest: string | undefined
 
-    const read = async (file: string, { required = false, json = true } = {}) => {
+    const read = async (file: string, { json = true } = {}) => {
       let bytes: Uint8Array
 
       try {
-        bytes = await this.workspace.read(projectPath(folder, file))
+        const override = overrides.get(file)
+        bytes =
+          override === undefined
+            ? await this.workspace.read(projectPath(folder, file))
+            : Buffer.from(override)
       } catch (error) {
-        if (workspaceError(error).status !== 404 || required) throw error
+        if (workspaceError(error).status !== 404) throw error
         sourceDiagnostics.push({
           code: 'missing_file',
           file,
@@ -87,6 +102,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           message: 'Referenced file does not exist',
         })
         sources.push([file, null])
+        sourceTexts[file] = null
 
         if (json) documents[file] = null
 
@@ -94,6 +110,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       }
 
       sources.push([file, Buffer.from(bytes).toString('base64')])
+      sourceTexts[file] = Buffer.from(bytes).toString('utf8')
 
       if (!json) {
         documents[file] = Buffer.from(bytes).toString('utf8')
@@ -114,7 +131,14 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       }
     }
 
-    await read('game.json', { required: true })
+    await read('game.json')
+
+    if (sourceTexts['game.json'] === null) {
+      const listing = await this.workspace.list(folder)
+      recoveryManifest = await suggestRecoveryManifest(this.workspace, folder, listing)
+      sources.push(['<recovery-manifest>', recoveryManifest])
+    }
+
     const game = gameSchema.safeParse(documents['game.json'])
 
     if (game.success) {
@@ -144,9 +168,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
         if (file === game.data.stylesheet) continue
 
         try {
-          const bytes = await this.workspace.read(projectPath(folder, file))
-          documents[file] = Buffer.from(bytes).toString('utf8')
-          sources.push([file, Buffer.from(bytes).toString('base64')])
+          await read(file, { json: false })
         } catch (error) {
           if (![400, 403, 404, 409].includes(workspaceError(error).status)) throw error
         }
@@ -190,6 +212,8 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       revision: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),
       documents,
       sourceDiagnostics,
+      sourceTexts,
+      ...(recoveryManifest === undefined ? {} : { recoveryManifest }),
     }
   }
 

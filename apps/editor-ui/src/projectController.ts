@@ -3,6 +3,8 @@ import type {
   EditorCommand,
   ProjectView,
   ComponentClipboard,
+  ProjectRepairRequest,
+  ProjectRepairCheck,
 } from '@ancadeba/editor-core'
 import { EditorClientError, type IEditorClient } from './editorClient.js'
 
@@ -97,6 +99,45 @@ export class ProjectEditorController {
 
       return true
     })
+  }
+
+  async checkRepair(
+    request: Omit<ProjectRepairRequest, 'path'>,
+  ): Promise<ProjectRepairCheck | undefined> {
+    let result: ProjectRepairCheck | undefined
+    await this.perform(async () => {
+      if (!this.client.checkRepair)
+        throw new EditorClientError('unsupported_repair', 'Project repair is unavailable')
+      result = await this.client.checkRepair({ ...request, path: this.state.path })
+      this.state = { ...this.state, conflict: false, changedElsewhere: false }
+
+      return false
+    })
+
+    return result
+  }
+
+  async repair(request: Omit<ProjectRepairRequest, 'path'>): Promise<boolean> {
+    let saved = false
+    await this.perform(async () => {
+      if (!this.client.repair)
+        throw new EditorClientError('unsupported_repair', 'Project repair is unavailable')
+      const next = await this.client.repair({ ...request, path: this.state.path })
+      this.state = {
+        ...this.state,
+        view: next,
+        lastCommand: null,
+        preserveDrafts: true,
+        error: '',
+        conflict: false,
+        changedElsewhere: false,
+      }
+      saved = true
+
+      return true
+    })
+
+    return saved
   }
 
   async copyComponent(
@@ -241,6 +282,23 @@ export class ProjectEditorController {
 
   dispose(): void {
     this.disposed = true
+  }
+
+  /** Recovered drafts retain their original revision until an explicit reload reviews newer files. */
+  recoverDrafts(view: ProjectView): void {
+    if (this.disposed || this.state.busy || !this.state.view) return
+    const changedElsewhere = this.state.view.revision !== view.revision
+    this.refreshSequence++
+    this.state = {
+      ...this.state,
+      view,
+      lastCommand: null,
+      preserveDrafts: false,
+      changedElsewhere,
+      conflict: false,
+      error: '',
+    }
+    this.onChange(this.state, true)
   }
 
   private async perform(operation: () => Promise<boolean>): Promise<void> {

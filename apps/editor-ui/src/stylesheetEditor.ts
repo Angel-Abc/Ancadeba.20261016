@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
@@ -244,6 +246,20 @@ export function bindStylesheetEditor(
     fields.append(form)
     fields.disabled = busy || !allowed()
   }
+
+  registerEditorDraft(
+    root,
+    'stylesheet',
+    z.object({ file: z.string(), css: z.string(), creating: z.boolean() }),
+    () => (dirty ? { file, css, creating } : undefined),
+    (saved) => {
+      file = saved.file
+      css = saved.css
+      creating = saved.creating
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,

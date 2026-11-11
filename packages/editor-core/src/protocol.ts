@@ -25,6 +25,8 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  recoveryManifest: z.string().optional(),
+  repairFiles: z.record(z.string(), z.string().nullable()).optional(),
   history: z
     .object({
       canUndo: z.boolean(),
@@ -58,7 +60,9 @@ export const projectViewSchema = z.object({
 })
 
 export const projectListSchema = z.object({
-  projects: z.array(z.object({ path: z.string(), title: z.string() })),
+  projects: z.array(
+    z.object({ path: z.string(), title: z.string(), missingManifest: z.boolean().optional() }),
+  ),
 })
 
 export type ProjectChoice = z.infer<typeof projectListSchema>['projects'][number]
@@ -70,6 +74,22 @@ export const historyRequestSchema = z.strictObject({
 })
 
 export type HistoryRequest = z.infer<typeof historyRequestSchema>
+
+export const projectRepairRequestSchema = z.strictObject({
+  path: z.string(),
+  expectedRevision: z.string().min(1),
+  file: z.string().min(1),
+  text: z.string().max(4 * 1024 * 1024),
+})
+
+export const projectRepairCheckSchema = z.object({
+  revision: z.string().min(1),
+  diagnostics: z.array(diagnosticSchema),
+})
+
+export type ProjectRepairRequest = z.infer<typeof projectRepairRequestSchema>
+
+export type ProjectRepairCheck = z.infer<typeof projectRepairCheckSchema>
 
 export const apiErrorSchema = z.object({
   error: z.string(),

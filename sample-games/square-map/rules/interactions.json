@@ -1,0 +1,131 @@
+{
+  "state": [
+    { "path": ["berriesCollected"], "value": false },
+    {
+      "path": ["signRead"],
+      "value": false
+    },
+    {
+      "path": ["chestOpened"],
+      "value": false
+    },
+    {
+      "path": ["coins"],
+      "value": 0
+    },
+    {
+      "path": ["interactionMessage"],
+      "value": "Press E beside an object to interact."
+    }
+  ],
+  "actions": {
+    "collect-berries": [
+      {
+        "when": [
+          { "type": "scene-is", "scene": "village" },
+          { "type": "payload-is-target", "target": "village-berries" },
+          { "type": "state-is", "path": ["berriesCollected"], "value": false }
+        ],
+        "effects": [
+          {
+            "type": "collect-items",
+            "items": ["berry-1", "berry-2", "berry-3"],
+            "owner": "player"
+          },
+          { "type": "set-state", "path": ["berriesCollected"], "value": true },
+          {
+            "type": "set-state",
+            "path": ["interactionMessage"],
+            "value": "You collect 3 berries. The basket is gone."
+          }
+        ]
+      }
+    ],
+    "read-signpost": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "coast"
+          },
+          {
+            "type": "payload-is-target",
+            "target": "coast-signpost"
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["signRead"],
+            "value": true
+          },
+          {
+            "type": "set-state",
+            "path": ["interactionMessage"],
+            "value": "Signpost: Pine Village is through the gold gate at (8, 2)."
+          }
+        ]
+      }
+    ],
+    "open-chest": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "village"
+          },
+          {
+            "type": "payload-is-target",
+            "target": "village-chest"
+          },
+          {
+            "type": "state-is",
+            "path": ["chestOpened"],
+            "value": false
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["chestOpened"],
+            "value": true
+          },
+          {
+            "type": "set-state",
+            "path": ["coins"],
+            "value": 25
+          },
+          {
+            "type": "set-state",
+            "path": ["interactionMessage"],
+            "value": "You open the chest and find 25 coins."
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "village"
+          },
+          {
+            "type": "payload-is-target",
+            "target": "village-chest"
+          },
+          {
+            "type": "state-is",
+            "path": ["chestOpened"],
+            "value": true
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-state",
+            "path": ["interactionMessage"],
+            "value": "The chest is empty. You already collected its coins."
+          }
+        ]
+      }
+    ]
+  }
+}

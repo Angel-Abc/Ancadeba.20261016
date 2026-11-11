@@ -1,0 +1,218 @@
+{
+  "schema-version": "1.0.0",
+  "type": "square-grid",
+  "width": 12,
+  "height": 8,
+  "terrain": {
+    "forest": {
+      "color": "#2b5143",
+      "walkable": false
+    },
+    "grass": {
+      "color": "#8b994e",
+      "walkable": true,
+      "movementCostMs": 200
+    },
+    "road": {
+      "color": "#9a8c76",
+      "walkable": true,
+      "movementCostMs": 150
+    },
+    "house": {
+      "color": "#9c6b4a",
+      "walkable": false
+    },
+    "gate": {
+      "color": "#d4a83f",
+      "walkable": true,
+      "movementCostMs": 150
+    },
+    "chest": {
+      "tile": {
+        "tileset": "chests",
+        "column": 0,
+        "row": 0
+      },
+      "walkable": false
+    },
+    "berries": {
+      "color": "#97437b"
+    },
+    "chest-open": {
+      "tile": {
+        "tileset": "chests",
+        "column": 1,
+        "row": 0
+      },
+      "walkable": true
+    }
+  },
+  "tiles": [
+    [
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest"
+    ],
+    [
+      "forest",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "forest"
+    ],
+    [
+      "forest",
+      "grass",
+      "grass",
+      "house",
+      "house",
+      "grass",
+      "grass",
+      "house",
+      "house",
+      "grass",
+      "grass",
+      "forest"
+    ],
+    [
+      "forest",
+      "grass",
+      "grass",
+      "house",
+      "house",
+      "grass",
+      "grass",
+      "house",
+      "house",
+      "grass",
+      "grass",
+      "forest"
+    ],
+    [
+      "gate",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "road",
+      "forest"
+    ],
+    [
+      "forest",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "road",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "forest"
+    ],
+    [
+      "forest",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "road",
+      "grass",
+      "grass",
+      "grass",
+      "grass",
+      "forest"
+    ],
+    [
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest",
+      "forest"
+    ]
+  ],
+  "entryTriggers": [
+    {
+      "id": "coast-exit",
+      "x": 0,
+      "y": 4,
+      "action": "return-coast"
+    }
+  ],
+  "objects": [
+    {
+      "id": "village-berries",
+      "label": "Berry basket",
+      "x": 4,
+      "y": 5,
+      "terrain": "berries",
+      "action": "collect-berries",
+      "blocking": true,
+      "states": [
+        {
+          "id": "collected",
+          "when": { "path": ["berriesCollected"], "value": true },
+          "visible": false
+        }
+      ]
+    },
+    {
+      "id": "village-chest",
+      "label": "Chest",
+      "x": 2,
+      "y": 3,
+      "terrain": "chest",
+      "action": "open-chest",
+      "blocking": true,
+      "states": [
+        {
+          "id": "open",
+          "when": {
+            "path": ["chestOpened"],
+            "value": true
+          },
+          "terrain": "chest-open",
+          "label": "Open chest",
+          "blocking": false
+        }
+      ]
+    }
+  ],
+  "tilesets": {
+    "chests": {
+      "image": "chests",
+      "tileWidth": 32,
+      "tileHeight": 32
+    }
+  }
+}

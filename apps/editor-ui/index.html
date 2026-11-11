@@ -106,8 +106,48 @@
               >
                 New project
               </button>
+              <button
+                id="project-recover-toggle"
+                type="button"
+                aria-controls="project-recover-controls"
+                aria-expanded="false"
+                data-i18n="recovery.open"
+              >
+                Recover project
+              </button>
             </div>
             <p id="project-open-feedback" class="help" role="status" hidden></p>
+          </form>
+          <form id="project-recover-controls" hidden>
+            <fieldset id="project-recover-fields">
+              <legend data-i18n="recovery.open">Recover project</legend>
+              <p class="help" id="project-recover-help" data-i18n="recovery.folderHelp">
+                Open an existing folder whose game.json is missing. Use a workspace-relative path
+                with / separators, or leave it blank for the workspace root. No files are written
+                until you save a repair.
+              </p>
+              <label for="project-recover-folder" data-i18n="recovery.folder"
+                >Existing folder</label
+              >
+              <input
+                id="project-recover-folder"
+                autocomplete="off"
+                aria-describedby="project-recover-help"
+              />
+              <div class="editor-actions">
+                <button
+                  id="project-recover-submit"
+                  type="submit"
+                  class="primary"
+                  data-i18n="recovery.inspect"
+                >
+                  Open for recovery
+                </button>
+                <button id="project-recover-cancel" type="button" data-i18n="project.cancelCreate">
+                  Cancel
+                </button>
+              </div>
+            </fieldset>
           </form>
           <form id="project-create-controls" hidden>
             <fieldset id="project-create-fields">
@@ -153,6 +193,13 @@
           <button id="editor-reload" type="button" disabled hidden data-i18n="project.reload">
             Reload latest (keep entries)
           </button>
+          <div id="draft-recovery" class="draft-recovery" hidden>
+            <p id="draft-recovery-message" role="status" aria-live="polite"></p>
+            <div class="preview-actions">
+              <button id="draft-restore" type="button">Restore drafts</button>
+              <button id="draft-discard" type="button">Discard recovery copy</button>
+            </div>
+          </div>
           <label for="project-search" class="sr-only" data-i18n="tree.search">Search project</label>
           <input id="project-search" type="search" autocomplete="off" />
           <div id="project-tree" role="tree"></div>
@@ -166,6 +213,7 @@
             </header>
             <div class="editor-pane-body">
               <p id="editor-error" class="error" role="alert" hidden></p>
+              <section id="project-repair" class="project-repair" hidden></section>
               <fieldset id="editor-fields" disabled>
                 <legend class="sr-only" data-i18n="project.properties">Project properties</legend>
                 <form id="editor-metadata">

@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { inventorySchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -554,6 +557,53 @@ export function bindItemEditor(
         ),
       )
   }
+
+  registerEditorDraft(
+    root,
+    'item',
+    z.object({
+      definitions: z.boolean(),
+      sceneId: z.string(),
+      target: z.string(),
+      item: inventorySchema.shape.itemTypes.valueType.optional(),
+      component: z
+        .union([itemDetailsComponentSchema, equipmentComponentSchema, inventoryComponentSchema])
+        .optional(),
+      slots: z.array(z.tuple([z.string(), z.string()])).optional(),
+      combatStats: combatStatsProfileSchema.optional(),
+      creating: z.boolean(),
+      hiddenPreviews: inventoryComponentSchema.shape.previews,
+    }),
+    () =>
+      dirty || inventoryEditor.hasDrafts()
+        ? {
+            definitions,
+            sceneId,
+            target,
+            item,
+            component,
+            slots,
+            combatStats,
+            creating,
+            hiddenPreviews,
+          }
+        : undefined,
+    (saved) => {
+      definitions = saved.definitions
+      sceneId = saved.sceneId
+      target = saved.target
+      item = saved.item
+      component = saved.component
+      slots = saved.slots
+      combatStats = saved.combatStats
+      creating = saved.creating
+      hiddenPreviews = saved.hiddenPreviews
+      fields.hidden = definitions
+      inventoryRoot.hidden = !definitions
+      dirty = !definitions
+      render()
+    },
+  )
 
   return {
     navigate,

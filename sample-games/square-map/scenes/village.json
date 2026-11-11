@@ -1,0 +1,162 @@
+{
+  "schema-version": "1.0.0",
+  "id": "village",
+  "title": "Pine Village",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 17,
+      "columns": 1
+    }
+  },
+  "components": [
+    {
+      "id": "backpack",
+      "type": "inventory",
+      "label": "Backpack",
+      "owners": ["player"],
+      "readOnly": true,
+      "placement": { "row": 14, "column": 1, "rowSpan": 4 }
+    },
+    {
+      "id": "heading",
+      "type": "text",
+      "placement": {
+        "row": 1,
+        "column": 1
+      },
+      "text": "Pine Village",
+      "presentation": {
+        "variant": "heading",
+        "align": "center"
+      }
+    },
+    {
+      "id": "controls",
+      "type": "text",
+      "placement": {
+        "row": 2,
+        "column": 1
+      },
+      "text": "Press E beside objects. From the entrance (1, 4), move east once for the chest, or east three times for the berry basket to the south. Collected berries appear in your Backpack. The gold gate at (0, 4) returns to Coast Road.",
+      "presentation": {
+        "align": "center"
+      }
+    },
+    {
+      "id": "village-map",
+      "type": "map-view",
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "rowSpan": 7
+      },
+      "map": "village",
+      "label": "Pine Village map",
+      "viewport": {
+        "columns": 9,
+        "rows": 6
+      },
+      "playerSpawn": {
+        "x": 6,
+        "y": 4
+      }
+    },
+    {
+      "id": "interaction-result",
+      "type": "text",
+      "placement": {
+        "row": 10,
+        "column": 1
+      },
+      "text": "{{message}} Coins: {{coins}}.",
+      "bindings": {
+        "message": {
+          "source": "game.state",
+          "path": ["interactionMessage"],
+          "fallback": "Press E beside an object to interact."
+        },
+        "coins": {
+          "source": "game.state",
+          "path": ["coins"],
+          "fallback": "0"
+        }
+      },
+      "presentation": {
+        "align": "center"
+      }
+    },
+    {
+      "id": "movement-bar",
+      "type": "action-bar",
+      "placement": {
+        "row": 11,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 1
+      },
+      "slots": {
+        "2": {
+          "label": "North",
+          "action": {
+            "type": "move-map",
+            "mapView": "village-map",
+            "direction": "north"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "north"
+          }
+        },
+        "6": {
+          "label": "West",
+          "action": {
+            "type": "move-map",
+            "mapView": "village-map",
+            "direction": "west"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "west"
+          }
+        },
+        "7": {
+          "label": "South",
+          "action": {
+            "type": "move-map",
+            "mapView": "village-map",
+            "direction": "south"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "south"
+          }
+        },
+        "8": {
+          "label": "East",
+          "action": {
+            "type": "move-map",
+            "mapView": "village-map",
+            "direction": "east"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "east"
+          }
+        },
+        "12": {
+          "label": "Interact",
+          "action": {
+            "type": "interact-map",
+            "mapView": "village-map"
+          },
+          "inputBinding": {
+            "context": "explore",
+            "input": "interact"
+          }
+        }
+      }
+    }
+  ]
+}

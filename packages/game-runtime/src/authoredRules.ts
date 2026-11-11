@@ -12,6 +12,7 @@ import type { IGameInventory } from './inventory.js'
 import { matchesConditions } from './storyConditions.js'
 import { MapStoryState } from './storyState.js'
 import { MapTradeState } from './tradeState.js'
+import { prepareInventoryCollection } from './inventoryCollection.js'
 import type { GameSave } from '@ancadeba/schemas'
 
 type Scalar = string | number | boolean
@@ -255,13 +256,19 @@ export class AuthoredPlaythrough {
               if (
                 !origin ||
                 branch.effects.some(
-                  (effect) => effect.type === 'move-item' || effect.type === 'enter-scene',
+                  (effect) =>
+                    effect.type === 'move-item' ||
+                    effect.type === 'collect-items' ||
+                    effect.type === 'enter-scene',
                 )
               )
                 return rejected('Quest transactions cannot include legacy movement effects')
 
               const effects = branch.effects.filter(
-                (effect) => effect.type !== 'move-item' && effect.type !== 'enter-scene',
+                (effect) =>
+                  effect.type !== 'move-item' &&
+                  effect.type !== 'collect-items' &&
+                  effect.type !== 'enter-scene',
               )
 
               const prepared = game.quests?.prepareEffects(origin, effects)
@@ -280,7 +287,10 @@ export class AuthoredPlaythrough {
             let cost = 0
 
             const external = branch.effects.find(
-              (effect) => effect.type === 'move-item' || effect.type === 'enter-scene',
+              (effect) =>
+                effect.type === 'move-item' ||
+                effect.type === 'collect-items' ||
+                effect.type === 'enter-scene',
             )
 
             if (external?.type === 'enter-scene') {
@@ -293,10 +303,19 @@ export class AuthoredPlaythrough {
 
                 const tileCost =
                   view?.type === 'map-view' && view.playerSpawn
-                    ? getMapMovementCostMs(view.map, view.playerSpawn)
+                    ? game.mapMovement
+                      ? game.mapMovement.getTileCost(
+                          view.map,
+                          external.position ?? view.playerSpawn,
+                        )
+                      : getMapMovementCostMs(view.map, external.position ?? view.playerSpawn)
                     : undefined
 
-                if (tileCost === undefined) return rejected('The destination is not reachable')
+                if (
+                  tileCost === undefined ||
+                  (external.position && view?.type === 'map-view' && view.interactive === false)
+                )
+                  return rejected('The destination is not reachable')
                 cost = tileCost
               }
             }
@@ -329,17 +348,39 @@ export class AuthoredPlaythrough {
               if (result?.status === 'rejected') return result
             } else if (external?.type === 'enter-scene') {
               completeCommittedEffect(
-                () => lifecycle.enterScene(external.scene),
+                () =>
+                  lifecycle.enterScene(
+                    external.scene,
+                    external.position && external.mapView
+                      ? { mapView: external.mapView, position: external.position }
+                      : undefined,
+                  ),
                 () => lifecycle.activeScene?.data.id === external.scene,
                 logger,
               )
             }
+
+            const collection =
+              external?.type === 'collect-items'
+                ? prepareInventoryCollection(inventory, external.items, external.owner)
+                : undefined
+
+            if (external?.type === 'collect-items' && !collection?.isCurrent())
+              return rejected('Inventory pickup is unavailable')
+            collection?.commit()
 
             for (const { path, value } of writes) set(this.state, path, value)
 
             if (entries.length) this.append(entries, nextTime)
 
             this.updateClock(nextTime)
+
+            if (collection)
+              completeCommittedEffect(
+                () => collection.notify(),
+                () => true,
+                logger,
+              )
 
             return { status: 'applied', worldTimeCostMs: cost }
           },

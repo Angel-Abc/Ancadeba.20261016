@@ -16,11 +16,13 @@ export class ContainerBuilder implements IContainerBuilder {
       createHost: () => this.dependencies.createHost,
       runtime: () => this.dependencies.runtime,
       onPreviewStateChange: () => this.dependencies.onPreviewStateChange,
+      confirmPreview: () => this.dependencies.confirmPreview,
       getPreferredGameLanguages: () => this.dependencies.getPreferredGameLanguages,
       gameLanguagePreferences: () => this.dependencies.gameLanguagePreferences,
       createGameSaveStore: () => this.dependencies.createGameSaveStore,
       download: () => this.dependencies.download,
       onExportStateChange: () => this.dependencies.onExportStateChange,
+      confirmExport: () => this.dependencies.confirmExport,
     })
   }
 }

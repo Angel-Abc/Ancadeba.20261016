@@ -91,6 +91,7 @@ function validateOutcome(value: unknown): ActionOutcome {
 
 /** Routes playthrough-owned triggers and serially executes synchronous action handlers. */
 export class ActionProcessor implements IGameActions {
+  private readonly requestScopes = new Map<ActionRequestId, () => boolean>()
   private readonly handlers: Map<string, GameActionHandler>
   private readonly bindings = new Map<
     string,
@@ -157,7 +158,7 @@ export class ActionProcessor implements IGameActions {
     this.progressionState.restore(snapshot)
   }
 
-  /** Encounter transactions advance the game counter without replacing game actor turns. */
+  /** Movement and encounter transactions advance the game counter independently of actor turns. */
   prepareProgression(worldTimeCostMs: number) {
     this.progressionState.synchronize()
 
@@ -226,6 +227,15 @@ export class ActionProcessor implements IGameActions {
     return id
   }
 
+  /** Queue a scene-owned request whose owner must still be active when it is delivered. */
+  requestScoped(
+    action: string,
+    payload: unknown,
+    isCurrent: () => boolean,
+  ): ActionRequestId | undefined {
+    return this.enqueue(action, payload, Object.freeze({ type: 'direct' }), undefined, isCurrent)
+  }
+
   cancelScheduled(timerId: TimerId): boolean {
     if (this.disposed || !this.scheduled.has(timerId) || !this.timers.cancel(timerId)) return false
     this.scheduled.delete(timerId)
@@ -267,6 +277,7 @@ export class ActionProcessor implements IGameActions {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.requestScopes.clear()
     this.worldSchedules.dispose()
 
     for (const unsubscribe of this.subscriptions) unsubscribe()
@@ -355,9 +366,12 @@ export class ActionProcessor implements IGameActions {
     payload: unknown,
     origin: ActionOrigin,
     actor?: ActorAttribution,
+    isCurrent?: () => boolean,
   ): ActionRequestId | undefined {
     if (this.disposed) return undefined
     const id = ++this.nextRequestId
+
+    if (isCurrent) this.requestScopes.set(id, isCurrent)
     this.messages.publish(
       'action.requested',
       Object.freeze({ id, action, payload, origin, ...(actor ? { actor } : {}) }),
@@ -367,6 +381,11 @@ export class ActionProcessor implements IGameActions {
   }
 
   private process(request: ActionRequest): void {
+    const isCurrent = this.requestScopes.get(request.id)
+    this.requestScopes.delete(request.id)
+
+    if (isCurrent && !isCurrent()) return
+
     if (this.disposed || !this.isRunning()) return
 
     try {

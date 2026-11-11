@@ -53,6 +53,7 @@ import {
   resolveMapView,
   mapVisualIssues,
   actionBarIssues,
+  sceneTransitionIssues,
   statusPanelIssues,
   localizeInventory,
   equipmentIssues,
@@ -207,11 +208,16 @@ export function assembleGameData(
     return { file, rules }
   })
 
-  const validated = sources.length
-    ? validateRuleSources(sources, sceneDefinitions, maps, inventory, ruleTranslation?.fallback)
-    : undefined
+  const validation = validateRuleSources(
+    sources,
+    sceneDefinitions,
+    maps,
+    inventory,
+    ruleTranslation?.fallback,
+  )
 
-  const issue = validated?.issues[0]
+  const validated = sources.length ? validation : undefined
+  const issue = validation.issues[0]
 
   if (issue) throw new Error(`${issue.file} (${issue.path.join('.')}): ${issue.message}`)
 
@@ -595,6 +601,7 @@ export function assembleGameData(
           inputDefinition,
           sceneDefinitions,
           sceneDefinitions.get(scene.id),
+          maps,
         )[0]
 
         if (issue) throw new Error(`Scene ${scene.id}, bar ${component.id}: ${issue.message}`)
@@ -623,6 +630,12 @@ export function assembleGameData(
       )
         continue
       const target = scenes.get(component.action.scene)
+
+      if (component.action.type === 'enter-scene') {
+        const issue = sceneTransitionIssues(component.action, sceneDefinitions, maps)[0]
+
+        if (issue) throw new Error(`Button ${component.id}: ${issue.message}`)
+      }
 
       if (!target)
         throw new Error(`Button ${component.id} references missing scene ${component.action.scene}`)

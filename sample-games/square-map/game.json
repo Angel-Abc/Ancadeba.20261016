@@ -2,10 +2,13 @@
   "schema-version": "1.0.0",
   "id": "square-map",
   "title": "Coast Road",
-  "description": "Explore a square map with a camera that follows the player.",
-  "version": "1.0.0",
+  "description": "Explore two connected maps, read a signpost, open a chest and collect a disappearing berry basket with E.",
+  "version": "1.5.0",
   "initial-scene": "coast",
-  "scenes": ["coast"],
-  "maps": ["coast"],
-  "input": "movement"
+  "scenes": ["coast", "village"],
+  "maps": ["coast", "village"],
+  "input": "movement",
+  "rules": ["travel", "interactions"],
+  "assets": "objects",
+  "inventory": ["supplies"]
 }

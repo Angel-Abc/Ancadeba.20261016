@@ -31,7 +31,7 @@ function gameData(title: string) {
   }
 }
 
-function createPreview() {
+function createPreview(confirmPreview?: () => boolean) {
   const fetcher = vi
     .fn<typeof fetch>()
     .mockImplementation(async () => new Response(JSON.stringify(gameDefinition('Preview'))))
@@ -61,12 +61,57 @@ function createPreview() {
       ),
   )
 
-  const controller = new EditorPreviewController(createInstance, onStateChange)
+  const controller = new EditorPreviewController(createInstance, onStateChange, confirmPreview)
 
   return { controller, fetcher, host, cleanup, onStateChange, createInstance }
 }
 
 describe('editor preview', () => {
+  it('refreshes an existing saved-file preview without asking to start it again', async () => {
+    const confirmPreview = vi.fn(() => true)
+    const { controller, createInstance } = createPreview(confirmPreview)
+
+    try {
+      await controller.start('basic')
+      controller.stop()
+      confirmPreview.mockReturnValue(false)
+      await controller.start('basic', { confirm: false })
+      expect(confirmPreview).toHaveBeenCalledTimes(1)
+      expect(createInstance).toHaveBeenCalledTimes(2)
+    } finally {
+      controller.dispose()
+    }
+  })
+
+  it('cancels before loading or publishing state and permits a later confirmed start', async () => {
+    const confirmPreview = vi.fn(() => false)
+    const { controller, fetcher, createInstance, onStateChange } = createPreview(confirmPreview)
+
+    try {
+      await controller.start('basic')
+      expect(createInstance).not.toHaveBeenCalled()
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(onStateChange).not.toHaveBeenCalled()
+      confirmPreview.mockReturnValue(true)
+      await controller.start('basic')
+      expect(createInstance).toHaveBeenCalledTimes(1)
+      expect(onStateChange.mock.calls).toEqual([['starting'], ['running']])
+      await controller.start('ignored')
+      expect(confirmPreview).toHaveBeenCalledTimes(2)
+      controller.stop()
+      confirmPreview.mockReturnValue(false)
+      const notifications = onStateChange.mock.calls.length
+      await controller.start('basic')
+      expect(createInstance).toHaveBeenCalledTimes(1)
+      expect(onStateChange).toHaveBeenCalledTimes(notifications)
+    } finally {
+      controller.dispose()
+    }
+
+    await controller.start('disposed')
+    expect(confirmPreview).toHaveBeenCalledTimes(3)
+  })
+
   it('reloads saved rule state and actions on a preview restart', async () => {
     const { controller, fetcher, host, createInstance } = createPreview()
 

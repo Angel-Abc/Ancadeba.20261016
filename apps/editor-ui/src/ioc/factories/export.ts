@@ -5,6 +5,7 @@ export interface ExportDependencies {
   fetcher: typeof fetch
   download: (archive: Blob, fileName: string) => void
   onExportStateChange: ExportStateListener
+  confirmExport?: () => boolean
 }
 
 export interface ExportServices {
@@ -17,5 +18,6 @@ export const exportFactories = {
       resolver.resolve('fetcher'),
       resolver.resolve('download'),
       resolver.resolve('onExportStateChange'),
+      resolver.resolve('confirmExport'),
     ),
 } satisfies Factories<ExportServices, ExportDependencies>

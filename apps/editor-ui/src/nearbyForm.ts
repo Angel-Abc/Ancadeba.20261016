@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { nearbyComponentSchema } from '@ancadeba/schemas'
 import type { EditorCommand, ProjectView } from '@ancadeba/editor-core'
 import { gameBindingSchema, gameIdSchema, type NearbyComponentDefinition } from '@ancadeba/schemas'
 import {
@@ -321,6 +324,29 @@ export function nearbyForm(
   picker.hidden = Boolean(initialScene)
   root.append(picker, error, area)
   reset()
+
+  registerEditorDraft(
+    root,
+    `nearby:${initialScene ?? 'rules'}:${componentId ?? ''}`,
+    z.object({
+      sceneId: z.string(),
+      draft: nearbyComponentSchema,
+      selected: z.string(),
+      newTarget: z.string(),
+      newAction: z.string(),
+    }),
+    () => (dirty ? { sceneId, draft, selected, newTarget, newAction } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      draft = saved.draft
+      selected = saved.selected
+      newTarget = saved.newTarget
+      newAction = saved.newAction
+      dirty = true
+      controls.markEdited()
+      render()
+    },
+  )
 
   return root
 }

@@ -16,6 +16,7 @@ import {
   componentClipboardSchema,
   object,
   type ComponentClipboard,
+  type ProjectRepairCheck,
 } from '@ancadeba/editor-core'
 import { gameIdSchema, gameSchema, assetCatalogSchema, assetCatalogFile } from '@ancadeba/schemas'
 import { inspectImageSource } from '@ancadeba/game-runtime'
@@ -24,6 +25,8 @@ import { applyCommand as editProject } from '@ancadeba/editor-core'
 import type { EditorProjectRepository } from './editorProjectRepository.js'
 import { EditorCoordinator } from './editorCoordinator.js'
 import { EditorHistory } from './editorHistory.js'
+import { prepareProjectRepair } from './projectRepairs.js'
+import { blockingAssetDiagnostics } from './assetRepairDiagnostics.js'
 
 export class EditorProjectService {
   constructor(
@@ -39,6 +42,10 @@ export class EditorProjectService {
         typeof this.repository.readHistoryFiles === 'function',
       assetImport: typeof this.repository.createAsset === 'function',
       projectCreation: typeof this.repository.create === 'function',
+      projectRepair:
+        typeof this.repository.previewRepair === 'function' &&
+        typeof this.repository.readHistoryFiles === 'function' &&
+        typeof this.repository.restoreHistoryFiles === 'function',
     }
   }
 
@@ -76,6 +83,68 @@ export class EditorProjectService {
 
   inspect(path: string): Promise<ProjectView> {
     return this.coordinator.run(async () => this.view(path, await this.repository.load(path)))
+  }
+
+  checkRepair(input: unknown): Promise<ProjectRepairCheck> {
+    return this.coordinator.run(async () => {
+      const { current, candidate } = await prepareProjectRepair(this.repository, input)
+
+      return {
+        revision: current.revision,
+        diagnostics: validateProject(candidate.documents, candidate.sourceDiagnostics),
+      }
+    })
+  }
+
+  repair(input: unknown): Promise<ProjectView> {
+    return this.coordinator.run(async () => {
+      const { request, current } = await prepareProjectRepair(this.repository, input)
+      const before = await this.repository.readHistoryFiles!(request.path, [request.file])
+      const original = before[request.file]
+      const expected = current.sourceTexts?.[request.file]
+
+      if ((original === undefined ? null : Buffer.from(original).toString('utf8')) !== expected)
+        throw new EditorError(
+          409,
+          'revision_conflict',
+          'The repair file changed. Reload before retrying.',
+        )
+      const after = Buffer.from(request.text)
+
+      if (original && Buffer.from(original).equals(after)) return this.view(request.path, current)
+      let saved: ProjectSnapshot
+
+      try {
+        await this.repository.restoreHistoryFiles!(request.path, [
+          { file: request.file, before: original, after },
+        ])
+      } catch (error) {
+        this.history.clear(request.path)
+        throw error
+      }
+
+      try {
+        saved = await this.repository.load(request.path)
+      } catch {
+        this.history.clear(request.path)
+        throw new EditorError(
+          500,
+          'repair_save_uncertain',
+          'Repair was saved, but could not be reopened. Reload and inspect the project before retrying.',
+        )
+      }
+
+      await this.remember(
+        request.path,
+        current,
+        saved,
+        [request.file],
+        before,
+        `Repair ${request.file}`,
+      )
+
+      return this.view(request.path, saved)
+    })
   }
 
   copyComponent(input: unknown): Promise<ComponentClipboard> {
@@ -235,8 +304,11 @@ export class EditorProjectService {
 
       const change = applyCommand(current, request.command)
 
-      const assetDiagnostics =
-        (await this.repository.validateAssets?.(request.path, change.project)) ?? []
+      const assetDiagnostics = blockingAssetDiagnostics(
+        current,
+        request.command,
+        (await this.repository.validateAssets?.(request.path, change.project)) ?? [],
+      )
 
       if (assetDiagnostics.length)
         throw new EditorError(422, 'invalid_project', 'Invalid asset source', assetDiagnostics)
@@ -305,7 +377,7 @@ export class EditorProjectService {
         if (previous?.colors[slot]) colors[slot] = previous.colors[slot]!
       const source = `assets/images/${request.id}-${randomUUID()}.${request.format === 'jpeg' ? 'jpg' : request.format}`
 
-      const change = editProject(current, {
+      const command = {
         type: 'assets.upsertImage',
         id: request.id,
         image: {
@@ -316,14 +388,19 @@ export class EditorProjectService {
           palettes: previous?.palettes ?? {},
           ...(previous?.preview ? { preview: previous.preview } : {}),
         },
-      })
+      } as const
 
-      const diagnostics =
+      const change = editProject(current, command)
+
+      const diagnostics = blockingAssetDiagnostics(
+        current,
+        command,
         (await this.repository.validateAssets?.(
           request.path,
           change.project,
           new Map([[source, bytes]]),
-        )) ?? []
+        )) ?? [],
+      )
 
       if (diagnostics.length)
         throw new EditorError(422, 'invalid_project', 'Invalid asset source', diagnostics)

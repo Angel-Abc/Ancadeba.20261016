@@ -1,0 +1,47 @@
+{
+  "state": [],
+  "actions": {
+    "enter-village": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "coast"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "village",
+            "mapView": "village-map",
+            "position": {
+              "x": 1,
+              "y": 4
+            }
+          }
+        ]
+      }
+    ],
+    "return-coast": [
+      {
+        "when": [
+          {
+            "type": "scene-is",
+            "scene": "village"
+          }
+        ],
+        "effects": [
+          {
+            "type": "enter-scene",
+            "scene": "coast",
+            "mapView": "coast-map",
+            "position": {
+              "x": 8,
+              "y": 3
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

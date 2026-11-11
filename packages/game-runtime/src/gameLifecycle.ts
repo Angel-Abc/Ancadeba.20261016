@@ -9,13 +9,17 @@ import type { IGameBindings } from './gameBindings.js'
 import { GameInventory, type IGameInventory } from './inventory.js'
 import type { IGameActionBar } from './actionBar.js'
 import type { IGameMapMovement } from './mapMovement.js'
+import type { IGameMapObjects } from './mapObjects.js'
 import type { IGameNearby } from './nearbyContext.js'
 import type { IGameInventorySelection } from './inventoryContext.js'
 import type { IGameEquipment } from './equipment.js'
 import type { IGameTrading } from './trading.js'
 import type { IGameCombat } from './combat.js'
+import type { SceneEntrance } from '@ancadeba/schemas'
+import { canEnterScene } from './sceneNavigation.js'
 
 export interface IGameRuntime {
+  readonly mapObjects?: IGameMapObjects | undefined
   readonly quests?: IGameQuests | undefined
   readonly dialogue?: IGameDialogue | undefined
   readonly itemUse?: IGameItemUse | undefined
@@ -38,6 +42,7 @@ export interface IGameRuntime {
 export type GameRuntimeFactory = (game: GameInstance) => IGameRuntime
 
 export interface GameInstance<TState = unknown> {
+  readonly mapObjects?: IGameMapObjects | undefined
   readonly quests?: IGameQuests | undefined
   readonly dialogue?: IGameDialogue | undefined
   readonly itemUse?: IGameItemUse | undefined
@@ -105,7 +110,7 @@ export interface IGameLifecycle<TGameState = unknown, TSceneState = unknown> {
     prepare?: (game: GameInstance<TGameState>) => void,
     restore?: (game: GameInstance<TGameState>) => void,
   ): GameInstance<TGameState>
-  enterScene(id: string): SceneInstance<TGameState, TSceneState>
+  enterScene(id: string, entrance?: SceneEntrance): SceneInstance<TGameState, TSceneState>
   leaveScene(): void
   endGame(): void
   dispose(): void
@@ -187,6 +192,10 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
 
   get mapMovement(): IGameMapMovement | undefined {
     return this.runtime?.mapMovement
+  }
+
+  get mapObjects(): IGameMapObjects | undefined {
+    return this.runtime?.mapObjects
   }
 
   get actionBar(): IGameActionBar | undefined {
@@ -358,7 +367,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     })
   }
 
-  enterScene(id: string): SceneInstance<TGameState, TSceneState> {
+  enterScene(id: string, entrance?: SceneEntrance): SceneInstance<TGameState, TSceneState> {
     return this.transition(() => {
       const data = this.data.scenes.get(id)
 
@@ -367,7 +376,25 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
 
       if (data.type === 'game' && !game) throw new Error(`Scene ${id} requires a current game`)
 
-      if (this.scene?.context.data.id === id) return this.scene.context
+      const arrival = entrance && { mapView: entrance.mapView, position: { ...entrance.position } }
+
+      if (arrival) {
+        if (
+          !game?.mapMovement ||
+          !canEnterScene(
+            this.data,
+            { type: 'enter-scene', scene: id, ...arrival },
+            game.mapMovement,
+          )
+        )
+          throw new Error('Invalid destination map position')
+      }
+
+      if (this.scene?.context.data.id === id) {
+        if (arrival) game!.mapMovement!.place(this.scene.context, arrival.mapView, arrival.position)
+
+        return this.scene.context
+      }
 
       const instance = new OwnedInstance(
         data,
@@ -393,7 +420,12 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
 
       const previous = this.scene
       this.scene = { instance, context }
-      release(previous?.instance)
+
+      try {
+        if (arrival) game!.mapMovement!.place(context, arrival.mapView, arrival.position)
+      } finally {
+        release(previous?.instance)
+      }
 
       return context
     })

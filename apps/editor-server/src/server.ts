@@ -161,6 +161,8 @@ export function createEditorServer(
         request.method === 'POST' &&
         (url.pathname === '/api/editor/commands' ||
           url.pathname === '/api/editor/history' ||
+          url.pathname === '/api/editor/repair' ||
+          url.pathname === '/api/editor/repair/check' ||
           url.pathname === '/api/editor/components/copy')
       ) {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json') {
@@ -178,6 +180,18 @@ export function createEditorServer(
 
         if (url.pathname === '/api/editor/components/copy') {
           json(response, 200, await projects.copyComponent(body))
+
+          return
+        }
+
+        if (url.pathname === '/api/editor/repair' || url.pathname === '/api/editor/repair/check') {
+          json(
+            response,
+            200,
+            url.pathname.endsWith('/check')
+              ? await projects.checkRepair(body)
+              : await projects.repair(body),
+          )
 
           return
         }

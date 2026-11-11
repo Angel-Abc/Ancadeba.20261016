@@ -58,3 +58,33 @@
   background: #145ad0;
   box-shadow: 0 0 0 1px #132d50;
 }
+
+.ancadeba-map-object {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 8%;
+  padding: 0;
+  border: 1px solid #fff;
+  border-radius: 0.15em;
+  color: white;
+  font-weight: bold;
+  font-size: calc(var(--ge-map-tile-size) * 0.35);
+  text-shadow: 0 1px 2px black;
+  image-rendering: pixelated;
+}
+
+.ancadeba-map-object:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.ancadeba-map-object[hidden] {
+  display: none;
+}
+.ancadeba-map-object:focus-visible {
+  outline: 3px solid #ffdc73;
+  outline-offset: 1px;
+}

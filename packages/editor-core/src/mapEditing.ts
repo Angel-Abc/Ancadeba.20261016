@@ -41,6 +41,47 @@ export function editMap(
     ...previous,
     ...command.map,
     tilesets: command.map.tilesets,
+    objects: command.map.objects?.map((entry) => ({
+      ...object(
+        Array.isArray(previous.objects)
+          ? previous.objects.find((value) => object(value).id === entry.id)
+          : undefined,
+      ),
+      ...entry,
+      blocking: entry.blocking,
+      visible: entry.visible,
+      states: entry.states?.map((state) => {
+        const old = object(
+          Array.isArray(previous.objects)
+            ? previous.objects.find((value) => object(value).id === entry.id)
+            : undefined,
+        )
+
+        const prior = object(
+          Array.isArray(old.states)
+            ? old.states.find((value) => object(value).id === state.id)
+            : undefined,
+        )
+
+        return {
+          ...prior,
+          ...state,
+          when: { ...object(prior.when), ...state.when },
+          terrain: state.terrain,
+          label: state.label,
+          blocking: state.blocking,
+          visible: state.visible,
+        }
+      }),
+    })),
+    entryTriggers: command.map.entryTriggers?.map((trigger) => ({
+      ...object(
+        Array.isArray(previous.entryTriggers)
+          ? previous.entryTriggers.find((value) => object(value).id === trigger.id)
+          : undefined,
+      ),
+      ...trigger,
+    })),
     layers: command.map.layers?.map((layer) => ({
       ...object(
         Array.isArray(previous.layers)

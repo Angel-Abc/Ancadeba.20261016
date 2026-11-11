@@ -9,10 +9,13 @@ export class EditorPreviewController {
   constructor(
     private readonly createInstance: (folder: string) => IEngine,
     private readonly onStateChange: PreviewStateListener,
+    private readonly confirmPreview: () => boolean = () => true,
   ) {}
 
-  async start(folder: string): Promise<void> {
+  async start(folder: string, { confirm = true }: { confirm?: boolean } = {}): Promise<void> {
     if (this.disposed || this.engine) return
+
+    if (confirm && !this.confirmPreview()) return
 
     let engine: IEngine | undefined
 

@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -306,6 +308,37 @@ export function bindGraphicDefinitionsEditor(
     fields.disabled = busy || Boolean(view.diagnostics.length)
     updatePreview()
   }
+
+  registerEditorDraft(
+    root,
+    'graphic-definitions',
+    z.object({
+      catalog: assetCatalogSchema,
+      kind: z.enum(['parts', 'compositions']),
+      selected: z.string(),
+      newId: z.string(),
+      palette: z.string(),
+      pending: z.object({
+        piece: z.string(),
+        layer: z.string(),
+        anchor: z.string(),
+        slot: z.string(),
+        color: z.string(),
+        palette: z.string(),
+      }),
+    }),
+    () => (dirty ? { catalog, kind, selected, newId, palette, pending } : undefined),
+    (saved) => {
+      catalog = saved.catalog
+      kind = saved.kind
+      selected = saved.selected
+      newId = saved.newId
+      palette = saved.palette
+      Object.assign(pending, saved.pending)
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,

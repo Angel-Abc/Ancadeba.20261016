@@ -9,7 +9,7 @@ import type {
   IGameSaves,
   SceneInstance,
 } from '@ancadeba/game-runtime'
-import type { AssetCatalog, InventoryDefinition } from '@ancadeba/schemas'
+import type { AssetCatalog, InventoryDefinition, SceneTransition } from '@ancadeba/schemas'
 import type { IGraphicResources } from './graphicResources.js'
 import type { KeyboardInputSink } from './keyboardInput.js'
 
@@ -27,6 +27,9 @@ export interface ComponentRendererOptions {
   readonly localization?: IGameLocalization | undefined
   readonly bindingMode?: TextResolutionOptions['mode']
   readonly onButtonActivate?: (action: SceneNavigation) => void
+  readonly canEnterScene?: (action: SceneTransition) => boolean
+  readonly subscribeNavigationChanges?: (listener: () => void) => () => void
+  readonly navigationUnavailableMessage?: () => string
 }
 
 export interface ComponentRenderContext extends ComponentRendererOptions {

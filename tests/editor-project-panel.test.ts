@@ -11,6 +11,7 @@ import {
 } from '@ancadeba/editor-core'
 import { bindProjectPanel } from '../apps/editor-ui/src/projectPanel.js'
 import { editorLocalization } from '../apps/editor-ui/src/localization.js'
+import type { EditorDraftStorage } from '../apps/editor-ui/src/editorDraftStore.js'
 
 // A small DOM surface for testing form reconciliation without a browser runtime.
 class Control extends EventTarget {
@@ -85,6 +86,7 @@ function panel(
     { path: '', title: 'Root game' },
     { path: 'basic', title: 'Basic game' },
   ],
+  recoveryStorage?: EditorDraftStorage,
 ) {
   const controls = new Map<string, Control>()
 
@@ -93,7 +95,7 @@ function panel(
 
     if (!result) {
       result = new Control(id)
-      result.hidden = id === 'project-create-controls'
+      result.hidden = ['project-create-controls', 'project-recover-controls'].includes(id)
       controls.set(id, result)
     }
 
@@ -104,6 +106,7 @@ function panel(
   const requests: CommandRequest[] = []
   const creations: CreateProjectRequest[] = []
   const historyRequests: HistoryRequest[] = []
+  const inspections: string[] = []
   let createResponse: (() => Promise<Response>) | undefined
   let applyResponse: (() => Promise<Response>) | undefined
   const onProjectChange = vi.fn<(path: string) => void>()
@@ -114,10 +117,14 @@ function panel(
   const root = {
     querySelector: (selector: string) =>
       ['#assets-panel', '#project-tree'].includes(selector) ? null : control(selector.slice(1)),
+    querySelectorAll: () =>
+      [...controls.values()].filter((node) => node.attributes.has('data-editor-draft')),
     ownerDocument: { createElement: () => new Control('option'), defaultView: new EventTarget() },
   }
 
   const fetcher: typeof fetch = async (url, init) => {
+    if (typeof url === 'string' && url.startsWith('/api/editor/project?')) inspections.push(url)
+
     if (url === '/api/editor/history') {
       if (typeof init?.body !== 'string') throw new Error('Expected JSON history request')
       historyRequests.push(historyRequestSchema.parse(JSON.parse(init.body)))
@@ -153,7 +160,7 @@ function panel(
     return new Response(JSON.stringify(latest))
   }
 
-  const dispose = bindProjectPanel(
+  const binding = bindProjectPanel(
     // @ts-expect-error -- Deliberately partial DOM fixture supplies only the query and control operations used by the panel.
     root,
     fetcher,
@@ -165,7 +172,7 @@ function panel(
         languageChanged = () => {}
       }
     },
-    { onProjectChange, confirmDiscardDrafts },
+    { onProjectChange, confirmDiscardDrafts, draftStorage: () => recoveryStorage },
   )
 
   const submitProject = async (path?: string) => {
@@ -179,13 +186,15 @@ function panel(
   return {
     control,
     requests,
+    inspections,
     historyRequests,
     window: root.ownerDocument.defaultView,
     creations,
     onProjectChange,
     confirmDiscardDrafts,
     submitProject,
-    dispose,
+    dispose: () => binding.dispose(),
+    hasDrafts: () => binding.hasDrafts(),
     setLanguage: (language: string) => {
       localization = editorLocalization([language])
       languageChanged()
@@ -203,6 +212,143 @@ function panel(
 }
 
 describe('project panel form reconciliation', () => {
+  it('opens an unlisted recovery folder or workspace root even when the project list is empty', async () => {
+    const ui = panel([])
+
+    try {
+      await vi.waitFor(() => expect(ui.control('editor-load').disabled).toBe(true))
+      expect(ui.control('project-recover-toggle').disabled).toBe(false)
+      ui.control('project-recover-toggle').fire('click')
+      expect(ui.control('project-recover-controls').hidden).toBe(false)
+      ui.control('project-recover-folder').value = ' nested/Lost game/ '
+      ui.setLatest({
+        revision: 'missing',
+        game: null,
+        scenes: [],
+        diagnostics: [
+          { code: 'missing_file', file: 'game.json', path: [], message: 'Missing manifest' },
+        ],
+        repairFiles: { 'game.json': null },
+      })
+      ui.control('project-recover-controls').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.inspections).toEqual(['/api/editor/project?path=nested%2FLost+game']),
+      )
+      await vi.waitFor(() => expect(ui.control('project-recover-controls').hidden).toBe(true))
+      expect(ui.control('editor-error').textContent).toContain('Missing manifest')
+      expect(ui.control('editor-fields').disabled).toBe(true)
+      ui.control('project-open-toggle').fire('click')
+      ui.control('project-recover-toggle').fire('click')
+      ui.control('project-recover-folder').value = ''
+      ui.control('project-recover-controls').fire('submit')
+      await vi.waitFor(() => expect(ui.inspections.at(-1)).toBe('/api/editor/project?path='))
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('labels recoverable folders and protects existing drafts before opening recovery', async () => {
+    const ui = panel([{ path: 'lost', title: '', missingManifest: true }])
+
+    try {
+      await vi.waitFor(() =>
+        expect(ui.control('editor-folder').children[0]?.textContent).toContain('missing game.json'),
+      )
+      await ui.submitProject('lost')
+      await vi.waitFor(() => expect(ui.control('editor-title').value).toBe('Game'))
+      ui.control('editor-title').value = 'Unsaved story'
+      ui.control('editor-metadata').fire('input')
+      ui.control('project-open-toggle').fire('click')
+      ui.control('project-recover-toggle').fire('click')
+      ui.control('project-recover-folder').value = 'other'
+      ui.control('project-recover-controls').fire('submit')
+      expect(ui.confirmDiscardDrafts).toHaveBeenCalledTimes(1)
+      expect(ui.inspections).toHaveLength(1)
+      expect(ui.control('editor-title').value).toBe('Unsaved story')
+      ui.control('project-recover-cancel').fire('click')
+      expect(ui.control('project-recover-controls').hidden).toBe(true)
+      ui.setLanguage('nl')
+      expect(ui.control('editor-folder').children[0]?.textContent).toContain('game.json ontbreekt')
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('reports invalid recovery paths without making a request', async () => {
+    const ui = panel([])
+
+    try {
+      await vi.waitFor(() => expect(ui.control('project-create-submit').disabled).toBe(false))
+      ui.control('project-recover-toggle').fire('click')
+      ui.control('project-recover-folder').value = '../outside'
+      ui.control('project-recover-controls').fire('submit')
+      expect(ui.inspections).toEqual([])
+      expect(ui.control('project-open-feedback').textContent).toContain('no parent directories')
+      expect(ui.control('project-recover-controls').hidden).toBe(false)
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('recovers metadata after reopening, warns while dirty, and clears the recovery copy after saving', async () => {
+    const values = new Map<string, string>()
+
+    const storage: EditorDraftStorage = {
+      get length() {
+        return values.size
+      },
+      key: (index) => [...values.keys()][index] ?? null,
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => {
+        values.set(key, value)
+      },
+      removeItem: (key) => {
+        values.delete(key)
+      },
+    }
+
+    const first = panel(undefined, storage)
+    await first.submitProject()
+    await vi.waitFor(() => expect(first.control('editor-title').value).toBe('Game'))
+    expect(first.hasDrafts()).toBe(false)
+    first.control('editor-title').value = 'Recovered title'
+    first.control('editor-metadata').fire('input')
+    expect(first.hasDrafts()).toBe(true)
+    const close = new Event('beforeunload', { cancelable: true })
+    first.window.dispatchEvent(close)
+    expect(close.defaultPrevented).toBe(true)
+    first.dispose()
+    expect(values.size).toBe(1)
+
+    const second = panel(undefined, storage)
+
+    try {
+      await second.submitProject()
+      await vi.waitFor(() => expect(second.control('editor-title').value).toBe('Game'))
+      await vi.waitFor(() => expect(second.control('draft-restore').hidden).toBe(false))
+      second.control('draft-restore').fire('click')
+      expect(second.hasDrafts()).toBe(true)
+      expect(second.control('editor-title').value).toBe('Recovered title')
+      expect(second.requests).toEqual([])
+      second.setLatest({
+        ...project('two'),
+        game: { ...project('two').game!, title: 'Recovered title' },
+      })
+      second.control('editor-metadata').fire('submit')
+      await vi.waitFor(() => expect(second.requests).toHaveLength(1))
+      await vi.waitFor(() =>
+        expect(second.control('editor-status').textContent).toContain('Recovered title'),
+      )
+      const clean = new Event('beforeunload', { cancelable: true })
+      second.window.dispatchEvent(clean)
+      expect(clean.defaultPrevented).toBe(false)
+      expect(second.hasDrafts()).toBe(false)
+      expect(values.size).toBe(0)
+    } finally {
+      second.dispose()
+    }
+  })
+
   function localized(revision: string) {
     const view = project(revision)
     view.game!.languages = { default: 'en', available: ['en', 'nl'] }

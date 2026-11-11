@@ -1,7 +1,12 @@
 /// <reference lib="dom" />
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
-import { gameSchema, languageCatalogSchema, mapDefinitionSchema } from '@ancadeba/schemas'
+import {
+  gameSchema,
+  gameRulesSchema,
+  languageCatalogSchema,
+  mapDefinitionSchema,
+} from '@ancadeba/schemas'
 import {
   Engine,
   GameLifecycle,
@@ -35,6 +40,7 @@ import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
 class TestStyle {
   backgroundColor = ''
   backgroundImage = ''
+  backgroundPosition = ''
   private readonly properties = new Map<string, string>()
 
   setProperty(name: string, value: string): void {
@@ -189,6 +195,13 @@ const source: IResourceSource = {
   readText: (path) => readFile(new URL(`../sample-games/basic/${path}`, import.meta.url), 'utf8'),
   readBytes: async (path) =>
     new Uint8Array(await readFile(new URL(`../sample-games/basic/${path}`, import.meta.url))),
+}
+
+const squareMapSource: IResourceSource = {
+  readText: (path) =>
+    readFile(new URL(`../sample-games/square-map/${path}`, import.meta.url), 'utf8'),
+  readBytes: async (path) =>
+    new Uint8Array(await readFile(new URL(`../sample-games/square-map/${path}`, import.meta.url))),
 }
 
 const loader = new GameLoader(new JsonResourceLoader(source, logger))
@@ -1160,7 +1173,7 @@ describe('scene renderer', () => {
       const game = await new GameLoader(
         new JsonResourceLoader(
           {
-            ...source,
+            ...squareMapSource,
             readText: async (path) => {
               const text = await readFile(
                 new URL(`../sample-games/square-map/${path}`, import.meta.url),
@@ -1249,13 +1262,542 @@ describe('scene renderer', () => {
     },
   )
 
+  it.each(['preview', 'standalone'])(
+    'disables blocked entrances, rechecks stale activations and follows live flags in the %s host',
+    async (host) => {
+      const entrance = {
+        id: 'entrance',
+        type: 'button',
+        label: 'Entrance',
+        placement: { row: 2, column: 1 },
+        action: {
+          type: 'enter-scene',
+          scene: 'village',
+          mapView: 'village-map',
+          position: { x: 2, y: 3 },
+        },
+      }
+
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...squareMapSource,
+            readText: async (path) => {
+              if (path === 'scenes/menu.json')
+                return JSON.stringify({
+                  'schema-version': '1.0.0',
+                  id: 'menu',
+                  title: 'Menu',
+                  type: 'stand-alone',
+                  screen: { type: 'grid', grid: { rows: 2, columns: 1 } },
+                  components: [entrance],
+                })
+              const text = await squareMapSource.readText(path)
+
+              if (path === 'rules/interactions.json') {
+                const rules = gameRulesSchema.parse(JSON.parse(text))
+
+                for (const open of [true, false])
+                  rules.actions[open ? 'open-entrance' : 'close-entrance'] = [
+                    {
+                      when: [],
+                      effects: [{ type: 'set-state', path: ['chestOpened'], value: open }],
+                    },
+                  ]
+
+                return JSON.stringify(rules)
+              }
+
+              if (path === 'game.json') {
+                const manifest = gameSchema.parse(JSON.parse(text))
+
+                return JSON.stringify({
+                  ...manifest,
+                  scenes: [...manifest.scenes, 'menu'],
+                  'initial-scene': 'menu',
+                })
+              }
+
+              if (path === 'scenes/coast.json') {
+                const scene = JSON.parse(text)
+                scene.components.push(entrance)
+                scene.components.find(
+                  (component: { type: string }) => component.type === 'action-bar',
+                ).slots['15'] = { label: 'Entrance', action: entrance.action }
+
+                return JSON.stringify(scene)
+              }
+
+              return text
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement(), undefined, undefined, undefined, () => 'menu')
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const button = () => target.find((node) => node.dataset.componentId === 'entrance')!
+      expect(button().disabled).toBe(true)
+      expect(engine.lifecycle!.currentGame).toBeUndefined()
+      engine.lifecycle!.startGame()
+      const coast = engine.lifecycle!.enterScene('coast')
+      const instance = engine.lifecycle!.currentGame!
+      const state = instance.state
+
+      if (!(state instanceof Map)) throw new Error('Expected authored state')
+
+      const setOpen = (open: boolean) => {
+        instance.actions!.request(open ? 'open-entrance' : 'close-entrance')
+        flush(engine)
+      }
+
+      const slot = () => target.find((node) => node.dataset.actionBarSlot === '15')!
+      expect(button().disabled).toBe(true)
+      expect(slot().disabled).toBe(true)
+      expect(slot().title).toContain('blocked')
+      instance.actionBar!.activate(coast, 'movement-bar', '15')
+      expect(engine.lifecycle!.activeScene).toBe(coast)
+      setOpen(true)
+      expect(button().disabled).toBe(false)
+      expect(slot().disabled).toBe(false)
+      // Simulate a collision change occurring before notification reaches either control.
+      state.set('chestOpened', false)
+      button().dispatchEvent(new Event('click'))
+      instance.actionBar!.activate(coast, 'movement-bar', '15')
+      expect(button().disabled).toBe(true)
+      expect(engine.lifecycle!.activeScene).toBe(coast)
+      setOpen(true)
+      engine.lifecycle!.enterScene('menu')
+      expect(button().disabled).toBe(false)
+      setOpen(false)
+      expect(button().disabled).toBe(true)
+      setOpen(true)
+      expect(button().disabled).toBe(false)
+      button().dispatchEvent(new Event('click'))
+      const village = engine.lifecycle!.activeScene!
+      expect(village.data.id).toBe('village')
+      expect(instance.mapMovement!.getPosition(village, 'village-map')).toEqual({ x: 2, y: 3 })
+    },
+  )
+
+  it.each(['preview', 'standalone'])(
+    'places scene-button entrances in the %s host',
+    async (host) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...squareMapSource,
+            readText: async (path) => {
+              const text = await readFile(
+                new URL(`../sample-games/square-map/${path}`, import.meta.url),
+                'utf8',
+              )
+
+              if (path !== 'scenes/coast.json') return text
+              const scene = JSON.parse(text)
+              scene.components.push({
+                id: 'entrance',
+                type: 'button',
+                label: 'Entrance',
+                placement: { row: 2, column: 1 },
+                action: {
+                  type: 'enter-scene',
+                  scene: 'coast',
+                  mapView: 'coast-map',
+                  position: { x: 12, y: 0 },
+                },
+              })
+
+              return JSON.stringify(scene)
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      target
+        .find((element) => element.dataset.componentId === 'entrance')!
+        .dispatchEvent(new Event('click'))
+      const scene = engine.lifecycle!.activeScene!
+      expect(engine.lifecycle!.currentGame!.mapMovement!.getPosition(scene, 'coast-map')).toEqual({
+        x: 12,
+        y: 0,
+      })
+      expect(target.find((element) => element.className === 'ancadeba-map-player')).toBeDefined()
+    },
+  )
+
+  it.each(['preview', 'standalone'])(
+    'renders adjacent map-object interactions in the %s host',
+    async (host) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...squareMapSource,
+            readText: async (path) => {
+              if (path === 'rules/objects.json')
+                return JSON.stringify({
+                  state: [{ path: ['readSign'], value: false }],
+                  actions: {
+                    'read-sign': [
+                      {
+                        when: [],
+                        effects: [{ type: 'set-state', path: ['readSign'], value: true }],
+                      },
+                    ],
+                  },
+                })
+
+              const text = await readFile(
+                new URL(`../sample-games/square-map/${path}`, import.meta.url),
+                'utf8',
+              )
+
+              const value = JSON.parse(text)
+
+              if (path === 'game.json') value.rules.push('objects')
+
+              if (path === 'maps/coast.json')
+                value.objects = [
+                  ...(value.objects ?? []),
+                  {
+                    id: 'sign',
+                    label: 'Signpost',
+                    x: 10,
+                    y: 4,
+                    terrain: 'forest',
+                    action: 'read-sign',
+                  },
+                ]
+
+              if (path === 'scenes/coast.json')
+                value.components.push({
+                  id: 'read-sign',
+                  type: 'button',
+                  label: 'Read sign',
+                  placement: { row: 2, column: 1 },
+                  action: { type: 'interact-map', mapView: 'coast-map', object: 'sign' },
+                })
+
+              return JSON.stringify(value)
+            },
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+      const tasks: (() => void)[] = []
+      const messages = new MessageBus<EngineMessages>()
+      const applied: string[] = []
+      messages.subscribe('action.applied', ({ request }) => {
+        applied.push(request.action)
+      })
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => messages,
+        {
+          clock: timing.clock,
+          scheduler: {
+            schedule(callback, delay) {
+              if (delay) tasks.push(callback)
+
+              return () => {}
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const object = target.find((element) => element.dataset.mapObject === 'sign')!
+      const button = target.find((element) => element.dataset.componentId === 'read-sign')!
+      expect(object.attributes.get('aria-label')).toBe('Signpost')
+      expect(object.style.getPropertyValue('grid-column')).toBe('11 / span 1')
+      expect(object.style.getPropertyValue('grid-row')).toBe('5 / span 1')
+      expect(object.disabled).toBe(false)
+      expect(button.disabled).toBe(false)
+      object.dispatchEvent(new Event('click'))
+      flush(engine)
+      button.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(applied).toEqual(['read-sign', 'read-sign'])
+      expect(
+        engine.lifecycle!.currentGame!.bindings!.read({ source: 'game.state', path: ['readSign'] }),
+      ).toEqual({ status: 'resolved', value: true })
+      const movement = engine.lifecycle!.currentGame!.mapMovement!
+      movement.move(engine.lifecycle!.activeScene!, 'coast-map', 'west')
+      expect(object.disabled).toBe(true)
+      expect(button.disabled).toBe(true)
+      object.dispatchEvent(new Event('click'))
+      flush(engine)
+      tasks.shift()!()
+      flush(engine)
+      expect(object.disabled).toBe(true)
+      expect(applied).toHaveLength(2)
+      engine.lifecycle!.enterScene('village')
+      object.dispatchEvent(new Event('click'))
+      button.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(applied).toHaveLength(2)
+    },
+  )
+
+  it.each(['preview', 'standalone'])(
+    'shows signpost and chest feedback from the real map sample in the %s host',
+    async (host) => {
+      const game = await new GameLoader(
+        new JsonResourceLoader(
+          {
+            ...squareMapSource,
+            readText: (path) =>
+              readFile(new URL(`../sample-games/square-map/${path}`, import.meta.url), 'utf8'),
+          },
+          logger,
+        ),
+      ).load()
+
+      const { target } = setup(game)
+      const tasks: (() => void)[] = []
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          clock: timing.clock,
+          scheduler: {
+            schedule(callback, delay) {
+              if (delay) tasks.push(callback)
+
+              return () => {}
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const interact = () => target.find((element) => element.dataset.actionBarSlot === '12')!
+
+      const feedback = () =>
+        target.find((element) => element.dataset.componentId === 'interaction-result')!.textContent
+
+      const press = (code: string) => {
+        engine.input!.pressKey(code)
+        engine.input!.releaseKey(code)
+        flush(engine)
+      }
+
+      const walk = (code: string) => {
+        press(code)
+        tasks.shift()!()
+        flush(engine)
+      }
+
+      expect(interact().disabled).toBe(false)
+      expect(interact().children[1]!.textContent).toBe('E')
+      expect(
+        target.find((element) => element.dataset.mapObject === 'coast-signpost')!.disabled,
+      ).toBe(false)
+      press('KeyE')
+      expect(feedback()).toContain('Signpost: Pine Village')
+      expect(feedback()).toContain('Coins: 0')
+
+      for (const code of ['KeyA', 'KeyW', 'KeyW']) walk(code)
+      expect(interact().disabled).toBe(true)
+      expect(
+        target.find((element) => element.dataset.mapObject === 'village-chest')!.disabled,
+      ).toBe(true)
+      walk('KeyD')
+      expect(interact().disabled).toBe(false)
+      expect(
+        target
+          .find((element) => element.dataset.mapObject === 'village-chest')!
+          .attributes.get('aria-label'),
+      ).toBe('Chest')
+      press('KeyE')
+      expect(feedback()).toContain('find 25 coins')
+      expect(
+        target
+          .find((element) => element.dataset.mapObject === 'village-chest')!
+          .attributes.get('aria-label'),
+      ).toBe('Open chest')
+      expect(feedback()).toContain('Coins: 25')
+      target
+        .find((element) => element.dataset.mapObject === 'village-chest')!
+        .dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(feedback()).toContain('chest is empty')
+      expect(feedback()).toContain('Coins: 25')
+    },
+  )
+
+  it.each(['preview', 'standalone'])(
+    'hides the collected berry basket, disables stale buttons and restores map focus in the %s host',
+    async (host) => {
+      const game = await new GameLoader(new JsonResourceLoader(squareMapSource, logger)).load()
+      const { target, document } = setup(game)
+      const applied: string[] = []
+      const messages = new MessageBus<EngineMessages>()
+      messages.subscribe('action.applied', ({ request }) => applied.push(request.action))
+
+      const engine = new Engine(
+        { load: async () => game },
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => messages,
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      const lifecycle = engine.lifecycle!
+      lifecycle.enterScene('village', { mapView: 'village-map', position: { x: 4, y: 4 } })
+      const basket = target.find((element) => element.dataset.mapObject === 'village-berries')!
+      const backpack = () => target.find((element) => element.dataset.componentId === 'backpack')!
+      expect(backpack().textContent).not.toContain('Wild berry')
+      const mapView = target.find((element) => element.dataset.componentId === 'village-map')!
+      let hidden = basket.hidden
+      // A real browser blurs a focused element when it becomes hidden.
+      Object.defineProperty(basket, 'hidden', {
+        get: () => hidden,
+        set: (value: boolean) => {
+          hidden = value
+
+          if (value && document.activeElement === basket) document.activeElement = null
+        },
+      })
+      expect(basket.hidden).toBe(false)
+      expect(basket.disabled).toBe(false)
+      basket.focus()
+      engine.input!.pressKey('KeyE')
+      engine.input!.releaseKey('KeyE')
+      flush(engine)
+      expect(basket.hidden).toBe(true)
+      expect(basket.disabled).toBe(true)
+      expect(backpack().textContent.match(/Wild berry/g)).toHaveLength(3)
+      expect(document.activeElement).toBe(mapView)
+      expect(target.find((element) => element.dataset.actionBarSlot === '12')!.disabled).toBe(true)
+      basket.dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(applied).toEqual(['collect-berries'])
+      lifecycle.enterScene('coast')
+      lifecycle.enterScene('village')
+      expect(
+        target.find((element) => element.dataset.mapObject === 'village-berries')!.hidden,
+      ).toBe(true)
+      expect(backpack().textContent.match(/Wild berry/g)).toHaveLength(3)
+      lifecycle.startGame()
+      lifecycle.enterScene('village')
+      expect(
+        target.find((element) => element.dataset.mapObject === 'village-berries')!.hidden,
+      ).toBe(false)
+      expect(backpack().textContent).not.toContain('Wild berry')
+    },
+  )
+
+  it('repaints the chest sprite after looting, including a graphics lease that resolves after the state change', async () => {
+    const game = await new GameLoader(new JsonResourceLoader(squareMapSource, logger)).load()
+    const { target } = setup(game)
+    const leases: ((value: { url: string; release: () => void }) => void)[] = []
+    const releases = vi.fn()
+
+    const engine = new Engine(
+      { load: async () => game },
+      {
+        mount: (_game, session) =>
+          mountGameView(target.asElement(), game, session, {
+            graphics: { acquire: () => new Promise((resolve) => leases.push(resolve)) },
+          }),
+      },
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      timing,
+    )
+
+    onTestFinished(() => engine.stop())
+    await engine.start()
+    const lifecycle = engine.lifecycle!
+    lifecycle.enterScene('village', { mapView: 'village-map', position: { x: 2, y: 4 } })
+    const chest = target.find((element) => element.dataset.mapObject === 'village-chest')!
+    expect(chest.attributes.get('aria-label')).toBe('Chest')
+    leases[0]!({ url: 'blob:closed-sheet', release: releases })
+    await Promise.resolve()
+    expect(chest.style.backgroundPosition).toBe('0% 0%')
+    engine.input!.pressKey('KeyE')
+    engine.input!.releaseKey('KeyE')
+    flush(engine)
+    expect(chest.attributes.get('aria-label')).toBe('Open chest')
+    expect(chest.style.backgroundPosition).toBe('100% 0%')
+    expect(chest.textContent).toBe('')
+    lifecycle.currentGame!.mapMovement!.place(lifecycle.activeScene!, 'village-map', { x: 4, y: 4 })
+    engine.input!.pressKey('KeyE')
+    engine.input!.releaseKey('KeyE')
+    flush(engine)
+    expect(target.find((element) => element.dataset.mapObject === 'village-berries')!.hidden).toBe(
+      true,
+    )
+    lifecycle.enterScene('coast')
+    lifecycle.enterScene('village')
+    const revisited = target.find((element) => element.dataset.mapObject === 'village-chest')!
+    expect(revisited.attributes.get('aria-label')).toBe('Open chest')
+    leases.at(-1)!({ url: 'blob:late-sheet', release: releases })
+    await Promise.resolve()
+    expect(revisited.style.backgroundImage).toContain('blob:late-sheet')
+    expect(revisited.style.backgroundPosition).toBe('100% 0%')
+    expect(target.find((element) => element.dataset.mapObject === 'village-berries')!.hidden).toBe(
+      true,
+    )
+    expect(chest.style.backgroundImage).toContain('blob:closed-sheet')
+    engine.stop()
+    expect(releases).toHaveBeenCalledTimes(2)
+  })
+
   it('follows the Coast Road player at terrain speed and stops at forests and map edges', async ({
     onTestFinished,
   }) => {
     const game = await new GameLoader(
       new JsonResourceLoader(
         {
-          ...source,
+          ...squareMapSource,
           readText: (path) =>
             readFile(new URL(`../sample-games/square-map/${path}`, import.meta.url), 'utf8'),
         },

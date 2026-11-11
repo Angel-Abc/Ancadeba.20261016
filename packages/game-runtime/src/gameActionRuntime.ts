@@ -11,6 +11,7 @@ import type { GameRules } from './actions.js'
 import type { GameInstance, IGameRuntime, IGameLifecycle } from './gameLifecycle.js'
 import { GameActionBar } from './actionBar.js'
 import { GameMapMovement } from './mapMovement.js'
+import { GameMapObjects } from './mapObjects.js'
 import { GameNearbyContext } from './nearbyContext.js'
 import { GameInventoryContext } from './inventoryContext.js'
 import { GameEquipment } from './equipment.js'
@@ -21,7 +22,8 @@ import { GameCombat } from './combat.js'
 import { GameBindings } from './gameBindings.js'
 import type { GameMessageScope } from './gameMessageScope.js'
 import { TimerService, type TimerId } from './timers.js'
-import { getMapMovementCostMs, type GameSave } from '@ancadeba/schemas'
+import type { GameSave } from '@ancadeba/schemas'
+import type { PreparedProgression } from './progression.js'
 
 /** Owns actions, bindings, and private host timers for one playthrough. */
 export class GameActionRuntime implements IGameRuntime {
@@ -31,6 +33,7 @@ export class GameActionRuntime implements IGameRuntime {
   readonly bindings: GameBindings
   readonly actionBar: GameActionBar | undefined
   readonly mapMovement: GameMapMovement | undefined
+  readonly mapObjects: GameMapObjects | undefined
   readonly nearby: GameNearbyContext | undefined
   readonly inventorySelection: GameInventoryContext | undefined
   readonly equipment: GameEquipment | undefined
@@ -44,13 +47,17 @@ export class GameActionRuntime implements IGameRuntime {
   private started = false
   private disposed = false
 
-  save(): Pick<GameSave, 'combat' | 'rewards' | 'quests' | 'dialogue' | 'maps' | 'leveling'> {
+  save(): Pick<
+    GameSave,
+    'combat' | 'rewards' | 'quests' | 'dialogue' | 'maps' | 'mapPositions' | 'leveling'
+  > {
     return {
       combat: this.combat?.save() ?? {},
       rewards: this.combatRewards?.save() ?? {},
       quests: this.quests?.save() ?? { records: {} },
       dialogue: this.dialogue?.save() ?? {},
       maps: this.mapMovement?.save() ?? {},
+      mapPositions: this.mapMovement?.savePositions() ?? {},
       leveling: this.leveling.save(),
     }
   }
@@ -60,17 +67,10 @@ export class GameActionRuntime implements IGameRuntime {
 
     if (scene?.type !== 'game') throw new Error('Invalid saved scene')
 
-    for (const [id, position] of Object.entries(save.maps)) {
-      const view = scene.components.find((component) => component.id === id)
-
-      if (
-        view?.type !== 'map-view' ||
-        !view.playerSpawn ||
-        view.interactive === false ||
-        getMapMovementCostMs(view.map, position) === undefined
-      )
-        throw new Error('Invalid saved map position')
-    }
+    this.mapMovement?.restorePositions(game.data, {
+      ...save.mapPositions,
+      [save.scene]: { ...save.maps, ...save.mapPositions?.[save.scene] },
+    })
 
     if (
       (!this.quests && (Object.keys(save.quests.records).length || save.quests.tracked)) ||
@@ -103,7 +103,6 @@ export class GameActionRuntime implements IGameRuntime {
     storyState?: IStoryStateTransactions,
   ) {
     this.timers = new TimerService(messages, scheduler, clock, allocateTimerId)
-    this.mapMovement = lifecycle ? new GameMapMovement(lifecycle, scheduler) : undefined
     this.bindings = new GameBindings(
       {
         state: () => game.state,
@@ -114,6 +113,81 @@ export class GameActionRuntime implements IGameRuntime {
       },
       messages,
     )
+
+    const readObjectState = (path: readonly string[]) => {
+      const result = this.bindings.read({ source: 'game.state', path })
+
+      return result.status === 'resolved' ? result.value : undefined
+    }
+
+    const dynamicObjects = [...game.data.scenes.values()].some((scene) =>
+      scene.components.some(
+        (component) =>
+          component.type === 'map-view' &&
+          component.map.objects?.some((object) => object.states?.length),
+      ),
+    )
+
+    const prepareProgression = (cost: number): PreparedProgression => {
+      const prepared = this.actions.prepareProgression(cost)
+
+      return {
+        ...prepared,
+        commit: () => {
+          prepared.commit()
+          // Clock projection is part of the commit and never notifies observers by itself.
+          updateAuthoredClock?.(prepared.progression.worldTimeMs)
+        },
+      }
+    }
+
+    this.mapMovement = lifecycle
+      ? new GameMapMovement(
+          lifecycle,
+          scheduler,
+          (scene, mapView, trigger) => {
+            this.actions.requestScoped(
+              trigger.action,
+              Object.freeze({
+                scene: scene.data.id,
+                mapView,
+                trigger: trigger.id,
+                x: trigger.x,
+                y: trigger.y,
+              }),
+              () => !scene.disposed && lifecycle.activeScene === scene,
+            )
+          },
+          dynamicObjects
+            ? {
+                read: readObjectState,
+                subscribe: (listener) => this.bindings.subscribeChanges(listener),
+              }
+            : undefined,
+          (cost) => {
+            if (!this.isRunning()) return
+
+            try {
+              return prepareProgression(cost)
+            } catch (error) {
+              logger.error('MapMovement', 'Movement progression could not be prepared', error)
+
+              return undefined
+            }
+          },
+        )
+      : undefined
+    this.mapObjects =
+      lifecycle && this.mapMovement
+        ? new GameMapObjects(
+            lifecycle,
+            this.mapMovement,
+            (action, payload, isCurrent) => {
+              this.actions.requestScoped(action, payload, isCurrent)
+            },
+            readObjectState,
+          )
+        : undefined
 
     const statState: IStateTransactions | undefined = stateTransactions
       ? {
@@ -204,6 +278,7 @@ export class GameActionRuntime implements IGameRuntime {
           () => this.itemUse,
           () => this.dialogue,
           () => this.quests,
+          this.mapObjects,
         )
       : undefined
 
@@ -223,18 +298,7 @@ export class GameActionRuntime implements IGameRuntime {
             this.bindings,
             numericState,
             messages,
-            (cost) => {
-              const prepared = this.actions.prepareProgression(cost)
-
-              return {
-                ...prepared,
-                commit: () => {
-                  prepared.commit()
-                  // This internal projection only writes the authored clock field; it never notifies observers.
-                  updateAuthoredClock?.(prepared.progression.worldTimeMs)
-                },
-              }
-            },
+            prepareProgression,
             () => this.bindings.invalidate(),
             this.combatRewards,
             this.leveling,
@@ -257,6 +321,7 @@ export class GameActionRuntime implements IGameRuntime {
       this.nearby?.dispose()
       this.bindings.dispose()
       this.mapMovement?.dispose()
+      this.mapObjects?.dispose()
       this.timers.dispose()
       messages.dispose()
       throw error
@@ -288,6 +353,7 @@ export class GameActionRuntime implements IGameRuntime {
     this.inventorySelection?.dispose()
     this.nearby?.dispose()
     this.mapMovement?.dispose()
+    this.mapObjects?.dispose()
     this.bindings.dispose()
 
     try {

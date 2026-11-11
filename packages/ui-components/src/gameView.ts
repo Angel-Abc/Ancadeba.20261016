@@ -1,8 +1,10 @@
 import type { GameData, IGameLifecycle, SceneData, IGameSaves } from '@ancadeba/game-runtime'
+import { canEnterScene } from '@ancadeba/game-runtime'
 import { mountGameSaveControls, gameSaveMessages } from './gameSaveControls.js'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
 import { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
 import { mountGameStylesheet } from './gameStylesheet.js'
+import type { SceneEntrance } from '@ancadeba/schemas'
 
 export interface GameViewSession {
   readonly saves?: IGameSaves | undefined
@@ -65,9 +67,9 @@ export function mountGameView(
     if (errors.length) throw new AggregateError(errors, 'Game view cleanup failed')
   }
 
-  const enter = (scene: SceneData) => {
+  const enter = (scene: SceneData, entrance?: SceneEntrance) => {
     if (scene.type === 'game' && !session.lifecycle.currentGame) session.lifecycle.startGame()
-    session.lifecycle.enterScene(scene.id)
+    session.lifecycle.enterScene(scene.id, entrance)
   }
 
   try {
@@ -160,14 +162,33 @@ export function mountGameView(
       onActionBarFocusLost: () => root.focus(),
       assets: game.assets,
       localization,
+      canEnterScene: (action) =>
+        canEnterScene(game, action, session.lifecycle.currentGame?.mapMovement),
+      subscribeNavigationChanges: (listener) =>
+        session.lifecycle.currentGame?.bindings?.subscribeChanges(listener) ?? (() => {}),
+      navigationUnavailableMessage: () =>
+        game.language?.toLowerCase().startsWith('nl')
+          ? 'De bestemming is momenteel geblokkeerd.'
+          : 'The destination is currently blocked.',
       onButtonActivate: (action) => {
         if (disposed) return
+
+        if (
+          action.type === 'enter-scene' &&
+          !canEnterScene(game, action, session.lifecycle.currentGame?.mapMovement)
+        )
+          return
         const scene = game.scenes.get(action.scene)
 
         if (!scene) throw new Error(`Missing button target scene: ${action.scene}`)
 
         if (action.type === 'new-game') session.lifecycle.startGame()
-        enter(scene)
+        enter(
+          scene,
+          action.type === 'enter-scene' && action.position && action.mapView
+            ? { mapView: action.mapView, position: action.position }
+            : undefined,
+        )
       },
     })
 

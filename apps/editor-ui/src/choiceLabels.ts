@@ -34,6 +34,7 @@ export const conditionTypeLabels = new Map<string, string>([
 export const effectTypeLabels = new Map<string, string>([
   ['set-state', 'choices.setState'],
   ['move-item', 'choices.moveItem'],
+  ['collect-items', 'choices.collectItems'],
   ['enter-scene', 'choices.enterGameScene'],
   ['append-log', 'choices.appendLog'],
   ['start-quest', 'choices.startQuest'],

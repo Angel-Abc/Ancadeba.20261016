@@ -124,13 +124,18 @@ export const gameSaveSchema = z.strictObject({
     tracked: id.optional(),
   }),
   dialogue: z.record(z.string(), savedDialogueSchema),
+  /** Active-scene positions retained for compatibility with earlier save slots. */
   maps: record(mapPositionSchema),
+  /** Per-playthrough positions keyed by scene ID, then map-view component ID. */
+  mapPositions: record(record(mapPositionSchema)).optional(),
   nearby: record(id),
   inventorySelection: record(id),
   activeDialogue: id.optional(),
 })
 
 export type GameSave = z.infer<typeof gameSaveSchema>
+
+export type SavedMapPositions = NonNullable<GameSave['mapPositions']>
 
 export type SavedCombat = z.infer<typeof savedCombatSchema>
 

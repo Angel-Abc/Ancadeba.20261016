@@ -19,6 +19,8 @@ export function mapSelectionTools(
     focusGrid: () => void
     edited: () => void
     report: (cause: unknown) => void
+    triggers?: { activate(point: TilePoint): void; selected(point: TilePoint): boolean }
+    objects?: { activate(point: TilePoint): void; selected(point: TilePoint): boolean }
     assets?: AssetCatalog | undefined
     imageUrl: (image: ImageAsset) => string | undefined
     history?: {
@@ -41,6 +43,10 @@ export function mapSelectionTools(
     if (layer.selected) choices.push(['erase', t('maps.erase')])
     choices.push(['select', t('maps.selectTiles')])
 
+    if (options.triggers) choices.push(['trigger', t('maps.entryTriggers')])
+
+    if (options.objects) choices.push(['object', t('maps.objects')])
+
     if (model.size) choices.push(['paste', t('maps.paste')])
     const disabled = options.disabled()
     const selected = model.selected?.layer === layer.selected
@@ -52,7 +58,11 @@ export function mapSelectionTools(
         choices,
         (tool) => {
           layer.erasing = tool === 'erase'
-          model.setTool(tool === 'select' || tool === 'paste' ? tool : 'paint')
+          model.setTool(
+            tool === 'select' || tool === 'paste' || tool === 'trigger' || tool === 'object'
+              ? tool
+              : 'paint',
+          )
           update()
           options.focusGrid()
         },
@@ -126,7 +136,13 @@ export function mapSelectionTools(
       .join(' ')
     const help = document.createElement('p')
     help.className = 'help'
-    help.textContent = t('maps.selectionHelp')
+    help.textContent = t(
+      model.tool === 'object'
+        ? 'maps.objectHelp'
+        : model.tool === 'trigger'
+          ? 'maps.entryGridHelp'
+          : 'maps.selectionHelp',
+    )
     element.append(status, help)
 
     if (options.history) {
@@ -191,7 +207,11 @@ export function mapSelectionTools(
       run(() => model.extend(layer.selected, point))
     },
     activate(point, extend) {
-      if (model.tool === 'paste') paste(point)
+      if (model.tool === 'object') {
+        if (!options.disabled()) options.objects?.activate(point)
+      } else if (model.tool === 'trigger') {
+        if (!options.disabled()) options.triggers?.activate(point)
+      } else if (model.tool === 'paste') paste(point)
       else this.start(point, extend)
     },
     hover(point) {
@@ -247,6 +267,15 @@ export function mapSelectionTools(
         event.preventDefault()
         event.stopPropagation()
 
+        if (model.tool === 'trigger' || model.tool === 'object') {
+          if (key === 'escape') {
+            model.setTool('paint')
+            update()
+          }
+
+          return true
+        }
+
         if (key === 'escape') {
           model.cancel()
           update()
@@ -267,7 +296,16 @@ export function mapSelectionTools(
       return false
     },
     decorate(cell, point) {
-      const selected = model.isSelected(layer.selected, point)
+      const triggerSelected =
+        (model.tool === 'trigger' && Boolean(options.triggers?.selected(point))) ||
+        (model.tool === 'object' && Boolean(options.objects?.selected(point)))
+
+      const selected =
+        model.tool === 'trigger' || model.tool === 'object'
+          ? triggerSelected
+          : model.isSelected(layer.selected, point)
+
+      cell.classList.toggle('map-tile-trigger-selected', triggerSelected)
       cell.setAttribute('aria-selected', String(selected))
       cell.classList.toggle('map-tile-selected', selected)
       cell.classList.toggle('map-tile-cut', selected && model.moving)

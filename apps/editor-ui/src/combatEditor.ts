@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { combatSourceSchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -370,6 +373,35 @@ export function bindCombatEditor(
       ),
     )
   }
+
+  registerEditorDraft(
+    root,
+    'combat',
+    z.object({
+      sceneId: z.string(),
+      encounterId: z.string(),
+      draft: combatSourceSchema.optional(),
+      component: combatComponentSchema.optional(),
+      creating: z.boolean(),
+      playerHealth: z.string(),
+      enemyHealth: z.string(),
+    }),
+    () =>
+      dirty
+        ? { sceneId, encounterId, draft, component, creating, playerHealth, enemyHealth }
+        : undefined,
+    (saved) => {
+      sceneId = saved.sceneId
+      encounterId = saved.encounterId
+      draft = saved.draft
+      component = saved.component
+      creating = saved.creating
+      playerHealth = saved.playerHealth
+      enemyHealth = saved.enemyHealth
+      dirty = true
+      render()
+    },
+  )
 
   return {
     navigate,

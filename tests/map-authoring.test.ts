@@ -64,6 +64,289 @@ describe('map authoring persistence', () => {
       direction,
     })
 
+  it('persists tile triggers, preserves extensions by ID, protects action links and restores exact history', async () => {
+    const rules = {
+      state: [],
+      actions: {
+        travel: [{ when: [], effects: [{ type: 'enter-scene' as const, scene: 'adventure' }] }],
+      },
+    }
+
+    await apply({ type: 'game.updateRules', ruleId: 'travel', rules })
+
+    const map = {
+      ...structuredClone(garden),
+      entryTriggers: [{ id: 'exit', x: 1, y: 0, action: 'travel' }],
+    }
+
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+
+    const extended = Buffer.from(
+      JSON.stringify({ ...map, entryTriggers: [{ ...map.entryTriggers[0], extension: 'keep' }] }),
+    )
+
+    await workspace.write('game/maps/garden.json', extended)
+    map.entryTriggers[0]!.x = 0
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const saved = await workspace.read('game/maps/garden.json')
+    expect(JSON.parse(Buffer.from(saved).toString()).entryTriggers).toEqual([
+      { id: 'exit', x: 0, y: 0, action: 'travel', extension: 'keep' },
+    ])
+    await restore('undo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(extended)
+    await restore('redo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(saved)
+    await expect(
+      apply({ type: 'game.updateRules', ruleId: 'travel', rules: { state: [], actions: {} } }),
+    ).rejects.toThrow('Unlink action "travel" before deleting it')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(saved)
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map: garden })
+    expect(
+      JSON.parse(Buffer.from(await workspace.read('game/maps/garden.json')).toString())
+        .entryTriggers,
+    ).toBeUndefined()
+    await apply({ type: 'game.updateRules', ruleId: 'travel', rules: { state: [], actions: {} } })
+  })
+
+  it('persists, clears and restores exact scene-entrance coordinates through rule history', async () => {
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map: garden })
+    await apply({
+      type: 'scene.upsertComponent',
+      sceneId: 'adventure',
+      component: {
+        id: 'entrance',
+        type: 'map-view',
+        label: 'Garden',
+        map: 'garden',
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+        viewport: { columns: 2, rows: 2, x: 0, y: 0 },
+        playerSpawn: { x: 0, y: 0 },
+      },
+    })
+
+    const rules = {
+      state: [],
+      actions: {
+        travel: [
+          {
+            when: [],
+            effects: [{ type: 'enter-scene' as const, scene: 'adventure', mapView: 'entrance' }],
+          },
+        ],
+      },
+    }
+
+    await apply({ type: 'game.updateRules', ruleId: 'travel', rules })
+    const before = await workspace.read('game/rules/travel.json')
+
+    const placed = {
+      ...rules,
+      actions: {
+        travel: [
+          {
+            when: [],
+            effects: [{ ...rules.actions.travel[0]!.effects[0]!, position: { x: 0, y: 1 } }],
+          },
+        ],
+      },
+    }
+
+    await apply({ type: 'game.updateRules', ruleId: 'travel', rules: placed })
+    const after = await workspace.read('game/rules/travel.json')
+    expect((await service.inspect('game')).rules!.actions.travel![0]!.effects).toEqual(
+      placed.actions.travel[0]!.effects,
+    )
+    await restore('undo')
+    expect(await workspace.read('game/rules/travel.json')).toEqual(before)
+    await restore('redo')
+    expect(await workspace.read('game/rules/travel.json')).toEqual(after)
+    await apply({ type: 'game.updateRules', ruleId: 'travel', rules })
+    expect((await service.inspect('game')).rules!.actions.travel![0]!.effects).toEqual(
+      rules.actions.travel[0]!.effects,
+    )
+  })
+
+  it('persists map objects and their extensions, protects action references and restores exact undo/redo bytes', async () => {
+    const rules = { state: [], actions: { interact: [{ when: [], effects: [] }] } }
+    await apply({ type: 'game.updateRules', ruleId: 'objects', rules })
+
+    const map = {
+      ...structuredClone(garden),
+      objects: [
+        {
+          id: 'sign',
+          label: 'Signpost',
+          x: 1,
+          y: 0,
+          terrain: 'wall',
+          action: 'interact',
+          blocking: false,
+        },
+      ],
+    }
+
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+
+    const before = Buffer.from(
+      JSON.stringify({ ...map, objects: [{ ...map.objects[0], extension: { keep: true } }] }),
+    )
+
+    await workspace.write('game/maps/garden.json', before)
+    map.objects[0]!.label = 'Changed sign'
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const after = await workspace.read('game/maps/garden.json')
+    expect(JSON.parse(Buffer.from(after).toString()).objects).toEqual([
+      { ...map.objects[0], extension: { keep: true } },
+    ])
+    await restore('undo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(before)
+    await restore('redo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(after)
+    await expect(
+      apply({ type: 'game.updateRules', ruleId: 'objects', rules: { state: [], actions: {} } }),
+    ).rejects.toThrow('Unlink action "interact"')
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map: garden })
+    expect(
+      JSON.parse(Buffer.from(await workspace.read('game/maps/garden.json')).toString()).objects,
+    ).toBeUndefined()
+    await apply({ type: 'game.updateRules', ruleId: 'objects', rules: { state: [], actions: {} } })
+  })
+
+  it('persists object states by ID, clears removed overrides, protects boolean flags and restores exact history', async () => {
+    const rules = {
+      state: [{ path: ['opened'], value: false }],
+      actions: { interact: [{ when: [], effects: [] }] },
+    }
+
+    await apply({ type: 'game.updateRules', ruleId: 'objects', rules })
+
+    const map = mapDefinitionSchema.parse({
+      ...garden,
+      objects: [
+        {
+          id: 'chest',
+          label: 'Chest',
+          x: 1,
+          y: 0,
+          terrain: 'wall',
+          action: 'interact',
+          states: [
+            {
+              id: 'open',
+              when: { path: ['opened'], value: true },
+              terrain: 'grass',
+              label: 'Open chest',
+              blocking: false,
+            },
+          ],
+        },
+      ],
+    })
+
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const object = map.objects![0]!
+    const state = object.states![0]!
+
+    const before = Buffer.from(
+      JSON.stringify({
+        ...map,
+        objects: [
+          {
+            ...object,
+            states: [
+              { ...state, extension: 'keep', when: { ...state.when, extension: 'condition' } },
+            ],
+          },
+        ],
+      }),
+    )
+
+    await workspace.write('game/maps/garden.json', before)
+    delete state.terrain
+    delete state.label
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const after = await workspace.read('game/maps/garden.json')
+    expect(JSON.parse(Buffer.from(after).toString()).objects[0].states).toEqual([
+      {
+        id: 'open',
+        when: { path: ['opened'], value: true, extension: 'condition' },
+        blocking: false,
+        extension: 'keep',
+      },
+    ])
+    await restore('undo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(before)
+    await restore('redo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(after)
+
+    for (const state of [[], [{ path: ['opened'], value: 'false' }]]) {
+      await expect(
+        apply({ type: 'game.updateRules', ruleId: 'objects', rules: { ...rules, state } }),
+      ).rejects.toThrow()
+      expect(await workspace.read('game/maps/garden.json')).toEqual(after)
+    }
+
+    delete object.states
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    expect(
+      JSON.parse(Buffer.from(await workspace.read('game/maps/garden.json')).toString()).objects[0]
+        .states,
+    ).toBeUndefined()
+    await apply({ type: 'game.updateRules', ruleId: 'objects', rules: { ...rules, state: [] } })
+  })
+
+  it('persists visibility-only states and clears inherited visibility without losing extensions or undo history', async () => {
+    await apply({
+      type: 'game.updateRules',
+      ruleId: 'pickups',
+      rules: {
+        state: [{ path: ['collected'], value: false }],
+        actions: { collect: [{ when: [], effects: [] }] },
+      },
+    })
+
+    const map = mapDefinitionSchema.parse({
+      ...garden,
+      objects: [
+        {
+          id: 'pickup',
+          label: 'Pickup',
+          x: 1,
+          y: 0,
+          terrain: 'grass',
+          action: 'collect',
+          visible: false,
+          states: [{ id: 'reveal', when: { path: ['collected'], value: true }, visible: true }],
+        },
+      ],
+    })
+
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const object = map.objects![0]!
+    const state = object.states![0]!
+
+    const before = Buffer.from(
+      JSON.stringify({
+        ...map,
+        objects: [{ ...object, extension: 'object', states: [{ ...state, extension: 'state' }] }],
+      }),
+    )
+
+    await workspace.write('game/maps/garden.json', before)
+    delete object.visible
+    delete state.visible
+    state.blocking = false
+    await apply({ type: 'game.upsertMap', mapId: 'garden', map })
+    const after = await workspace.read('game/maps/garden.json')
+    expect(JSON.parse(Buffer.from(after).toString()).objects).toEqual([
+      { ...object, extension: 'object', states: [{ ...state, extension: 'state' }] },
+    ])
+    await restore('undo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(before)
+    await restore('redo')
+    expect(await workspace.read('game/maps/garden.json')).toEqual(after)
+  })
+
   it('persists copied and moved building groups and restores exact bytes through undo and redo', async () => {
     const map = new MapDraft(garden)
     map.resize(6, 4, 'grass')

@@ -13,6 +13,8 @@ import {
   translationChoices,
 } from './ruleFormControls.js'
 import { questChoices, sceneChoices } from './choiceLabels.js'
+import { sceneEntranceFields } from './sceneEntranceFields.js'
+import { mapInteractFields } from './mapInteractFields.js'
 
 function shortcut(view: ProjectView, binding: ActionBarSlotDefinition['inputBinding']): string {
   if (!binding || !view.input) return ''
@@ -34,6 +36,7 @@ export function actionBarForm(
   sceneId?: string,
 ): HTMLElement[] {
   const { create, input, select, button, group, translation, t } = controls
+  const render = () => selectSlot(selectedSlot)
   const grid = create('div')
   grid.className = 'action-bar-slot-grid'
 
@@ -109,6 +112,7 @@ export function actionBarForm(
         ['item-use', t('controls.useSelectedItem')],
         ['nearby-action', t('controls.selectedTarget')],
         ['move-map', t('controls.moveOnMap')],
+        ['interact-map', t('maps.interact')],
         ['equipment-action', t('controls.equipmentCommand')],
         ['shop-action', t('controls.shopCommand')],
         ['combat-action', t('controls.combatCommand')],
@@ -138,22 +142,24 @@ export function actionBarForm(
                         ? { type, shop: shops[0]?.id ?? '', operation: 'buy' }
                         : type === 'equipment-action'
                           ? { type, equipment: equipmentViews[0]?.id ?? '', operation: 'equip' }
-                          : type === 'move-map'
-                            ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
-                            : type === 'nearby-action'
-                              ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
-                              : type === 'inventory-action'
-                                ? {
-                                    type,
-                                    inventory: inventoryPanels[0]?.id ?? '',
-                                    action: 'inspect',
-                                  }
-                                : type === 'request-action'
-                                  ? { type, action: actions[0] ?? '' }
-                                  : {
-                                      type: type === 'new-game' ? 'new-game' : 'enter-scene',
-                                      scene: gameScenes[0] ?? '',
-                                    },
+                          : type === 'interact-map'
+                            ? { type, mapView: mapViews[0]?.id ?? '' }
+                            : type === 'move-map'
+                              ? { type, mapView: mapViews[0]?.id ?? '', direction: 'north' }
+                              : type === 'nearby-action'
+                                ? { type, nearby: nearbyPanels[0]?.id ?? '', action: 'talk' }
+                                : type === 'inventory-action'
+                                  ? {
+                                      type,
+                                      inventory: inventoryPanels[0]?.id ?? '',
+                                      action: 'inspect',
+                                    }
+                                  : type === 'request-action'
+                                    ? { type, action: actions[0] ?? '' }
+                                    : {
+                                        type: type === 'new-game' ? 'new-game' : 'enter-scene',
+                                        scene: gameScenes[0] ?? '',
+                                      },
           }
         }),
     ),
@@ -379,6 +385,8 @@ export function actionBarForm(
           action.action = value.trim()
         }),
       )
+    } else if (action.type === 'interact-map') {
+      detail.append(...mapInteractFields(controls, view, sceneId ?? '', action, render))
     } else if (action.type === 'move-map') {
       detail.append(
         select(
@@ -451,8 +459,17 @@ export function actionBarForm(
           sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
           (value) => {
             action.scene = value
+
+            if (action.type === 'enter-scene') {
+              delete action.mapView
+              delete action.position
+              render()
+            }
           },
         ),
+        ...(action.type === 'enter-scene'
+          ? sceneEntranceFields(controls, view, action, render)
+          : []),
       )
 
     detail.append(

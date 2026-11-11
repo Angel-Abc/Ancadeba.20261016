@@ -1,6 +1,6 @@
 import { editStory } from './storyEditing.js'
 import { editLeveling } from './levelingEditing.js'
-import { assetCatalogFile, gameSchema, sceneSchema } from '@ancadeba/schemas'
+import { gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand } from './commands.js'
 import { EditorError, object, type CommandResult, type ProjectSnapshot } from './project.js'
 import { validateProject } from './validation.js'
@@ -26,20 +26,16 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
   if (!parsed.success) throw new EditorError(400, 'invalid_command', 'Invalid editing command')
   const command = parsed.data
   const initialDiagnostics = validateProject(project.documents, project.sourceDiagnostics)
-  const repairing = command.type === 'assets.upsertImage' || command.type === 'assets.remove'
+
+  const repairing =
+    command.type === 'assets.upsertImage' ||
+    (command.type === 'assets.remove' && command.kind === 'images')
+
   const manifest = object(project.documents['game.json'])
-
-  const catalog = object(
-    typeof manifest.assets === 'string'
-      ? project.documents[assetCatalogFile(manifest.assets)]
-      : undefined,
-  )
-
-  const repairSource = repairing ? object(object(catalog.images)[command.id]).source : undefined
 
   const diagnostics = initialDiagnostics.filter(
     (diagnostic) =>
-      (!repairing || diagnostic.file !== repairSource) &&
+      (!repairing || diagnostic.code !== 'invalid_asset_source') &&
       (command.type !== 'game.updateRules' || diagnostic.code !== 'invalid_rules') &&
       (!['game.upsertStylesheet', 'game.assignStylesheet'].includes(command.type) ||
         diagnostic.file !== manifest.stylesheet ||

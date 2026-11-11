@@ -1,6 +1,6 @@
 {
   "schema-version": "1.0.0",
-  "virtual-keys": ["north", "east", "south", "west"],
+  "virtual-keys": ["north", "east", "south", "west", "interact"],
   "keyboard": {
     "KeyW": "north",
     "ArrowUp": "north",
@@ -9,14 +9,16 @@
     "KeyS": "south",
     "ArrowDown": "south",
     "KeyA": "west",
-    "ArrowLeft": "west"
+    "ArrowLeft": "west",
+    "KeyE": "interact"
   },
   "contexts": {
     "explore": {
       "north": "north",
       "east": "east",
       "south": "south",
-      "west": "west"
+      "west": "west",
+      "interact": "interact"
     }
   },
   "initial-context": "explore"

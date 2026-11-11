@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -357,6 +359,30 @@ export function bindInventoryEditor(
     fields.append(form)
     fields.disabled = busy || Boolean(view.diagnostics.length)
   }
+
+  registerEditorDraft(
+    root,
+    'inventory',
+    z.object({
+      selectedFile: z.string(),
+      id: z.string(),
+      draft: inventorySchema,
+      selected: z.object({ kind: z.enum(['itemTypes', 'owners', 'items']), id: z.string() }),
+      newId: z.string(),
+      slot: z.object({ id: z.string(), label: z.string() }),
+    }),
+    () => (dirty ? { selectedFile, id, draft, selected, newId, slot } : undefined),
+    (saved) => {
+      selectedFile = saved.selectedFile
+      id = saved.id
+      draft = saved.draft
+      selected = saved.selected
+      newId = saved.newId
+      Object.assign(slot, saved.slot)
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,

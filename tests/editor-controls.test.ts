@@ -1,4 +1,5 @@
 import { bindStoryEditor } from '../apps/editor-ui/src/storyEditor.js'
+import { captureEditorDrafts, restoreEditorDrafts } from '../apps/editor-ui/src/editorDraftState.js'
 import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 /// <reference lib="dom" />
 import { describe, expect, it, vi } from 'vite-plus/test'
@@ -145,7 +146,13 @@ describe('editor control commands', () => {
     const rawBar = {
       ...bar,
       extension: 'bar',
-      slots: { '1': { ...bar.slots['1']!, extension: 'slot' } },
+      slots: {
+        '1': {
+          ...bar.slots['1']!,
+          extension: 'slot',
+          action: { ...bar.slots['1']!.action, extension: 'action' },
+        },
+      },
     }
 
     const extended = {
@@ -177,6 +184,11 @@ describe('editor control commands', () => {
       label: 'New label',
       extension: 'slot',
       inputBinding: undefined,
+    })
+    expect(object(object(object(savedBar.slots)['1']).action)).toEqual({
+      type: 'enter-scene',
+      scene: 'other',
+      extension: 'action',
     })
 
     const removed = applyCommand(updated.project, {
@@ -248,6 +260,13 @@ class Control extends EventTarget {
   disabled = false
   readOnly = false
   hidden = false
+  validationMessage = ''
+  setCustomValidity(message: string) {
+    this.validationMessage = message
+  }
+  reportValidity() {
+    return !this.validationMessage
+  }
   constructor(
     readonly ownerDocument: ControlDocument,
     readonly tagName: string,
@@ -283,6 +302,15 @@ class Control extends EventTarget {
   }
   querySelector(selector: string): Control | null {
     return this.all().find((child) => child.tagName === selector) ?? null
+  }
+  querySelectorAll(selector: string): Control[] {
+    return this.all()
+      .slice(1)
+      .filter((node) =>
+        selector === '[data-editor-draft]'
+          ? node.attributes.has('data-editor-draft')
+          : ['input', 'select', 'textarea'].includes(node.tagName),
+      )
   }
   asElement(): HTMLElement {
     // @ts-expect-error -- Partial DOM harness supplies the panel's element operations.
@@ -2212,6 +2240,57 @@ describe('action bar editor controls', () => {
 })
 
 describe('editor draft workflows', () => {
+  it('recovers a pending action identifier before it has been added to the rules model', async () => {
+    const first = await connected(bindRulesPanel)
+
+    const pending = first.root
+      .all()
+      .find((node) => node.attributes.get('aria-label') === 'New action ID')!
+
+    pending.value = 'pending-action'
+    pending.dispatchEvent(new Event('input'))
+    const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement())))
+    const second = await connected(bindRulesPanel)
+    expect(restoreEditorDrafts(second.root.asElement(), drafts)).toEqual([])
+    expect(
+      second.root.all().find((node) => node.attributes.get('aria-label') === 'New action ID')
+        ?.value,
+    ).toBe('pending-action')
+    expect(second.commands).toEqual([])
+  })
+
+  it('recovers independent action-bar and input drafts without submitting either', () => {
+    const first = panel()
+    first.edit('Slot label', 'Recovered slot')
+    first.click('Game input bindings')
+    first.edit('Physical key code', 'KeyJ')
+    const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement())))
+    const second = panel()
+    expect(restoreEditorDrafts(second.root.asElement(), drafts)).toEqual([])
+    expect(second.field('Slot label').value).toBe('Recovered slot')
+    expect(second.field('Physical key code').value).toBe('KeyJ')
+    expect(second.controls.hasDrafts()).toBe(true)
+    expect(second.commands).toEqual([])
+  })
+
+  it('recovers a new conversation and an independently edited quest journal', async () => {
+    const first = await connected(bindStoryEditor)
+    first.click('Add dialogue')
+    first.edit('Name', 'Recovered conversation')
+    first.edit('Journal scene', 'shop')
+    first.edit('Journal label', 'Recovered journal')
+    const drafts = JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement())))
+    const second = await connected(bindStoryEditor)
+    expect(restoreEditorDrafts(second.root.asElement(), drafts)).toEqual([])
+    expect(second.field('Name').value).toBe('Recovered conversation')
+    expect(second.field('Journal label').value).toBe('Recovered journal')
+    expect(second.commands).toEqual([])
+    second.submit('Save dialogue')
+    await second.flush()
+    expect(second.read().dialogues?.dialogue?.label).toBe('Recovered conversation')
+    expect(second.editor.hasDrafts()).toBe(true)
+  })
+
   async function connected<T extends { render: ProjectEditorListener }>(
     bind: (root: HTMLElement, save: (command: EditorCommand) => void) => T,
     source = project(),
@@ -2256,6 +2335,267 @@ describe('editor draft workflows', () => {
       read: () => inspectProject(source),
     }
   }
+
+  it('authors, recovers and saves a multi-item pickup with its destination owner', async () => {
+    const base = project()
+
+    const source = {
+      ...base,
+      documents: {
+        ...base.documents,
+        'game.json': {
+          ...object(base.documents['game.json']),
+          inventory: ['items'],
+          rules: ['rules'],
+        },
+        'inventory/items.json': inventorySchema.parse({
+          'schema-version': '1.0.0',
+          owners: { player: { label: 'Player' }, world: { label: 'World' } },
+          itemTypes: { berry: { label: 'Berry' } },
+          items: {
+            one: { itemType: 'berry', placement: { type: 'carried', owner: 'world' } },
+            two: { itemType: 'berry', placement: { type: 'carried', owner: 'world' } },
+          },
+        }),
+        'rules/rules.json': {
+          state: [{ path: ['collected'], value: false }],
+          actions: {
+            collect: [
+              { when: [], effects: [{ type: 'set-state', path: ['collected'], value: true }] },
+            ],
+          },
+        },
+      },
+    }
+
+    const first = await connected(bindRulesPanel, source)
+    first.edit('Effect', 'collect-items')
+    first.edit('Destination owner', 'player')
+    first.click('Add pickup item')
+    expect(first.field('Item', 'Pickup item 2').value).toBe('two')
+    const recovered = await connected(bindRulesPanel, source)
+    expect(
+      restoreEditorDrafts(
+        recovered.root.asElement(),
+        JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement()))),
+      ),
+    ).toEqual([])
+    expect(recovered.field('Destination owner').value).toBe('player')
+    recovered.submit('Save rules')
+    await recovered.flush()
+    expect(recovered.read().rules?.actions.collect![0]!.effects).toEqual([
+      { type: 'collect-items', items: ['one', 'two'], owner: 'player' },
+    ])
+    recovered.click('Remove pickup item')
+    recovered.submit('Save rules')
+    await recovered.flush()
+    expect(recovered.read().rules?.actions.collect![0]!.effects).toEqual([
+      { type: 'collect-items', items: ['two'], owner: 'player' },
+    ])
+    expect(
+      recovered.root
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Remove pickup item')
+        ?.disabled,
+    ).toBe(true)
+  })
+
+  function entranceProject() {
+    let source = applyCommand(project(), {
+      type: 'game.upsertMap',
+      mapId: 'entrances',
+      map: {
+        'schema-version': '1.0.0',
+        type: 'square-grid',
+        width: 2,
+        height: 2,
+        terrain: { ground: { color: '#ffffff' } },
+        tiles: [
+          ['ground', 'ground'],
+          ['ground', 'ground'],
+        ],
+      },
+    }).project
+
+    for (const sceneId of ['shop', 'other'])
+      source = applyCommand(source, {
+        type: 'scene.upsertComponent',
+        sceneId,
+        component: {
+          id: 'world',
+          type: 'map-view',
+          label: 'World',
+          map: 'entrances',
+          placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+          viewport: { columns: 2, rows: 2, x: 0, y: 0 },
+          playerSpawn: { x: 0, y: 0 },
+        },
+      }).project
+    source = applyCommand(source, {
+      type: 'scene.upsertComponent',
+      sceneId: 'shop',
+      component: {
+        id: 'exit',
+        type: 'button',
+        label: 'Exit',
+        placement: { row: 1, column: 1, rowSpan: 1, columnSpan: 1 },
+        action: { type: 'enter-scene', scene: 'other' },
+      },
+    }).project
+
+    return applyCommand(source, {
+      type: 'game.updateRules',
+      ruleId: 'travel',
+      rules: {
+        state: [],
+        actions: { travel: [{ when: [], effects: [{ type: 'enter-scene', scene: 'other' }] }] },
+      },
+    }).project
+  }
+
+  it('edits, recovers, saves and clears destination coordinates in Rules', async () => {
+    const first = await connected(bindRulesPanel, entranceProject())
+    first.edit('Charge time from map view', 'world')
+    first.edit('Place player at destination tile', 'yes')
+    first.edit('Destination tile X', '1')
+    first.edit('Destination tile Y', '1')
+    const recovered = await connected(bindRulesPanel, entranceProject())
+    expect(
+      restoreEditorDrafts(
+        recovered.root.asElement(),
+        JSON.parse(JSON.stringify(captureEditorDrafts(first.root.asElement()))),
+      ),
+    ).toEqual([])
+    expect(recovered.field('Destination tile X').value).toBe('1')
+    recovered.submit('Save rules')
+    await recovered.flush()
+    expect(recovered.read().rules?.actions.travel?.[0]?.effects).toEqual([
+      { type: 'enter-scene', scene: 'other', mapView: 'world', position: { x: 1, y: 1 } },
+    ])
+    recovered.edit('Place player at destination tile', 'no')
+    recovered.submit('Save rules')
+    await recovered.flush()
+    expect(recovered.read().rules?.actions.travel?.[0]?.effects).toEqual([
+      { type: 'enter-scene', scene: 'other', mapView: 'world' },
+    ])
+    recovered.edit('Destination scene', 'shop')
+    recovered.submit('Save rules')
+    await recovered.flush()
+    expect(recovered.read().rules?.actions.travel?.[0]?.effects).toEqual([
+      { type: 'enter-scene', scene: 'shop' },
+    ])
+  })
+
+  it('saves and clears entrance coordinates on scene buttons and action-bar navigation', async () => {
+    const source = entranceProject()
+    const ui = await connected(bindComponentEditor, source)
+    expect(ui.editor.navigate('shop', 'exit')).toBe(true)
+    ui.edit('Destination map view', 'world')
+    ui.edit('Place player at destination tile', 'yes')
+    ui.edit('Destination tile X', '1')
+    ui.edit('Destination tile Y', '1')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'exit')).toMatchObject({
+      action: { type: 'enter-scene', mapView: 'world', position: { x: 1, y: 1 } },
+    })
+    ui.edit('Place player at destination tile', 'no')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'exit')).toMatchObject({
+      action: { type: 'enter-scene', scene: 'other', mapView: 'world' },
+    })
+    expect(
+      object(object(ui.read().scenes[0]!.components.find(({ id }) => id === 'exit')).action)
+        .position,
+    ).toBeUndefined()
+    const barUI = panel(false)
+    barUI.controls.render({ ...barUI.initial, view: inspectProject(source) }, true)
+    barUI.click('Add action bar')
+    barUI.edit('Action type', 'enter-scene')
+    barUI.edit('Slot label', 'Travel')
+    barUI.edit('Target scene', 'other')
+    barUI.edit('Destination map view', 'world')
+    barUI.edit('Place player at destination tile', 'yes')
+    barUI.edit('Destination tile X', '1')
+    barUI.edit('Destination tile Y', '1')
+    barUI.submit('Save action bar')
+    const result = applyCommand(source, barUI.commands[0]!)
+    expect(inspectProject(result.project).diagnostics).toEqual([])
+    expect(barUI.commands[0]).toMatchObject({
+      component: {
+        slots: {
+          '1': {
+            action: {
+              type: 'enter-scene',
+              scene: 'other',
+              mapView: 'world',
+              position: { x: 1, y: 1 },
+            },
+          },
+        },
+      },
+    })
+    barUI.edit('Place player at destination tile', 'no')
+    barUI.submit('Save action bar')
+    const cleared = applyCommand(result.project, barUI.commands[1]!)
+
+    const bar = inspectProject(cleared.project).scenes[0]!.components.find(
+      ({ type }) => type === 'action-bar',
+    )
+
+    expect(bar?.type === 'action-bar' && bar.slots['1']!.action).toEqual({
+      type: 'enter-scene',
+      scene: 'other',
+      mapView: 'world',
+    })
+  })
+
+  it('authors Interact targets on scene buttons and action-bar slots', async () => {
+    let source = entranceProject()
+    source = applyCommand(source, {
+      type: 'game.upsertMap',
+      mapId: 'entrances',
+      map: {
+        ...inspectProject(source).maps!.entrances!,
+        objects: [{ id: 'chest', label: 'Chest', x: 1, y: 1, terrain: 'ground', action: 'travel' }],
+      },
+    }).project
+    const ui = await connected(bindComponentEditor, source)
+    expect(ui.editor.navigate('shop', 'exit')).toBe(true)
+    ui.edit('Action', 'interact-map')
+    ui.edit('Interaction target', 'chest')
+    ui.submit('Save component')
+    await ui.flush()
+    expect(ui.read().scenes[0]!.components.find(({ id }) => id === 'exit')).toMatchObject({
+      action: { type: 'interact-map', mapView: 'world', object: 'chest' },
+    })
+    const barUI = panel(false)
+    barUI.controls.render({ ...barUI.initial, view: inspectProject(source) }, true)
+    barUI.click('Add action bar')
+    barUI.edit('Action type', 'interact-map')
+    barUI.edit('Slot label', 'Interact')
+    barUI.edit('Interaction target', 'chest')
+    barUI.submit('Save action bar')
+    let result = applyCommand(source, barUI.commands[0]!).project
+    expect(barUI.commands[0]).toMatchObject({
+      component: {
+        slots: { '1': { action: { type: 'interact-map', mapView: 'world', object: 'chest' } } },
+      },
+    })
+    barUI.edit('Interaction target', '')
+    barUI.submit('Save action bar')
+    result = applyCommand(result, barUI.commands[1]!).project
+
+    const bar = inspectProject(result).scenes[0]!.components.find(
+      ({ type }) => type === 'action-bar',
+    )
+
+    expect(bar?.type === 'action-bar' && bar.slots['1']!.action).toEqual({
+      type: 'interact-map',
+      mapView: 'world',
+    })
+  })
 
   function itemViewProject() {
     let source = applyCommand(project(), {

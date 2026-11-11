@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { worldConditionSchema } from './storyConditions.js'
 import { bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
+import { sceneTransitionSchema } from './sceneTransition.js'
 
 const id = bindingAliasSchema
 
@@ -25,7 +26,16 @@ export const ruleConditionSchema = z.discriminatedUnion('type', [
 export const ruleEffectSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('set-state'), path: pathSchema, value: ruleValueSchema }),
   z.strictObject({ type: z.literal('move-item'), item: id, owner: id }),
-  z.strictObject({ type: z.literal('enter-scene'), scene: id, mapView: id.optional() }),
+  z.strictObject({
+    type: z.literal('collect-items'),
+    items: z
+      .array(id)
+      .min(1)
+      .max(100)
+      .refine((items) => new Set(items).size === items.length, 'Choose each pickup item only once'),
+    owner: id,
+  }),
+  sceneTransitionSchema,
   z.strictObject({ type: z.literal('append-log'), text: ruleTextSchema }),
   z.strictObject({ type: z.literal('start-quest'), quest: id }),
   z.strictObject({ type: z.literal('complete-quest'), quest: id }),
@@ -38,12 +48,14 @@ const branchSchema = z
   })
   .superRefine((branch, context) => {
     if (
-      branch.effects.filter(({ type }) => type === 'move-item' || type === 'enter-scene').length > 1
+      branch.effects.filter(
+        ({ type }) => type === 'move-item' || type === 'collect-items' || type === 'enter-scene',
+      ).length > 1
     )
       context.addIssue({
         code: 'custom',
         path: ['effects'],
-        message: 'Use at most one inventory move or scene transition per branch',
+        message: 'Use at most one inventory operation or scene transition per branch',
       })
   })
 

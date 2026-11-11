@@ -48,6 +48,7 @@ import {
   shopIssues,
   gameRulesSchema,
   actionBarIssues,
+  sceneTransitionIssues,
   combatFile,
   combatIssues,
   localizeCombat,
@@ -217,7 +218,7 @@ export function validateProject(
           })
 
       if (component.type === 'action-bar')
-        for (const issue of actionBarIssues(component, input, scenes, scene))
+        for (const issue of actionBarIssues(component, input, scenes, scene, maps))
           diagnostics.push({
             code: 'invalid_action_bar',
             file: `scenes/${id}.json`,
@@ -245,6 +246,15 @@ export function validateProject(
         (component.action?.type === 'new-game' || component.action?.type === 'enter-scene')
       ) {
         const target = scenes.get(component.action.scene)
+
+        if (component.action.type === 'enter-scene')
+          for (const issue of sceneTransitionIssues(component.action, scenes, maps))
+            diagnostics.push({
+              code: 'invalid_button_target',
+              file: `scenes/${id}.json`,
+              path: ['components', index, 'action', ...issue.path],
+              message: issue.message,
+            })
 
         if (!target || (component.action.type === 'new-game' && target.type !== 'game'))
           diagnostics.push({

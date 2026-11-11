@@ -178,6 +178,161 @@ describe('revision-checked graphics authoring', () => {
     expect((await inspect()).assets?.images).toEqual({})
   })
 
+  it.each(['missing', 'malformed'])(
+    'repairs multiple %s images one at a time over HTTP with shared undo/redo',
+    async (failure) => {
+      await upload((await inspect()).revision)
+      await upload((await inspect()).revision, artwork, 'other')
+      const valid = await inspect()
+
+      for (const image of Object.values(valid.assets!.images)) {
+        const path = join(root, 'game', image.source)
+
+        if (failure === 'missing') await unlink(path)
+        else await writeFile(path, 'broken SVG bytes')
+      }
+
+      const broken = await inspect()
+      expect(broken.diagnostics).toHaveLength(2)
+      const failedUpload = await upload(broken.revision, '<svg>broken')
+      expect(failedUpload.status).toBe(422)
+      expect((await inspect()).revision).toBe(broken.revision)
+      const original = broken.assets!.images.art!
+
+      const invalidReplacement = await command(broken.revision, {
+        type: 'assets.upsertImage',
+        id: 'art',
+        image: original,
+      })
+
+      expect(invalidReplacement.status).toBe(422)
+      expect(await invalidReplacement.json()).toMatchObject({
+        diagnostics: [expect.objectContaining({ file: original.source })],
+      })
+
+      const metadata = await command(broken.revision, {
+        type: 'game.updateMetadata',
+        title: 'Unrelated edit',
+        description: '',
+        version: '1',
+      })
+
+      expect(metadata.status).toBe(422)
+      expect((await upload(broken.revision)).status).toBe(200)
+      const partial = await inspect()
+      expect(partial.diagnostics).toEqual([
+        expect.objectContaining({
+          code: 'invalid_asset_source',
+          file: valid.assets!.images.other!.source,
+          path: ['images', 'other'],
+        }),
+      ])
+      const replacement = partial.assets!.images.art!.source
+      expect(await readFile(join(root, 'game', replacement), 'utf8')).toBe(artwork)
+
+      const undo = await fetch(`${base}/api/editor/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: 'game',
+          expectedRevision: partial.revision,
+          direction: 'undo',
+        }),
+      })
+
+      expect(undo.status).toBe(200)
+      const undone = projectViewSchema.parse(await undo.json())
+      expect(undone.diagnostics).toHaveLength(2)
+      expect(undone.assets!.images.art!.source).toBe(original.source)
+      await expect(readFile(join(root, 'game', replacement))).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+
+      const redo = await fetch(`${base}/api/editor/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: 'game',
+          expectedRevision: undone.revision,
+          direction: 'redo',
+        }),
+      })
+
+      expect(redo.status).toBe(200)
+      const redone = projectViewSchema.parse(await redo.json())
+      expect(redone.diagnostics).toEqual(partial.diagnostics)
+      expect((await upload(redone.revision, artwork, 'other')).status).toBe(200)
+      expect((await inspect()).diagnostics).toEqual([])
+    },
+  )
+
+  it('repairs registered source paths and removes unused broken images while others remain', async () => {
+    await upload((await inspect()).revision)
+    await upload((await inspect()).revision, artwork, 'other')
+    const valid = await inspect()
+
+    for (const image of Object.values(valid.assets!.images))
+      await unlink(join(root, 'game', image.source))
+    await writeFile(join(root, 'game/replacement.svg'), artwork)
+    const broken = await inspect()
+
+    const updated = await command(broken.revision, {
+      type: 'assets.upsertImage',
+      id: 'art',
+      image: { ...valid.assets!.images.art!, source: 'replacement.svg' },
+    })
+
+    expect(updated.status).toBe(200)
+    expect((await inspect()).diagnostics).toHaveLength(1)
+    await unlink(join(root, 'game/replacement.svg'))
+
+    const removed = await command((await inspect()).revision, {
+      type: 'assets.remove',
+      kind: 'images',
+      id: 'art',
+    })
+
+    expect(removed.status).toBe(200)
+    expect((await inspect()).diagnostics).toHaveLength(1)
+    expect((await inspect()).assets!.images.art).toBeUndefined()
+  })
+
+  it('rejects a new failure on another image discovered while validating a repair', async () => {
+    await upload((await inspect()).revision)
+    await upload((await inspect()).revision, artwork, 'other')
+    const valid = await inspect()
+    const otherSource = valid.assets!.images.other!.source
+    await unlink(join(root, 'game', valid.assets!.images.art!.source))
+
+    class ChangedDuringRepair extends WorkspaceProjectRepository {
+      override async validateAssets(
+        ...args: Parameters<WorkspaceProjectRepository['validateAssets']>
+      ) {
+        await unlink(join(root, 'game', otherSource))
+
+        return super.validateAssets(...args)
+      }
+    }
+
+    const service = new EditorProjectService(
+      new ChangedDuringRepair(workspace),
+      new EditorCoordinator(),
+    )
+
+    const broken = await service.inspect('game')
+    await expect(
+      service.importAsset(
+        { path: 'game', expectedRevision: broken.revision, id: 'art', format: 'svg' },
+        new TextEncoder().encode(artwork),
+      ),
+    ).rejects.toMatchObject({
+      code: 'invalid_project',
+      diagnostics: [expect.objectContaining({ file: otherSource })],
+    })
+    expect((await inspect()).assets).toEqual(broken.assets)
+    expect(await readdir(join(root, 'game/assets/images'))).toEqual([])
+  })
+
   it('validates references and supports creating, editing, and removing graphic components', async () => {
     await upload((await inspect()).revision)
     expect(

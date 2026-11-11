@@ -1,8 +1,15 @@
 import type { LanguageCatalog } from './languages.js'
-import { getMapMovementCostMs, type MapDefinition } from './map.js'
+import {
+  getMapMovementCostMs,
+  getMapPotentialMovementCostMs,
+  resolveMapObject,
+  isBlockingMapObject,
+  type MapDefinition,
+} from './map.js'
 import type { InventoryDefinition } from './inventory.js'
 import type { SceneDefinition } from './scene.js'
 import { ruleValueType, type GameRulesDefinition, type RuleValue } from './rules.js'
+import { sceneTransitionIssues } from './sceneTransition.js'
 
 export interface RuleSource {
   file: string
@@ -93,9 +100,96 @@ export function validateRuleSources(
 ): MergedRules {
   const merged = mergeRuleSources(sources)
 
+  for (const [id, map] of maps)
+    map.objects?.forEach((object, index) => {
+      if (!Object.hasOwn(merged.rules.actions, object.action))
+        merged.issues.push({
+          file: `maps/${id}.json`,
+          path: ['objects', index, 'action'],
+          message: `Unknown map object action: ${object.action}`,
+        })
+    })
+
+  for (const [id, scene] of scenes)
+    scene.components.forEach((component, index) => {
+      const actions =
+        component.type === 'button' && component.action
+          ? [{ action: component.action, path: ['components', index, 'action'] }]
+          : component.type === 'action-bar'
+            ? Object.entries(component.slots).map(([slot, value]) => ({
+                action: value.action,
+                path: ['components', index, 'slots', slot, 'action'],
+              }))
+            : []
+
+      for (const { action, path } of actions) {
+        if (action.type !== 'interact-map' || !action.object) continue
+        const view = scene.components.find((component) => component.id === action.mapView)
+        const map = view?.type === 'map-view' ? maps.get(view.map) : undefined
+
+        if (!map?.objects?.some((object) => object.id === action.object))
+          merged.issues.push({
+            file: `scenes/${id}.json`,
+            path: [...path, 'object'],
+            message: `Unknown map object: ${action.object}`,
+          })
+      }
+    })
+
+  for (const [id, map] of maps)
+    map.entryTriggers?.forEach((trigger, index) => {
+      if (!Object.hasOwn(merged.rules.actions, trigger.action))
+        merged.issues.push({
+          file: `maps/${id}.json`,
+          path: ['entryTriggers', index, 'action'],
+          message: `Unknown tile-entry action: ${trigger.action}`,
+        })
+
+      if (getMapPotentialMovementCostMs(map, trigger) === undefined)
+        merged.issues.push({
+          file: `maps/${id}.json`,
+          path: ['entryTriggers', index],
+          message: 'Tile-entry triggers require a walkable tile',
+        })
+    })
+
   const fields = new Map(
     merged.rules.state.map(({ path, value }) => [path.join('.'), ruleValueType(value)]),
   )
+
+  const initial = (path: readonly string[]) =>
+    merged.rules.state.find((field) => JSON.stringify(field.path) === JSON.stringify(path))?.value
+
+  for (const [id, map] of maps)
+    map.objects?.forEach((object, index) =>
+      object.states?.forEach((state, stateIndex) => {
+        if (typeof initial(state.when.path) !== 'boolean')
+          merged.issues.push({
+            file: `maps/${id}.json`,
+            path: ['objects', index, 'states', stateIndex, 'when', 'path'],
+            message: 'Object states require an existing boolean Rules state field',
+          })
+      }),
+    )
+
+  for (const [id, scene] of scenes)
+    scene.components.forEach((component, index) => {
+      if (component.type !== 'map-view' || !component.playerSpawn) return
+      const map = maps.get(component.map)
+
+      if (
+        map &&
+        getMapPotentialMovementCostMs(map, component.playerSpawn) !== undefined &&
+        getMapMovementCostMs(map, component.playerSpawn, (object) =>
+          isBlockingMapObject(resolveMapObject(object, initial)),
+        ) === undefined
+      )
+        merged.issues.push({
+          file: `scenes/${id}.json`,
+          path: ['components', index, 'playerSpawn'],
+          message: 'Player spawn is blocked by the initial object state',
+        })
+    })
 
   for (const { file, rules } of sources) {
     const report = (path: RuleIssue['path'], message: string) =>
@@ -130,6 +224,9 @@ export function validateRuleSources(
 
           if (
             condition.type === 'payload-is-target' &&
+            ![...maps.values()].some((map) =>
+              map.objects?.some((object) => object.id === condition.target),
+            ) &&
             ![...scenes.values()].some((scene) =>
               scene.components.some(
                 (component) =>
@@ -169,27 +266,23 @@ export function validateRuleSources(
               if (!inventory || !Object.hasOwn(inventory.owners, effect.owner))
                 report([...source, 'owner'], 'Unknown inventory owner')
               break
+            case 'collect-items':
+              effect.items.forEach((item, index) => {
+                if (!inventory || !Object.hasOwn(inventory.items, item))
+                  report([...source, 'items', index], 'Unknown inventory item')
+              })
+
+              if (!inventory || !Object.hasOwn(inventory.owners, effect.owner))
+                report([...source, 'owner'], 'Unknown inventory owner')
+              break
             case 'enter-scene': {
               const scene = scenes.get(effect.scene)
 
               if (scene?.type !== 'game')
                 report([...source, 'scene'], 'Expected an existing game scene')
 
-              if (effect.mapView !== undefined) {
-                const view = scene?.components.find(({ id }) => id === effect.mapView)
-                const map = view?.type === 'map-view' && maps.get(view.map)
-
-                if (
-                  !map ||
-                  view?.type !== 'map-view' ||
-                  !view.playerSpawn ||
-                  getMapMovementCostMs(map, view.playerSpawn) === undefined
-                )
-                  report(
-                    [...source, 'mapView'],
-                    'Expected a destination map view with a walkable spawn',
-                  )
-              }
+              for (const issue of sceneTransitionIssues(effect, scenes, maps))
+                report([...source, ...issue.path], issue.message)
 
               break
             }

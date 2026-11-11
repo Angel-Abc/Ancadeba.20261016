@@ -1,6 +1,11 @@
 import type { Translate } from '@ancadeba/utilities'
 import { applyMapCellAppearance } from '@ancadeba/ui-components'
-import { getMapMovementCostMs, type AssetCatalog, type ImageAsset } from '@ancadeba/schemas'
+import {
+  getMapMovementCostMs,
+  type AssetCatalog,
+  type ImageAsset,
+  type MapEntryTrigger,
+} from '@ancadeba/schemas'
 import type { MapDraft, TilePoint } from './mapDraft.js'
 import type { MapTileTool } from './mapTileSelection.js'
 import { MapViewport, mapGridViewport } from './mapViewport.js'
@@ -74,6 +79,13 @@ export function mapTileGrid(
     | undefined
 
   const key = (x: number, y: number) => `${x},${y}`
+  let triggers = new Map<string, MapEntryTrigger>()
+
+  const indexTriggers = () => {
+    triggers = new Map(
+      draft.data.entryTriggers?.map((trigger) => [key(trigger.x, trigger.y), trigger]),
+    )
+  }
 
   const updateCell = (button: HTMLButtonElement) => {
     const x = Number(button.dataset.mapX)
@@ -92,7 +104,37 @@ export function mapTileGrid(
       button.append(marker)
     }
 
-    const label = t('maps.tile', { x: x + 1, y: y + 1, terrain })
+    const trigger = triggers.get(key(x, y))
+    const object = draft.data.objects?.find((object) => object.x === x && object.y === y)
+
+    if (object) {
+      const marker = document.createElement('span')
+      marker.className = 'map-entry-trigger-marker map-object-marker'
+      marker.textContent = 'O'
+      marker.setAttribute('aria-hidden', 'true')
+      button.append(marker)
+    }
+
+    button.classList.toggle('map-tile-trigger', Boolean(trigger))
+
+    if (trigger) {
+      const marker = document.createElement('span')
+      marker.className = 'map-entry-trigger-marker'
+      marker.textContent = 'T'
+      marker.setAttribute('aria-hidden', 'true')
+      button.append(marker)
+    }
+
+    const label = [
+      t('maps.tile', { x: x + 1, y: y + 1, terrain }),
+      trigger ? t('maps.entryTile', { id: trigger.id, action: trigger.action, x, y }) : '',
+      object
+        ? t('maps.objectTile', { id: object.id, label: object.label, action: object.action, x, y })
+        : '',
+    ]
+      .filter(Boolean)
+      .join('. ')
+
     button.setAttribute('aria-label', label)
     button.title = label
     selection?.decorate(button, { x, y })
@@ -133,7 +175,7 @@ export function mapTileGrid(
     if (selection?.tool() === 'select') {
       button.focus()
       selection.drag(point(button))
-    } else if (selection?.tool() !== 'paste') paint(button)
+    } else if (!selection || selection.tool() === 'paint') paint(button)
   }
 
   const clampFocus = () => {
@@ -178,6 +220,7 @@ export function mapTileGrid(
   navigation.append(controls.element)
 
   const render = () => {
+    indexTriggers()
     const columns = camera.columns
     const rows = camera.rows
     cells.clear()
@@ -221,7 +264,7 @@ export function mapTileGrid(
           if (event.button !== 0 || disabled() || panning || drag) return
           event.preventDefault()
           button.focus()
-          painting = selection?.tool() !== 'paste'
+          painting = !selection || selection.tool() === 'paint' || selection.tool() === 'select'
 
           if (!selection || selection.tool() === 'paint') {
             editing = true
@@ -462,6 +505,8 @@ export function mapTileGrid(
     element,
     focus: () => cells.get(key(focused.x, focused.y))?.focus(),
     refresh: (overview = true) => {
+      indexTriggers()
+
       for (const cell of cells.values()) updateCell(cell)
 
       if (overview) minimap.refresh()

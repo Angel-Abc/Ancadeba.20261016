@@ -1,4 +1,13 @@
-import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
+import { registerEditorDraft } from './editorDraftState.js'
+import { sceneEntranceFields } from './sceneEntranceFields.js'
+import { mapInteractFields } from './mapInteractFields.js'
+import { z } from 'zod'
+import {
+  basicComponentSchema,
+  commandSchema,
+  type EditorCommand,
+  type ProjectView,
+} from '@ancadeba/editor-core'
 import { resolveMapView, type ButtonComponentDefinition } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
@@ -66,6 +75,7 @@ export function bindComponentEditor(
   let newType: CreatableComponentType = 'text'
   let submitted: { type: EditorCommand['type']; sceneId: string; componentId: string } | undefined
   let addLabel = t('component.add')
+  let nearbyEditor: HTMLElement | undefined
   const bindingPending: TextBindingPending = { alias: '', value: '' }
 
   const controls = ruleFormControls(
@@ -98,6 +108,7 @@ export function bindComponentEditor(
   }
 
   const reset = () => {
+    nearbyEditor = undefined
     const current = component()
     draft =
       creating && view
@@ -119,15 +130,15 @@ export function bindComponentEditor(
     if (!view || !scene()) return
 
     if (!creating && current?.type === 'nearby') {
-      fields.append(
-        nearbyForm(controls, view, submit, sceneId, {
+      if (!dirty || !nearbyEditor)
+        nearbyEditor = nearbyForm(controls, view, submit, sceneId, {
           componentId,
           onDiscard: () => {
             dirty = false
             error.textContent = ''
           },
-        }),
-      )
+        })
+      fields.append(nearbyEditor)
 
       return
     }
@@ -258,6 +269,30 @@ export function bindComponentEditor(
     })
     fields.append(form)
   }
+
+  registerEditorDraft(
+    root,
+    'component',
+    z.object({
+      sceneId: z.string(),
+      componentId: z.string(),
+      draft: basicComponentSchema.optional(),
+      creating: z.boolean(),
+      newType: z.enum(creatableComponentTypes),
+      bindingPending: z.object({ alias: z.string(), value: z.string() }),
+    }),
+    () => (dirty ? { sceneId, componentId, draft, creating, newType, bindingPending } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      componentId = saved.componentId
+      draft = saved.draft
+      creating = saved.creating
+      newType = saved.newType
+      Object.assign(bindingPending, saved.bindingPending)
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,
@@ -541,9 +576,11 @@ function componentFields(
         ? { type, scene: (type === 'new-game' ? gameScenes : scenes)[0] ?? '' }
         : type === 'request-action'
           ? { type, action: actions[0] ?? '' }
-          : type === 'move-map'
-            ? { type, mapView: mapViews[0] ?? '', direction: 'north' }
-            : undefined
+          : type === 'interact-map'
+            ? { type, mapView: mapViews[0] ?? '' }
+            : type === 'move-map'
+              ? { type, mapView: mapViews[0] ?? '', direction: 'north' }
+              : undefined
 
   return [
     ...label,
@@ -556,6 +593,7 @@ function componentFields(
         ['enter-scene', t('component.goToScene')],
         ['request-action', t('component.runAction')],
         ['move-map', t('component.moveOnMap')],
+        ['interact-map', t('maps.interact')],
         ['save-game', t('component.saveProgress')],
         ['load-game', t('component.loadProgress')],
       ],
@@ -572,8 +610,17 @@ function componentFields(
             sceneChoices(view, action.type === 'new-game' ? 'game' : undefined),
             (value) => {
               action.scene = value
+
+              if (action.type === 'enter-scene') {
+                delete action.mapView
+                delete action.position
+                render()
+              }
             },
           ),
+          ...(action.type === 'enter-scene'
+            ? sceneEntranceFields(controls, view, action, render)
+            : []),
         ]
       : action?.type === 'request-action'
         ? [
@@ -581,25 +628,27 @@ function componentFields(
               action.action = value
             }),
           ]
-        : action?.type === 'move-map'
-          ? [
-              select(t('tree.map-view'), action.mapView, mapViews, (value) => {
-                action.mapView = value
-              }),
-              select(
-                t('form.direction'),
-                action.direction,
-                [
-                  ['north', t('component.north')],
-                  ['east', t('component.east')],
-                  ['south', t('component.south')],
-                  ['west', t('component.west')],
-                ],
-                (value) => {
-                  action.direction = value
-                },
-              ),
-            ]
-          : []),
+        : action?.type === 'interact-map'
+          ? mapInteractFields(controls, view, sceneId, action, render)
+          : action?.type === 'move-map'
+            ? [
+                select(t('tree.map-view'), action.mapView, mapViews, (value) => {
+                  action.mapView = value
+                }),
+                select(
+                  t('form.direction'),
+                  action.direction,
+                  [
+                    ['north', t('component.north')],
+                    ['east', t('component.east')],
+                    ['south', t('component.south')],
+                    ['west', t('component.west')],
+                  ],
+                  (value) => {
+                    action.direction = value
+                  },
+                ),
+              ]
+            : []),
   ]
 }

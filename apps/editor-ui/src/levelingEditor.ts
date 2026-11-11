@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -524,6 +526,28 @@ export function bindLevelingEditor(
       ),
     )
   }
+
+  registerEditorDraft(
+    root,
+    'leveling',
+    z.object({
+      sceneId: z.string(),
+      profileId: z.string(),
+      componentId: z.string(),
+      draft: levelingProfileSchema.optional(),
+      component: characterProgressionComponentSchema.optional(),
+    }),
+    () => (dirty ? { sceneId, profileId, componentId, draft, component } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      profileId = saved.profileId
+      componentId = saved.componentId
+      draft = saved.draft
+      component = saved.component
+      dirty = true
+      render()
+    },
+  )
 
   return {
     navigate,

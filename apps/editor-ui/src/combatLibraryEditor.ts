@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -214,6 +216,24 @@ export function bindCombatLibraryEditor(
       ),
     )
   }
+
+  registerEditorDraft(
+    root,
+    'combat-library',
+    z.object({
+      libraryId: z.string(),
+      draft: combatLibrarySchema.optional(),
+      creating: z.boolean(),
+    }),
+    () => (dirty ? { libraryId, draft, creating } : undefined),
+    (saved) => {
+      libraryId = saved.libraryId
+      draft = saved.draft
+      creating = saved.creating
+      dirty = true
+      render()
+    },
+  )
 
   return {
     navigate,

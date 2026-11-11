@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -346,6 +348,26 @@ export function bindSceneGraphicEditor(
     fields.disabled = busy || Boolean(view.diagnostics.length)
     updatePreview()
   }
+
+  registerEditorDraft(
+    root,
+    'scene-graphic',
+    z.object({
+      sceneId: z.string(),
+      componentId: z.string(),
+      draft: graphicComponentSchema.optional(),
+      creating: z.boolean(),
+    }),
+    () => (dirty ? { sceneId, componentId, draft, creating } : undefined),
+    (saved) => {
+      sceneId = saved.sceneId
+      componentId = saved.componentId
+      draft = saved.draft
+      creating = saved.creating
+      dirty = true
+      render()
+    },
+  )
 
   return {
     hasDrafts: () => dirty,

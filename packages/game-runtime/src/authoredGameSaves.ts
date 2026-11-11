@@ -105,7 +105,6 @@ export function bindAuthoredGameSaves({
       if (save.language) game.localization?.select(save.language)
       const scene = lifecycle.enterScene(save.scene)
       const runtime = runtimeFor(lifecycle.currentGame!)!
-      runtime.mapMovement?.restore(scene, save.maps)
 
       for (const [panel, entry] of Object.entries(save.nearby))
         runtime.nearby?.select(scene, panel, entry)

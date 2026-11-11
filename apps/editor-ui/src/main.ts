@@ -163,6 +163,8 @@ const container = new ContainerBuilder({
     if (state !== 'ready') clearDownload()
     updateControls()
   },
+  confirmExport: () => !projectPanel.hasDrafts() || window.confirm(t('export.unsaved')),
+  confirmPreview: () => !projectPanel.hasDrafts() || window.confirm(t('preview.unsaved')),
   onPreviewStateChange: (state, message) => {
     previewState = state
     previewMessage = message
@@ -203,7 +205,7 @@ exportButton.addEventListener('click', onExport)
 
 controller.stop()
 
-const disposeProjectPanel = bindProjectPanel(
+const projectPanel = bindProjectPanel(
   element<HTMLElement>('#app'),
   fetch,
   t,
@@ -215,7 +217,7 @@ const disposeProjectPanel = bindProjectPanel(
       exportController.reset()
       controller.stop()
 
-      if (restartPreview) void controller.start(path)
+      if (restartPreview) void controller.start(path, { confirm: false })
     },
     onSceneSelect(scene) {
       selectedScene = scene
@@ -237,7 +239,7 @@ const onLanguageChange = () => {
 editorLanguage.addEventListener('change', onLanguageChange)
 
 import.meta.hot?.dispose(() => {
-  disposeProjectPanel()
+  projectPanel.dispose()
   layout.dispose()
   editorLanguage.removeEventListener('change', onLanguageChange)
   form.removeEventListener('submit', onStart)

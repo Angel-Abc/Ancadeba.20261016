@@ -26,6 +26,7 @@ export interface PreviewDependencies {
   runtime: EngineRuntimeServices
   logger: ILogger
   onPreviewStateChange: PreviewStateListener
+  confirmPreview?: () => boolean
   getPreferredGameLanguages?: () => readonly string[]
   gameLanguagePreferences?: GameLanguagePreferences
   createGameSaveStore?: (folder: string) => GameSaveStore
@@ -73,5 +74,6 @@ export const previewFactories = {
     new EditorPreviewController(
       resolver.resolve('createPreviewEngine'),
       resolver.resolve('onPreviewStateChange'),
+      resolver.resolve('confirmPreview'),
     ),
 } satisfies Factories<PreviewServices, PreviewServices & PreviewDependencies>

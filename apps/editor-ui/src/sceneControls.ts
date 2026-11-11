@@ -1,3 +1,5 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { Translate } from '@ancadeba/utilities'
 import type { ProjectEditorState } from './projectController.js'
@@ -270,6 +272,43 @@ export function bindSceneControls(
 
     return true
   }
+
+  registerEditorDraft(
+    root,
+    'scene-controls',
+    z.object({
+      sceneId: z.string().optional(),
+      componentId: z.string().optional(),
+      renameId: z.string(),
+      duplicateId: z.string(),
+      duplicateTitle: z.string(),
+      duplicateComponentId: z.string(),
+      replacement: z.string(),
+    }),
+    () =>
+      dirty
+        ? {
+            sceneId,
+            componentId,
+            renameId,
+            duplicateId,
+            duplicateTitle,
+            duplicateComponentId,
+            replacement,
+          }
+        : undefined,
+    (saved) => {
+      sceneId = saved.sceneId
+      componentId = saved.componentId
+      renameId = saved.renameId
+      duplicateId = saved.duplicateId
+      duplicateTitle = saved.duplicateTitle
+      duplicateComponentId = saved.duplicateComponentId
+      replacement = saved.replacement
+      dirty = true
+      render()
+    },
+  )
 
   return {
     shortcut(action: 'duplicate' | 'delete'): boolean {

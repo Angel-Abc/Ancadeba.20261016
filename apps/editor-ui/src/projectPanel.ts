@@ -1,4 +1,12 @@
 import { bindLevelingEditor } from './levelingEditor.js'
+import { z } from 'zod'
+import {
+  registerEditorDraft,
+  captureEditorDrafts,
+  restoreEditorDrafts,
+} from './editorDraftState.js'
+import { EditorDraftStore, type EditorDraftStorage } from './editorDraftStore.js'
+import { bindEditorDraftRecovery } from './editorDraftRecovery.js'
 import { bindLocalizationEditor } from './localizationEditor.js'
 import { bindMapEditor } from './mapEditor.js'
 import { mapConfirmation } from './mapConfirmation.js'
@@ -7,7 +15,7 @@ import {
   createGraphicPlatform,
   mountGameStylesheet,
 } from '@ancadeba/ui-components'
-import { EditorWorkspaceResources } from './workspaceResources.js'
+import { EditorWorkspaceResources, normalizeGameFolder } from './workspaceResources.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
 import { createProjectRequestSchema } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
@@ -30,6 +38,7 @@ import { bindComponentClipboard } from './componentClipboard.js'
 import { bindEditorShortcuts } from './editorShortcuts.js'
 import { bindMetadataTranslations } from './metadataTranslations.js'
 import { bindStylesheetEditor } from './stylesheetEditor.js'
+import { bindProjectRepair } from './projectRepair.js'
 import {
   buildProjectTree,
   dataFileContent,
@@ -50,6 +59,11 @@ export interface ProjectWorkspaceSection extends ProjectTreeSection {
   hide(): void
 }
 
+export interface ProjectPanelBinding {
+  hasDrafts(): boolean
+  dispose(): void
+}
+
 export function bindProjectPanel(
   root: HTMLElement,
   fetcher: typeof fetch,
@@ -62,6 +76,7 @@ export function bindProjectPanel(
     confirmDiscardDrafts = () =>
       root.ownerDocument.defaultView?.confirm(t('project.discardDrafts')) ?? false,
     confirmDelete = (message: string) => root.ownerDocument.defaultView?.confirm(message) ?? false,
+    draftStorage = () => root.ownerDocument.defaultView?.localStorage,
   }: {
     additionalSections?: readonly ProjectWorkspaceSection[]
     onProjectChange?: (path: string) => void
@@ -69,8 +84,9 @@ export function bindProjectPanel(
     onSceneSelect?: (scene: { id: string; title: string } | undefined) => void
     confirmDiscardDrafts?: () => boolean
     confirmDelete?: (message: string) => boolean
+    draftStorage?: () => EditorDraftStorage | undefined
   } = {},
-): () => void {
+): ProjectPanelBinding {
   const find = <T extends HTMLElement>(id: string): T => {
     const element = root.querySelector<T>(`#${id}`)
 
@@ -103,6 +119,11 @@ export function bindProjectPanel(
   const newSubmit = find<HTMLButtonElement>('project-create-submit')
   const newCancel = find<HTMLButtonElement>('project-create-cancel')
   const newError = find<HTMLElement>('project-create-error')
+  const recoverToggle = root.querySelector<HTMLButtonElement>('#project-recover-toggle')
+  const recoverForm = root.querySelector<HTMLFormElement>('#project-recover-controls')
+  const recoverFields = root.querySelector<HTMLFieldSetElement>('#project-recover-fields')
+  const recoverFolder = root.querySelector<HTMLInputElement>('#project-recover-folder')
+  const recoverCancel = root.querySelector<HTMLButtonElement>('#project-recover-cancel')
   const value = (id: string) => find<HTMLInputElement>(id).value
 
   const showOpenControls = (show: boolean) => {
@@ -112,6 +133,9 @@ export function bindProjectPanel(
     if (!show) {
       newForm.hidden = true
       newToggle.setAttribute('aria-expanded', 'false')
+
+      if (recoverForm) recoverForm.hidden = true
+      recoverToggle?.setAttribute('aria-expanded', 'false')
     }
   }
 
@@ -150,6 +174,10 @@ export function bindProjectPanel(
     folder.disabled = disabled
     load.disabled = disabled
     newToggle.disabled = busy
+
+    if (recoverToggle) recoverToggle.disabled = busy
+
+    if (recoverFields) recoverFields.disabled = busy
     newFields.disabled = busy
     newSubmit.disabled = busy || Boolean(discovery)
     newSubmit.textContent = t(creatingProject ? 'project.creating' : 'project.create')
@@ -159,7 +187,7 @@ export function bindProjectPanel(
     if (discovery) message = t('project.discovering')
     else if (openingProject) message = t('project.working')
     else if (discoveryError) message = t('project.listError', { message: discoveryError })
-    else if (!projectChoices.length) message = t('project.emptyList')
+    else if (!projectChoices.length && !message) message = t('project.emptyList')
 
     openFeedback.textContent = message
     openFeedback.hidden = !message
@@ -167,11 +195,13 @@ export function bindProjectPanel(
 
   const renderProjectChoices = (preferredPath: string) => {
     folder.replaceChildren(
-      ...projectChoices.map(({ path, title }) => {
+      ...projectChoices.map(({ path, title, missingManifest }) => {
         const option = root.ownerDocument.createElement('option')
         const location = path || t('workspace.root')
         option.value = path
         option.textContent = title && title !== location ? `${title} (${location})` : location
+
+        if (missingManifest) option.textContent = t('recovery.choice', { path: location })
 
         return option
       }),
@@ -269,6 +299,8 @@ export function bindProjectPanel(
   let localizationEditor: ReturnType<typeof bindLocalizationEditor> | undefined
   const stylesheetElement = treeElement && root.querySelector<HTMLElement>('#stylesheet-editor')
   let stylesheetEditor: ReturnType<typeof bindStylesheetEditor> | undefined
+  const repairElement = treeElement && root.querySelector<HTMLElement>('#project-repair')
+  let repairEditor: ReturnType<typeof bindProjectRepair> | undefined
   const combatElement = treeElement && root.querySelector<HTMLElement>('#combat-editor')
   let combatEditor: ReturnType<typeof bindCombatEditor> | undefined
   const componentElement = treeElement && root.querySelector<HTMLElement>('#component-editor')
@@ -657,6 +689,7 @@ export function bindProjectPanel(
   let refreshLanguage = () => {}
 
   const render: ProjectEditorListener = (state, replaceFields) => {
+    repairEditor?.render(state, replaceFields)
     componentClipboard?.render(state, replaceFields)
     sceneControls?.render(state, replaceFields)
     assetsPanel?.render(state, replaceFields)
@@ -930,7 +963,34 @@ export function bindProjectPanel(
     updateTree()
   }
 
-  const controller = new ProjectEditorController(client, render)
+  let draftRecovery: ReturnType<typeof bindEditorDraftRecovery> | undefined
+
+  const controller = new ProjectEditorController(client, (state, replaceFields) => {
+    draftRecovery?.beforeRender()
+    render(state, replaceFields)
+    draftRecovery?.afterRender(state)
+  })
+
+  if (repairElement)
+    repairEditor = bindProjectRepair(
+      repairElement,
+      t,
+      {
+        check: (request) => controller.checkRepair(request),
+        save: (request) => controller.repair(request),
+      },
+      (css) => {
+        const host = root.ownerDocument.createElement('div')
+        host.hidden = true
+        repairElement.append(host)
+
+        try {
+          mountGameStylesheet(host, css)
+        } finally {
+          host.remove()
+        }
+      },
+    )
 
   if (clipboardElement)
     componentClipboard = bindComponentClipboard(clipboardElement, t, {
@@ -1178,6 +1238,7 @@ export function bindProjectPanel(
     refreshLanguage()
     renderProjectChoices(folder.value)
     renderOpenControls()
+    draftRecovery?.languageChanged()
   })
 
   const listeners: (() => void)[] = []
@@ -1194,6 +1255,8 @@ export function bindProjectPanel(
     if (show) void refreshProjects(true)
   })
   on(newToggle, 'click', () => {
+    if (recoverForm) recoverForm.hidden = true
+    recoverToggle?.setAttribute('aria-expanded', 'false')
     newForm.hidden = !newForm.hidden
     newToggle.setAttribute('aria-expanded', String(!newForm.hidden))
 
@@ -1230,6 +1293,43 @@ export function bindProjectPanel(
     newError.hidden = true
     void controller.create(request.data)
   })
+
+  if (recoverToggle && recoverForm && recoverFolder && recoverCancel) {
+    on(recoverToggle, 'click', () => {
+      recoverForm.hidden = !recoverForm.hidden
+      recoverToggle.setAttribute('aria-expanded', String(!recoverForm.hidden))
+      newForm.hidden = true
+      newToggle.setAttribute('aria-expanded', 'false')
+
+      if (!recoverForm.hidden) recoverFolder.focus()
+    })
+    on(recoverCancel, 'click', () => {
+      recoverForm.hidden = true
+      recoverToggle.setAttribute('aria-expanded', 'false')
+      recoverToggle.focus()
+    })
+    on(recoverForm, 'submit', (event) => {
+      event.preventDefault()
+
+      if (busy) return
+      let path: string
+
+      try {
+        path = normalizeGameFolder(recoverFolder.value)
+      } catch (error) {
+        openError = error instanceof Error ? error.message : String(error)
+        renderOpenControls()
+
+        return
+      }
+
+      if (hasDrafts() && !confirmDiscardDrafts()) return
+      openingProject = true
+      openError = ''
+      void controller.load(path)
+    })
+  }
+
   on(folder, 'keydown', (event) => {
     if (!('key' in event) || event.key !== 'Enter') return
 
@@ -1251,6 +1351,7 @@ export function bindProjectPanel(
   const hasDrafts = (includeSceneControls = true, includeClipboard = true) =>
     dirtyForms.size > 0 ||
     Boolean(
+      repairEditor?.hasDrafts() ||
       (includeSceneControls && sceneControls?.hasDrafts()) ||
       (includeClipboard && componentClipboard?.hasDrafts()) ||
       assetsPanel?.hasDrafts() ||
@@ -1267,6 +1368,86 @@ export function bindProjectPanel(
       storyEditor?.hasDrafts() ||
       mapEditor?.hasDrafts(),
     )
+
+  const formFields = [
+    'editor-title',
+    'editor-description',
+    'editor-version',
+    'editor-title-key',
+    'editor-description-key',
+    'scene-title',
+    'scene-description',
+    'scene-title-key',
+    'scene-description-key',
+    'scene-rows',
+    'scene-columns',
+    'new-scene-id',
+    'new-scene-title',
+    'new-scene-type',
+    'new-scene-rows',
+    'new-scene-columns',
+  ]
+
+  registerEditorDraft(
+    metadata,
+    'project-forms',
+    z.object({
+      fields: z.record(z.string(), z.string()),
+      dirty: z.array(z.string()),
+      scene: z.string(),
+    }),
+    () =>
+      dirtyForms.size
+        ? {
+            fields: Object.fromEntries(formFields.map((id) => [id, value(id)])),
+            dirty: [...dirtyForms],
+            scene: scenes.value,
+          }
+        : undefined,
+    (saved) => {
+      dirtyForms.clear()
+
+      for (const id of saved.dirty)
+        if ([metadata.id, sceneMetadata.id, layout.id, create.id].includes(id)) dirtyForms.add(id)
+      scenes.value = saved.scene
+
+      for (const id of formFields) if (Object.hasOwn(saved.fields, id)) set(id, saved.fields[id]!)
+      scenes.disabled = dirtyForms.has(sceneMetadata.id) || dirtyForms.has(layout.id)
+    },
+  )
+  draftRecovery = bindEditorDraftRecovery(
+    root,
+    new EditorDraftStore(draftStorage, crypto.randomUUID()),
+    t,
+    () =>
+      view
+        ? {
+            version: 1,
+            path: loadedPath,
+            savedAt: Date.now(),
+            base: view,
+            selection: selection.key,
+            drafts: captureEditorDrafts(root),
+          }
+        : undefined,
+    hasDrafts,
+    (draft) => {
+      controller.recoverDrafts(draft.base)
+      selection = flattenProjectTree(buildProjectTree(draft.base, t, sections)).find(
+        (node) => node.key === draft.selection,
+      ) ?? { key: 'game', section: 'game', kind: 'section', label: t('project.properties') }
+      showSelection()
+      tree?.render(view, busy, selection.key)
+      const failed = restoreEditorDrafts(root, draft.drafts)
+      projectTranslations.render(view, view?.game ?? undefined, false)
+      const scene = view?.scenes.find((scene) => scene.id === scenes.value)
+
+      if (scene) sceneTranslations.render(view, scene, false)
+      renderHistoryControls()
+
+      return failed
+    },
+  )
 
   const restoreHistory = (direction: 'undo' | 'redo') => {
     if (mapHistory()?.active) {
@@ -1410,18 +1591,23 @@ export function bindProjectPanel(
 
   void refreshProjects()
 
-  return () => {
-    discovery?.abort()
-    controller.dispose()
-    assetsPanel?.dispose()
-    mapEditor?.dispose()
-    mapConfirm?.dispose()
-    tree?.dispose()
-    rail?.dispose()
-    unsubscribeLanguage?.()
-    projectTranslations.dispose()
-    sceneTranslations.dispose()
+  return {
+    hasDrafts,
+    dispose() {
+      draftRecovery?.dispose()
+      repairEditor?.dispose()
+      discovery?.abort()
+      controller.dispose()
+      assetsPanel?.dispose()
+      mapEditor?.dispose()
+      mapConfirm?.dispose()
+      tree?.dispose()
+      rail?.dispose()
+      unsubscribeLanguage?.()
+      projectTranslations.dispose()
+      sceneTranslations.dispose()
 
-    for (const remove of listeners) remove()
+      for (const remove of listeners) remove()
+    },
   }
 }

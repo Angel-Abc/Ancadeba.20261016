@@ -7,12 +7,15 @@ import type {
   HistoryRequest,
   ComponentCopyRequest,
   ComponentClipboard,
+  ProjectRepairRequest,
+  ProjectRepairCheck,
 } from '@ancadeba/editor-core'
 import {
   apiErrorSchema,
   projectListSchema,
   projectViewSchema,
   componentClipboardSchema,
+  projectRepairCheckSchema,
 } from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
@@ -26,6 +29,8 @@ export class EditorClientError extends Error {
 }
 
 export interface IEditorClient {
+  checkRepair?(request: ProjectRepairRequest): Promise<ProjectRepairCheck>
+  repair?(request: ProjectRepairRequest): Promise<ProjectView>
   copyComponent?(request: ComponentCopyRequest): Promise<ComponentClipboard>
   restore?(request: HistoryRequest): Promise<ProjectView>
   create?(request: CreateProjectRequest): Promise<ProjectView>
@@ -44,6 +49,29 @@ export interface IEditorClient {
 
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
+
+  async checkRepair(request: ProjectRepairRequest): Promise<ProjectRepairCheck> {
+    const value = await this.request('/api/editor/repair/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    const parsed = projectRepairCheckSchema.safeParse(value)
+
+    if (!parsed.success)
+      throw new EditorClientError('invalid_response', 'Repair check response was malformed')
+
+    return parsed.data
+  }
+
+  repair(request: ProjectRepairRequest): Promise<ProjectView> {
+    return this.requestProject('/api/editor/repair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
 
   async copyComponent(request: ComponentCopyRequest): Promise<ComponentClipboard> {
     const value = await this.request('/api/editor/components/copy', {

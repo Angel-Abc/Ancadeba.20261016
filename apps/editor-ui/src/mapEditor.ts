@@ -1,6 +1,9 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { mapDefinitionSchema, mapObjectSchema, mapObjectStateSchema } from '@ancadeba/schemas'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import type { Translate } from '@ancadeba/utilities'
-import { MapDraft, MapDraftError } from './mapDraft.js'
+import { MapDraft, MapDraftError, type TilePoint } from './mapDraft.js'
 import { mapTileGrid, mapGridViewport } from './mapTileGrid.js'
 import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls, saveBar } from './ruleFormControls.js'
@@ -10,6 +13,52 @@ import { mapLayerEditor, type MapLayerEditorState } from './mapLayerEditor.js'
 import { MapTileSelection } from './mapTileSelection.js'
 import { mapSelectionTools } from './mapSelectionTools.js'
 import { MapDraftHistory } from './mapDraftHistory.js'
+import { mapEntryTriggerEditor, type MapEntryTriggerEditorState } from './mapEntryTriggerEditor.js'
+import { mapObjectEditor, type MapObjectEditorState } from './mapObjectEditor.js'
+
+// Keep unfinished trigger and object fields recoverable while validating map geometry.
+const mapDraftSchema = z
+  .object({
+    ...mapDefinitionSchema.shape,
+    entryTriggers: z
+      .array(z.object({ id: z.string(), x: z.number(), y: z.number(), action: z.string() }))
+      .optional(),
+    objects: z
+      .array(
+        z.object({
+          ...mapObjectSchema.shape,
+          id: z.string(),
+          label: z.string(),
+          action: z.string(),
+          terrain: z.string(),
+          x: z.number(),
+          y: z.number(),
+          states: z
+            .array(
+              z.object({
+                ...mapObjectStateSchema.shape,
+                id: z.string(),
+                label: z.string().optional(),
+                terrain: z.string().optional(),
+                when: z.object({ path: z.array(z.string()), value: z.boolean() }),
+              }),
+            )
+            .optional(),
+        }),
+      )
+      .optional(),
+  })
+  .superRefine((map, context) => {
+    const parsed = mapDefinitionSchema.safeParse({
+      ...map,
+      entryTriggers: undefined,
+      objects: undefined,
+    })
+
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        context.addIssue({ code: 'custom', path: issue.path, message: issue.message })
+  })
 
 type MapCommand = Extract<EditorCommand, { type: 'game.upsertMap' | 'game.removeMap' }>
 
@@ -56,6 +105,10 @@ export function bindMapEditor(
   let gridViewport = mapGridViewport()
   let selection = new MapTileSelection()
   let tileTools: ReturnType<typeof mapSelectionTools> | undefined
+  let entryEditor: ReturnType<typeof mapEntryTriggerEditor> | undefined
+  const entryState: MapEntryTriggerEditorState = { selected: -1 }
+  const objectState: MapObjectEditorState = { selected: -1 }
+  let objectEditor: ReturnType<typeof mapObjectEditor> | undefined
   const capture = () => ({ map: draft.data, id })
   const history = new MapDraftHistory(capture())
   const inputGroups = new WeakMap<Element, number>()
@@ -138,6 +191,8 @@ export function bindMapEditor(
 
   const reset = () => {
     finishStroke()
+    entryState.selected = -1
+    objectState.selected = -1
 
     if (!creating && !view?.maps?.[selected]) {
       selected = view?.game?.maps?.[0] ?? ''
@@ -300,6 +355,10 @@ export function bindMapEditor(
     fields.replaceChildren()
 
     if (!view?.game) return
+
+    if (!draft.data.entryTriggers?.[entryState.selected]) entryState.selected = -1
+
+    if (!draft.data.objects?.[objectState.selected]) objectState.selected = -1
     images = mapTileImages(
       draft.data,
       view.assets,
@@ -532,7 +591,7 @@ export function bindMapEditor(
     )
     const instructions = document.createElement('p')
     instructions.className = 'help'
-    instructions.textContent = t('maps.paintHelp')
+    instructions.textContent = `${t('maps.paintHelp')} ${t('maps.entryGridLegend')}`
 
     const spawns = new Set(
       references.flatMap(({ component }) =>
@@ -554,7 +613,79 @@ export function bindMapEditor(
     const gridDisabled = () =>
       busy ||
       confirming ||
-      draft.data.layers?.find((layer) => layer.id === layerState.selected)?.visible === false
+      (selection.tool !== 'trigger' &&
+        selection.tool !== 'object' &&
+        draft.data.layers?.find((layer) => layer.id === layerState.selected)?.visible === false)
+
+    const openTrigger = (point: TilePoint) => {
+      if (gridDisabled()) return
+      finishStroke()
+      history.breakGroup()
+
+      const index =
+        draft.data.entryTriggers?.findIndex(({ x, y }) => x === point.x && y === point.y) ?? -1
+
+      let opened = index >= 0
+
+      if (index >= 0) {
+        entryState.selected = index
+        error.textContent = ''
+        render()
+      } else {
+        const action = Object.keys(view?.rules?.actions ?? {})[0]
+
+        if (!action) {
+          error.textContent = t('maps.entryRuleFirst')
+
+          return
+        }
+
+        change(() => {
+          entryState.selected = draft.addEntryTrigger(point, action)
+          opened = true
+        })
+      }
+
+      if (opened) entryEditor?.focusSelected()
+    }
+
+    const openObject = (point: TilePoint) => {
+      if (gridDisabled()) return
+      finishStroke()
+      history.breakGroup()
+
+      const index =
+        draft.data.objects?.findIndex(({ x, y }) => x === point.x && y === point.y) ?? -1
+
+      let opened = index >= 0
+
+      if (index >= 0) {
+        objectState.selected = index
+        error.textContent = ''
+        render()
+      } else {
+        const action = Object.keys(view?.rules?.actions ?? {})[0]
+
+        if (!action) {
+          error.textContent = t('maps.entryRuleFirst')
+
+          return
+        }
+
+        if (spawns.has(`${point.x},${point.y}`)) {
+          error.textContent = t('maps.objectSpawn')
+
+          return
+        }
+
+        change(() => {
+          objectState.selected = draft.addObject(point, action, brush, t('maps.objectDefaultLabel'))
+          opened = true
+        })
+      }
+
+      if (opened) objectEditor?.focusSelected()
+    }
 
     tileTools = mapSelectionTools(document, draft, layerState, selection, t, {
       disabled: gridDisabled,
@@ -569,6 +700,22 @@ export function bindMapEditor(
       assets: view.assets,
       imageUrl: (image) => images?.url(image),
       history: { state: draftHistory, restore: restoreDraft },
+      triggers: {
+        activate: openTrigger,
+        selected: ({ x, y }) => {
+          const trigger = draft.data.entryTriggers?.[entryState.selected]
+
+          return trigger?.x === x && trigger.y === y
+        },
+      },
+      objects: {
+        activate: openObject,
+        selected: ({ x, y }) => {
+          const object = draft.data.objects?.[objectState.selected]
+
+          return object?.x === x && object.y === y
+        },
+      },
     })
 
     board = mapTileGrid(
@@ -642,7 +789,47 @@ export function bindMapEditor(
           dirty,
         ),
       )
-    brushes.append(layerPicker, brushPicker)
+    brushes.append(
+      layerPicker,
+      brushPicker,
+      controls.button(t('maps.editEntryTriggers'), () => {
+        if (busy || confirming) return
+        finishStroke()
+        selection.setTool('trigger')
+        layerState.erasing = false
+        render()
+        board?.focus()
+      }),
+      controls.button(t('maps.editObjects'), () => {
+        if (busy || confirming) return
+        finishStroke()
+        selection.setTool('object')
+        layerState.erasing = false
+        render()
+        board?.focus()
+      }),
+    )
+    entryEditor = mapEntryTriggerEditor(
+      draft,
+      Object.keys(view.rules?.actions ?? {}),
+      controls,
+      t,
+      change,
+      entryState,
+      () => board?.refresh(false),
+    )
+
+    objectEditor = mapObjectEditor(
+      draft,
+      Object.keys(view.rules?.actions ?? {}),
+      controls,
+      t,
+      change,
+      objectState,
+      () => board?.refresh(false),
+      spawns,
+      view.rules?.state ?? [],
+    )
 
     const fill = controls.button(
       t(layerState.selected ? 'maps.fillLayer' : 'maps.fill'),
@@ -673,6 +860,8 @@ export function bindMapEditor(
       instructions,
       fill,
       tileTools.element,
+      entryEditor.element,
+      objectEditor.element,
       terrain,
       layers,
       tilesetEditor.element,
@@ -704,6 +893,74 @@ export function bindMapEditor(
       input.addEventListener('blur', () => history.breakGroup())
     fields.disabled = busy || confirming || Boolean(view.diagnostics.length)
   }
+
+  registerEditorDraft(
+    root,
+    'map',
+    z.object({
+      selected: z.string(),
+      creating: z.boolean(),
+      id: z.string(),
+      map: mapDraftSchema,
+      brush: z.string(),
+      width: z.string(),
+      height: z.string(),
+      newTerrain: z.string(),
+      entrySelection: z.number().int().min(-1).optional(),
+      objectSelection: z.number().int().min(-1).optional(),
+      mapTool: z.enum(['paint', 'select', 'paste', 'trigger', 'object']).optional(),
+      layerState: z.object({ selected: z.string(), newId: z.string(), erasing: z.boolean() }),
+      tilesetState: z.object({
+        selected: z.string(),
+        newId: z.string(),
+        column: z.number(),
+        row: z.number(),
+      }),
+    }),
+    () =>
+      dirty || strokeChanged
+        ? {
+            selected,
+            creating,
+            id,
+            map: draft.data,
+            brush,
+            width,
+            height,
+            newTerrain,
+            entrySelection: entryState.selected,
+            objectSelection: objectState.selected,
+            mapTool: selection.tool,
+            layerState,
+            tilesetState,
+          }
+        : undefined,
+    (saved) => {
+      selected = saved.selected
+      creating = saved.creating
+      id = saved.id
+      draft = new MapDraft(saved.map)
+      brush = saved.brush
+      width = saved.width
+      height = saved.height
+      newTerrain = saved.newTerrain
+      entryState.selected = saved.entrySelection ?? -1
+
+      if (entryState.selected >= 0) selection.setTool('trigger')
+      objectState.selected = saved.objectSelection ?? -1
+
+      if (objectState.selected >= 0) selection.setTool('object')
+
+      if (saved.mapTool) selection.setTool(saved.mapTool === 'paste' ? 'select' : saved.mapTool)
+      layerState = saved.layerState
+      tilesetState = saved.tilesetState
+      history.reset({ map: view?.maps?.[selected] ?? new MapDraft().data, id: selected })
+      history.record(capture(), layerState.selected)
+      dirty = true
+      render()
+      notifyHistory()
+    },
+  )
 
   return {
     navigate,

@@ -198,7 +198,12 @@ export function storyIssues(sources: StorySources) {
         branch.effects.some(
           (value) => value.type === 'start-quest' || value.type === 'complete-quest',
         ) &&
-        branch.effects.some((value) => value.type === 'move-item' || value.type === 'enter-scene')
+        branch.effects.some(
+          (value) =>
+            value.type === 'move-item' ||
+            value.type === 'collect-items' ||
+            value.type === 'enter-scene',
+        )
       )
         add('game.json', 'Quest transactions cannot include legacy movement effects')
     }

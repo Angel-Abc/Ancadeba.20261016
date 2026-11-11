@@ -1,3 +1,5 @@
+import { registerEditorDraft, registerFormDraft } from './editorDraftState.js'
+import { z } from 'zod'
 import {
   assetCatalogSchema,
   graphicAppearanceSchema,
@@ -508,6 +510,36 @@ export function bindAssetsPanel(
     HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement
   >('input, button, select, textarea'))
     control.disabled = true
+
+  registerEditorDraft(
+    panel,
+    'assets',
+    z.object({
+      selected: z.string(),
+      navigationKey: z.string(),
+      browsingKind: z.string(),
+      appearance: graphicAppearanceSchema,
+      dirty: z.array(z.string()),
+    }),
+    () =>
+      dirty.size
+        ? { selected, navigationKey, browsingKind, appearance, dirty: [...dirty] }
+        : undefined,
+    (saved) => {
+      selected = saved.selected
+      navigationKey = saved.navigationKey
+      browsingKind = saved.browsingKind
+      appearance = saved.appearance
+      dirty.clear()
+
+      for (const id of saved.dirty) dirty.add(id)
+      set('asset-select', selected)
+      fillSelection(false)
+    },
+  )
+
+  for (const id of ['asset-image', 'asset-palettes', 'asset-definition'])
+    registerFormDraft(find(id), id, () => dirty.has(id))
 
   return {
     hasDrafts: () =>

@@ -1,3 +1,6 @@
+import { registerEditorDraft } from './editorDraftState.js'
+import { z } from 'zod'
+import { actionBarComponentSchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
@@ -285,6 +288,43 @@ export function bindActionBarPanel(
       }),
     )
   }
+
+  registerEditorDraft(
+    panel,
+    'controls',
+    z.object({
+      sceneId: z.string(),
+      selectedSlot: z.string(),
+      barDraft: actionBarComponentSchema.optional(),
+      barDirty: z.boolean(),
+      inputDirty: z.boolean(),
+      inputId: z.string(),
+      inputDraft: z
+        .object({
+          virtualKeys: z.string(),
+          keyboard: z.array(z.object({ code: z.string(), key: z.string() })),
+          contexts: z.record(z.string(), z.array(z.object({ key: z.string(), input: z.string() }))),
+          initialContext: z.string(),
+          newContext: z.string(),
+        })
+        .optional(),
+    }),
+    () =>
+      barDirty || inputDirty
+        ? { sceneId, selectedSlot, barDraft, barDirty, inputDirty, inputId, inputDraft }
+        : undefined,
+    (saved) => {
+      sceneId = saved.sceneId
+      selectedSlot = saved.selectedSlot
+      barDraft = saved.barDraft
+      barDirty = saved.barDirty
+      inputDirty = saved.inputDirty
+      inputId = saved.inputId
+      inputDraft = saved.inputDraft
+      renderBar()
+      renderInput()
+    },
+  )
 
   return {
     navigate,

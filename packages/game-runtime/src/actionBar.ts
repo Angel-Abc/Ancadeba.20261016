@@ -11,10 +11,13 @@ import {
 } from './inventoryContext.js'
 import type { EquipmentSelection, IGameEquipment } from './equipment.js'
 import type { IGameMapMovement } from './mapMovement.js'
+import type { IGameMapObjects } from './mapObjects.js'
+import type { MapObject } from '@ancadeba/schemas'
 import type { IGameNearby, NearbySelection } from './nearbyContext.js'
 import type { IGameTrading, TradeSelection } from './trading.js'
 import type { IGameCombat, CombatCapture } from './combat.js'
 import type { ActionOrigin } from './actions.js'
+import { canEnterScene } from './sceneNavigation.js'
 
 export interface IGameActionBar {
   getSlot(scene: SceneInstance, bar: string, slot: string): ActionBarSlotDefinition | undefined
@@ -26,6 +29,7 @@ export interface IGameActionBar {
 }
 
 interface CapturedSlot {
+  readonly objectCapture?: MapObject | undefined
   readonly storyCapture?: StoryCapture | undefined
   readonly itemCapture?: ItemUseCapture | undefined
   readonly combatCapture?: CombatCapture | undefined
@@ -61,6 +65,7 @@ export class GameActionBar implements IGameActionBar {
     private readonly dialogue: () => IGameDialogue | undefined = () =>
       lifecycle.currentGame?.dialogue,
     private readonly quests: () => IGameQuests | undefined = () => lifecycle.currentGame?.quests,
+    private readonly mapObjects: IGameMapObjects | undefined = lifecycle.currentGame?.mapObjects,
   ) {
     this.ownedContext = selection ? undefined : new GameInventoryContext(lifecycle, inventory)
     this.inventoryContext = selection ?? this.ownedContext!
@@ -115,6 +120,7 @@ export class GameActionBar implements IGameActionBar {
   ):
     | {
         definition: ActionBarSlotDefinition
+        objectCapture?: MapObject | undefined
         storyCapture?: StoryCapture | undefined
         itemCapture?: ItemUseCapture | undefined
         combatCapture?: CombatCapture | undefined
@@ -129,6 +135,16 @@ export class GameActionBar implements IGameActionBar {
     const definition = this.definition(scene, bar, slot)
 
     if (!definition) return
+
+    if (definition.action.type === 'interact-map')
+      return {
+        definition,
+        objectCapture: this.mapObjects?.getTarget(
+          scene,
+          definition.action.mapView,
+          definition.action.object,
+        ),
+      }
 
     if (definition.action.type === 'dialogue-action') {
       const action = definition.action
@@ -277,6 +293,12 @@ export class GameActionBar implements IGameActionBar {
     if (action.type === 'move-map')
       return this.mapMovement?.canMove(scene, action.mapView, action.direction) ?? false
 
+    if (action.type === 'interact-map')
+      return Boolean(this.mapObjects?.getTarget(scene, action.mapView, action.object))
+
+    if (action.type === 'enter-scene')
+      return canEnterScene(scene.game.data, action, this.mapMovement)
+
     if (action.type !== 'request-action') return true
 
     if (!scene.game.actions) return false
@@ -297,6 +319,7 @@ export class GameActionBar implements IGameActionBar {
       combatCapture: resolved?.combatCapture,
       itemCapture: resolved?.itemCapture,
       storyCapture: resolved?.storyCapture,
+      objectCapture: resolved?.objectCapture,
     })
   }
 
@@ -312,6 +335,13 @@ export class GameActionBar implements IGameActionBar {
 
     if (!resolved || resolved.selection !== target.selection) return
     const action = resolved.definition.action
+
+    if (action.type === 'interact-map') {
+      if (target.objectCapture && target.objectCapture === resolved.objectCapture)
+        this.mapObjects?.interact(scene, action.mapView, target.objectCapture.id)
+
+      return
+    }
 
     if (action.type === 'dialogue-action' || action.type === 'quest-action') {
       if (
@@ -375,7 +405,12 @@ export class GameActionBar implements IGameActionBar {
     if (action.type === 'inventory-action' || action.type === 'nearby-action') return
 
     if (action.type === 'new-game') this.lifecycle.startGame()
-    this.lifecycle.enterScene(action.scene)
+    this.lifecycle.enterScene(
+      action.scene,
+      action.type === 'enter-scene' && action.position && action.mapView
+        ? { mapView: action.mapView, position: action.position }
+        : undefined,
+    )
   }
 
   /** Capture before queued delivery so a later scene cannot claim an earlier press. */
@@ -410,6 +445,7 @@ export class GameActionBar implements IGameActionBar {
             combatCapture: resolved?.combatCapture,
             itemCapture: resolved?.itemCapture,
             storyCapture: resolved?.storyCapture,
+            objectCapture: resolved?.objectCapture,
           }
       }
 

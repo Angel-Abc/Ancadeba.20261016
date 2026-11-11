@@ -16,6 +16,7 @@ import {
 import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { FileWorkspace } from '../apps/editor-server/src/workspace.js'
 import { projectViewSchema, type ProjectView } from '@ancadeba/editor-core'
+import { sceneSchema } from '@ancadeba/schemas'
 
 const manifest = {
   'schema-version': '1.0.0',
@@ -82,6 +83,98 @@ describe('shared editor project API', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, expectedRevision: revision, command: operation }),
     })
+
+  it.each(['standard', 'inventory', 'training', 'advanced-training'])(
+    'persists every action type when editing the %s sample action bar',
+    async (sceneId) => {
+      await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'basic'), {
+        recursive: true,
+      })
+      const before = await inspect()
+      expect(before.diagnostics).toEqual([])
+
+      const component = before.scenes
+        .find((scene) => scene.id === sceneId)!
+        .components.find((component) => component.type === 'action-bar')!
+
+      const slot = Object.values(component.slots)[0]!
+      slot.label = `${slot.label} updated`.trim()
+
+      const response = await command(before.revision, {
+        type: 'scene.setActionBar',
+        sceneId,
+        component,
+      })
+
+      const body = await response.json()
+      expect(response.status, JSON.stringify(body)).toBe(200)
+      const saved = projectViewSchema.parse(body)
+      expect(saved.diagnostics).toEqual([])
+      expect(saved.revision).not.toBe(before.revision)
+      const reopened = await inspect()
+      expect(
+        reopened.scenes
+          .find((scene) => scene.id === sceneId)!
+          .components.find((entry) => entry.id === component.id),
+      ).toEqual(component)
+
+      const persisted = sceneSchema.parse(
+        JSON.parse(await readFile(join(root, `basic/scenes/${sceneId}.json`), 'utf8')),
+      )
+
+      expect(persisted.components.find((entry) => entry.id === component.id)).toEqual(component)
+    },
+  )
+
+  it.each(['dialogue', 'conversation identity'])(
+    'persists clearing a nearby target %s through JSON requests',
+    async (field) => {
+      await cp(new URL('../sample-games/basic/', import.meta.url), join(root, 'basic'), {
+        recursive: true,
+      })
+      const file = join(root, 'basic/scenes/standard.json')
+      const scene = sceneSchema.parse(JSON.parse(await readFile(file, 'utf8')))
+      const nearby = scene.components.find((component) => component.type === 'nearby')!
+      nearby.entries.curator = {
+        ...nearby.entries.curator!,
+        conversationId: 'curator-shared',
+      }
+      await writeFile(file, JSON.stringify(scene))
+      const before = await inspect()
+      expect(before.diagnostics).toEqual([])
+
+      const component = before.scenes
+        .find((scene) => scene.id === 'standard')!
+        .components.find((component) => component.type === 'nearby')!
+
+      const entry = component.entries.curator!
+      entry.conversationId = undefined
+
+      if (field === 'dialogue') entry.dialogue = undefined
+
+      const response = await command(before.revision, {
+        type: 'scene.upsertNearby',
+        sceneId: 'standard',
+        component,
+      })
+
+      const body = await response.json()
+      expect(response.status, JSON.stringify(body)).toBe(200)
+      expect(projectViewSchema.parse(body).diagnostics).toEqual([])
+      const persisted = sceneSchema.parse(JSON.parse(await readFile(file, 'utf8')))
+      const saved = persisted.components.find((component) => component.type === 'nearby')!
+      expect(saved.entries.curator).not.toHaveProperty('conversationId')
+
+      if (field === 'dialogue') expect(saved.entries.curator).not.toHaveProperty('dialogue')
+      else expect(saved.entries.curator?.dialogue).toBe('curator')
+      const reopened = await inspect()
+      expect(
+        reopened.scenes
+          .find((scene) => scene.id === 'standard')!
+          .components.find((component) => component.type === 'nearby'),
+      ).toEqual(saved)
+    },
+  )
 
   it.each(['success', 'before-manifest', 'after-manifest'] as const)(
     'publishes dialogue files with revision checks and rollback: %s',
@@ -1121,6 +1214,7 @@ describe('shared editor project API', () => {
       gameExport: false,
       projectDiscovery: true,
       projectCreation: true,
+      projectRepair: true,
     })
     const initial = await inspect()
     const created = await command(initial.revision, { type: 'scene.create', scene })

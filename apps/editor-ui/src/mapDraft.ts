@@ -1,4 +1,4 @@
-import { assetIdSchema, type MapDefinition } from '@ancadeba/schemas'
+import { assetIdSchema, getMapMovementCostMs, type MapDefinition } from '@ancadeba/schemas'
 
 export type MapDraftIssue =
   | 'invalidSize'
@@ -14,6 +14,8 @@ export type MapDraftIssue =
   | 'clipboardTerrainMissing'
   | 'cutSourceChanged'
   | 'invalidGroundFill'
+  | 'entryBlocked'
+  | 'objectOutside'
 
 export interface TilePoint {
   x: number
@@ -54,6 +56,46 @@ export class MapDraft {
           terrain: { ground: { color: '#608c4f' }, wall: { color: '#4f5969', walkable: false } },
           tiles: Array.from({ length: 12 }, () => Array<string>(16).fill('ground')),
         }
+  }
+
+  addEntryTrigger(point: TilePoint, action: string): number {
+    const triggers = this.data.entryTriggers ?? []
+    const existing = triggers.findIndex(({ x, y }) => x === point.x && y === point.y)
+
+    if (existing >= 0) return existing
+
+    if (getMapMovementCostMs(this.data, point) === undefined)
+      throw new MapDraftError('entryBlocked')
+    let id = 'entry'
+    let suffix = 2
+
+    while (triggers.some((trigger) => trigger.id === id)) id = `entry-${suffix++}`
+    this.data.entryTriggers = [...triggers, { id, ...point, action }]
+
+    return triggers.length
+  }
+
+  addObject(point: TilePoint, action: string, terrain: string, label: string): number {
+    if (
+      !Number.isInteger(point.x) ||
+      !Number.isInteger(point.y) ||
+      point.x < 0 ||
+      point.y < 0 ||
+      point.x >= this.data.width ||
+      point.y >= this.data.height
+    )
+      throw new MapDraftError('objectOutside')
+    const objects = this.data.objects ?? []
+    const existing = objects.findIndex(({ x, y }) => x === point.x && y === point.y)
+
+    if (existing >= 0) return existing
+    let id = 'object'
+    let suffix = 2
+
+    while (objects.some((object) => object.id === id)) id = `object-${suffix++}`
+    this.data.objects = [...objects, { id, ...point, label, terrain, action, blocking: true }]
+
+    return objects.length
   }
 
   resize(width: number, height: number, fill: string): void {
@@ -263,7 +305,12 @@ export class MapDraft {
 
     if (Object.keys(this.data.terrain).length === 1) throw new MapDraftError('lastTerrain')
     const grids = [this.data.tiles, ...(this.data.layers ?? []).map((layer) => layer.tiles)]
-    const used = grids.some((tiles) => tiles.some((row) => row.includes(id)))
+
+    const used =
+      grids.some((tiles) => tiles.some((row) => row.includes(id))) ||
+      this.data.objects?.some(
+        (object) => object.terrain === id || object.states?.some((state) => state.terrain === id),
+      )
 
     if (
       used &&
@@ -275,6 +322,14 @@ export class MapDraft {
       for (const tiles of grids)
         for (const row of tiles)
           for (let x = 0; x < row.length; x++) if (row[x] === id) row[x] = replacement!
+
+    for (const object of this.data.objects ?? []) {
+      if (object.terrain === id) object.terrain = replacement!
+
+      for (const state of object.states ?? [])
+        if (state.terrain === id) state.terrain = replacement!
+    }
+
     delete this.data.terrain[id]
   }
 }

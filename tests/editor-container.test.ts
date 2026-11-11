@@ -48,6 +48,52 @@ function createDependencies() {
 }
 
 describe('editor container', () => {
+  it('checks current drafts before each preview start and leaves them intact on cancellation', async () => {
+    const { dependencies } = createDependencies()
+    const confirm = vi.fn(() => false)
+    let dirty = true
+
+    const container = new ContainerBuilder({
+      ...dependencies,
+      confirmPreview: () => !dirty || confirm(),
+    }).build()
+
+    const controller = container.resolve('previewController')
+
+    try {
+      await controller.start('basic')
+      expect(dirty).toBe(true)
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(dependencies.fetcher).not.toHaveBeenCalled()
+      expect(dependencies.onPreviewStateChange).not.toHaveBeenCalled()
+      dirty = false
+      await controller.start('basic')
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(dependencies.host.mount).toHaveBeenCalledTimes(1)
+      controller.stop()
+      dirty = true
+      confirm.mockReturnValue(true)
+      await controller.start('basic')
+      expect(dirty).toBe(true)
+      expect(confirm).toHaveBeenCalledTimes(2)
+      expect(dependencies.host.mount).toHaveBeenCalledTimes(2)
+    } finally {
+      controller.dispose()
+    }
+  })
+
+  it('checks the export confirmation dependency before making an export request', async () => {
+    const { dependencies } = createDependencies()
+    const confirmExport = vi.fn(() => false)
+    const container = new ContainerBuilder({ ...dependencies, confirmExport }).build()
+    await container.resolve('exportController').export('basic')
+    expect(confirmExport).toHaveBeenCalledTimes(1)
+    expect(dependencies.fetcher).not.toHaveBeenCalled()
+    expect(dependencies.download).not.toHaveBeenCalled()
+    expect(dependencies.onExportStateChange).not.toHaveBeenCalled()
+    container.resolve('exportController').dispose()
+  })
+
   it('reads the current game language preference each time the preview restarts', async () => {
     const { dependencies } = createDependencies()
     let language = 'en'
