@@ -1284,7 +1284,10 @@ pinned to an editor revision across its individual file reads.
 The preview provides five named save slots, with **Save progress** and **Load
 progress** operating on the selected **Save slot**. **Export save** downloads that
 slot as JSON; **Import save** validates a file into the selected slot without
-loading it. Occupied slots require confirmation before import. Slots use durable browser
+loading it. Occupied slots require confirmation before import.
+**Delete save** clears the selected manual slot after confirmation, including
+damaged or incompatible saves, while preserving the active game and autosave. Empty
+slots disable deletion. Saves use durable browser
 storage scoped to the project folder and game ID. They preserve progress across preview
 restarts and page reloads. Autosave writes a separate checkpoint after gameplay
 changes and periodically while a playthrough is open, without replacing manual

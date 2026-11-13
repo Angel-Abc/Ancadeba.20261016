@@ -24,6 +24,8 @@ export interface GameSaveFile {
 export interface GameSaveStore {
   read(gameId: string, slot?: GameSaveLocation): string | undefined
   write(gameId: string, save: string, slot?: GameSaveLocation): void
+  /** Omit when the host does not support deleting manual saves. */
+  remove?(gameId: string, slot?: GameSaveSlotId): void
 }
 
 export type SaveError =
@@ -34,21 +36,24 @@ export type SaveError =
   | 'busy'
   | 'invalid-name'
   | 'too-large'
+  | 'delete-unavailable'
 
 export interface IGameSaves {
   readonly selectedSlot: GameSaveSlotId
   readonly slots: readonly GameSaveSlot[]
   readonly canSave: boolean
   readonly canLoad: boolean
+  readonly canDelete: boolean
   readonly canLoadAutosave: boolean
   readonly canImport: boolean
   readonly autosaveStatus: 'idle' | 'saved' | 'error'
   readonly autosaveError: SaveError | undefined
-  readonly status: 'idle' | 'saved' | 'loaded' | 'imported' | 'exported' | 'error'
+  readonly status: 'idle' | 'saved' | 'loaded' | 'imported' | 'exported' | 'deleted' | 'error'
   readonly error: SaveError | undefined
   selectSlot(id: string): boolean
   save(name?: string): boolean
   load(): boolean
+  delete(): boolean
   loadAutosave(): boolean
   importFile(text: string, name?: string): boolean
   exportFile(): GameSaveFile | undefined
@@ -150,6 +155,10 @@ export class GameSaves implements IGameSaves {
     return this.hasSave(this.slot)
   }
 
+  get canDelete(): boolean {
+    return this.store.remove !== undefined && this.hasSave(this.slot)
+  }
+
   get canLoadAutosave(): boolean {
     return this.hasSave('autosave')
   }
@@ -181,6 +190,23 @@ export class GameSaves implements IGameSaves {
 
   load(): boolean {
     return this.loadFrom(this.slot)
+  }
+
+  /** Clears only the selected manual slot, including damaged or incompatible snapshots. */
+  delete(): boolean {
+    if (this.disposed || this.working || this.notifying) return false
+
+    return this.perform(() => {
+      if (!this.store.remove) throw new GameSaveError('delete-unavailable')
+
+      try {
+        this.store.remove(this.gameId, this.slot)
+      } catch {
+        throw new GameSaveError('storage')
+      }
+
+      this.status = 'deleted'
+    })
   }
 
   loadAutosave(): boolean {

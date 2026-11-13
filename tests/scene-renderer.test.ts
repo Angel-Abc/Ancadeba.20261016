@@ -1265,6 +1265,103 @@ describe('scene renderer', () => {
     },
   )
 
+  it.each(['standalone', 'preview'] as const)(
+    'deletes the selected save after confirmation in %s',
+    async (host) => {
+      const document = new TestDocument()
+      const target = document.createElement('main')
+      const storage = new Map<string, string>()
+      let blocked = false
+
+      const engine = new Engine(
+        loader,
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id, slot = '1') => storage.get(`${id}:${slot}`),
+            write: (id, text, slot = '1') => {
+              storage.set(`${id}:${slot}`, text)
+            },
+            remove: (id, slot = '1') => {
+              if (blocked) throw new Error('Blocked')
+              storage.delete(`${id}:${slot}`)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+
+      const button = (text: string) =>
+        target.find((node) => node.tagName === 'BUTTON' && node.textContent === text)!
+
+      const status = () =>
+        target.find((node) => node.attributes.get('role') === 'status')!.textContent
+
+      expect(button('Delete save').disabled).toBe(true)
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('standard')
+      const current = engine.lifecycle!.currentGame
+      const scene = engine.lifecycle!.activeScene
+      engine.saves!.save('First save')
+      engine.saves!.selectSlot('2')
+      const name = target.find((node) => node.attributes.get('aria-label') === 'Save name')!
+      const select = target.find((node) => node.attributes.get('aria-label') === 'Save slot')!
+      name.value = 'Museum'
+      button('Save progress').click()
+      const first = storage.get('basic-game:1')!
+      storage.set('basic-game:autosave', first)
+      const second = storage.get('basic-game:2')
+      expect(button('Delete save').disabled).toBe(false)
+      document.defaultView.confirm.mockReturnValueOnce(false)
+      button('Delete save').click()
+      expect(document.defaultView.confirm).toHaveBeenCalledWith(
+        'Delete the save in slot 2 (Museum)? This cannot be undone.',
+      )
+      expect(storage.get('basic-game:2')).toBe(second)
+      expect(status()).toBe('Progress saved on this device.')
+      blocked = true
+      button('Delete save').click()
+      expect(status()).toContain('Browser storage is unavailable or full')
+      expect(storage.get('basic-game:2')).toBe(second)
+      expect(name.value).toBe('Museum')
+      blocked = false
+      engine.game!.localization!.select('nl')
+      button('Opslag verwijderen').click()
+      expect(document.defaultView.confirm).toHaveBeenLastCalledWith(
+        'De opslag in vak 2 (Museum) verwijderen? Dit kan niet ongedaan worden gemaakt.',
+      )
+      expect(status()).toBe('Opslag verwijderd uit het gekozen vak.')
+      expect(select.children[1]?.textContent).toBe('Vak 2: Leeg')
+      expect(name.value).toBe('')
+      expect(button('Opslag verwijderen').disabled).toBe(true)
+      expect(button('Voortgang laden').disabled).toBe(true)
+      expect(button('Opslag exporteren').disabled).toBe(true)
+      expect(button('Automatische opslag laden').disabled).toBe(false)
+      expect(engine.lifecycle!.currentGame).toBe(current)
+      expect(engine.lifecycle!.activeScene).toBe(scene)
+      expect(storage.get('basic-game:1')).toBe(first)
+      expect(storage.get('basic-game:autosave')).toBe(first)
+      expect(storage.has('basic-game:2')).toBe(false)
+      engine.lifecycle!.enterScene('start-screen')
+      expect(target.find((node) => node.dataset.componentId === 'load-game')!.disabled).toBe(true)
+      select.value = '1'
+      select.dispatchEvent(new Event('change'))
+      expect(target.find((node) => node.dataset.componentId === 'load-game')!.disabled).toBe(false)
+      const remove = vi.spyOn(engine.saves!, 'delete')
+      const oldDelete = button('Opslag verwijderen')
+      engine.stop()
+      oldDelete.click()
+      expect(remove).not.toHaveBeenCalled()
+    },
+  )
+
   it('names and switches slots, exports snapshots, and imports only after overwrite confirmation', async () => {
     const storage = new Map<string, string>()
     const document = new TestDocument()
@@ -1285,6 +1382,9 @@ describe('scene renderer', () => {
           read: (id, slot = '1') => storage.get(`${id}:${slot}`),
           write: (id, text, slot = '1') => {
             storage.set(`${id}:${slot}`, text)
+          },
+          remove: (id, slot = '1') => {
+            storage.delete(`${id}:${slot}`)
           },
         },
       },
@@ -1328,6 +1428,7 @@ describe('scene renderer', () => {
     const original = storage.get('basic-game:2')
     document.defaultView.confirm.mockReturnValueOnce(false)
     input.dispatchEvent(new Event('change'))
+    expect(button('Delete save').disabled).toBe(true)
     await vi.waitFor(() => expect(slot.disabled).toBe(false))
     expect(document.defaultView.confirm).toHaveBeenCalledWith(
       'Replace the saved game in this slot with the imported file?',

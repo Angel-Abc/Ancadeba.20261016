@@ -1311,6 +1311,12 @@ gameplay scene; the Basic Game's main-menu **Load Game** button and authored sav
 buttons use the selected slot too. Loading while a playthrough is open asks before
 replacing unsaved progress. Starting **New game** leaves all manual slots intact.
 
+To clear a manual slot, choose it and click **Delete save**. Confirm the slot
+number and saved name before deletion; this cannot be undone. The slot becomes
+empty and reusable. Deletion preserves the active playthrough, autosave, other
+slots and downloaded save files. Damaged or incompatible saves can also be deleted.
+Empty slots disable Delete, Load and Export. A storage failure reports an error.
+
 Autosave uses a separate checkpoint and never overwrites the five manual slots.
 It saves about half a second after gameplay changes or scene transitions, coalescing
 bursts of updates, with a 30-second fallback for changes without notifications.
@@ -1385,6 +1391,9 @@ engine exposes `engine.saves` and passes it to its host session. `save()` and
 `load()` return a boolean; `status`, `error`, and `subscribe()` expose feedback.
 `selectedSlot`, `slots`, `selectSlot(id)`, `save(name?)`, `importFile(text)`, and
 `exportFile()` support slot selection and portable snapshots. Hosts handle file I/O.
+Hosts may implement `GameSaveStore.remove(gameId, slot)` to enable `canDelete` and
+`delete()` for the selected manual slot. Hosts without `remove` keep deletion
+disabled. Browser hosts remove only that slot's storage key.
 `canLoadAutosave`, `loadAutosave()`, `autosaveStatus`, and `autosaveError` expose
 automatic checkpoint recovery and feedback. `status` and `error` remain dedicated
 to player-requested save operations.

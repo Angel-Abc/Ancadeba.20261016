@@ -5,6 +5,7 @@ import {
   maxGameSaveBytes,
   type EngineMessages,
   type GameSaveLocation,
+  type GameSaveSlotId,
   type GameSaveStore,
 } from '@ancadeba/game-runtime'
 import { gameSaveSchema, gameSchema, sceneSchema, mapDefinitionSchema } from '@ancadeba/schemas'
@@ -19,6 +20,9 @@ class MemorySaves implements GameSaveStore {
   }
   write(id: string, save: string, slot: GameSaveLocation = '1') {
     this.slots.set(`${id}:${slot}`, save)
+  }
+  remove(id: string, slot: GameSaveSlotId = '1') {
+    this.slots.delete(`${id}:${slot}`)
   }
 }
 
@@ -104,6 +108,109 @@ async function launch(
 }
 
 describe('persistent player progress', () => {
+  it.each(['1', '2', '3', '4', '5'] as const)(
+    'deletes only manual slot %s and keeps the active game, autosave and other slots intact',
+    async (selected) => {
+      const store = new MemorySaves()
+      const { engine, start, advance } = await launch(store)
+      const current = start()
+      const scene = engine.lifecycle!.activeScene
+      const saves = engine.saves!
+      expect(saves.canDelete).toBe(false)
+
+      for (const slot of ['1', '2', '3', '4', '5'] as const) {
+        saves.selectSlot(slot)
+        expect(saves.save(`Save ${slot}`)).toBe(true)
+      }
+
+      advance(500)
+      const before = new Map(store.slots)
+      saves.selectSlot(selected)
+
+      const changed = vi.fn(() => {
+        expect(saves.delete()).toBe(false)
+      })
+
+      const unsubscribe = saves.subscribe(changed)
+      expect(saves.canDelete).toBe(true)
+      expect(saves.delete()).toBe(true)
+      unsubscribe()
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(saves.status).toBe('deleted')
+      expect(saves.error).toBeUndefined()
+      expect(saves.canDelete).toBe(false)
+      expect(saves.canLoad).toBe(false)
+      expect(saves.selectedSlot).toBe(selected)
+      expect(saves.slots.find(({ id }) => id === selected)).toMatchObject({
+        occupied: false,
+        name: '',
+      })
+      expect(engine.lifecycle!.currentGame).toBe(current)
+      expect(engine.lifecycle!.activeScene).toBe(scene)
+      before.delete(`basic-game:${selected}`)
+      expect(store.slots).toEqual(before)
+      advance(30_000)
+      advance(500)
+      expect(store.read('basic-game', selected)).toBeUndefined()
+      const second = await launch(store)
+      second.engine.saves!.selectSlot(selected)
+      expect(second.engine.saves!.canLoad).toBe(false)
+      expect(saves.save('Replacement')).toBe(true)
+      expect(saves.slots.find(({ id }) => id === selected)?.name).toBe('Replacement')
+      engine.stop()
+      expect(saves.delete()).toBe(false)
+      expect(saves.canDelete).toBe(false)
+      expect(store.read('basic-game', selected)).toBeDefined()
+    },
+  )
+
+  it('clears damaged and incompatible slots from the menu without loading them', async () => {
+    const store = new MemorySaves()
+    const { engine } = await launch(store)
+    const saves = engine.saves!
+
+    for (const text of ['{', JSON.stringify({ 'save-version': 999, gameId: 'other' })]) {
+      store.write('basic-game', text)
+      expect(saves.canDelete).toBe(true)
+      expect(saves.delete()).toBe(true)
+      expect(store.read('basic-game')).toBeUndefined()
+      expect(engine.lifecycle!.currentGame).toBeUndefined()
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('start-screen')
+    }
+  })
+
+  it.each(['blocked', 'unsupported'] as const)(
+    'reports %s deletion without removing saved or current progress',
+    async (failure) => {
+      const store = new MemorySaves()
+
+      const { engine, start, advance } = await launch({
+        read: (id, slot) => store.read(id, slot),
+        write: (id, text, slot) => store.write(id, text, slot),
+        ...(failure === 'blocked'
+          ? {
+              remove: () => {
+                throw new Error('Blocked')
+              },
+            }
+          : {}),
+      })
+
+      const current = start()
+      const saves = engine.saves!
+      saves.save('Keep me')
+      advance(500)
+      const before = new Map(store.slots)
+      expect(saves.canDelete).toBe(failure === 'blocked')
+      expect(saves.delete()).toBe(false)
+      expect(saves.status).toBe('error')
+      expect(saves.error).toBe(failure === 'blocked' ? 'storage' : 'delete-unavailable')
+      expect(saves.autosaveStatus).toBe('saved')
+      expect(store.slots).toEqual(before)
+      expect(engine.lifecycle!.currentGame).toBe(current)
+    },
+  )
+
   it('autosaves progress independently of all five manual slots and resumes after restart', async () => {
     const store = new MemorySaves()
     const { engine, start, advance } = await launch(store)
@@ -1051,6 +1158,9 @@ describe('persistent player progress', () => {
       setItem: (key: string, value: string) => {
         slots.set(key, value)
       },
+      removeItem: (key: string) => {
+        slots.delete(key)
+      },
     }
 
     const first = new BrowserGameSaveStore(() => storage, 'first')
@@ -1067,6 +1177,17 @@ describe('persistent player progress', () => {
     expect(slots.get('ancadeba.save.first.game')).toBe('progress')
     expect(second.read('game')).toBeUndefined()
     expect(first.read('other')).toBeUndefined()
+    second.write('game', 'other namespace', '2')
+    first.write('other', 'other game', '2')
+    first.remove('game', '2')
+    expect(first.read('game', '2')).toBeUndefined()
+    expect(first.read('game')).toBe('progress')
+    expect(first.read('game', 'autosave')).toBe('automatic progress')
+    expect(first.read('other', '2')).toBe('other game')
+    expect(second.read('game', '2')).toBe('other namespace')
+    first.remove('game')
+    expect(first.read('game')).toBeUndefined()
+    expect(first.read('game', 'autosave')).toBe('automatic progress')
 
     const { engine, start } = await launch(
       new BrowserGameSaveStore(() => {
@@ -1079,6 +1200,8 @@ describe('persistent player progress', () => {
     expect(engine.saves!.error).toBe('storage')
     expect(engine.saves!.load()).toBe(false)
     expect(engine.saves!.error).toBe('storage')
+    expect(engine.saves!.delete()).toBe(false)
+    expect(engine.saves!.error).toBe('storage')
   })
 
   it('preserves the previous save when browser quota is exhausted', async () => {
@@ -1090,6 +1213,9 @@ describe('persistent player progress', () => {
       setItem: (key, value) => {
         if (full) throw new Error('Quota exceeded')
         slots.set(key, value)
+      },
+      removeItem: (key) => {
+        slots.delete(key)
       },
     }))
 

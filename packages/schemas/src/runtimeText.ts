@@ -51,6 +51,10 @@ const en = {
   'save.load': 'Load progress',
   'save.saved': 'Progress saved on this device.',
   'save.loaded': 'Saved progress loaded.',
+  'save.delete': 'Delete save',
+  'save.deleted': 'Save deleted from the selected slot.',
+  'save.confirmDelete': 'Delete the save in slot {slot} ({name})? This cannot be undone.',
+  'save.delete-unavailable': 'Deleting saves is unavailable.',
   'save.loadAutosave': 'Load autosave',
   'save.autosaveEnabled': 'Autosave enabled.',
   'save.autosaved': 'Progress autosaved on this device.',
@@ -58,7 +62,7 @@ const en = {
   'save.confirm': 'Load saved progress? Unsaved progress will be replaced.',
   'save.unavailable': 'Start a game before saving, or save a game before loading.',
   'save.storage':
-    'Browser storage is unavailable or full. Your progress could not be saved or loaded.',
+    'Browser storage is unavailable or full. The requested action could not be completed.',
   'save.invalid-save': 'The saved game is damaged or invalid. Your current progress is unchanged.',
   'save.incompatible-save':
     'This save belongs to a different game or content version. Your current progress is unchanged.',
@@ -138,13 +142,18 @@ const nl: Record<RuntimeTextKey, string> = {
   'save.load': 'Voortgang laden',
   'save.saved': 'Voortgang opgeslagen op dit apparaat.',
   'save.loaded': 'Opgeslagen voortgang geladen.',
+  'save.delete': 'Opslag verwijderen',
+  'save.deleted': 'Opslag verwijderd uit het gekozen vak.',
+  'save.confirmDelete':
+    'De opslag in vak {slot} ({name}) verwijderen? Dit kan niet ongedaan worden gemaakt.',
+  'save.delete-unavailable': 'Opslag verwijderen is niet beschikbaar.',
   'save.loadAutosave': 'Automatische opslag laden',
   'save.autosaveEnabled': 'Automatisch opslaan ingeschakeld.',
   'save.autosaved': 'Voortgang automatisch opgeslagen op dit apparaat.',
   'save.autosaveError': 'Automatisch opslaan mislukt: {error}',
   'save.confirm': 'Opgeslagen voortgang laden? Niet-opgeslagen voortgang wordt vervangen.',
   'save.unavailable': 'Start een spel om op te slaan, of sla een spel op om het te laden.',
-  'save.storage': 'Browseropslag is niet beschikbaar of vol. Opslaan of laden is niet gelukt.',
+  'save.storage': 'Browseropslag is niet beschikbaar of vol. De bewerking is niet gelukt.',
   'save.invalid-save':
     'Het opgeslagen spel is beschadigd of ongeldig. Je huidige voortgang is behouden.',
   'save.incompatible-save':

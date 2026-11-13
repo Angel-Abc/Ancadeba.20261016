@@ -11,6 +11,7 @@ export function gameSaveMessages(game: GameData) {
     loaded: runtimeText(game, 'save.loaded'),
     imported: runtimeText(game, 'save.imported'),
     exported: runtimeText(game, 'save.exported'),
+    deleted: runtimeText(game, 'save.deleted'),
     confirm: runtimeText(game, 'save.confirm'),
     unavailable: runtimeText(game, 'save.unavailable'),
     storage: runtimeText(game, 'save.storage'),
@@ -19,6 +20,7 @@ export function gameSaveMessages(game: GameData) {
     busy: runtimeText(game, 'save.busy'),
     'invalid-name': runtimeText(game, 'save.invalid-name'),
     'too-large': runtimeText(game, 'save.too-large'),
+    'delete-unavailable': runtimeText(game, 'save.delete-unavailable'),
   }
 }
 
@@ -37,7 +39,14 @@ export function mountGameSaveControls(
   const exportSave = document.createElement('button')
   const importSave = document.createElement('button')
   const loadAutosave = document.createElement('button')
-  save.type = load.type = exportSave.type = importSave.type = loadAutosave.type = 'button'
+  const deleteSave = document.createElement('button')
+  save.type =
+    load.type =
+    exportSave.type =
+    importSave.type =
+    loadAutosave.type =
+    deleteSave.type =
+      'button'
   const slotLabel = document.createElement('label')
   const slotCaption = document.createElement('span')
   const slot = document.createElement('select')
@@ -67,6 +76,7 @@ export function mountGameSaveControls(
     loadAutosave,
     exportSave,
     importSave,
+    deleteSave,
     file,
     status,
     autosaveStatus,
@@ -117,12 +127,14 @@ export function mountGameSaveControls(
     exportSave.textContent = runtimeText(game, 'save.export')
     importSave.textContent = runtimeText(game, 'save.import')
     loadAutosave.textContent = runtimeText(game, 'save.loadAutosave')
+    deleteSave.textContent = runtimeText(game, 'save.delete')
     file.setAttribute('aria-label', importSave.textContent)
     slot.disabled = name.disabled = reading
     save.disabled = reading || !saves.canSave
     load.disabled = exportSave.disabled = reading || !saves.canLoad
     importSave.disabled = reading || !saves.canImport
     loadAutosave.disabled = reading || !saves.canLoadAutosave
+    deleteSave.disabled = reading || !saves.canDelete
     autosaveStatus.textContent = saves.autosaveError
       ? runtimeText(game, 'save.autosaveError', { error: t[saves.autosaveError] })
       : runtimeText(
@@ -157,6 +169,21 @@ export function mountGameSaveControls(
   const onSlot = () => {
     if (reading || disposed) return
     saves.selectSlot(slot.value)
+  }
+
+  const onDelete = () => {
+    if (reading || disposed || !saves.canDelete) return
+    const selected = saves.slots.find(({ id }) => id === saves.selectedSlot)
+
+    const confirmation = runtimeText(game, 'save.confirmDelete', {
+      slot: saves.selectedSlot,
+      name: selected?.name || runtimeText(game, 'save.unnamed'),
+    })
+
+    if (document.defaultView?.confirm(confirmation) !== true) return
+    message = undefined
+
+    if (saves.delete()) name.value = ''
   }
 
   const onLoadAutosave = () => {
@@ -232,6 +259,7 @@ export function mountGameSaveControls(
   save.addEventListener('click', onSave)
   load.addEventListener('click', onLoad)
   loadAutosave.addEventListener('click', onLoadAutosave)
+  deleteSave.addEventListener('click', onDelete)
   slot.addEventListener('change', onSlot)
   exportSave.addEventListener('click', onExport)
   importSave.addEventListener('click', onImport)
@@ -247,6 +275,7 @@ export function mountGameSaveControls(
     save.removeEventListener('click', onSave)
     load.removeEventListener('click', onLoad)
     loadAutosave.removeEventListener('click', onLoadAutosave)
+    deleteSave.removeEventListener('click', onDelete)
     slot.removeEventListener('change', onSlot)
     exportSave.removeEventListener('click', onExport)
     importSave.removeEventListener('click', onImport)
