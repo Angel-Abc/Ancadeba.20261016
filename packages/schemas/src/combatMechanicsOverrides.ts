@@ -71,6 +71,10 @@ export function previewCombatMechanicsOverrides(
       damageType: optionalField(old.damageType, patch.damageType),
       delivery: optionalField(old.delivery, patch.delivery),
       includeReactions: optionalField(old.includeReactions, patch.includeReactions),
+      priority: optionalField(old.priority, patch.priority),
+      charges: optionalField(old.charges, patch.charges),
+      perTurn: optionalField(old.perTurn, patch.perTurn),
+      cooldown: optionalField(old.cooldown, patch.cooldown),
       event: patch.event ?? old.event,
       once: patch.once ?? old.once,
       actor: optionalField(old.actor, patch.actor),
@@ -190,6 +194,10 @@ export function diffCombatMechanics(
     ...(previous?.includeReactions !== next.includeReactions
       ? { includeReactions: next.includeReactions ?? null }
       : {}),
+    ...(previous?.priority !== next.priority ? { priority: next.priority ?? null } : {}),
+    ...(previous?.charges !== next.charges ? { charges: next.charges ?? null } : {}),
+    ...(previous?.perTurn !== next.perTurn ? { perTurn: next.perTurn ?? null } : {}),
+    ...(previous?.cooldown !== next.cooldown ? { cooldown: next.cooldown ?? null } : {}),
     ...(previous?.event !== next.event ? { event: next.event } : {}),
     ...(previous?.actor !== next.actor ? { actor: next.actor ?? null } : {}),
     ...(previous?.move !== next.move ? { move: next.move ?? null } : {}),

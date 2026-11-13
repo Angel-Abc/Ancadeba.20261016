@@ -1,4 +1,6 @@
 import {
+  resolveCombatStatusValues,
+  resolveCombatEffectValues,
   combatDamageProfile,
   combatTypedDamage,
   combatRestrictionProfile,
@@ -256,9 +258,15 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
             snapshot.statuses,
             actor,
             queued.target,
+            { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
           )
 
-          const contributions = statusContributions(definition, snapshot.statuses[actor] ?? [])
+          const contributions = statusContributions(
+            definition,
+            snapshot.statuses[actor] ?? [],
+            valueContext,
+            actor,
+          )
 
           const actorDefinition = [definition.player, ...definition.enemies].find(
             (entry) => entry.id === actor,
@@ -266,7 +274,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
 
           const apCost = combatActionCost(
             move,
-            combatActorEconomy(definition, actorDefinition, snapshot.statuses[actor]),
+            combatActorEconomy(definition, actorDefinition, snapshot.statuses[actor], valueContext),
             valueContext,
           )
 
@@ -288,7 +296,8 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
               ?.label ?? queued.target
 
           if (move.type === 'ability') {
-            const effects = move.effects.map((effect) => {
+            const effects = move.effects.map((authored) => {
+              const effect = resolveCombatEffectValues(authored, valueContext)
               const recipient = effect.target === 'self' ? actor : queued.target
 
               const name =
@@ -296,18 +305,48 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
                 recipient
 
               const values = combatAbilityEffectValues(
-                effect,
+                { ...effect, valueScaling: undefined },
                 snapshot.stats[actor],
                 snapshot.stats[recipient]?.defense ?? 0,
                 valueContext,
                 contributions,
-                combatDamageProfile(definition, recipient, snapshot.statuses, snapshot.equipment),
+                combatDamageProfile(
+                  definition,
+                  recipient,
+                  snapshot.statuses,
+                  snapshot.equipment,
+                  valueContext,
+                ),
               )
 
-              const status =
+              const statusDefinition =
                 effect.type === 'apply-status' || effect.type === 'remove-status'
                   ? definition.statuses?.[effect.status]
                   : undefined
+
+              const status = statusDefinition
+                ? resolveCombatStatusValues(
+                    statusDefinition,
+                    {
+                      id:
+                        effect.type === 'apply-status' || effect.type === 'remove-status'
+                          ? effect.status
+                          : '',
+                      source: actor,
+                      remaining: statusDefinition.duration,
+                    },
+                    recipient,
+                    valueContext,
+                  )
+                : undefined
+
+              const duration = Math.min(
+                statusDefinition?.duration ?? 0,
+                status?.duration ?? 0,
+                effect.type === 'apply-status'
+                  ? (effect.duration ?? status?.duration ?? 0)
+                  : (status?.duration ?? 0),
+              )
 
               const text =
                 effect.type === 'change-resource'
@@ -333,7 +372,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
                             ? definition.messages.statusImmune
                                 .replaceAll('{target}', name)
                                 .replaceAll('{status}', status?.label ?? effect.status)
-                            : `${status?.label} · ${definition.messages.turnsRemaining.replaceAll('{turns}', String(status?.duration))}`
+                            : `${status?.label} · ${definition.messages.turnsRemaining.replaceAll('{turns}', String(duration))}`
                           : effect.type === 'remove-status' && effect.stacks !== undefined
                             ? definition.messages.removeStacks
                                 .replaceAll('{stacks}', String(effect.stacks))
@@ -357,7 +396,13 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
               snapshot.stats[queued.target]?.defense ?? 0,
               valueContext,
               contributions,
-              combatDamageProfile(definition, queued.target, snapshot.statuses, snapshot.equipment),
+              combatDamageProfile(
+                definition,
+                queued.target,
+                snapshot.statuses,
+                snapshot.equipment,
+                valueContext,
+              ),
             )
           } catch {
             return definition.messages.unavailable
@@ -409,6 +454,14 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
             actor.id,
             snapshot.statuses,
             snapshot.equipment,
+            combatValueContext(
+              definition,
+              snapshot.resources,
+              snapshot.statuses,
+              actor.id,
+              actor.id,
+              { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
+            ),
           )
 
           defenses.textContent = damageDefenseText(profile)
@@ -495,7 +548,23 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
             }
 
           for (const status of active) {
-            const data = definition.statuses?.[status.id]
+            const authored = definition.statuses?.[status.id]
+
+            const data =
+              authored &&
+              resolveCombatStatusValues(
+                authored,
+                status,
+                actor.id,
+                combatValueContext(
+                  definition,
+                  snapshot.resources,
+                  snapshot.statuses,
+                  status.source,
+                  actor.id,
+                  { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
+                ),
+              )
 
             if (!data) continue
             let view = effectViews.get(status.id)
@@ -589,7 +658,19 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
                     `${names[stat]} ${(modifiers[stat] ?? 0) >= 0 ? '+' : ''}${modifiers[stat]}`,
                 ),
               ...Object.entries(
-                statusContributions(definition, [status])[0]?.percentModifiers ?? {},
+                statusContributions(
+                  definition,
+                  [status],
+                  combatValueContext(
+                    definition,
+                    snapshot.resources,
+                    snapshot.statuses,
+                    status.source,
+                    actor.id,
+                    { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
+                  ),
+                  actor.id,
+                )[0]?.percentModifiers ?? {},
               ).map(
                 ([stat, value]) =>
                   `${Object.getOwnPropertyDescriptor(names, stat)?.value ?? stat} ${(value ?? 0) >= 0 ? '+' : ''}${value ?? 0}%`,

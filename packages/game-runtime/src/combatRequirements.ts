@@ -29,6 +29,7 @@ export function combatMoveRequirements(
       context.statuses,
       context.self ?? definition.player.id,
       queued.target,
+      context,
     )
 
     for (const [id, amount] of Object.entries(combatResourceCosts(candidate, values))) {

@@ -82,6 +82,11 @@ export function mergeCombatMechanicsOverrides(
       'damageType',
       'delivery',
       'includeReactions',
+      'priority',
+      'charges',
+      'perTurn',
+      'cooldown',
+
       'event',
       'actor',
       'move',

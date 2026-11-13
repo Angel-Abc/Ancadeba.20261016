@@ -6,7 +6,7 @@
   "screen": {
     "type": "grid",
     "grid": {
-      "rows": 12,
+      "rows": 16,
       "columns": 12
     }
   },
@@ -200,6 +200,62 @@
       },
       "placement": {
         "row": 11,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "water-trigger-limits",
+      "type": "button",
+      "label": "Trigger limits: Water",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water-trigger-limits"
+      },
+      "placement": {
+        "row": 12,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "underwater-boss-trigger-limits",
+      "type": "button",
+      "label": "Trigger limits: Underwater guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-trigger-limits"
+      },
+      "placement": {
+        "row": 13,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "water-dynamic-effects",
+      "type": "button",
+      "label": "Dynamic effects: Water",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water-dynamic-effects"
+      },
+      "placement": {
+        "row": 14,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "underwater-boss-dynamic-effects",
+      "type": "button",
+      "label": "Dynamic effects: Underwater guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-dynamic-effects"
+      },
+      "placement": {
+        "row": 15,
         "column": 7,
         "columnSpan": 6
       }

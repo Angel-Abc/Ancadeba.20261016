@@ -2536,7 +2536,8 @@ combatant and selected action recipient; named encounter actor IDs also work.
 Each formula supports 1–20 terms, with coefficients from −10,000 to 10,000 and
 up to two decimal places. The default `mode` is `add`; `percent` evaluates
 `base × (1 + sum / 100)`. Exact rational arithmetic avoids floating-point
-threshold drift. Negative results clamp to zero. Optional integer `minimum`
+threshold drift. Unsigned effects clamp negative results to zero; signed resource
+changes, adjustments and modifiers preserve negative results. Optional integer `minimum`
 and `maximum` clamp before rounding. `rounding` can be `floor`, `ceil`, or
 `nearest` (halves round up). Effects default to floor, AP/resource costs to ceil.
 AP actions always cost at least one; resource costs may scale to zero. Unbounded
@@ -2590,9 +2591,8 @@ Starting health/stat bindings and equipped bonuses use the game's declared
 starting state; player move unlocks use its starting character level. The
 simulator accepts custom initial health, resources, phase, statuses, round and
 seed. Changes take effect on **Start/reset simulation**. It never writes source
-files or touches a live game, inventory, rewards or world progression. Tests cover
-combat moves; inventory-item actions and reward delivery remain outside this
-sandbox.
+files or touches a live game, inventory, rewards or world progression. Tests cover combat moves and simulated inventory-item actions; reward delivery
+remains outside this sandbox.
 
 Queue moves with explicit enemy targets, undo/clear the plan, resolve a round or
 repeat the current plan for 1–100 rounds. Planning applies current AP, cooldown,
@@ -2667,7 +2667,7 @@ and move unlocks are recomputed from current content. Starting status entries us
 `id`, `source`, `remaining`, optional `stacks` and `intensity`. Cooldowns map actor
 and move IDs to the first round when the move is available.
 
-Each ordered step has a unique ID, a plan of `{ move, target? }`, `repeat` (1–100),
+Each ordered step has a unique ID, a plan of `{ move, target?, item? }`, `repeat` (1–100),
 optional escape and optional checkpoint `expect` array. Self moves can omit the
 target. Every group repeats until its count or a terminal outcome; its checkpoint
 runs after the group. A later step after a terminal outcome is an execution error.
@@ -2699,8 +2699,88 @@ authoring action. Scenario drafts participate in recovery and navigation guards.
 The browser/Node-independent `runCombatScenario(definition, baseSetup, scenario)`
 API returns checks, skipped actions and an inspectable `CombatSimulation`, making
 the same tests available to automated tooling. The water and boss sample includes
-twenty-three saved tests, including exhaustion recovery, rhythm disruption, inherited
-water pressure, typed damage defenses, a temporary phase ward and the three-seal victory.
+sixty saved tests, including exhaustion recovery, typed defenses, shared
+passives, interception, trigger limits and the three-seal victory.
+
+## Rich simulation scenario assertions
+
+Saved scenarios can verify committed combat activity as well as state. New
+numeric checks use the existing `operator` / `value` comparisons:
+
+| Type                  | What is checked                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `passive-activations` | Matched passive trigger executions, filtered by actor, library, passive, trigger and granting source kind/ID. Blocked/failed matches are excluded; a matched no-op still counts.                             |
+| `interception`        | Changed pending packets, filtered by original effect source/target, operation, resource and trigger. `measure` is `count` (default), `amount` (absolute before/after packet difference), or shield `spent`.  |
+| `damage-total`        | Actual HP lost (default `amount`), packet `count`, or `absorbed`, `prevented`, `redirectedAmount`; optional source, target, move, damage type and delivery filters.                                          |
+| `healing-total`       | Actual HP restored (default `amount`), packet `count`, or `overheal`, filtered by source, target, move and delivery.                                                                                         |
+| `action-choices`      | Actual resolution choices (default `result: chosen`) or `executed` actions. Filters include actor, move, target and AI rule ID. Previews and actions rejected during queuing do not count.                   |
+| `cooldown`            | An actor/move's current remaining cooldown (default), or stored `readyRound`.                                                                                                                                |
+| `trigger-cooldown`    | An encounter trigger's remaining cooldown or `readyRound`; for a passive specify actor, library, passive, sourceKind and sourceId together. Charge exhaustion and Once are separate from cooldown readiness. |
+| `item-consumption`    | Actually consumed item instances, optionally filtered by item ID or itemType. Reusable item activations count as executed actions, with zero consumption.                                                    |
+
+```json
+{
+  "type": "damage-total",
+  "source": "player",
+  "target": "guardian",
+  "damageType": "lightning",
+  "delivery": "direct",
+  "operator": "eq",
+  "value": 13
+}
+```
+
+Activity checks default to `scope: "scenario"`, accumulating from the beginning.
+`scope: "step"` measures only the current step's entire repeat group; on final
+checks it means the last step. Cooldown checks always read current state. Remaining
+cooldown is measured against the current planning round after resolution; a
+round-1 cast with cooldown 1 has ready round 3 and one round remaining at the
+round-2 checkpoint. Completed encounters retain the existing cleared-cooldown
+behavior. Unknown IDs/filters are reported as errors before running, even when
+the expected count is zero. Failed checks show the expected comparison and actual
+number; they never rewrite saved expectations automatically.
+
+Damage and healing totals count each resolved packet once, including periodic,
+reaction and redirected packets. Their default amounts are actual HP changes,
+so overkill, immunity and shields cannot inflate totals. `count` includes zero-HP
+packets; the received/dealt events still require positive actual change. Redirect
+amount measures the portion transferred before the recipient's own defenses;
+query that recipient's damage total to verify what it actually lost. Interception
+amount measures packet adjustment, rather than the protected actor's HP saved.
+
+The simulator aggregates authoritative observations independently of bounded
+traces and display logs. It reserves no world resources and records facts only
+when a round commits; rejected rounds preserve counters, consumption, RNG and
+plans. Counters use safe integer arithmetic and at most 100,000 distinct aggregate
+records. `CombatSimulation.statistics()` and report `metrics` return isolated
+copies. Reports also expose simulated `consumedItems`. Truncating a trace to one
+frame does not weaken assertions. Reset starts with empty counters and restores
+simulated consumables.
+
+Scenarios can script items using `{ "move": "tonic-sip", "item": "brine-tonic" }`.
+Only authored item IDs and matching ability IDs are stored; type/consumption flags
+are derived from current inventory content. `combatSimulationSetup` supplies an
+isolated item context and initial enabled-binding values through its injected
+reader. Actor ownership, equipped/nonempty-container restrictions, encounter and
+context permissions, meaningful effects, AP/resources and shared ability cooldowns
+are checked. A consumed instance cannot be reused; a reusable item becomes
+available again after its reservation/cooldown. Item abilities need not be native
+player moves. Equipment loadout overrides also update simulated item eligibility.
+The real inventory, rewards and world state remain unchanged.
+
+The editor's expected-result picker exposes every assertion and filter. Add
+**Assertion scope**, choose measures and filters, and edit the expected number at
+any step or in final results. **Scripted item** sets an action's matching ability;
+selecting a native move clears its item reference. The simulator also offers
+**Simulation item → Queue item**, with unavailable reasons and normal undo/clear.
+Captured simulations retain item IDs. Saving and switching assertion types preserve
+extension data while clearing obsolete filters. Replay works against the current
+encounter draft and saved shared libraries, with the existing fail/skip policy.
+
+Six new water/underwater boss scenarios verify shield sources/spending and trigger
+cooldowns, consumed tonic versus reusable breath stone, healing and move cooldowns,
+actual enemy rule choices, and the conduit's 12 redirected / 13 guardian damage.
+The sample now has 60 saved scenarios.
 
 ## Damage types, resistances, vulnerabilities and immunities
 
@@ -2881,8 +2961,9 @@ action and status hooks. See [the combat example](sample-games/combat-mechanics/
 
 Trigger effects run in array order: `change-resource`, `set-resource`,
 `apply-status`, `remove-status`, `damage`, `heal`, `set-phase`, and `finish` (`victory` or `defeat`).
-Status/damage/heal effects specify an `actor`. Triggers run in authored record order
-and evaluate current candidate values, including changes made by earlier triggers.
+Status/damage/heal effects specify an `actor`. Triggers run by descending
+`priority` (default 0), keeping authored/source order for ties, and evaluate
+current candidate values, including changes made by earlier triggers.
 Nested events enter a FIFO queue and drain before ordinary combat resumes.
 Resource events fire only when the clamped value actually changes, not for no-ops.
 Health/resource/status conditions observe live values when their event is processed;
@@ -3428,9 +3509,10 @@ own copy; two items granting the same passive each react. Status stacks and
 intensity do not multiply trigger execution, although conditions can inspect
 both. Dead bearers do not react. Existing equipment loadout locks apply.
 
-For each dispatched event, the engine snapshots current grants, runs encounter
-triggers first, then passive triggers in actor order, equipment order, active
-status order and authored trigger order. Each passive source is checked again
+For each dispatched event, the engine snapshots current grants and sorts all
+encounter/passive triggers by descending priority. Equal priorities retain the
+previous order: encounter triggers, then passive triggers in actor order,
+equipment order, active status order and authored trigger order. Each passive source is checked again
 before its trigger runs. Removing or expiring a status stops later reactions;
 a matched trigger finishes its effect list even if it removes its own grant.
 New grants receive subsequent dispatched events, including notifications already
@@ -3969,6 +4051,168 @@ host to avoid caching `config.json`. Source settings such as ports are not expos
 to the browser. Vite preview serves the emitted config file. Both web apps still
 require their source app config files when invoking Vite tooling.
 
+## Dynamic values across combat effects
+
+The same bounded formulas now support `health`, `missing-health`, `stat` and
+`round` terms in addition to resources and statuses. Health terms accept
+`measure: "value"` (default) or `"percent"`, relative to the actor's effective
+maximum health. Missing-health percentages use the missing fraction of that same
+maximum. Stat terms select `attack`, `defense`, `guard` or `maximumHealth`.
+Round terms read the current encounter round, including a scenario's starting
+round; they do not use world time or a combatant-turn counter.
+
+Existing move `scaling`, `apCostScaling` and `resourceCostScaling` formulas accept
+all of these sources. Numeric ability, trigger, phase-entry and status payloads
+also accept a `valueScaling` map keyed by a declared numeric field:
+
+```json
+{
+  "type": "absorb-damage",
+  "resource": "stamina",
+  "maximum": 1,
+  "valueScaling": {
+    "maximum": {
+      "terms": [
+        { "type": "round", "factor": 1 },
+        { "type": "stat", "actor": "self", "stat": "defense", "factor": 0.5 }
+      ],
+      "maximum": 8
+    }
+  }
+}
+```
+
+Supported payload paths include `amount`, `damage.min`, `damage.max`, periodic
+status `damage`/`regeneration`, interception `percent`/`maximum`/`minimumHealth`,
+status application/removal `stacks`, application `intensity`/`duration`,
+`modifiers.attack`/`defense`/`guard`/`ap`/`apCost`, `percentModifiers.<modifier>`,
+and `damageDefenses.resistances.<type>` / `vulnerabilities.<type>` on statuses.
+The selected field must have a numeric authored base. This scales effect payloads;
+IDs, phase selection, immunity flags, trigger limits and resource maxima remain
+configuration. Maps support at most 100 fields and formulas at most 20 terms.
+
+Every field formula in one payload reads the same context. The engine evaluates
+`valueScaling` first, then any existing primary `scaling` or `eventValue`, then
+normal stat bonuses, outgoing percentages, defenses, Guard and interception at
+their established stages. Later effects re-read live candidate values, so healing
+changes subsequent missing-health calculations. Costs use current health/stats
+and round in gameplay, AI, simulation and previews, without predicting queued
+buffs or future gains. Reactive healing/damage and pending interception use the
+same evaluator. Resolved events still report actual HP changed.
+
+Ordinary effect formulas read current effective stats, including equipment and
+status modifiers. Status formulas use their applier as `self` and recipient as
+`target`; their stat inputs are the values before status modifiers, preventing
+recursive self-scaling and dependence on status iteration order. Periodic payloads
+and modifier/type-defense contributions are evaluated live, then multiplied by
+status stacks/intensity as before. Durations are evaluated when applied and capped
+at the status's authored duration, keeping save validation consistent. Scaled
+stacks/intensity are capped at their configured maxima; zero application/removal
+strength is a no-op. An omitted removal stack count still removes the whole status.
+
+Signed resource changes, pending adjustments and modifiers keep negative values.
+Other HP/resource payloads clamp below zero. Percentage fields retain hundredths;
+redirect percentages clamp to 0–100 and adjustment percentages to -100–1000.
+A shield maximum of zero absorbs nothing, and lethal protection keeps a minimum
+of one HP. Invalid contexts, reversed damage ranges and unbounded overflow reject
+the candidate without spending AP/items/resources, advancing RNG or changing
+trigger charges. Explicit formula bounds can cap calculations before overflow.
+
+Reference validation, shared status dependency imports and actor-role binding
+include field formulas. Trigger formulas may use `event.source` / `event.target`;
+those references are rejected outside damage/healing events. Editor merges keep
+formula extensions while clearing obsolete source-specific fields. Outside-combat
+item abilities cannot use combat formulas.
+
+Use **Numeric effect scaling → Numeric field → Add field scaling** in ability,
+status and trigger forms, including shared libraries/rulesets and phase entry.
+Each **Scaling: <field>** section uses the same source, coefficient, bounds and
+rounding controls as existing move formulas. Disable a formula to remove it.
+Live status badges and previews use current inputs; interception previews retain
+the existing before-interception notice. Public integrations can pass health,
+maximum health, pre-status stats, round and event facts to the optional sixth
+`combatValueContext` argument and use `resolveCombatEffectValues`.
+
+The **Dynamic effects** sample views add Adaptive breath, Adaptive current and
+Pressure lance. Six scenarios cover missing-health recovery, live regeneration,
+defense and shielding, and health/stat/round-scaled damage and costs. In the boss
+conduit scenario, 25 lightning damage splits into 12 redirected and 13 actual
+guardian damage; the seal receives exactly 13 charge. All 60 saved scenarios remain
+available alongside the earlier water and three-seal examples.
+
+## Trigger priorities and activation limits
+
+Every encounter, ruleset and shared passive trigger can set optional controls:
+
+```json
+{
+  "event": "damage-pending",
+  "target": "self",
+  "priority": 20,
+  "charges": 3,
+  "perTurn": 1,
+  "cooldown": 1,
+  "conditions": [
+    { "type": "event-value", "field": "amount", "operator": "gt", "value": 0 },
+    { "type": "resource", "resource": "stamina", "operator": "gt", "value": 0 }
+  ],
+  "effects": [{ "type": "absorb-damage", "resource": "stamina", "maximum": 2 }]
+}
+```
+
+`self` in this example is the shared passive's bearer. Higher `priority` runs
+first for the same dispatched event, across encounter triggers and all active
+passive sources. Values are integers from -10,000 to 10,000; omitted means 0.
+Equal values preserve the established encounter/source/authored order. Array
+order within each trigger's effects is unchanged. Priorities do not reorder
+queued events or phase `onEnter` effects, which still precede phase-enter triggers.
+
+`charges` caps total activations for the encounter (1–10,000). `perTurn` caps
+activations between consecutive combatant turn starts (1–10,000), resetting at
+each actor's `turn-start` before that event's triggers run. These are individual
+actor turns, not rounds or the passive bearer's own turns. Pre-turn events use
+the initial turn bucket; subsequent events retain the current bucket until the
+next turn start.
+
+`cooldown` uses whole rounds (0–1,000), matching move cooldowns. Firing in round R
+with cooldown N makes the trigger available in R + N + 1: cooldown 1 can fire in
+rounds 1, 3 and 5, while skipping round 2 and later activations in round 1.
+Omitted/zero means no cooldown. Omitted charge/per-turn limits are unlimited.
+All configured limits apply together, and `once: true` still permits at most one
+activation regardless of a larger charge allowance.
+
+Filters, trigger conditions and limits must all pass before consuming anything.
+The engine reserves an activation before executing effects, so nested reactions
+cannot reuse the same charge or bypass the current-turn cap. A matched trigger
+spends its activation even if its effects are no-ops or all per-effect conditions
+fail. Gate a shield with positive pending damage and available resource, as above,
+when empty/immune packets should not spend charges.
+
+Encounter triggers have their own histories. Shared passives track each actor,
+item instance or status ID, library, passive and trigger separately. Stacks do not
+multiply grants. Removing/reapplying a status or removing/regranting a source does
+not refill its charges or erase its cooldown. New Game and fresh/reset simulations
+start new histories. Optional saved `mechanics.activations` and `mechanics.turn`
+fields persist counters and readiness through save/load; old state without them
+starts with no new usage. Existing once receipts remain separate and compatible.
+Histories are capped at 10,000 entries and validated against resolved definitions.
+Candidate rollback includes charges, turn counters, resources, logs and RNG.
+
+The trigger editor exposes all four controls in encounter mechanics, shared
+rulesets and passives. Blank fields remove a local control; inherited overrides
+use explicit null removals, and save merges preserve unrelated extension data.
+Simulation mechanics traces expose `activation`: effective priority, remaining
+charges/current-turn allowance, cooldown rounds remaining and blockers (`once`,
+`charges`, `per-turn`, `cooldown`). `activated: true` frames capture reserved
+usage before effects execute and show readiness for the next activation. Timeline
+labels identify activations and blocked limits without requiring a JSON search.
+
+The water and underwater boss **Trigger limits** views demonstrate a Paced
+barrier. Its priority-20 shield consumes stamina before priority-10 softening
+halves remaining damage. A separate action refund grants 2 stamina once per turn.
+Each encounter adds `trigger-priority`, `trigger-per-turn` and `trigger-limits`;
+the last checks health/stamina after every round through the third shield charge.
+
 ## Damage and healing interception
 
 Triggers in encounters, composed rulesets and shared passives can use
@@ -3998,8 +4242,8 @@ interception effects are:
 | `redirect-damage` | Transfer `percent` (0–100, default 100) of the remaining damage to `actor`, with an optional positive `maximum`. Dead/self recipients leave the packet unchanged.           |
 | `prevent-lethal`  | On a currently lethal packet, preserve at least `minimumHealth` (positive, default 1), capped at current HP. Later adjustments in the same packet cannot defeat that floor. |
 
-Interceptors run in the existing order: encounter triggers, then active equipment
-and status passive sources in their authored order. Conditions and event formulas
+Interceptors run by descending trigger priority across encounter and passive
+sources. Equal priorities keep encounter, equipment and status source order. Conditions and event formulas
 see the latest pending amount. Gate once-only lethal protection with
 `event-flag: lethal = true`, as above, so nonlethal hits do not spend its receipt.
 Receipts are saved per source through the existing passive mechanism.

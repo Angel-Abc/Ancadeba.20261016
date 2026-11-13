@@ -32,7 +32,17 @@ async function sample(id: string) {
     JSON.parse(await readFile(new URL('combat-libraries/environments.json', root), 'utf8')),
   )
 
-  const resolved = resolveCombatSource(source, new Map([['environments', library]]))
+  const inventory = inventorySchema.parse(
+    JSON.parse(await readFile(new URL('inventory/diving-gear.json', root), 'utf8')),
+  )
+
+  const resolved = resolveCombatSource(
+    source,
+    new Map([['environments', library]]),
+    undefined,
+    inventory,
+  )
+
   expect(resolved.issues).toEqual([])
   const definition = resolved.definition!
 
@@ -45,7 +55,11 @@ async function sample(id: string) {
 
   return {
     definition,
-    setup: { health, maximumHealth: { ...health } } satisfies CombatSimulationSetup,
+    setup: {
+      health,
+      maximumHealth: { ...health },
+      itemContext: { inventory },
+    } satisfies CombatSimulationSetup,
   }
 }
 

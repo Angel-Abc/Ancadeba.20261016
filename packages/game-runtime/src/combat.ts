@@ -3,7 +3,7 @@ import { combatDamageProfile } from './combatDamage.js'
 import { combatEquipmentFor, combatActorMoves } from './combatEquipment.js'
 import type { CombatEquipment } from '@ancadeba/schemas'
 import { combatMoveRestriction, combatMoveRestrictionText } from './combatRestrictions.js'
-import { combatValueContext } from './combatValues.js'
+import { combatValueContext, type CombatValueContext } from './combatValues.js'
 import { usableItem, abilityCanMatter } from './itemUseEligibility.js'
 
 import {
@@ -31,7 +31,6 @@ import {
   combatStunned,
   cooldownRemaining,
   statusContributions,
-  temporaryCombatStats,
   combatStatusParts,
   combatStatusAmount,
   type CombatStatuses,
@@ -113,6 +112,7 @@ export interface CombatCommandRequest {
 }
 
 export interface CombatSnapshot {
+  readonly baseStats?: Readonly<Record<string, Readonly<CombatBonuses>>> | undefined
   readonly equipment?: CombatEquipment | undefined
   readonly resources: Readonly<Record<string, number>>
 
@@ -348,7 +348,10 @@ export class GameCombat implements IGameCombat {
         }
       }
 
-      combatEconomySnapshot(definition, saved.statuses, saved.mechanics?.resources, saved.target)
+      combatEconomySnapshot(definition, saved.statuses, saved.mechanics?.resources, saved.target, {
+        ...this.valueInputs(definition),
+        round: saved.round,
+      })
 
       for (const [actor, moves] of Object.entries(saved.cooldowns))
         if (!actors.has(actor) || Object.keys(moves).some((move) => !definition.moves[move]))
@@ -505,7 +508,7 @@ export class GameCombat implements IGameCombat {
           : this.bindings.read(actor.maximumHealth)
 
       const value = actor.equipmentOwner
-        ? this.stats?.snapshot(actor.equipmentOwner)?.total.maximumHealth
+        ? this.stats?.baseSnapshot(actor.equipmentOwner)?.total.maximumHealth
         : typeof max === 'number'
           ? max
           : max.status === 'resolved'
@@ -543,37 +546,74 @@ export class GameCombat implements IGameCombat {
         [definition.player, ...definition.enemies].find((actor) => actor.equipmentOwner === owner)
 
       if (definition && actor)
-        return statusContributions(definition, session.statuses[actor.id] ?? [])
+        return statusContributions(
+          definition,
+          session.statuses[actor.id] ?? [],
+          combatValueContext(
+            definition,
+            session.mechanics?.resources,
+            session.statuses,
+            actor.id,
+            actor.id,
+            this.valueInputs(definition),
+          ),
+          actor.id,
+        )
     }
 
     return []
   }
 
-  private statValues(definition: CombatDefinition, effective = true) {
+  private baseStatValues(definition: CombatDefinition) {
     const values: Record<string, Readonly<CombatBonuses>> = {}
 
+    for (const actor of [definition.player, ...definition.enemies]) {
+      if (!actor.equipmentOwner) continue
+      const snapshot = this.stats?.baseSnapshot(actor.equipmentOwner)
+
+      if (!snapshot) return
+      values[actor.id] = snapshot.total
+    }
+
+    return values
+  }
+
+  private valueInputs(definition: CombatDefinition) {
+    const health = this.health(definition)
+
+    return {
+      health: health?.health,
+      maximumHealth: health?.maximum,
+      stats: this.baseStatValues(definition),
+      round: this.sessions.get(definition.id)?.round ?? 1,
+    }
+  }
+
+  private statValues(definition: CombatDefinition, effective = true) {
+    const values = this.baseStatValues(definition)
+
+    if (!values) return
+    const inputs = this.valueInputs(definition)
+    const current = this.sessions.get(definition.id)
+
     try {
-      for (const actor of [definition.player, ...definition.enemies]) {
-        const active = this.sessions.get(definition.id)?.statuses[actor.id] ?? []
+      if (effective) {
+        const context = combatValueContext(
+          definition,
+          current?.mechanics?.resources,
+          current?.statuses ?? {},
+          definition.player.id,
+          undefined,
+          inputs,
+        )
 
-        if (!actor.equipmentOwner) {
-          if (effective && active.length)
-            values[actor.id] = temporaryCombatStats(
-              undefined,
-              statusContributions(definition, active),
-            )
-
-          continue
+        for (const actor of [definition.player, ...definition.enemies]) {
+          if (actor.equipmentOwner || current?.statuses[actor.id]?.length)
+            values[actor.id] = context.stats![actor.id]!
         }
-
-        const snapshot = effective
-          ? this.stats?.snapshot(actor.equipmentOwner)
-          : this.stats?.baseSnapshot(actor.equipmentOwner)
-
-        if (!snapshot) return
-
-        values[actor.id] = snapshot.total
       }
+
+      const contexts = new Map<string, CombatValueContext>()
 
       for (const actor of [definition.player, ...definition.enemies])
         for (const moveId of combatActorMoves(actor, this.equipmentValues(definition))) {
@@ -588,15 +628,28 @@ export class GameCombat implements IGameCombat {
                 ? (session?.target?.id ?? definition.enemies[0]?.id)
                 : definition.player.id
 
-          const context = combatValueContext(
+          const key = JSON.stringify([actor.id, target])
+          let context = contexts.get(key)
+
+          if (!context) {
+            context = combatValueContext(
+              definition,
+              session?.mechanics?.resources,
+              session?.statuses ?? {},
+              actor.id,
+              target,
+              inputs,
+            )
+            contexts.set(key, context)
+          }
+
+          const effects = statusContributions(
             definition,
-            session?.mechanics?.resources,
-            session?.statuses ?? {},
+            session?.statuses[actor.id] ?? [],
+            context,
             actor.id,
-            target,
           )
 
-          const effects = statusContributions(definition, session?.statuses[actor.id] ?? [])
           combatMoveValues(
             move,
             values[actor.id],
@@ -608,6 +661,7 @@ export class GameCombat implements IGameCombat {
               target ?? actor.id,
               session?.statuses ?? {},
               this.equipmentValues(definition),
+              context,
             ),
           )
 
@@ -624,6 +678,7 @@ export class GameCombat implements IGameCombat {
                   effect.target === 'self' ? actor.id : (target ?? actor.id),
                   session?.statuses ?? {},
                   this.equipmentValues(definition),
+                  context,
                 ),
               )
         }
@@ -677,6 +732,7 @@ export class GameCombat implements IGameCombat {
               undefined,
               values.maximum,
               this.equipmentValues(definition),
+              this.baseStatValues(definition),
             )
           : {},
 
@@ -729,6 +785,7 @@ export class GameCombat implements IGameCombat {
           undefined,
           values.maximum,
           this.equipmentValues(definition),
+          this.baseStatValues(definition),
         )
 
       if (!session.outcome) {
@@ -797,12 +854,21 @@ export class GameCombat implements IGameCombat {
         session.statuses,
         session.mechanics?.resources,
         session.target?.id,
+        this.valueInputs(definition),
       )
 
       const playerEconomy = combatActorEconomy(
         definition,
         definition.player,
         session.statuses[definition.player.id],
+        combatValueContext(
+          definition,
+          session.mechanics?.resources,
+          session.statuses,
+          definition.player.id,
+          session.target?.id,
+          this.valueInputs(definition),
+        ),
       )
 
       for (const queued of session.plan)
@@ -815,6 +881,7 @@ export class GameCombat implements IGameCombat {
             session.statuses,
             definition.player.id,
             queued.target,
+            this.valueInputs(definition),
           ),
         )
 
@@ -833,6 +900,7 @@ export class GameCombat implements IGameCombat {
 
       moveCosts: economy?.moveCosts ?? Object.freeze({}),
 
+      baseStats: this.baseStatValues(definition),
       resources: Object.freeze({ ...session.mechanics?.resources }),
 
       bossPhase: session.mechanics?.phase,
@@ -1173,6 +1241,8 @@ export class GameCombat implements IGameCombat {
           candidate,
           {
             health: values.health,
+            stats: this.baseStatValues(definition),
+            round: session.round,
             maximumHealth: values.maximum,
             statuses: session.statuses,
             resources: session.mechanics?.resources ?? {},
@@ -1222,6 +1292,7 @@ export class GameCombat implements IGameCombat {
             combatMoveTarget(move) === 'self'
               ? definition.player.id
               : (session.target?.id ?? definition.enemies[0]?.id),
+            this.valueInputs(definition),
           ),
         )
     } catch {
@@ -1540,6 +1611,7 @@ export class GameCombat implements IGameCombat {
             undefined,
             values.maximum,
             this.equipmentValues(definition),
+            this.baseStatValues(definition),
           )
 
       removal?.commit()

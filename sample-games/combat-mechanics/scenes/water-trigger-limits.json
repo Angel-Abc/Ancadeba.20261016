@@ -1,0 +1,297 @@
+{
+  "schema-version": "1.0.0",
+  "id": "water-trigger-limits",
+  "title": "Trigger limits: Water",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "water",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "A: Raise paced barrier. The priority-20 shield spends up to 2 stamina before priority-10 softening halves remaining damage. It has 3 charges, one activation per turn and skips the next round after firing. Actions refund 2 stamina once per turn: queue several actions to see the limit. Reapplying does not refill shield charges. B resolves. Inspect priority, remaining charges and blocked cooldown/per-turn activations in the simulator trace.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Quick thrust",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "jab"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "label": "Power stroke",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "heavy"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        },
+        "3": {
+          "label": "Float and recover",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rest"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "6": {
+          "label": "Raise paced barrier",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "raise-paced-barrier"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        },
+        "7": {
+          "label": "Rescue breath",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rescue-breath"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "9": {
+          "label": "Draw brine",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "draw-brine"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-9"
+          }
+        },
+        "10": {
+          "label": "Focus current",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "focus-current"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-10"
+          }
+        },
+        "11": {
+          "label": "Tidal bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "tidal-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-11"
+          }
+        },
+        "12": {
+          "label": "Arc bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "arc-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "label": "Venom dart",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "venom-dart"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
+        }
+      }
+    },
+    {
+      "id": "control-techniques",
+      "type": "button",
+      "label": "Return to diving gear",
+      "action": {
+        "type": "enter-scene",
+        "scene": "diving-gear"
+      },
+      "placement": {
+        "row": 9,
+        "column": 1,
+        "columnSpan": 12
+      }
+    }
+  ]
+}

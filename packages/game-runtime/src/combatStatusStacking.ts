@@ -2,6 +2,7 @@ import { combatStatusApplicationIssues, type CombatStatusDefinition } from '@anc
 import type { ActiveCombatStatus } from './combatEffects.js'
 
 export interface StatusApplication {
+  readonly duration?: number | undefined
   readonly stacks?: number | undefined
   readonly intensity?: number | undefined
 }
@@ -66,7 +67,9 @@ export function applyCombatStatus(
   const next: ActiveCombatStatus = {
     id,
     source,
-    remaining: durationReset ? status.duration : previous.remaining,
+    remaining: durationReset
+      ? Math.min(status.duration, application.duration ?? status.duration)
+      : previous.remaining,
     ...(status.stacking ? { stacks } : {}),
     ...(status.intensity ? { intensity } : {}),
   }

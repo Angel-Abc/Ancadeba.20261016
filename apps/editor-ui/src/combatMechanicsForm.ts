@@ -1,3 +1,5 @@
+import { combatEffectValuesForm } from './combatEffectValuesForm.js'
+import { combatTriggerLimitsForm } from './combatTriggerLimitsForm.js'
 import { combatInterceptionForm } from './combatInterceptionForm.js'
 import {
   combatMechanicsSchema,
@@ -120,6 +122,9 @@ export function combatMechanicsForm(
       },
     ),
   ]
+
+  const triggerHelp = controls.create('p')
+  triggerHelp.textContent = t('combat.triggerLimits.help')
 
   const effectsForm = (effects: CombatTriggerEffect[], eventType?: string) => {
     const event = eventType !== undefined
@@ -268,6 +273,7 @@ export function combatMechanicsForm(
             ]
           : []),
         ...combatInterceptionForm(controls, effect),
+        combatEffectValuesForm(controls, effect, render, resources, statusIds),
         combatEffectConditionsForm(
           controls,
           effect,
@@ -452,6 +458,7 @@ export function combatMechanicsForm(
         ]),
     group(
       text('triggers'),
+      triggerHelp,
       ...Object.entries(mechanics.triggers).map(([id, trigger]) =>
         group(
           id,
@@ -527,7 +534,7 @@ export function combatMechanicsForm(
                     ['true', t('form.yes')],
                   ],
                   (value) => {
-                    trigger.includeReactions = value === 'true' ? true : undefined
+                    trigger.includeReactions = value === 'true'
                   },
                 ),
               ]
@@ -567,6 +574,7 @@ export function combatMechanicsForm(
               trigger.phase = value || undefined
             },
           ),
+          ...combatTriggerLimitsForm(controls, trigger),
           select(
             text('once'),
             String(trigger.once),

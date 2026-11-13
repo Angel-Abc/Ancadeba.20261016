@@ -1,3 +1,5 @@
+import { resolveCombatStatusValues } from './combatEffectValues.js'
+import type { CombatValueContext } from './combatValues.js'
 import type { CombatDamageDefenses, CombatDefinition, CombatEquipment } from '@ancadeba/schemas'
 import { combatStatusAmount, type CombatStatuses } from './combatEffects.js'
 import { applyCombatPercent } from './combatValues.js'
@@ -14,6 +16,7 @@ export function combatDamageProfile(
   actor: string,
   statuses: CombatStatuses = {},
   equipment: CombatEquipment = {},
+  context?: CombatValueContext,
 ): CombatDamageProfile {
   const owner = [definition.player, ...definition.enemies].find((entry) => entry.id === actor)
 
@@ -44,8 +47,24 @@ export function combatDamageProfile(
   for (const entry of equipment[actor] ?? []) add(entry.effects.damageDefenses, (value) => value)
 
   for (const active of statuses[actor] ?? [])
-    add(definition.statuses?.[active.id]?.damageDefenses, (value) =>
-      combatStatusAmount(value, active),
+    add(
+      (definition.statuses?.[active.id]
+        ? resolveCombatStatusValues(
+            {
+              ...definition.statuses[active.id]!,
+              valueScaling: Object.fromEntries(
+                Object.entries(definition.statuses[active.id]!.valueScaling ?? {}).filter(([key]) =>
+                  key.startsWith('damageDefenses.'),
+                ),
+              ),
+            },
+            active,
+            actor,
+            context,
+          )
+        : undefined
+      )?.damageDefenses,
+      (value) => combatStatusAmount(value, active),
     )
 
   return Object.freeze({

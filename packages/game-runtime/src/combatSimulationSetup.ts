@@ -69,6 +69,18 @@ export function combatSimulationSetup(
   const equipment = combatEquipmentFor(definition, inventory)
 
   return {
+    ...(inventory
+      ? {
+          itemContext: {
+            inventory,
+            enabled: Object.fromEntries(
+              Object.entries(inventory.itemTypes)
+                .filter(([, type]) => type.use?.enabledWhen)
+                .map(([id, type]) => [id, read(type.use!.enabledWhen!) === true]),
+            ),
+          },
+        }
+      : {}),
     ...(inventory && Object.keys(baseStats).length
       ? { equipmentContext: { inventory, baseStats, level } }
       : {}),

@@ -89,6 +89,7 @@ export function applyCombatSimulationLoadout(
 
   return {
     ...setup,
+    ...(setup.itemContext ? { itemContext: { ...setup.itemContext, inventory } } : {}),
     stats,
     maximumHealth,
     health,

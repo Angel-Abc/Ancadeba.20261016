@@ -1,3 +1,4 @@
+import type { CombatTriggerLimitsTrace } from './combatTriggerLimits.js'
 import type { CombatInterceptionChange } from './combatInterception.js'
 import type {
   CombatMechanicsState,
@@ -54,6 +55,8 @@ export interface EnemyDecisionTrace {
 }
 
 export interface CombatMechanicsTrace {
+  readonly activation?: CombatTriggerLimitsTrace | undefined
+  readonly activated?: boolean | undefined
   readonly interception?: CombatInterceptionChange | undefined
   readonly passive?: CombatPassiveSource | undefined
   readonly source?: string | undefined

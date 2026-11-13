@@ -1,3 +1,5 @@
+import { combatEffectValueScalingSchema } from '@ancadeba/schemas'
+import { mergeCombatEffectValueScaling } from './combatValueEditing.js'
 import { object } from './project.js'
 
 export function mergeCombatRuleFields(
@@ -35,7 +37,14 @@ export function mergeCombatRuleEffects(
         'percent',
         'maximum',
         'minimumHealth',
+        'duration',
       ]),
+      valueScaling: mergeCombatEffectValueScaling(
+        object(old).valueScaling,
+        entry.valueScaling === undefined
+          ? undefined
+          : combatEffectValueScalingSchema.parse(entry.valueScaling),
+      ),
       eventValue: entry.eventValue
         ? {
             ...object(object(old).eventValue),

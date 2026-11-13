@@ -626,6 +626,162 @@
           "status": "seal-conduit"
         }
       ]
+    },
+    "raise-paced-barrier": {
+      "type": "ability",
+      "label": "Raise paced barrier",
+      "description": "Spend 5 stamina for a paced barrier: three shield charges, a per-turn action refund and a one-round shield cooldown. Reapplying the ward does not refill charges.",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "paced-ward",
+          "type": "apply-status",
+          "status": "paced-barrier"
+        }
+      ]
+    },
+    "adaptive-breath": {
+      "type": "ability",
+      "label": "Adaptive breath",
+      "description": "Heal 4 plus 25% of missing health and current defense. Restore 2 stamina plus the current round.",
+      "apCost": 1,
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "breath",
+          "type": "heal",
+          "amount": 4,
+          "scaling": {
+            "terms": [
+              {
+                "type": "missing-health",
+                "factor": 0.25,
+                "actor": "self"
+              },
+              {
+                "type": "stat",
+                "factor": 1,
+                "actor": "self",
+                "stat": "defense"
+              }
+            ]
+          }
+        },
+        {
+          "id": "reserve",
+          "type": "change-resource",
+          "resource": "stamina",
+          "amount": 2,
+          "valueScaling": {
+            "amount": {
+              "terms": [
+                {
+                  "type": "round",
+                  "factor": 1
+                }
+              ],
+              "maximum": 12
+            }
+          }
+        }
+      ]
+    },
+    "adaptive-barrier": {
+      "type": "ability",
+      "label": "Raise adaptive current",
+      "description": "Spend 5 stamina to apply Adaptive current for 3 plus the current round, up to its eight-turn duration. Its regeneration, defense, water resistance and shield all scale.",
+      "apCost": 1,
+      "target": "self",
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "current",
+          "type": "apply-status",
+          "status": "adaptive-current",
+          "duration": 3,
+          "valueScaling": {
+            "duration": {
+              "terms": [
+                {
+                  "type": "round",
+                  "factor": 1
+                }
+              ],
+              "maximum": 8
+            }
+          }
+        }
+      ]
+    },
+    "pressure-lance": {
+      "type": "attack",
+      "label": "Pressure lance",
+      "description": "Lightning damage: 4 plus 5% of target health percentage, half attack, and 2 per round. Stamina cost grows by 1 per round. Actual damage charges the guardian seal.",
+      "apCost": 1,
+      "damageType": "lightning",
+      "damage": {
+        "min": 4,
+        "max": 4
+      },
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "resourceCostScaling": {
+        "stamina": {
+          "terms": [
+            {
+              "type": "round",
+              "factor": 1
+            }
+          ]
+        }
+      },
+      "scaling": {
+        "terms": [
+          {
+            "type": "health",
+            "factor": 0.05,
+            "actor": "target",
+            "measure": "percent"
+          },
+          {
+            "type": "stat",
+            "factor": 0.5,
+            "actor": "self",
+            "stat": "attack"
+          },
+          {
+            "type": "round",
+            "factor": 2
+          }
+        ]
+      },
+      "categories": ["spell"]
+    },
+    "tonic-sip": {
+      "type": "ability",
+      "label": "Sip brine tonic",
+      "description": "An item-granted ability: restore 12 health before incoming healing effects. One-round cooldown shared by tonic and breath stone.",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "sip",
+          "type": "heal",
+          "amount": 12
+        }
+      ]
     }
   },
   "statuses": {
@@ -792,6 +948,69 @@
           "id": "seal-conduit"
         }
       ]
+    },
+    "paced-barrier": {
+      "type": "composite",
+      "label": "Paced barrier",
+      "duration": 12,
+      "description": "Priority-20 shield absorbs up to 2 damage before priority-10 softening halves the rest. Three shield activations per encounter; one per turn; one round between activations. Actions restore 2 stamina once per turn.",
+      "passives": [
+        {
+          "library": "environments",
+          "id": "paced-barrier"
+        }
+      ]
+    },
+    "adaptive-current": {
+      "type": "composite",
+      "label": "Adaptive current",
+      "description": "Regeneration and water resistance grow each round; missing health adds defense. Grants an adaptive stamina shield.",
+      "duration": 8,
+      "regeneration": 1,
+      "modifiers": {
+        "defense": 0
+      },
+      "damageDefenses": {
+        "resistances": {
+          "water": 0
+        }
+      },
+      "passives": [
+        {
+          "library": "environments",
+          "id": "adaptive-guard"
+        }
+      ],
+      "valueScaling": {
+        "regeneration": {
+          "terms": [
+            {
+              "type": "round",
+              "factor": 1
+            }
+          ],
+          "maximum": 8
+        },
+        "modifiers.defense": {
+          "terms": [
+            {
+              "type": "missing-health",
+              "factor": 0.02,
+              "actor": "target"
+            }
+          ],
+          "maximum": 4
+        },
+        "damageDefenses.resistances.water": {
+          "terms": [
+            {
+              "type": "round",
+              "factor": 5
+            }
+          ],
+          "maximum": 40
+        }
+      }
     }
   },
   "rulesets": {
@@ -1480,6 +1699,115 @@
               "type": "redirect-damage",
               "actor": "event.source",
               "percent": 50
+            }
+          ]
+        }
+      }
+    },
+    "paced-barrier": {
+      "label": "Paced barrier",
+      "description": "The shield runs at priority 20 before priority-10 softening. It has 3 encounter charges, at most one activation per combatant turn, and skips the next round after firing. A separate once-per-turn action refund restores 2 stamina.",
+      "triggers": {
+        "soften": {
+          "event": "damage-pending",
+          "target": "self",
+          "priority": 10,
+          "effects": [
+            {
+              "type": "adjust-effect",
+              "percent": -50
+            }
+          ]
+        },
+        "reserve": {
+          "event": "after-action",
+          "actor": "self",
+          "perTurn": 1,
+          "effects": [
+            {
+              "type": "change-resource",
+              "resource": "stamina",
+              "amount": 2
+            }
+          ]
+        },
+        "absorb": {
+          "event": "damage-pending",
+          "target": "self",
+          "priority": 20,
+          "charges": 3,
+          "perTurn": 1,
+          "cooldown": 1,
+          "conditions": [
+            {
+              "type": "event-value",
+              "field": "amount",
+              "operator": "gt",
+              "value": 0
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "gt",
+              "value": 0
+            }
+          ],
+          "effects": [
+            {
+              "type": "absorb-damage",
+              "resource": "stamina",
+              "maximum": 2
+            }
+          ]
+        }
+      }
+    },
+    "adaptive-guard": {
+      "label": "Adaptive guard",
+      "description": "Absorb stamina-funded damage before HP loss. Maximum absorption grows with round and effective defense.",
+      "triggers": {
+        "adaptive-shield": {
+          "event": "damage-pending",
+          "target": "self",
+          "priority": 30,
+          "charges": 3,
+          "perTurn": 1,
+          "conditions": [
+            {
+              "type": "event-value",
+              "field": "amount",
+              "operator": "gt",
+              "value": 0
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "gt",
+              "value": 0
+            }
+          ],
+          "effects": [
+            {
+              "type": "absorb-damage",
+              "resource": "stamina",
+              "maximum": 1,
+              "valueScaling": {
+                "maximum": {
+                  "terms": [
+                    {
+                      "type": "round",
+                      "factor": 1
+                    },
+                    {
+                      "type": "stat",
+                      "factor": 0.5,
+                      "actor": "self",
+                      "stat": "defense"
+                    }
+                  ],
+                  "maximum": 8
+                }
+              }
             }
           ]
         }

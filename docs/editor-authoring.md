@@ -1070,7 +1070,8 @@ then choose **Start/reset simulation**. Queue player moves with a target and
 resolve a round, or repeat the plan for 1–100 rounds. Repeat retains targets and
 omits unavailable moves. Simulation controls never mark the authoring draft as
 edited or send save commands. They test combat moves independently of live state;
-item use, rewards and world progression are outside this sandbox.
+item use is simulated against an isolated inventory copy. Rewards and world
+progression remain outside this sandbox.
 
 Filter the timeline and inspect a decision, action or event/trigger step. Enemy
 decision explanations show observed condition values, rule priority, AP cost,
@@ -1950,3 +1951,133 @@ gear room before entering for lethal protection. In the underwater boss view,
 `intercept-shield`, `intercept-healing` and `intercept-last-breath` in both
 encounters, and `intercept-conduit` for the underwater boss. The latter confirms
 9 actual guardian damage and 9 seal charge after half the bolt redirects.
+
+## Trigger priorities, charges and cooldowns
+
+Open **Mechanics → Triggers** on an encounter, shared ruleset or shared passive.
+The trigger controls include:
+
+- **Trigger priority (higher first; empty = 0)**: integers from -10,000 to 10,000.
+  Priorities sort encounter and passive triggers together for each event. Equal
+  values retain source order; **Move up** changes ordering within a tie.
+- **Trigger charges (empty = unlimited)**: 1–10,000 activations for this encounter.
+- **Activations per turn (empty = unlimited)**: 1–10,000 between consecutive actor
+  turn starts. This resets for every combatant turn, before turn-start triggers.
+- **Trigger cooldown (rounds; empty = 0)**: 0–1,000 rounds to skip after firing.
+  A value of 1 fires in round 1, skips round 2, and becomes ready in round 3.
+
+Each granting item/status has its own counters. All limits must allow activation;
+**Run once per encounter** continues to cap a trigger at one execution. Removing
+and reapplying the same status does not refill charges. A failed trigger condition
+or filter consumes nothing; a matched trigger reserves its activation before
+running effects, including when an effect does not change anything. For shields,
+add conditions for positive pending damage and available shield resource to
+avoid spending charges on empty packets.
+
+Save through the containing encounter/library form. Clear a field to remove it;
+inherited encounter overrides explicitly remove the inherited value. Controls
+participate in draft recovery and validation, and preserve extension data when
+saved. Invalid numbers remain editable until corrected.
+
+In **Combat simulation and debugging**, filter to mechanics. Timeline choices
+label **Activated**, **No charges remaining**, **Per-turn limit reached**,
+**Trigger cooling down** or **Already activated once**. Select a frame to inspect
+`activation.priority`, remaining budgets and blockers. An `activated: true` frame
+shows the counters after reservation; a failed match shows the current blockers.
+Save/load preserves live combat counters and cooldowns.
+
+The combat-mechanics harbour and diving gear room link to **Trigger limits:
+Water** and **Trigger limits: Underwater guardian**. **A** raises the Paced barrier;
+**B** resolves. Its shield runs at priority 20 before priority-10 softening, has
+three charges, a one-activation turn limit and a one-round cooldown. Actions also
+refund 2 stamina once per turn: queue multiple actions to see the turn blocker.
+Replay `trigger-priority`, `trigger-per-turn` and `trigger-limits` for both
+encounters. Their health/stamina checks verify ordering, refund limits and shield
+spending across six rounds; inspect traces to see the corresponding counters.
+
+## Health, stats and round formulas on every effect
+
+Move value/cost formulas now offer **Current health**, **Missing health**, **Stat**
+and **Round number** as scaling sources. Health sources support absolute values
+or percentages of maximum health. Stat sources select attack, defense, guard or
+maximum health; round sources need no actor. Use `self`, `target` or a named actor;
+trigger field formulas can also use event actors in damage/healing hooks.
+
+On an ability effect, status or trigger effect, open **Numeric effect scaling**.
+Select a **Numeric field** and choose **Add field scaling**. Configure its
+**Scaling: <field>** section with the usual terms, mode, bounds and rounding.
+This covers resource changes, periodic damage/regeneration, modifiers and status
+type defenses, shield maximums, redirection percentages, lethal HP floors, and
+status stacks/intensity/duration. The numeric base remains visible in the normal
+effect controls. Adding an optional status strength/duration formula supplies a
+base of 1, which you can edit. **Applied duration** left empty uses the status default.
+Disable scaling in that field's section to remove it.
+
+Field formulas run before existing primary/event formulas and ordinary combat
+modifiers. Earlier actions can change later values. Periodic/status contributions
+are evaluated live; status stat inputs use pre-status values to prevent recursion.
+Applied durations and strengths respect the status's configured ceilings. Zero
+scaled status strength is a no-op; omitted removal strength still removes all
+stacks. Preview values are conditional on current state and do not predict queued
+buffs or the next regeneration tick. Reference and numeric errors remain editable
+until corrected; saves retain extensions and clear obsolete source fields.
+
+The harbour and gear room link to **Dynamic effects: Water** and **Dynamic effects:
+Underwater guardian**. **A** raises Adaptive current, **S** uses Adaptive breath,
+**Z** casts Pressure lance and **B** resolves. The boss view's **F** enables its
+conduit. Current defense increases when wounded; regeneration and water resistance
+increase each round. The shield maximum also uses round and defense. Pressure
+lance scales with target health, attack and round, with a growing stamina cost.
+
+Replay `dynamic-recovery`, `dynamic-periodic-shield` and `dynamic-strike` in either
+encounter. The periodic scenario starts at 20 HP to exercise missing-health defense
+and checks health, stamina and duration every round. The underwater strike starts
+with conduit active: 12 damage redirects, the guardian loses 13 HP and its seal
+gains 13. Save/load retains round and status context so the same actions replay
+with the same values.
+
+## Rich scenario assertions and simulated items
+
+In **Saved combat scenarios**, add an expected result at a step checkpoint or in
+**Final results**. **Expected result type** now includes `passive-activations`,
+`interception`, `damage-total`, `healing-total`, `action-choices`, `cooldown`,
+`trigger-cooldown` and `item-consumption`. Configure the filters shown for that
+type, choose **Expected comparison**, and enter **Expected value**. Empty optional
+filters mean any matching event; unknown IDs are errors, including zero-count checks.
+
+**Assertion scope** selects the whole scenario (default) or the current step's
+repeat group. Final step-scoped assertions refer to the last step. Cooldown checks
+always read current state, with **Assertion measure** selecting remaining rounds
+or the stored ready round. Passive cooldown checks need all five source fields:
+actor, library, passive ID, grant source kind and grant source ID.
+
+Passive counts measure matched activations. Interception measures count, absolute
+packet adjustment, or shield resource spent. Damage/healing default to actual HP
+changed; packet count and mitigation/overheal measures are available separately.
+Use **Effect source**, **Effect target**, move, type and delivery to isolate
+redirected or periodic packets. **Action stage** distinguishes a move chosen for
+resolution from one that executed; **Enemy AI rule** filters the actual rule that
+selected it. Plan previews do not contribute to these counters. Completed fights
+keep the engine's existing cleared-cooldown state.
+
+Choose **Scripted item (empty = native move)** on a scenario action to select a
+carried item instance. The action automatically uses its authored ability. Selecting
+a native move clears the item reference. The simulator also offers **Simulation
+item → Queue item**, including explanations when unavailable. Consumables disappear
+only from the simulation; reusable items count as actions but not consumption.
+Both share their ability cooldown with native casts and other copies. Undo/clear
+releases reservations, while **Start/reset simulation** restores consumed items.
+Captured plans keep item IDs and replay against the current inventory definitions.
+
+Replay and inspect actual/expected values in the check report. The simulation JSON
+report includes `metrics` and `consumedItems`. These counters are committed with
+rounds, so trace truncation and failed calculations cannot hide or invent events.
+Saving a scenario preserves extensions, and changing an assertion type clears
+its old filters. Editing a comparison does not change the tested game mechanics.
+
+Water adds `assert-passive-shield`, `assert-items-healing` and
+`assert-enemy-choices`. Underwater boss adds the first two and
+`assert-conduit-damage`. The item scenario checks 6 healing through Waterlogged,
+a cooling-down round, then 12 healing from a reusable breath stone. Total healing
+is 18, tonic consumption is 1 and stone consumption is 0. The boss conduit check
+verifies 13 guardian damage, 12 redirected damage and 13 seal charge.

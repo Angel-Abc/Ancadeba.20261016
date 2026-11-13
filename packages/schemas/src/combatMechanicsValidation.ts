@@ -1,3 +1,4 @@
+import { combatEffectValueReferenceIssues } from './combatEffectValues.js'
 import { combatMoveScalings, combatScalingIssues } from './combatValues.js'
 import type { CombatDefinition } from './combat.js'
 import { combatStatusApplicationIssues } from './combatAbilities.js'
@@ -31,6 +32,19 @@ export function combatMechanicsIssues(combat: CombatDefinition) {
       combat.enemies.map((actor) => [actor.id, [...actor.moves, ...(actor.equipmentMoves ?? [])]]),
     ),
   })
+
+  for (const [id, status] of Object.entries(combat.statuses ?? {}))
+    issues.push(
+      ...combatEffectValueReferenceIssues(
+        status,
+        {
+          actors: [combat.player, ...combat.enemies].map((actor) => actor.id),
+          statuses: combat.statuses ?? {},
+          resources: combat.mechanics?.resources ?? {},
+        },
+        ['statuses', id],
+      ),
+    )
 
   for (const [id, move] of Object.entries(combat.moves)) {
     const resources = [...Object.keys(move.resourceCosts ?? {})]
@@ -71,6 +85,18 @@ export function combatMechanicsIssues(combat: CombatDefinition) {
 
     if (move.type === 'ability')
       for (const [index, entry] of move.effects.entries()) {
+        issues.push(
+          ...combatEffectValueReferenceIssues(
+            entry,
+            {
+              actors: [combat.player, ...combat.enemies].map((actor) => actor.id),
+              statuses: combat.statuses ?? {},
+              resources: combat.mechanics?.resources ?? {},
+            },
+            ['moves', id, 'effects', index],
+          ),
+        )
+
         if (entry.type === 'change-resource') resources.push(entry.resource)
 
         for (const [conditionIndex, condition] of (entry.conditions ?? []).entries())
@@ -149,6 +175,13 @@ export function combatMechanicsReferenceIssues(combat: CombatMechanicsValidation
 
   const effect = (effect: CombatTriggerEffect, path: (string | number)[], eventType?: string) => {
     const event = eventType !== undefined
+    issues.push(
+      ...combatEffectValueReferenceIssues(
+        effect,
+        { actors, statuses: combat.statuses ?? {}, resources: mechanics?.resources ?? {}, event },
+        path,
+      ),
+    )
     const pending = combatPendingEvents.some((event) => event === eventType)
 
     if (
@@ -237,6 +270,7 @@ export function combatMechanicsReferenceIssues(combat: CombatMechanicsValidation
     if (
       effect.type === 'set-resource' &&
       !effect.eventValue &&
+      !effect.valueScaling?.amount &&
       effect.amount > (mechanics?.resources[effect.resource]?.maximum ?? 0)
     )
       issues.push({ path: [...path, 'amount'], message: 'Resource value exceeds maximum' })

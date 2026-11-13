@@ -1,4 +1,4 @@
-import type { CombatScaling } from '@ancadeba/schemas'
+import { combatScalingStats, type CombatScaling } from '@ancadeba/schemas'
 import type { RuleFormControls } from './ruleFormControls.js'
 
 export function combatScalingForm(
@@ -86,18 +86,28 @@ export function combatScalingForm(
                 [
                   ['resource', text('resource')],
                   ['status', text('status')],
+                  ['health', text('health')],
+                  ['missing-health', text('missingHealth')],
+                  ['stat', text('stat')],
+                  ['round', text('round')],
                 ],
                 (type) => {
                   scaling.terms[index] =
                     type === 'resource'
                       ? { type, resource: resources[0] ?? 'resource', factor: term.factor }
-                      : {
-                          type,
-                          actor: 'self',
-                          status: statuses[0] ?? 'status',
-                          measure: 'intensity',
-                          factor: term.factor,
-                        }
+                      : type === 'round'
+                        ? { type, factor: term.factor }
+                        : type === 'stat'
+                          ? { type, actor: 'self', stat: 'attack', factor: term.factor }
+                          : type === 'health' || type === 'missing-health'
+                            ? { type, actor: 'self', measure: 'value', factor: term.factor }
+                            : {
+                                type,
+                                actor: 'self',
+                                status: statuses[0] ?? 'status',
+                                measure: 'intensity',
+                                factor: term.factor,
+                              }
                   render()
                 },
               ),
@@ -118,22 +128,52 @@ export function combatScalingForm(
                       },
                     ),
                   ]
-                : [
-                    input(text('actor'), term.actor, (value) => {
-                      term.actor = value.trim()
-                    }),
-                    select(t('form.status'), term.status, statuses, (value) => {
-                      term.status = value
-                    }),
-                    select(
-                      text('measure'),
-                      term.measure ?? 'intensity',
-                      ['stacks', 'intensity', 'remaining'],
-                      (value) => {
-                        term.measure = value
-                      },
-                    ),
-                  ]),
+                : term.type === 'round'
+                  ? []
+                  : [
+                      input(text('actor'), term.actor, (value) => {
+                        term.actor = value.trim()
+                      }),
+                      ...(term.type === 'status'
+                        ? [
+                            select(t('form.status'), term.status, statuses, (value) => {
+                              term.status = value
+                            }),
+                          ]
+                        : []),
+                      ...(term.type === 'stat'
+                        ? [
+                            select(text('stat'), term.stat, combatScalingStats, (value) => {
+                              term.stat = value
+                            }),
+                          ]
+                        : [
+                            select(
+                              text('measure'),
+                              term.measure ?? (term.type === 'status' ? 'intensity' : 'value'),
+                              term.type === 'status'
+                                ? ['stacks', 'intensity', 'remaining']
+                                : ['value', 'percent'],
+                              (value) => {
+                                if (
+                                  term.type === 'status' &&
+                                  ['stacks', 'intensity', 'remaining'].includes(value)
+                                )
+                                  term.measure =
+                                    value === 'stacks'
+                                      ? 'stacks'
+                                      : value === 'remaining'
+                                        ? 'remaining'
+                                        : 'intensity'
+                                else if (
+                                  term.type !== 'status' &&
+                                  (value === 'value' || value === 'percent')
+                                )
+                                  term.measure = value
+                              },
+                            ),
+                          ]),
+                    ]),
               input(
                 text('factor'),
                 String(term.factor),

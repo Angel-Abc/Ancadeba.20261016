@@ -15,10 +15,25 @@ export function mergeCombatScaling(previous: unknown, scaling: CombatScaling | u
     terms: scaling.terms.map((term, index) => ({
       ...object(Array.isArray(old.terms) ? old.terms[index] : undefined),
       ...term,
-      actor: term.type === 'status' ? term.actor : undefined,
+      actor: 'actor' in term ? term.actor : undefined,
       status: term.type === 'status' ? term.status : undefined,
       resource: term.type === 'resource' ? term.resource : undefined,
-      measure: term.measure,
+      measure: 'measure' in term ? term.measure : undefined,
+      stat: term.type === 'stat' ? term.stat : undefined,
     })),
   }
+}
+
+export function mergeCombatEffectValueScaling(
+  previous: unknown,
+  next: Record<string, CombatScaling> | undefined,
+) {
+  return next
+    ? Object.fromEntries(
+        Object.entries(next).map(([key, scaling]) => [
+          key,
+          mergeCombatScaling(object(previous)[key], scaling),
+        ]),
+      )
+    : undefined
 }

@@ -47,7 +47,10 @@ export function itemUseIssues(
         Boolean(ability.requirements?.length) ||
         ability.effects.some(
           (effect) =>
-            effect.type !== 'heal' || Boolean(effect.conditions?.length) || Boolean(effect.scaling),
+            effect.type !== 'heal' ||
+            Boolean(effect.conditions?.length) ||
+            Boolean(effect.scaling) ||
+            Boolean(effect.valueScaling),
         ) ||
         Object.keys(ability.resourceCosts ?? {}).length > 0)
     )

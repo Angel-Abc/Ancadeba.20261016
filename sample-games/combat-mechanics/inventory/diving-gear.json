@@ -73,6 +73,30 @@
           }
         ]
       }
+    },
+    "brine-tonic": {
+      "label": "Brine tonic",
+      "description": "Scenario item for verifying actual healing, shared cooldown and consumption.",
+      "use": {
+        "ability": {
+          "library": "environments",
+          "id": "tonic-sip"
+        },
+        "consumption": "consume",
+        "contexts": ["combat"]
+      }
+    },
+    "breath-stone": {
+      "label": "Breath stone",
+      "description": "Scenario item for verifying actual healing, shared cooldown and reusable activation without consumption.",
+      "use": {
+        "ability": {
+          "library": "environments",
+          "id": "tonic-sip"
+        },
+        "consumption": "keep",
+        "contexts": ["combat"]
+      }
     }
   },
   "items": {
@@ -99,6 +123,20 @@
     },
     "rescue-charm": {
       "itemType": "rescue-charm",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    },
+    "brine-tonic": {
+      "itemType": "brine-tonic",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    },
+    "breath-stone": {
+      "itemType": "breath-stone",
       "placement": {
         "type": "carried",
         "owner": "diver"

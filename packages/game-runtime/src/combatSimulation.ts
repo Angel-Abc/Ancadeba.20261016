@@ -1,3 +1,6 @@
+import { combatSimulationItem, type CombatSimulationItemContext } from './combatSimulationItems.js'
+import { abilityCanMatter } from './itemUseEligibility.js'
+import { CombatMetricCollector, type CombatSimulationMetric } from './combatObservations.js'
 import { combatMoveRequirementIssue } from './combatRequirements.js'
 import { combatActorMoves, validateCombatEquipment } from './combatEquipment.js'
 import type { CombatEquipment } from '@ancadeba/schemas'
@@ -40,6 +43,7 @@ import {
 import type { CombatDebugFrame, EnemyDecisionTrace } from './combatDebug.js'
 
 export interface CombatSimulationSetup {
+  readonly itemContext?: CombatSimulationItemContext | undefined
   readonly loadout?: CombatSimulationLoadout | undefined
   readonly equipmentContext?:
     | {
@@ -126,7 +130,10 @@ function initialState(definition: CombatDefinition, setup: CombatSimulationSetup
   } else if (setup.phase !== undefined || Object.keys(setup.resources ?? {}).length)
     throw new Error('Encounter has no simulation mechanics')
   validateCombatMechanicsState(definition, mechanics)
-  combatEconomySnapshot(definition, setup.statuses ?? {}, mechanics?.resources)
+  combatEconomySnapshot(definition, setup.statuses ?? {}, mechanics?.resources, undefined, {
+    ...setup,
+    round,
+  })
   const statuses = cloneCombatRules(setup.statuses ?? {})
   const cooldowns = cloneCombatRules(setup.cooldowns ?? {})
   const health = { ...setup.health }
@@ -142,6 +149,7 @@ function initialState(definition: CombatDefinition, setup: CombatSimulationSetup
     undefined,
     setup.maximumHealth,
     setup.equipment,
+    setup.stats,
   )
 
   const guard: Record<string, number> = {}
@@ -167,6 +175,8 @@ export class CombatSimulation {
   private readonly setup: CombatSimulationSetup
   private current: CombatSimulationState
   private frames: CombatDebugFrame[] = []
+  private metrics: CombatSimulationMetric[] = []
+  private consumedItems = new Set<string>()
   private truncated = false
   private inputs: { round: number; plan: PlannedMove[]; escape: boolean }[] = []
 
@@ -182,6 +192,21 @@ export class CombatSimulation {
     this.current = initialState(this.definition, this.setup)
   }
 
+  statistics() {
+    return cloneCombatRules(this.metrics)
+  }
+  itemCatalog() {
+    return cloneCombatRules(this.setup.itemContext)
+  }
+  hasPassiveSource(kind: 'equipment' | 'status', id: string): boolean {
+    return kind === 'status'
+      ? Boolean(this.definition.statuses?.[id])
+      : Boolean(this.setup.itemContext?.inventory.items[id]) ||
+          Object.values(this.setup.equipment ?? {}).some((entries) =>
+            entries.some((entry) => entry.item === id),
+          )
+  }
+
   snapshot() {
     return cloneCombatRules(this.current)
   }
@@ -193,6 +218,8 @@ export class CombatSimulation {
   }
   reset() {
     this.current = initialState(this.definition, this.setup)
+    this.metrics = []
+    this.consumedItems = new Set()
     this.frames = []
     this.inputs = []
     this.truncated = false
@@ -223,26 +250,69 @@ export class CombatSimulation {
       },
       this.setup.maximumHealth,
       this.setup.equipment,
+      this.setup.stats,
     )
 
     return cloneCombatRules(decisions)
   }
 
-  queueIssue(moveId: string, target?: string): string | undefined {
+  queueIssue(moveId: string, target?: string, itemId?: string): string | undefined {
     const state = this.current
     const player = this.definition.player
     const move = this.definition.moves[moveId]
 
     if (state.outcome) return 'Combat has finished'
 
+    if (!move) return 'Unknown simulation move'
+
+    const item = itemId
+      ? combatSimulationItem(this.definition, this.setup.itemContext, itemId)
+      : undefined
+
+    if (itemId && (item?.reason || !item?.use || item.use.ability.id !== moveId))
+      return item?.reason ?? 'Item ability does not match the scripted move'
+
     if (
-      !combatActorMoves(player, this.setup.equipment).includes(moveId) ||
-      !(this.setup.availableMoves ?? combatActorMoves(player, this.setup.equipment)).includes(
-        moveId,
-      ) ||
-      !move
+      itemId &&
+      (this.consumedItems.has(itemId) || state.plan.some((action) => action.item === itemId))
+    )
+      return 'Item is consumed or already reserved'
+
+    if (
+      !itemId &&
+      (!combatActorMoves(player, this.setup.equipment).includes(moveId) ||
+        !(this.setup.availableMoves ?? combatActorMoves(player, this.setup.equipment)).includes(
+          moveId,
+        ))
     )
       return 'Move is unavailable or locked by level'
+
+    if (
+      itemId &&
+      !abilityCanMatter(
+        move,
+        this.definition,
+        {
+          ...state,
+          resources: state.mechanics?.resources ?? {},
+          maximumHealth: this.setup.maximumHealth,
+          stats:
+            combatValueContext(
+              this.definition,
+              state.mechanics?.resources,
+              state.statuses,
+              player.id,
+              combatMoveTarget(move) === 'self' ? player.id : (target ?? player.id),
+              { ...state, maximumHealth: this.setup.maximumHealth, stats: this.setup.stats },
+            ).stats ?? {},
+          baseStats: this.setup.stats,
+          bossPhase: state.mechanics?.phase,
+          equipment: this.setup.equipment,
+        },
+        combatMoveTarget(move) === 'self' ? player.id : (target ?? player.id),
+      )
+    )
+      return 'Item would have no effect'
 
     if (combatStunned(this.definition, state.statuses[player.id])) return 'Player is stunned'
 
@@ -267,6 +337,8 @@ export class CombatSimulation {
       move,
       {
         health: state.health,
+        stats: this.setup.stats,
+        round: state.round,
         maximumHealth: this.setup.maximumHealth,
         statuses: state.statuses,
         resources: state.mechanics?.resources ?? {},
@@ -284,7 +356,25 @@ export class CombatSimulation {
 
     if (move.cooldown && state.plan.some((queued) => queued.move === moveId))
       return 'Cooldown move is already queued'
-    const economy = combatActorEconomy(this.definition, player, state.statuses[player.id])
+
+    const economy = combatActorEconomy(
+      this.definition,
+      player,
+      state.statuses[player.id],
+      combatValueContext(
+        this.definition,
+        state.mechanics?.resources,
+        state.statuses,
+        player.id,
+        target,
+        {
+          health: state.health,
+          maximumHealth: this.setup.maximumHealth,
+          stats: this.setup.stats,
+          round: state.round,
+        },
+      ),
+    )
 
     const values = (target?: string) =>
       combatValueContext(
@@ -293,6 +383,12 @@ export class CombatSimulation {
         state.statuses,
         player.id,
         target,
+        {
+          health: state.health,
+          maximumHealth: this.setup.maximumHealth,
+          stats: this.setup.stats,
+          round: state.round,
+        },
       )
 
     const spent = state.plan.reduce(
@@ -322,11 +418,19 @@ export class CombatSimulation {
     if (resource) return `Insufficient resource: ${resource}`
   }
 
-  queue(move: string, target?: string) {
-    const issue = this.queueIssue(move, target)
+  queue(move: string, target?: string, item?: string) {
+    const issue = this.queueIssue(move, target, item)
 
     if (issue) throw new Error(issue)
+
+    const entry = item
+      ? combatSimulationItem(this.definition, this.setup.itemContext, item)
+      : undefined
+
     this.current.plan.push({
+      ...(item && entry?.item && entry.use
+        ? { item, itemType: entry.item.itemType, consume: entry.use.consumption === 'consume' }
+        : {}),
       move,
       target:
         combatMoveTarget(this.definition.moves[move]!) === 'self'
@@ -348,6 +452,7 @@ export class CombatSimulation {
 
     if (this.inputs.length >= 1000) throw new Error('Reset after 1000 simulated rounds')
     const input = { round: this.current.round, plan: cloneCombatRules(this.current.plan), escape }
+    const metrics = new CombatMetricCollector(this.metrics)
     const frames: CombatDebugFrame[] = []
     let truncated = this.truncated
 
@@ -371,6 +476,7 @@ export class CombatSimulation {
 
             frames.push(frame)
           },
+      (observation) => metrics.record(observation),
     )
 
     const round = result.outcome ? this.current.round : this.current.round + 1
@@ -390,8 +496,17 @@ export class CombatSimulation {
           undefined,
           this.setup.maximumHealth,
           this.setup.equipment,
+          this.setup.stats,
         )
 
+    const nextMetrics = metrics.snapshot()
+    const consumed = new Set(this.consumedItems)
+
+    for (const item of result.usedItems)
+      if (input.plan.some((action) => action.item === item && action.consume !== false))
+        consumed.add(item)
+    this.metrics = nextMetrics
+    this.consumedItems = consumed
     this.current = {
       round,
       seed: result.seed,
@@ -419,7 +534,8 @@ export class CombatSimulation {
     for (let index = 0; index < rounds && !this.current.outcome; index++) {
       if (index)
         for (const move of plan)
-          if (!this.queueIssue(move.move, move.target)) this.queue(move.move, move.target)
+          if (!this.queueIssue(move.move, move.target, move.item))
+            this.queue(move.move, move.target, move.item)
       this.resolve()
     }
 
@@ -434,6 +550,8 @@ export class CombatSimulation {
       inputs: this.inputs,
       state: this.current,
       frames: this.frames,
+      metrics: this.metrics,
+      consumedItems: [...this.consumedItems],
       truncated: this.truncated,
     })
   }

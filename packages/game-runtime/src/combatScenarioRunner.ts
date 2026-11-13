@@ -1,3 +1,5 @@
+import { checkCombatRichAssertion } from './combatScenarioAssertions.js'
+import type { CombatSimulationMetric } from './combatObservations.js'
 import { combatRequirementsText } from './combatRequirements.js'
 import {
   combatSimulationScenarioSchema,
@@ -53,6 +55,7 @@ export function checkCombatScenario(
   simulation: CombatSimulation,
   expectation: CombatScenarioExpectation,
   stage: string,
+  baseline: readonly CombatSimulationMetric[] = [],
 ): CombatScenarioCheck {
   const state = simulation.snapshot()
   const definition = simulation.definition
@@ -60,11 +63,22 @@ export function checkCombatScenario(
 
   if (
     'actor' in expectation &&
+    expectation.actor !== undefined &&
     ![definition.player, ...definition.enemies].some((actor) => actor.id === expectation.actor)
   )
     throw new Error(`Unknown expected actor: ${expectation.actor}`)
 
   switch (expectation.type) {
+    case 'passive-activations':
+    case 'interception':
+    case 'damage-total':
+    case 'healing-total':
+    case 'action-choices':
+    case 'cooldown':
+    case 'trigger-cooldown':
+    case 'item-consumption':
+      actual = checkCombatRichAssertion(simulation, expectation, baseline)
+      break
     case 'outcome':
       actual = state.outcome ?? 'planning'
       break
@@ -139,9 +153,10 @@ export function runCombatScenario(
     for (const step of scenario.steps)
       for (const move of step.plan) {
         if (
-          ![...definition.player.moves, ...(definition.player.equipmentMoves ?? [])].includes(
-            move.move,
-          ) ||
+          (!move.item &&
+            ![...definition.player.moves, ...(definition.player.equipmentMoves ?? [])].includes(
+              move.move,
+            )) ||
           !definition.moves[move.move]
         )
           throw new Error(`Unknown player move in ${step.id}: ${move.move}`)
@@ -163,6 +178,19 @@ export function runCombatScenario(
       traceLimit,
     )
 
+    for (const step of scenario.steps)
+      for (const action of step.plan)
+        if (action.item) {
+          const inventory = simulation.itemCatalog()?.inventory
+          const item = inventory?.items[action.item]
+          const use = item && inventory?.itemTypes[item.itemType]?.use
+
+          if (!use) throw new Error(`Unknown scripted item: ${action.item}`)
+
+          if (use.ability.id !== action.move)
+            throw new Error('Item ability does not match the scripted move')
+        }
+
     // Validate all expected references up front, including checkpoints after a terminal result.
     for (const expectation of [
       ...scenario.expect,
@@ -170,7 +198,10 @@ export function runCombatScenario(
     ])
       checkCombatScenario(simulation, expectation, 'validate')
 
+    let baseline: readonly CombatSimulationMetric[] = []
+
     for (const [index, step] of scenario.steps.entries()) {
+      baseline = simulation.statistics()
       stage = step.id
 
       if (index && simulation.snapshot().outcome)
@@ -182,13 +213,13 @@ export function runCombatScenario(
         iteration++
       ) {
         for (const move of step.plan) {
-          const issue = simulation.queueIssue(move.move, move.target)
+          const issue = simulation.queueIssue(move.move, move.target, move.item)
 
           if (issue) {
             if (step.unavailable === 'fail')
               throw new Error(`Iteration ${iteration}, ${move.move}: ${issue}`)
             skipped.push({ step: step.id, iteration, move: move.move, reason: issue })
-          } else simulation.queue(move.move, move.target)
+          } else simulation.queue(move.move, move.target, move.item)
         }
 
         const queued = simulation.snapshot().plan
@@ -229,13 +260,13 @@ export function runCombatScenario(
       }
 
       for (const expectation of step.expect)
-        checks.push(checkCombatScenario(simulation, expectation, step.id))
+        checks.push(checkCombatScenario(simulation, expectation, step.id, baseline))
     }
 
     stage = 'final'
 
     for (const expectation of scenario.expect)
-      checks.push(checkCombatScenario(simulation, expectation, 'final'))
+      checks.push(checkCombatScenario(simulation, expectation, 'final', baseline))
 
     return {
       status: checks.every((check) => check.passed) ? 'passed' : 'failed',

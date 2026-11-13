@@ -1,3 +1,4 @@
+import { combatTriggerControlFields } from './combatTriggerLimits.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
 import { combatDamageTypeSchema } from './combatDamage.js'
@@ -72,6 +73,11 @@ const resourceOverride = z.object({
 })
 
 const triggerOverride = z.object({
+  priority: combatTriggerControlFields.priority.nullable(),
+  charges: combatTriggerControlFields.charges.nullable(),
+  perTurn: combatTriggerControlFields.perTurn.nullable(),
+  cooldown: combatTriggerControlFields.cooldown.nullable(),
+
   source: id.nullable().optional(),
   target: id.nullable().optional(),
   damageType: combatDamageTypeSchema.nullable().optional(),

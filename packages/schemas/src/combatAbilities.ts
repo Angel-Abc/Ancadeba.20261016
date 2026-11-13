@@ -1,3 +1,4 @@
+import { combatEffectValueFields } from './combatEffectValues.js'
 import { combatPassiveReferencesSchema } from './combatPassiveReferences.js'
 import { combatDamageTypeSchema, combatDamageDefensesSchema } from './combatDamage.js'
 import { combatRestrictionFields } from './combatRestrictions.js'
@@ -14,7 +15,12 @@ const id = bindingAliasSchema.refine(
 
 const amount = z.number().int().nonnegative().safe()
 const target = z.enum(['self', 'target']).optional()
-const conditional = { conditions: z.array(combatConditionSchema).max(20).optional() }
+
+const conditional = {
+  ...combatEffectValueFields,
+  conditions: z.array(combatConditionSchema).max(20).optional(),
+}
+
 export const combatStatusStrengthSchema = z.number().int().positive().max(100)
 export const temporaryModifierNames = ['attack', 'defense', 'guard', 'ap', 'apCost'] as const
 
@@ -65,6 +71,7 @@ export const abilityEffectSchema = z.discriminatedUnion('type', [
   z.object({
     id,
     type: z.literal('apply-status'),
+    duration: z.number().int().min(1).max(1000).optional(),
     ...conditional,
     target,
     status: id,
@@ -82,6 +89,7 @@ export const abilityEffectSchema = z.discriminatedUnion('type', [
 ])
 
 const presentation = {
+  ...combatEffectValueFields,
   passives: combatPassiveReferencesSchema.optional(),
   label: z.string().default(''),
   labelKey: translationKeySchema.optional(),

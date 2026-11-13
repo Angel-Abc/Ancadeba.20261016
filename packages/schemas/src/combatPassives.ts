@@ -1,3 +1,4 @@
+import { bindCombatEffectValues, combatEffectScalings } from './combatEffectValues.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
@@ -59,18 +60,24 @@ export function bindCombatPassiveTrigger(
     ...(trigger.source ? { source: actor(trigger.source) } : {}),
     ...(trigger.target ? { target: actor(trigger.target) } : {}),
     conditions: trigger.conditions.map((condition) => bindCombatCondition(condition, actor)),
-    effects: trigger.effects.map((effect) => ({
-      ...effect,
-      ...('actor' in effect ? { actor: actor(effect.actor) } : {}),
-      ...(effect.type === 'damage' || effect.type === 'heal'
-        ? { source: actor(effect.source ?? owner) }
-        : {}),
-      ...(effect.conditions
-        ? {
-            conditions: effect.conditions.map((condition) => bindCombatCondition(condition, actor)),
-          }
-        : {}),
-    })),
+    effects: trigger.effects.map((original) => {
+      const effect = bindCombatEffectValues(original, actor)
+
+      return {
+        ...effect,
+        ...('actor' in effect ? { actor: actor(effect.actor) } : {}),
+        ...(effect.type === 'damage' || effect.type === 'heal'
+          ? { source: actor(effect.source ?? owner) }
+          : {}),
+        ...(effect.conditions
+          ? {
+              conditions: effect.conditions.map((condition) =>
+                bindCombatCondition(condition, actor),
+              ),
+            }
+          : {}),
+      }
+    }),
   }
 }
 
@@ -86,7 +93,11 @@ export function combatPassiveLibraryIssues(
     phases = new Set<string>()
 
   const reference = (
-    value: CombatTriggerDefinition | CombatTriggerEffect | CombatConditionLeaf,
+    value:
+      | CombatTriggerDefinition
+      | CombatTriggerEffect
+      | CombatConditionLeaf
+      | import('./combatValues.js').CombatScaling['terms'][number],
   ) => {
     for (const [key, entry] of Object.entries(value)) {
       if (typeof entry !== 'string') continue
@@ -107,6 +118,9 @@ export function combatPassiveLibraryIssues(
 
     for (const effect of trigger.effects) {
       reference(effect)
+
+      for (const { scaling } of combatEffectScalings(effect))
+        for (const term of scaling.terms) reference(term)
 
       for (const condition of effect.conditions ?? []) visitCombatCondition(condition, reference)
     }

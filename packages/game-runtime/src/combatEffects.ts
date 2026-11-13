@@ -1,3 +1,5 @@
+import { resolveCombatStatusValues } from './combatEffectValues.js'
+import type { CombatValueContext } from './combatValues.js'
 import type {
   CombatDefinition,
   CombatBonuses,
@@ -6,7 +8,7 @@ import type {
   CombatStatusDefinition,
   CombatPercentModifiers,
 } from '@ancadeba/schemas'
-import { applyCombatPercent } from './combatValues.js'
+import { applyCombatPercent } from './combatValueEvaluation.js'
 import { temporaryModifierNames, combatPercentModifierNames } from '@ancadeba/schemas'
 
 export interface ActiveCombatStatus {
@@ -31,10 +33,30 @@ export interface TemporaryStatContribution {
 export function statusContributions(
   definition: CombatDefinition,
   statuses: readonly ActiveCombatStatus[],
+  context?: CombatValueContext,
+  owner = context?.self ?? '',
 ): readonly TemporaryStatContribution[] {
   return Object.freeze(
     statuses.flatMap((active) => {
-      const status = definition.statuses?.[active.id]
+      const authored = definition.statuses?.[active.id]
+
+      const status =
+        authored &&
+        resolveCombatStatusValues(
+          {
+            ...authored,
+            valueScaling: authored.valueScaling
+              ? Object.fromEntries(
+                  Object.entries(authored.valueScaling).filter(
+                    ([key]) => key.startsWith('modifiers.') || key.startsWith('percentModifiers.'),
+                  ),
+                )
+              : undefined,
+          },
+          active,
+          owner,
+          context,
+        )
 
       if (!status) return []
 

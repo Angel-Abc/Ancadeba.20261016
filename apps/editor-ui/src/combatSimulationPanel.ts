@@ -54,6 +54,7 @@ export function bindCombatSimulationPanel(
   let config: StartingConditions | undefined
   let simulation: CombatSimulation | undefined
   let selectedMove = ''
+  let selectedItem = ''
   let selectedTarget = ''
   let statusActor = ''
   let statusId = ''
@@ -554,6 +555,29 @@ export function bindCombatSimulationPanel(
       Boolean(state.outcome) || !selectedMove || Boolean(queueIssue),
     )
 
+    const catalog = sandbox.itemCatalog()
+
+    const itemIds = Object.entries(catalog?.inventory.items ?? {})
+      .filter(([, item]) => currentDefinition.itemUse?.itemTypes.includes(item.itemType))
+      .map(([id]) => id)
+
+    if (!itemIds.includes(selectedItem)) selectedItem = itemIds[0] ?? ''
+    const itemType = catalog?.inventory.items[selectedItem]?.itemType
+    const itemMove = itemType ? catalog?.inventory.itemTypes[itemType]?.use?.ability.id : undefined
+
+    const itemIssue = itemMove
+      ? sandbox.queueIssue(itemMove, selectedTarget, selectedItem)
+      : undefined
+
+    const queueItem = button(
+      text('queueItem'),
+      act(() => {
+        if (itemMove) sandbox.queue(itemMove, selectedTarget, selectedItem)
+      }),
+      !itemMove || Boolean(itemIssue) || Boolean(state.outcome),
+    )
+
+    queueItem.title = itemIssue ?? ''
     queueButton.title = queueIssue ?? ''
     root.append(
       summary,
@@ -580,6 +604,16 @@ export function bindCombatSimulationPanel(
           },
         ),
         queueButton,
+        ...(itemIds.length
+          ? [
+              select(text('item'), selectedItem, itemIds, (value) => {
+                selectedItem = value
+                render()
+              }),
+              queueItem,
+              ...(itemIssue ? [pre(itemIssue)] : []),
+            ]
+          : []),
         ...(queueIssue ? [pre(queueIssue)] : []),
         pre(state.plan),
         button(
@@ -632,7 +666,7 @@ export function bindCombatSimulationPanel(
         ? [
             [
               String(index),
-              `${frame.round} · ${frame.kind} · ${frame.actor ?? ''} ${frame.action?.move ?? frame.mechanicsEvent?.trigger ?? ''}${frame.mechanicsEvent?.interception ? ` · ${frame.mechanicsEvent.interception.type}` : ''}`,
+              `${frame.round} · ${frame.kind} · ${frame.actor ?? ''} ${frame.action?.move ?? frame.mechanicsEvent?.trigger ?? ''}${frame.mechanicsEvent?.interception ? ` · ${frame.mechanicsEvent.interception.type}` : ''}${frame.mechanicsEvent?.activated ? ` · ${t('combat.triggerLimits.activated')}` : frame.mechanicsEvent?.activation?.blockers.length ? ` · ${frame.mechanicsEvent.activation.blockers.map((blocker) => t(`combat.triggerLimits.blocker.${blocker}`)).join(', ')}` : ''}`,
             ] as const,
           ]
         : [],

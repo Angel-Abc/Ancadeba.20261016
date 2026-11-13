@@ -1,3 +1,4 @@
+import { combatEffectValueReferenceIssues, combatEffectScalings } from './combatEffectValues.js'
 import {
   combatPassiveSchema,
   combatPassiveLibraryIssues,
@@ -190,10 +191,26 @@ export const combatLibrarySchema = z
         })
 
     for (const [id, status] of Object.entries(library.statuses))
+      for (const issue of combatEffectValueReferenceIssues(status, { statuses: library.statuses }, [
+        'statuses',
+        id,
+      ]))
+        context.addIssue({ code: 'custom', ...issue })
+
+    for (const [id, status] of Object.entries(library.statuses))
       for (const issue of combatStatusImmunityIssues(status, library.statuses, ['statuses', id]))
         context.addIssue({ code: 'custom', ...issue })
 
     for (const [id, move] of Object.entries(library.moves)) {
+      if (move.type === 'ability')
+        for (const [index, effect] of move.effects.entries())
+          for (const issue of combatEffectValueReferenceIssues(
+            effect,
+            { statuses: library.statuses },
+            ['moves', id, 'effects', index],
+          ))
+            context.addIssue({ code: 'custom', ...issue })
+
       for (const [index, condition] of (move.requirements ?? []).entries())
         for (const issue of combatConditionIssues(condition, { statuses: library.statuses }, [
           'moves',
@@ -412,6 +429,10 @@ export function resolveCombatSource(
     }
 
     for (const id of status.statusImmunities ?? []) addStatus({ library: ref.library, id }, path)
+
+    for (const { scaling } of combatEffectScalings(status))
+      for (const term of scaling.terms)
+        if (term.type === 'status') addStatus({ library: ref.library, id: term.status }, path)
   }
 
   const addMove = (

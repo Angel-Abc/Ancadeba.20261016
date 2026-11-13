@@ -1,3 +1,5 @@
+import { combatEffectValueFields } from './combatEffectValues.js'
+import { combatTriggerControlFields, combatTriggerActivationSchema } from './combatTriggerLimits.js'
 import { combatPassiveReceiptSchema } from './combatPassiveReferences.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
@@ -37,7 +39,10 @@ export const combatResourceSchema = z
 
 export const combatTriggerConditionSchema = combatConditionSchema
 
-const conditional = { conditions: z.array(combatConditionSchema).max(20).optional() }
+const conditional = {
+  ...combatEffectValueFields,
+  conditions: z.array(combatConditionSchema).max(20).optional(),
+}
 
 const percent = z
   .number()
@@ -111,6 +116,7 @@ export const combatTriggerEffectSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('apply-status'),
+    duration: z.number().int().min(1).max(1000).optional(),
     ...conditional,
     actor: combatEffectActorSchema,
     status: id,
@@ -148,6 +154,7 @@ export const combatTriggerEvents = [
 ] as const
 
 export const combatTriggerSchema = z.object({
+  ...combatTriggerControlFields,
   event: z.enum(combatTriggerEvents),
   actor: id.optional(),
   move: id.optional(),
@@ -210,6 +217,8 @@ export type CombatTriggerEvent = (typeof combatTriggerEvents)[number]
 
 /** Encounter-local state, saved independently of authored definitions and world state. */
 export const combatMechanicsStateSchema = z.strictObject({
+  turn: amount.optional(),
+  activations: z.array(combatTriggerActivationSchema).max(10000).optional(),
   passiveFired: z.array(combatPassiveReceiptSchema).max(10000).optional(),
   resources: z.record(id, amount),
   phase: id.optional(),

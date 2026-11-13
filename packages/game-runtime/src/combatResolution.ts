@@ -1,3 +1,5 @@
+import type { CombatObservationSink } from './combatObservations.js'
+import { resolveCombatEffectValues, resolveCombatStatusValues } from './combatEffectValues.js'
 import { combatInterceptionDetails } from './combatInterception.js'
 import { combatMoveRequirements } from './combatRequirements.js'
 import { combatStatusImmune, combatMoveRestriction } from './combatRestrictions.js'
@@ -40,7 +42,6 @@ import {
   combatMoveTarget,
   cooldownRemaining,
   statusContributions,
-  temporaryCombatStats,
   combatStatusParts,
   combatStatusAmount,
   combatPercentModifier,
@@ -151,6 +152,7 @@ export function planEnemies(
   trace?: (decision: EnemyDecisionTrace) => void,
   maximumHealth?: Readonly<Record<string, number>>,
   equipment?: CombatEquipment,
+  stats?: Readonly<Record<string, Readonly<CombatBonuses>>>,
 ): Record<string, EnemyPlan> {
   return Object.fromEntries(
     definition.enemies.map((actor) => [
@@ -167,6 +169,7 @@ export function planEnemies(
         trace,
         maximumHealth,
         equipment,
+        stats,
       ),
     ]),
   )
@@ -210,6 +213,7 @@ export function resolveCombatRound(
     equipment?: CombatEquipment | undefined
   },
   debug?: CombatDebugSink,
+  observe?: CombatObservationSink,
 ) {
   validateCombatEquipment(definition, current.equipment)
 
@@ -293,6 +297,9 @@ export function resolveCombatRound(
     current.mechanics,
     {
       health,
+      observe,
+      round,
+      values: (self, target) => valueContext(self, target),
       equipment: current.equipment,
       damage: (source, target, amount, type) =>
         damage(
@@ -310,13 +317,13 @@ export function resolveCombatRound(
           Object.entries(current.stats ?? {}).map(([id, stats]) => [id, stats.maximumHealth]),
         ),
       statuses: () => statuses,
-      status: (actor, status, remove, stacks, intensity, source) =>
+      status: (actor, status, remove, stacks, intensity, source, duration) =>
         effect(
           source ?? actor,
           actor,
           remove
             ? { id: status, type: 'remove-status', status, stacks }
-            : { id: status, type: 'apply-status', status, stacks, intensity },
+            : { id: status, type: 'apply-status', status, stacks, intensity, duration },
         ),
       log: (entry) => entries.push(entry),
       finish: (result) => {
@@ -350,13 +357,20 @@ export function resolveCombatRound(
   )
 
   const valueContext = (actor: string, target?: string) =>
-    combatValueContext(definition, mechanics.state?.resources, statuses, actor, target)
+    combatValueContext(definition, mechanics.state?.resources, statuses, actor, target, {
+      health,
+      maximumHealth: current.maximumHealth,
+      stats: current.stats,
+      round,
+    })
 
   const percentages = (id: string, stat: 'damage' | 'healing') =>
-    combatPercentModifier(statusContributions(definition, statuses[id] ?? []), stat)
+    combatPercentModifier(
+      statusContributions(definition, statuses[id] ?? [], valueContext(id), id),
+      stat,
+    )
 
-  const stats = (id: string) =>
-    temporaryCombatStats(current.stats?.[id], statusContributions(definition, statuses[id] ?? []))
+  const stats = (id: string) => valueContext(id).stats![id]!
 
   const resolvedEffect = (
     kind: 'damage' | 'healing',
@@ -364,6 +378,7 @@ export function resolveCombatRound(
     move?: string,
     status?: string,
   ) => {
+    observe?.({ kind: kind === 'damage' ? 'damage-total' : 'healing-total', effect: data, move })
     const effect = Object.freeze(data)
     const common = { source: data.source, target: data.target, move, status, effect }
     mechanics.lifecycle(
@@ -463,7 +478,13 @@ export function resolveCombatRound(
     const typed = combatTypedDamage(
       rawAmount - defended,
       damageType,
-      combatDamageProfile(definition, target, statuses, current.equipment),
+      combatDamageProfile(
+        definition,
+        target,
+        statuses,
+        current.equipment,
+        valueContext(actor, target),
+      ),
     )
 
     const blocked = periodic ? 0 : Math.min(typed.amount, guard[target] ?? 0)
@@ -580,6 +601,7 @@ export function resolveCombatRound(
 
   const effect = (actor: string, target: string, effect: AbilityEffect, move?: string) => {
     if (!mechanics.matches(effect.conditions, actor, target)) return
+    effect = resolveCombatEffectValues(effect, valueContext(actor, target))
 
     if (effect.type === 'change-resource') {
       mechanics.change(effect.resource, effect.amount)
@@ -623,6 +645,8 @@ export function resolveCombatRound(
         | undefined
 
       if (effect.type === 'remove-status') {
+        if (effect.stacks === 0) return
+
         if (index >= 0) {
           const reduced = removeCombatStatusStacks(active[index]!, effect.stacks)
 
@@ -638,9 +662,23 @@ export function resolveCombatRound(
           })
         }
       } else {
-        const status = definition.statuses?.[effect.status]
+        const authored = definition.statuses?.[effect.status]
 
-        if (!status) throw new Error('Unknown status')
+        if (!authored) throw new Error('Unknown status')
+
+        const resolved = resolveCombatStatusValues(
+          {
+            ...authored,
+            valueScaling: authored.valueScaling?.duration
+              ? { duration: authored.valueScaling.duration }
+              : undefined,
+          },
+          { id: effect.status, source: actor, remaining: authored.duration },
+          recipient,
+          valueContext(actor, recipient),
+        )
+
+        const status = { ...resolved, duration: Math.min(authored.duration, resolved.duration) }
 
         if (combatStatusImmune(definition, recipient, effect.status, statuses, current.equipment)) {
           entries.push({ type: 'statusImmune', actor, target: recipient, status: effect.status })
@@ -648,7 +686,19 @@ export function resolveCombatRound(
           return
         }
 
-        const applied = applyCombatStatus(status, effect.status, actor, active[index], effect)
+        if (effect.stacks === 0 || effect.intensity === 0) return
+
+        const applied = applyCombatStatus(status, effect.status, actor, active[index], {
+          ...effect,
+          stacks:
+            effect.stacks === undefined
+              ? undefined
+              : Math.min(effect.stacks, status.stacking?.maximum ?? 1),
+          intensity:
+            effect.intensity === undefined
+              ? undefined
+              : Math.min(effect.intensity, status.intensity?.maximum ?? 1),
+        })
 
         if (!applied.changed) return
         const next = applied.active
@@ -679,7 +729,12 @@ export function resolveCombatRound(
         (entry) => entry.id === recipient,
       )!
 
-      const economy = combatActorEconomy(definition, owner, statuses[recipient])
+      const economy = combatActorEconomy(
+        definition,
+        owner,
+        statuses[recipient],
+        valueContext(owner.id),
+      )
 
       for (const move of Object.values(definition.moves))
         combatActionCost(
@@ -736,7 +791,15 @@ export function resolveCombatRound(
           const active = statuses[actor.id]?.find((active) => active.id === id)
 
           if (!active) continue
-          const magnitude = combatStatusAmount(amount, active)
+
+          const live = resolveCombatStatusValues(
+            status,
+            active,
+            actor.id,
+            valueContext(active.source, actor.id),
+          )
+
+          const magnitude = combatStatusAmount(combatStatusParts(live)[type]!, active)
 
           if (type === 'damage') {
             damage(
@@ -764,7 +827,13 @@ export function resolveCombatRound(
       let planIndex = 0
 
       if (debug && actor.ai && (stunned || !health[actor.id])) {
-        const economy = combatActorEconomy(definition, actor, statuses[actor.id])
+        const economy = combatActorEconomy(
+          definition,
+          actor,
+          statuses[actor.id],
+          valueContext(actor.id),
+        )
+
         capture({
           kind: 'enemy-decision',
           actor: actor.id,
@@ -785,6 +854,8 @@ export function resolveCombatRound(
 
       if (!outcome && !stunned)
         while (!outcome) {
+          let selectedRule: string | undefined
+
           const queued = actor.ai
             ? chooseEnemyAction(
                 definition,
@@ -792,6 +863,7 @@ export function resolveCombatRound(
                 {
                   health,
                   equipment: current.equipment,
+                  stats: current.stats,
                   statuses,
                   cooldowns,
                   resources: mechanics.state?.resources ?? {},
@@ -808,13 +880,36 @@ export function resolveCombatRound(
                 },
                 decision,
                 spentAp,
-                tracing
-                  ? (decision) => capture({ kind: 'enemy-decision', actor: actor.id, decision })
+                tracing || observe
+                  ? (decision) => {
+                      selectedRule = decision.candidates.find(
+                        (candidate) => candidate.selected,
+                      )?.rule
+
+                      if (decision.choice)
+                        observe?.({
+                          kind: 'action-choices',
+                          actor: actor.id,
+                          ...decision.choice,
+                          result: 'chosen',
+                          rule: selectedRule,
+                        })
+                      capture({ kind: 'enemy-decision', actor: actor.id, decision })
+                    }
                   : undefined,
               )
             : plan[planIndex++]
 
           if (!queued) break
+
+          if (!actor.ai)
+            observe?.({
+              kind: 'action-choices',
+              actor: actor.id,
+              move: queued.move,
+              target: queued.target,
+              result: 'chosen',
+            })
 
           if (!health[actor.id]) break
           const move = definition.moves[queued.move]!
@@ -822,6 +917,8 @@ export function resolveCombatRound(
           const requirementsPass = () => {
             const requirements = combatMoveRequirements(definition, move, {
               health,
+              stats: current.stats,
+              round,
               maximumHealth:
                 current.maximumHealth ??
                 Object.fromEntries(
@@ -900,7 +997,13 @@ export function resolveCombatRound(
           if (cooldownRemaining(cooldowns, actor.id, queued.move, round))
             throw new Error('Move is on cooldown')
 
-          const economy = combatActorEconomy(definition, actor, statuses[actor.id])
+          const economy = combatActorEconomy(
+            definition,
+            actor,
+            statuses[actor.id],
+            valueContext(actor.id),
+          )
+
           const cost = combatActionCost(move, economy, valueContext(actor.id, queued.target))
           const remaining = Math.max(0, economy.ap - spentAp)
 
@@ -940,6 +1043,12 @@ export function resolveCombatRound(
 
           if (outcome) {
             if (queued.item) {
+              observe?.({
+                kind: 'item-use',
+                item: queued.item,
+                itemType: queued.itemType ?? queued.item,
+                consumed: queued.consume !== false,
+              })
               usedItems.push(queued.item)
               entries.splice(entryStart, 0, {
                 type: 'itemUsed',
@@ -998,6 +1107,12 @@ export function resolveCombatRound(
               continue
             }
 
+            observe?.({
+              kind: 'item-use',
+              item: queued.item,
+              itemType: queued.itemType ?? queued.item,
+              consumed: queued.consume !== false,
+            })
             usedItems.push(queued.item)
             entries.splice(entryStart, 0, {
               type: 'itemUsed',
@@ -1005,6 +1120,15 @@ export function resolveCombatRound(
               item: queued.itemType ?? queued.item,
             })
           }
+
+          observe?.({
+            kind: 'action-choices',
+            actor: actor.id,
+            move: queued.move,
+            target: queued.target,
+            result: 'executed',
+            rule: selectedRule,
+          })
 
           if (move.cooldown)
             (cooldowns[actor.id] ??= {})[queued.move] = safe(round + move.cooldown + 1)
@@ -1146,6 +1270,8 @@ export function combatAbilityEffectValues(
   effects: readonly TemporaryStatContribution[] = [],
   profile?: CombatDamageProfile,
 ): AbilityEffectPreview {
+  effect = resolveCombatEffectValues(effect, context)
+
   if (effect.type === 'damage')
     return damagePreview(
       effect.damage,

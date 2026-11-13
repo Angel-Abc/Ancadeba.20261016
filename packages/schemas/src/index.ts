@@ -95,3 +95,9 @@ export * from './combatEquipment.js'
 export * from './combatPassiveReferences.js'
 
 export * from './combatPassives.js'
+
+export * from './combatTriggerLimits.js'
+
+export * from './combatEffectValues.js'
+
+export * from './combatScenarioAssertions.js'

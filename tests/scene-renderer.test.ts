@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
 import {
   gameSchema,
+  gameSaveSchema,
   gameRulesSchema,
   languageCatalogSchema,
   mapDefinitionSchema,
@@ -337,6 +338,172 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it.each([false, true])(
+    'previews live dynamic status and healing values and restores their round context in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) => {
+          const raw = await readFile(
+            new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path !== 'rules/state.json') return raw
+          const rules = JSON.parse(raw)
+          rules.state.find((field: { path: string[] }) => field.path[0] === 'player-health').value =
+            20
+
+          return JSON.stringify(rules)
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main'),
+        saves = new Map<string, string>()
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => saves.get(id),
+            write: (id, value) => {
+              saves.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water-dynamic-effects')
+      flush(engine)
+
+      const click = (slot: string) => {
+        target
+          .find((node) => node.dataset.actionBarSlot === slot)!
+          .dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      const snapshot = () =>
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+
+      click('6')
+      expect(target.textContent).toContain('Adaptive current · 4 turns remaining')
+      click('15')
+      expect(snapshot().statuses.player![0]).toMatchObject({ id: 'adaptive-current', remaining: 4 })
+      expect(snapshot().stats.player!.defense).toBe(1)
+      expect(snapshot().health.player).toBe(20)
+      expect(
+        target.find((node) => node.dataset.statusEffect === 'adaptive-current')!.textContent,
+      ).toContain('3')
+      expect(engine.saves!.save()).toBe(true)
+      click('7')
+      expect(target.textContent).toContain('Stamina: +4')
+      click('15')
+      const expected = snapshot()
+      expect(expected.log.filter((entry) => entry.type === 'healed').at(-1)!.amount).toBe(19)
+      expect(expected.health.player).toBe(42)
+      expect(engine.saves!.load()).toBe(true)
+      click('7')
+      click('15')
+      expect(snapshot().health).toEqual(expected.health)
+      expect(snapshot().resources).toEqual(expected.resources)
+      expect(snapshot().log).toEqual(expected.log)
+    },
+  )
+
+  it.each([false, true])(
+    'restores trigger charges and cooldowns across live save/load in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) =>
+          readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url), 'utf8'),
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const saves = new Map<string, string>()
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => saves.get(id),
+            write: (id, value) => {
+              saves.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water-trigger-limits')
+      flush(engine)
+
+      const click = (slot: string) => {
+        target
+          .find((node) => node.dataset.actionBarSlot === slot)!
+          .dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      const snapshot = () =>
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+
+      const shieldUses = () =>
+        snapshot().log.filter(
+          (entry) =>
+            entry.type === 'passiveTriggered' &&
+            entry.trigger === 'absorb' &&
+            entry.passive?.passive === 'paced-barrier',
+        ).length
+
+      click('6')
+      click('15')
+      expect(shieldUses()).toBe(1)
+      expect(engine.saves!.save()).toBe(true)
+      const stored = gameSaveSchema.parse(JSON.parse([...saves.values()][0]!))
+      expect(
+        stored.combat.water!.mechanics!.activations!.find((entry) => entry.trigger === 'absorb'),
+      ).toMatchObject({ uses: 1, readyRound: 3 })
+      click('15')
+      expect(shieldUses()).toBe(1)
+      click('15')
+      expect(shieldUses()).toBe(2)
+      const expected = snapshot()
+      expect(engine.saves!.load()).toBe(true)
+      expect(shieldUses()).toBe(1)
+      click('15')
+      expect(shieldUses()).toBe(1)
+      click('15')
+      expect(shieldUses()).toBe(2)
+      expect(snapshot().resources).toEqual(expected.resources)
+      expect(snapshot().health).toEqual(expected.health)
+      expect(snapshot().log).toEqual(expected.log)
+    },
+  )
+
   it.each([false, true])(
     'displays interception and restores consumed lethal protection in preview=%s',
     async (preview) => {

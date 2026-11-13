@@ -3,6 +3,7 @@ import {
   evaluateCombatValue,
   combatValueContext,
   type CombatValueContext,
+  type CombatValueInputs,
 } from './combatValues.js'
 import type {
   CombatDefinition,
@@ -26,11 +27,12 @@ export function combatActorEconomy(
   definition: CombatDefinition,
   actor: CombatActorDefinition,
   statuses: readonly ActiveCombatStatus[] = [],
+  context?: CombatValueContext,
 ): CombatActionEconomy {
   let ap = actor.ap
   let apCost = 0
 
-  const effects = statusContributions(definition, statuses)
+  const effects = statusContributions(definition, statuses, context, actor.id)
 
   for (const effect of effects) {
     ap += effect.modifiers.ap ?? 0
@@ -67,12 +69,19 @@ export function combatEconomySnapshot(
   statuses: CombatStatuses,
   resources?: Readonly<Record<string, number>>,
   target?: string,
+  inputs: CombatValueInputs = {},
 ) {
   const ap: Record<string, number> = {}
   const moveCosts: Record<string, Readonly<Record<string, number>>> = {}
 
   for (const actor of [definition.player, ...definition.enemies]) {
-    const economy = combatActorEconomy(definition, actor, statuses[actor.id])
+    const economy = combatActorEconomy(
+      definition,
+      actor,
+      statuses[actor.id],
+      combatValueContext(definition, resources, statuses, actor.id, actor.id, inputs),
+    )
+
     ap[actor.id] = economy.ap
     moveCosts[actor.id] = Object.freeze(
       Object.fromEntries(
@@ -91,6 +100,7 @@ export function combatEconomySnapshot(
                 : actor.id === definition.player.id
                   ? (target ?? definition.enemies[0]?.id)
                   : definition.player.id,
+              inputs,
             ),
           ),
         ]),

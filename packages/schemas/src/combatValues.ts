@@ -1,3 +1,4 @@
+import { combatEffectActorSchema } from './combatEvents.js'
 import type { CombatMoveDefinition } from './combat.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
@@ -17,7 +18,28 @@ const decimal = z
     'Use at most two decimal places',
   )
 
+export const combatScalingStats = ['attack', 'defense', 'guard', 'maximumHealth'] as const
+
 export const combatScalingTermSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('health'),
+    actor: combatEffectActorSchema,
+    measure: z.enum(['value', 'percent']).optional(),
+    factor: decimal,
+  }),
+  z.object({
+    type: z.literal('missing-health'),
+    actor: combatEffectActorSchema,
+    measure: z.enum(['value', 'percent']).optional(),
+    factor: decimal,
+  }),
+  z.object({
+    type: z.literal('stat'),
+    actor: combatEffectActorSchema,
+    stat: z.enum(combatScalingStats),
+    factor: decimal,
+  }),
+  z.object({ type: z.literal('round'), factor: decimal }),
   z.object({
     type: z.literal('resource'),
     resource: id,
@@ -26,21 +48,31 @@ export const combatScalingTermSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('status'),
-    actor: id,
+    actor: combatEffectActorSchema,
     status: id,
     measure: z.enum(['stacks', 'intensity', 'remaining']).optional(),
     factor: decimal,
   }),
 ])
 
-/** A bounded affine formula; no executable scripts or recursive expressions. */
-export const combatScalingSchema = z
+export type CombatScalingTerm = z.infer<typeof combatScalingTermSchema>
+
+export interface CombatScaling {
+  terms: CombatScalingTerm[]
+  mode?: 'add' | 'percent' | undefined
+  rounding?: 'floor' | 'ceil' | 'nearest' | undefined
+  minimum?: number | undefined
+  maximum?: number | undefined
+}
+
+/** A bounded affine formula; the named output type also keeps editor protocol declarations compact. */
+export const combatScalingSchema: z.ZodType<CombatScaling> = z
   .object({
     terms: z.array(combatScalingTermSchema).min(1).max(20),
     mode: z.enum(['add', 'percent']).optional(),
     rounding: z.enum(['floor', 'ceil', 'nearest']).optional(),
-    minimum: z.number().int().nonnegative().safe().optional(),
-    maximum: z.number().int().nonnegative().safe().optional(),
+    minimum: z.number().int().safe().optional(),
+    maximum: z.number().int().safe().optional(),
   })
   .refine(
     (value) =>
@@ -70,11 +102,10 @@ export const combatPercentModifiersSchema = z.object({
 
 export type CombatPercentModifiers = z.infer<typeof combatPercentModifiersSchema>
 
-export type CombatScaling = z.infer<typeof combatScalingSchema>
-
 export function combatScalingIssues(
   scaling: CombatScaling | undefined,
   references: {
+    event?: boolean
     actors?: readonly string[]
     resources?: Readonly<Record<string, unknown>>
     statuses?: Readonly<Record<string, unknown>>
@@ -92,11 +123,29 @@ export function combatScalingIssues(
           path: [...at, 'resource'],
           message: `Unknown scaling resource: ${term.resource}`,
         })
-    } else {
-      if (references.actors && !['self', 'target', ...references.actors].includes(term.actor))
+    } else if (term.type !== 'round') {
+      if (term.actor.startsWith('event.') && !references.event)
+        issues.push({
+          path: [...at, 'actor'],
+          message: 'Event actors require a damage or healing trigger',
+        })
+
+      if (
+        references.actors &&
+        ![
+          'self',
+          'target',
+          ...(references.event ? ['event.source', 'event.target'] : []),
+          ...references.actors,
+        ].includes(term.actor)
+      )
         issues.push({ path: [...at, 'actor'], message: `Unknown scaling actor: ${term.actor}` })
 
-      if (references.statuses && !Object.hasOwn(references.statuses, term.status))
+      if (
+        term.type === 'status' &&
+        references.statuses &&
+        !Object.hasOwn(references.statuses, term.status)
+      )
         issues.push({ path: [...at, 'status'], message: `Unknown scaling status: ${term.status}` })
     }
   }
@@ -117,9 +166,13 @@ export function combatMoveScalings(
   if ('scaling' in move && move.scaling) entries.push({ scaling: move.scaling, path: ['scaling'] })
 
   if (move.type === 'ability')
-    for (const [index, effect] of move.effects.entries())
+    for (const [index, effect] of move.effects.entries()) {
       if ('scaling' in effect && effect.scaling)
         entries.push({ scaling: effect.scaling, path: ['effects', index, 'scaling'] })
+
+      for (const [key, scaling] of Object.entries(effect.valueScaling ?? {}))
+        entries.push({ scaling, path: ['effects', index, 'valueScaling', key] })
+    }
 
   return entries
 }

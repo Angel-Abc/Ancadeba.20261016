@@ -1,3 +1,4 @@
+import { combatEffectValuesForm } from './combatEffectValuesForm.js'
 import { combatPassiveGrantsForm } from './combatPassiveForms.js'
 import { combatDamageDefensesForm } from './combatDamageForm.js'
 import { combatRestrictionsForm } from './combatRestrictionsForm.js'
@@ -124,6 +125,13 @@ export function abilityEffectsForm(
             ),
           ]
         : []),
+      combatEffectValuesForm(
+        controls,
+        effect,
+        render,
+        Object.keys(draft.mechanics?.resources ?? {}),
+        Object.keys(draft.statuses ?? {}),
+      ),
       combatEffectConditionsForm(
         controls,
         effect,
@@ -206,6 +214,7 @@ export function combatStatusesForm(
         },
       ),
       combatPassiveGrantsForm(controls, view, status, render),
+      combatEffectValuesForm(controls, status, render, [], Object.keys(draft.statuses ?? {})),
       input(t('form.name'), status.label, (value) => {
         status.label = value
       }),

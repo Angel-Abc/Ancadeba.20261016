@@ -1,3 +1,4 @@
+import { bindCombatEffectValues, combatEffectScalings } from './combatEffectValues.js'
 import { z } from 'zod'
 import { bindCombatCondition, visitCombatCondition } from './combatConditions.js'
 import type { CombatLibrary, CombatSource, CombatMechanicsOrigins } from './combatLibraries.js'
@@ -16,6 +17,9 @@ export function combatRulesetDependencies(mechanics: CombatMechanicsDefinition |
 
   const effect = (effect: CombatTriggerEffect) => {
     if ('status' in effect) statuses.add(effect.status)
+
+    for (const { scaling } of combatEffectScalings(effect))
+      for (const term of scaling.terms) if (term.type === 'status') statuses.add(term.status)
 
     for (const condition of effect.conditions ?? [])
       visitCombatCondition(condition, (leaf) => {
@@ -53,7 +57,7 @@ export function bindCombatRulesetActors(
   const actor = (id: string) => (id.startsWith('event.') ? id : (bindings[id] ?? id))
 
   const entry = (value: CombatTriggerEffect): CombatTriggerEffect => ({
-    ...value,
+    ...bindCombatEffectValues(value, actor),
     ...('actor' in value ? { actor: actor(value.actor) } : {}),
     ...('source' in value && value.source ? { source: actor(value.source) } : {}),
     ...(value.conditions

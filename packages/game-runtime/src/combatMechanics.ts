@@ -1,3 +1,12 @@
+import type { CombatObservationSink } from './combatObservations.js'
+import { resolveCombatEffectValues } from './combatEffectValues.js'
+import {
+  activateCombatTrigger,
+  combatTriggerActivationKey,
+  combatTriggerHasLimits,
+  combatTriggerLimits,
+  validateCombatTriggerActivations,
+} from './combatTriggerLimits.js'
 import {
   applyCombatInterception,
   combatPendingSnapshot,
@@ -83,6 +92,7 @@ export function validateCombatMechanicsState(
     state.fired.some((id) => !mechanics.triggers[id]?.once)
   )
     throw new Error('Invalid saved combat mechanics')
+  validateCombatTriggerActivations(definition, state)
   const receipts = state.passiveFired ?? []
 
   if (
@@ -153,6 +163,9 @@ export interface CombatMechanicsEvent {
 }
 
 interface MechanicsEffects {
+  observe?: CombatObservationSink | undefined
+  values?: ((self: string, target?: string) => CombatValueContext) | undefined
+  round?: number | undefined
   equipment?: CombatEquipment | undefined
   damage?: (source: string, target: string, amount: number, damageType?: string) => void
   heal?: (source: string, target: string, amount: number) => void
@@ -166,6 +179,7 @@ interface MechanicsEffects {
     stacks?: number,
     intensity?: number,
     source?: string,
+    duration?: number,
   ) => void
   log: (entry: CombatLogEntry) => void
   finish: (outcome: CombatOutcome) => void
@@ -176,6 +190,7 @@ interface MechanicsEffects {
 export class CombatMechanics {
   readonly state: CombatMechanicsState | undefined
   private readonly events: (CombatMechanicsEvent & { unobserved?: boolean })[] = []
+  private readonly trackTurns: boolean
   private processing = false
   private operations = 0
   private currentEvent: CombatMechanicsEvent | undefined
@@ -189,6 +204,12 @@ export class CombatMechanics {
     private readonly effects: MechanicsEffects,
     private readonly trace?: (entry: CombatMechanicsTrace) => void,
   ) {
+    this.trackTurns = [
+      ...Object.values(definition.mechanics?.triggers ?? {}),
+      ...Object.values(definition.passiveDefinitions ?? {}).flatMap((entries) =>
+        Object.values(entries).flatMap((passive) => Object.values(passive.triggers)),
+      ),
+    ].some(combatTriggerHasLimits)
     const state = current ?? initialCombatMechanics(definition)
     validateCombatMechanicsState(definition, state)
     this.state = state
@@ -196,6 +217,14 @@ export class CombatMechanics {
           ...state,
           resources: { ...state.resources },
           fired: [...state.fired],
+          ...(state.activations
+            ? {
+                activations: state.activations.map((entry) => ({
+                  ...entry,
+                  ...(entry.passive ? { passive: { ...entry.passive } } : {}),
+                })),
+              }
+            : {}),
           ...(state.passiveFired
             ? { passiveFired: state.passiveFired.map((receipt) => ({ ...receipt })) }
             : {}),
@@ -316,6 +345,17 @@ export class CombatMechanics {
     this.limit()
 
     if (!this.matches(effect.conditions)) return
+    const self = this.currentPassive?.actor ?? this.currentEvent?.actor ?? this.definition.player.id
+
+    const values = this.effects.values?.(
+      self,
+      this.currentEvent?.target ?? this.currentEvent?.actor ?? self,
+    )
+
+    effect = resolveCombatEffectValues(
+      effect,
+      values ? { ...values, event: this.effectData() } : undefined,
+    )
 
     const actor = (reference: string) => {
       const value =
@@ -352,6 +392,13 @@ export class CombatMechanics {
       })
 
       if (change) {
+        this.effects.observe?.({
+          kind: 'interception',
+          source: pending.data.source,
+          target: pending.data.target,
+          trigger: this.currentTrigger,
+          change,
+        })
         this.effects.log({
           type: 'effectIntercepted',
           actor: this.currentPassive?.actor ?? pending.data.target,
@@ -404,6 +451,7 @@ export class CombatMechanics {
         effect.stacks,
         effect.type === 'apply-status' ? effect.intensity : undefined,
         this.currentPassive?.actor,
+        effect.type === 'apply-status' ? effect.duration : undefined,
       )
     else if (effect.type === 'finish') this.effects.finish(effect.outcome)
     else if (effect.type === 'set-phase' && this.state && this.state.phase !== effect.phase) {
@@ -501,6 +549,13 @@ export class CombatMechanics {
       previousTrigger = this.currentTrigger
 
     try {
+      if (next.type === 'turn-start' && this.state && this.trackTurns) {
+        const turn = (this.state.turn ?? 0) + 1
+
+        if (!Number.isSafeInteger(turn)) throw new RangeError('Combat trigger turn overflow')
+        this.state.turn = turn
+      }
+
       const grants = combatPassiveGrants(
         this.definition,
         this.effects.statuses?.() ?? {},
@@ -566,6 +621,9 @@ export class CombatMechanics {
         ),
       ]
 
+      // Stable sorting preserves authored/source order for equal priorities.
+      triggers.sort((left, right) => (right.trigger.priority ?? 0) - (left.trigger.priority ?? 0))
+
       for (const { id, trigger, passive } of triggers) {
         if (this.effects.finished()) break
 
@@ -594,6 +652,22 @@ export class CombatMechanics {
             )
           : this.state?.fired.includes(id)
 
+        const key = combatTriggerActivationKey(id, passive)
+
+        const previous = this.state?.activations?.find(
+          (entry) => combatTriggerActivationKey(entry.trigger, entry.passive) === key,
+        )
+
+        const activation = combatTriggerLimits(
+          trigger,
+          previous,
+          this.state?.turn ?? 0,
+          this.effects.round ?? 1,
+          Boolean(alreadyFired),
+        )
+
+        const controlled = trigger.priority !== undefined || combatTriggerHasLimits(trigger)
+
         const conditions = trigger.conditions.map((condition) =>
           evaluateCombatCondition(condition, this.context()),
         )
@@ -613,7 +687,7 @@ export class CombatMechanics {
               trigger.includeReactions ??
               (next.type === 'damage-pending' || next.type === 'healing-pending')
             )) ||
-          (trigger.once && alreadyFired) ||
+          activation.blockers.length > 0 ||
           !conditions.every((condition) => condition.matched)
         )
 
@@ -627,6 +701,7 @@ export class CombatMechanics {
           target: next.target,
           move: next.move,
           matched,
+          ...(controlled ? { activation } : {}),
           source: next.source,
           effect: this.effectData(),
           conditions,
@@ -635,6 +710,9 @@ export class CombatMechanics {
         if (!matched) continue
         this.limit()
 
+        if (this.state)
+          activateCombatTrigger(this.state, trigger, id, passive, this.effects.round ?? 1)
+
         if (trigger.once && this.state) {
           if (receipt) {
             if ((this.state.passiveFired?.length ?? 0) >= 10000)
@@ -642,6 +720,27 @@ export class CombatMechanics {
             ;(this.state.passiveFired ??= []).push(receipt)
           } else this.state.fired.push(id)
         }
+
+        if (controlled)
+          this.trace?.({
+            event: next.type,
+            actor: next.actor,
+            trigger: id,
+            ...(passive ? { passive } : {}),
+            activated: true,
+            activation: combatTriggerLimits(
+              trigger,
+              this.state?.activations?.find(
+                (entry) => combatTriggerActivationKey(entry.trigger, entry.passive) === key,
+              ),
+              this.state?.turn ?? 0,
+              this.effects.round ?? 1,
+              Boolean(trigger.once),
+            ),
+            effect: this.effectData(),
+          })
+
+        if (passive) this.effects.observe?.({ kind: 'passive-activations', passive, trigger: id })
 
         if (passive)
           this.effects.log({

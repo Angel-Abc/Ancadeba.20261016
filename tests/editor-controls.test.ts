@@ -4081,6 +4081,347 @@ describe('editor draft workflows', () => {
     }
   }
 
+  it('authors rich assertion types and item plans with structured scenario controls', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+    ui.edit('New scenario ID', 'rich-checks')
+    ui.click('Capture simulation as new scenario')
+    const scope = 'Final results expected result 1'
+
+    const cases = [
+      {
+        type: 'passive-activations',
+        fields: {
+          'Assertion actor': 'player',
+          'Passive library': 'environments',
+          'Passive ID': 'paced-barrier',
+          'Assertion trigger': 'absorb',
+          'Grant source kind': 'status',
+          'Grant source ID': 'paced-barrier',
+        },
+      },
+      {
+        type: 'interception',
+        fields: {
+          'Effect source': 'eel',
+          'Effect target': 'player',
+          'Interception operation': 'absorb-damage',
+          'Shield resource': 'stamina',
+          'Assertion measure': 'spent',
+          'Assertion scope': 'step',
+        },
+      },
+      {
+        type: 'damage-total',
+        fields: {
+          'Effect source': 'player',
+          'Effect target': 'eel',
+          'Assertion damage type': 'lightning',
+          'Assertion measure': 'amount',
+        },
+      },
+      {
+        type: 'healing-total',
+        fields: { 'Effect target': 'player', 'Assertion measure': 'overheal' },
+      },
+      {
+        type: 'action-choices',
+        fields: {
+          'Assertion actor': 'eel',
+          'Assertion move': 'ambush',
+          'Enemy AI rule': 'exploit-fatigue',
+          'Action stage': 'executed',
+        },
+      },
+      {
+        type: 'cooldown',
+        fields: {
+          'Assertion actor': 'player',
+          'Assertion move': 'tonic-sip',
+          'Assertion measure': 'readyRound',
+        },
+      },
+      {
+        type: 'trigger-cooldown',
+        fields: {
+          'Assertion actor': 'player',
+          'Passive library': 'environments',
+          'Passive ID': 'paced-barrier',
+          'Assertion trigger': 'absorb',
+          'Grant source kind': 'status',
+          'Grant source ID': 'paced-barrier',
+        },
+      },
+      {
+        type: 'item-consumption',
+        fields: { 'Consumed item instance': 'brine-tonic', 'Consumed item type': 'brine-tonic' },
+      },
+    ]
+
+    for (const entry of cases) {
+      ui.edit('Expected result type', entry.type, scope)
+
+      for (const [field, value] of Object.entries(entry.fields))
+        if (value !== undefined) ui.edit(field, value, scope)
+      ui.edit('Expected comparison', 'gte', scope)
+      ui.edit('Expected value', '1', scope)
+      ui.click('Save simulation scenario')
+      await ui.flush()
+      expect(
+        ui.read().combatSources!.water!.simulationScenarios!['rich-checks']!.expect[0],
+      ).toMatchObject({ type: entry.type, operator: 'gte', value: 1 })
+    }
+
+    const saved = ui.read().combatSources!.water!.simulationScenarios!['rich-checks']!.expect[0]!
+    expect('source' in saved).toBe(false)
+    ui.edit('Simulation scenario', 'assert-items-healing')
+    ui.edit('Scripted item (empty = native move)', 'breath-stone', 'Scripted action 1')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!.water!.simulationScenarios!['assert-items-healing']!.steps[0]!
+        .plan[0],
+    ).toMatchObject({ move: 'tonic-sip', item: 'breath-stone' })
+    ui.edit('Scripted move', 'guard', 'Scripted action 1')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!.water!.simulationScenarios!['assert-items-healing']!.steps[0]!
+        .plan[0]!.item,
+    ).toBeUndefined()
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('replays the water and boss assertion scenarios and captures simulated item use without changing inventory', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+
+    for (const encounter of ['water', 'underwater-boss']) {
+      ui.edit('Combat encounter', encounter)
+
+      for (const name of [
+        'assert-passive-shield',
+        'assert-items-healing',
+        encounter === 'water' ? 'assert-enemy-choices' : 'assert-conduit-damage',
+      ]) {
+        ui.edit('Simulation scenario', name)
+        ui.click('Replay scenario')
+        expect(ui.root.textContent).toContain(`${name}: Passed`)
+      }
+    }
+
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Simulation health · player (maximum 80)', '30')
+    ui.click('Start/reset simulation')
+    ui.edit('Simulation item', 'brine-tonic')
+    ui.click('Queue item')
+    ui.click('Resolve simulation round')
+    ui.edit('New scenario ID', 'captured-tonic')
+    ui.click('Capture simulation as new scenario')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!.water!.simulationScenarios!['captured-tonic']!.steps[0]!.plan[0],
+    ).toMatchObject({ move: 'tonic-sip', item: 'brine-tonic' })
+    expect(ui.read().inventory!.items).toHaveProperty('brine-tonic')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('captured-tonic: Passed')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors health, missing-health, stat and round formulas across move, status and passive effects', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+
+    const edit = (owner: string, group: string, label: string, value: string) => {
+      const outer = ui.root
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some((child) => child.tagName === 'legend' && child.ownText === owner),
+        )!
+
+      const scope = outer
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some((child) => child.tagName === 'legend' && child.ownText === group),
+        )!
+
+      const control = scope
+        .all()
+        .find((node) => node.tagName === 'label' && node.ownText === label)!.children[0]!
+
+      control.value = value
+      control.dispatchEvent(new Event(control.tagName === 'select' ? 'change' : 'input'))
+    }
+
+    for (const type of ['health', 'stat', 'round', 'missing-health'])
+      edit('Move: adaptive-breath', 'Effect value scaling', 'Scaling source', type)
+    edit('Move: adaptive-breath', 'Effect value scaling', 'Scaling factor', '0.3')
+    edit('Move: adaptive-breath', 'Scaling: amount', 'Scaling factor', '2')
+    edit('Status: adaptive-current', 'Scaling: modifiers.defense', 'Scaling factor', '0.03')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const move = ui.read().combatSources!.water!.moves['adaptive-breath']!
+    expect(move).toMatchObject({
+      effects: [
+        {
+          scaling: {
+            terms: [
+              { type: 'missing-health', actor: 'self', factor: 0.3 },
+              { type: 'stat', stat: 'defense' },
+            ],
+          },
+        },
+        { valueScaling: { amount: { terms: [{ type: 'round', factor: 2 }] } } },
+      ],
+    })
+    expect(
+      ui.read().combatSources!.water!.statuses!['adaptive-current']!.valueScaling![
+        'modifiers.defense'
+      ],
+    ).toMatchObject({ terms: [{ factor: 0.03 }] })
+    ui.edit('Combat library', 'environments')
+    edit('Passive: adaptive-guard', 'Scaling: maximum', 'Scaling factor', '3')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['adaptive-guard']!.triggers[
+        'adaptive-shield'
+      ]!.effects[0]!.valueScaling!.maximum,
+    ).toMatchObject({
+      terms: [
+        { type: 'round', factor: 3 },
+        { type: 'stat', stat: 'defense' },
+      ],
+    })
+    edit('Passive: adaptive-guard', 'Scaling: maximum', 'Enable scaling', 'false')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['adaptive-guard']!.triggers[
+        'adaptive-shield'
+      ]!.effects[0]!.valueScaling,
+    ).toBeUndefined()
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('replays all dynamic effect examples including actual damage charged through the boss conduit', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+
+    for (const encounter of ['water', 'underwater-boss']) {
+      ui.edit('Combat encounter', encounter)
+
+      for (const name of ['dynamic-recovery', 'dynamic-periodic-shield', 'dynamic-strike']) {
+        ui.edit('Simulation scenario', name)
+        ui.click('Replay scenario')
+        expect(ui.root.textContent).toContain(`${name}: Passed`)
+      }
+    }
+
+    ui.edit('Trace filter', 'mechanics')
+
+    const redirect = ui
+      .field('Inspect trace step')
+      .children.find((node) => node.textContent.includes('redirect-damage'))!
+
+    ui.edit('Inspect trace step', redirect.value)
+    expect(ui.root.textContent).toContain('"redirectedAmount": 12')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors trigger controls on encounters, shared passives and inherited ruleset overrides', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+
+    const fields = [
+      'Trigger priority (higher first; empty = 0)',
+      'Trigger charges (empty = unlimited)',
+      'Activations per turn (empty = unlimited)',
+      'Trigger cooldown (rounds; empty = 0)',
+    ]
+
+    ui.edit('Combat encounter', 'water')
+    fields.forEach((field, index) =>
+      ui.edit(field, String([25, 4, 2, 1][index]), 'fatigue-on-change'),
+    )
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.water!.mechanics!.triggers['fatigue-on-change']).toMatchObject({
+      priority: 25,
+      charges: 4,
+      perTurn: 2,
+      cooldown: 1,
+    })
+    fields.forEach((field) => ui.edit(field, '', 'fatigue-on-change'))
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!.water!.mechanics!.triggers['fatigue-on-change']!.charges,
+    ).toBeUndefined()
+    ui.edit('Combat encounter', 'underwater-boss')
+    fields.forEach((field, index) =>
+      ui.edit(field, String([30, 5, 1, 2][index]), 'fatigue-on-change'),
+    )
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!['underwater-boss']!.mechanicsOverrides!.triggers![
+        'fatigue-on-change'
+      ],
+    ).toMatchObject({ priority: 30, charges: 5, perTurn: 1, cooldown: 2 })
+    ui.edit('Combat library', 'environments')
+    fields.forEach((field, index) =>
+      ui.edit(field, String([-5, 6, 3, 0][index]), 'Passive: paced-barrier'),
+    )
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['paced-barrier']!.triggers.soften,
+    ).toMatchObject({ priority: -5, charges: 6, perTurn: 3, cooldown: 0 })
+    fields.forEach((field) => ui.edit(field, '', 'Passive: paced-barrier'))
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['paced-barrier']!.triggers.soften!
+        .priority,
+    ).toBeUndefined()
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('replays trigger limit examples and explains charge, per-turn and cooldown blockers', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+
+    for (const encounter of ['water', 'underwater-boss']) {
+      ui.edit('Combat encounter', encounter)
+      ui.edit('Simulation scenario', 'trigger-limits')
+      ui.click('Replay scenario')
+      expect(ui.root.textContent).toContain('trigger-limits: Passed')
+      ui.edit('Trace filter', 'mechanics')
+
+      const charges = [...ui.field('Inspect trace step').children]
+        .reverse()
+        .find((option) => option.textContent.includes('No charges remaining'))!
+
+      ui.edit('Inspect trace step', charges.value)
+      expect(ui.root.textContent).toContain('"chargesRemaining": 0')
+      expect(ui.root.textContent).toContain('"cooldown"')
+      ui.edit('Simulation scenario', 'trigger-per-turn')
+      ui.click('Replay scenario')
+      expect(ui.root.textContent).toContain('trigger-per-turn: Passed')
+
+      const turn = [...ui.field('Inspect trace step').children]
+        .reverse()
+        .find((option) => option.textContent.includes('Per-turn limit reached'))!
+
+      ui.edit('Inspect trace step', turn.value)
+      expect(ui.root.textContent).toContain('"perTurnRemaining": 0')
+    }
+
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
   it('edits shield, redirect, lethal and healing interception effects in the shared trigger editor', async () => {
     const ui = await connected(bindCombatEditor, await simulationProject())
     ui.edit('Combat library', 'environments')

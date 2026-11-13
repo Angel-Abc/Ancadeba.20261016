@@ -1,6 +1,6 @@
 import { mergeCombatPassiveReferences } from './combatPassiveEditing.js'
 import { mergeCombatDamageDefenses } from './combatDamageEditing.js'
-import { mergeCombatScaling } from './combatValueEditing.js'
+import { mergeCombatScaling, mergeCombatEffectValueScaling } from './combatValueEditing.js'
 import { combatPercentModifierNames } from '@ancadeba/schemas'
 import type { CombatSource } from '@ancadeba/schemas'
 import { mergeCombatRuleConditions } from './combatRuleEntryEditing.js'
@@ -53,6 +53,11 @@ export function mergeCombatEntries(
                     return {
                       ...previous,
                       ...effect,
+                      valueScaling: mergeCombatEffectValueScaling(
+                        previous?.valueScaling,
+                        effect.valueScaling,
+                      ),
+                      duration: effect.type === 'apply-status' ? effect.duration : undefined,
                       target: effect.target,
                       damageType: effect.type === 'damage' ? effect.damageType : undefined,
                       scaling:
@@ -99,6 +104,7 @@ export function mergeCombatEntries(
               {
                 ...old,
                 ...status,
+                valueScaling: mergeCombatEffectValueScaling(old.valueScaling, status.valueScaling),
                 passives: mergeCombatPassiveReferences(old.passives, status.passives),
                 labelKey: status.labelKey,
                 descriptionKey: status.descriptionKey,

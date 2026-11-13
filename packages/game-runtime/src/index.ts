@@ -199,3 +199,13 @@ export * from './combatRequirements.js'
 export * from './combatPassives.js'
 
 export * from './combatInterception.js'
+
+export * from './combatTriggerLimits.js'
+
+export * from './combatEffectValues.js'
+
+export * from './combatObservations.js'
+
+export * from './combatSimulationItems.js'
+
+export * from './combatScenarioAssertions.js'

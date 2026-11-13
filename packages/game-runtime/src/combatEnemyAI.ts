@@ -72,8 +72,23 @@ export function chooseEnemyAction(
       self: actor.id,
       target: definition.player.id,
     }),
+    round: context.round,
   }
-  const economy = combatActorEconomy(definition, actor, context.statuses[actor.id])
+
+  const economy = combatActorEconomy(
+    definition,
+    actor,
+    context.statuses[actor.id],
+    combatValueContext(
+      definition,
+      context.resources,
+      context.statuses,
+      actor.id,
+      definition.player.id,
+      context,
+    ),
+  )
+
   const candidates: EnemyCandidateTrace[] = []
   const startCursor = state.cursor
 
@@ -115,6 +130,7 @@ export function chooseEnemyAction(
       context.statuses,
       actor.id,
       combatMoveTarget(move) === 'self' ? actor.id : definition.player.id,
+      context,
     )
 
     const cost = combatActionCost(move, economy, values)
@@ -234,12 +250,14 @@ export function planEnemyTurn(
   trace?: (decision: EnemyDecisionTrace) => void,
   maximumHealth?: Readonly<Record<string, number>>,
   equipment?: CombatEquipment,
+  stats?: EnemyContext['stats'],
 ) {
   const state = enemyDecisionState(cursor)
   const resources = { ...mechanics?.resources }
 
   const context = {
     equipment,
+    stats,
     health,
     maximumHealth,
     round,
@@ -259,10 +277,19 @@ export function planEnemyTurn(
     if (!move) break
     moves.push(move)
     const authored = definition.moves[move.move]!
-    const values = combatValueContext(definition, resources, statuses, actor.id, move.target)
+
+    const values = combatValueContext(
+      definition,
+      resources,
+      statuses,
+      actor.id,
+      move.target,
+      context,
+    )
+
     spentAp += combatActionCost(
       authored,
-      combatActorEconomy(definition, actor, statuses[actor.id]),
+      combatActorEconomy(definition, actor, statuses[actor.id], values),
       values,
     )
 

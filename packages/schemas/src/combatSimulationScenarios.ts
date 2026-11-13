@@ -1,3 +1,4 @@
+import { combatScenarioRichAssertionSchemas } from './combatScenarioAssertions.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
 import { combatSimulationLoadoutSchema } from './combatEquipment.js'
@@ -11,6 +12,7 @@ const amount = z.number().int().nonnegative().safe()
 const comparison = { operator: z.enum(['eq', 'gte', 'lte', 'gt', 'lt']), value: amount }
 
 export const combatScenarioExpectationSchema = z.discriminatedUnion('type', [
+  ...combatScenarioRichAssertionSchemas,
   z.object({
     type: z.literal('outcome'),
     value: z.enum(['planning', 'victory', 'defeat', 'escaped']),
@@ -59,7 +61,7 @@ export const combatScenarioSetupSchema = z.object({
 export const combatScenarioStepSchema = z.object({
   id,
   plan: z
-    .array(z.object({ move: id, target: id.optional() }))
+    .array(z.object({ move: id, target: id.optional(), item: id.optional() }))
     .max(100)
     .default([]),
   repeat: z.number().int().min(1).max(100).default(1),

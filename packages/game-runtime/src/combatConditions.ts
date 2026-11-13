@@ -9,6 +9,10 @@ import {
 import type { CombatStatuses } from './combatEffects.js'
 
 export interface CombatConditionContext {
+  readonly stats?:
+    | Readonly<Record<string, Readonly<import('@ancadeba/schemas').CombatBonuses>>>
+    | undefined
+  readonly round?: number | undefined
   readonly event?: CombatEffectEventData | undefined
   readonly health: Readonly<Record<string, number>>
   readonly maximumHealth?: Readonly<Record<string, number>> | undefined

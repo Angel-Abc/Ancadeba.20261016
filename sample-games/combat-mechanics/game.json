@@ -22,7 +22,11 @@
     "water-passives",
     "underwater-boss-passives",
     "water-interception",
-    "underwater-boss-interception"
+    "underwater-boss-interception",
+    "water-trigger-limits",
+    "underwater-boss-trigger-limits",
+    "water-dynamic-effects",
+    "underwater-boss-dynamic-effects"
   ],
   "input": "controls",
   "rules": ["state"],

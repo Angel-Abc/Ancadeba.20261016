@@ -5,6 +5,7 @@ import {
   combatEnemyAISchema,
   combatLibrarySchema,
   combatSourceSchema,
+  inventorySchema,
   resolveCombatSource,
   type CombatDefinition,
 } from '@ancadeba/schemas'
@@ -511,7 +512,15 @@ describe('conditional enemy examples', () => {
     async (id) => {
       const source = combatSourceSchema.parse(await read(`combat/${id}.json`))
       const library = combatLibrarySchema.parse(await read('combat-libraries/environments.json'))
-      const resolved = resolveCombatSource(source, new Map([['environments', library]]))
+      const inventory = inventorySchema.parse(await read('inventory/diving-gear.json'))
+
+      const resolved = resolveCombatSource(
+        source,
+        new Map([['environments', library]]),
+        undefined,
+        inventory,
+      )
+
       expect(resolved.issues).toEqual([])
       const encounter = resolved.definition!
       const player = encounter.player.id

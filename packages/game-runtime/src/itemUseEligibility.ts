@@ -1,3 +1,4 @@
+import { resolveCombatEffectValues } from './combatEffectValues.js'
 import { combatDamageProfile } from './combatDamage.js'
 import { combatStatusImmune, combatMoveRestriction } from './combatRestrictions.js'
 import { combatValueContext } from './combatValues.js'
@@ -67,7 +68,7 @@ export function abilityCanMatter(
     CombatSnapshot,
     'health' | 'maximumHealth' | 'statuses' | 'guard' | 'stats' | 'resources'
   > &
-    Partial<Pick<CombatSnapshot, 'bossPhase' | 'equipment'>>,
+    Partial<Pick<CombatSnapshot, 'bossPhase' | 'equipment' | 'baseStats' | 'round'>>,
   target: string,
 ): boolean {
   if (move.type !== 'ability') return false
@@ -92,7 +93,18 @@ export function abilityCanMatter(
 
   if (!combatConditionsMatch(move.requirements, context)) return false
 
-  return move.effects.some((effect) => {
+  return move.effects.some((authored) => {
+    const valuesContext = combatValueContext(
+      definition,
+      snapshot.resources,
+      snapshot.statuses,
+      definition.player.id,
+      target,
+      { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
+    )
+
+    const effect = resolveCombatEffectValues(authored, valuesContext)
+
     if (!combatConditionsMatch(effect.conditions, context)) return false
 
     if (effect.type === 'change-resource') {
@@ -111,7 +123,7 @@ export function abilityCanMatter(
     if (!snapshot.health[recipient]) return false
 
     const values = combatAbilityEffectValues(
-      effect,
+      { ...effect, valueScaling: undefined },
       snapshot.stats[definition.player.id],
       snapshot.stats[recipient]?.defense ?? 0,
       combatValueContext(
@@ -120,9 +132,21 @@ export function abilityCanMatter(
         snapshot.statuses,
         definition.player.id,
         target,
+        { ...snapshot, stats: snapshot.baseStats ?? snapshot.stats },
       ),
-      statusContributions(definition, snapshot.statuses[definition.player.id] ?? []),
-      combatDamageProfile(definition, recipient, snapshot.statuses, snapshot.equipment),
+      statusContributions(
+        definition,
+        snapshot.statuses[definition.player.id] ?? [],
+        valuesContext,
+        definition.player.id,
+      ),
+      combatDamageProfile(
+        definition,
+        recipient,
+        snapshot.statuses,
+        snapshot.equipment,
+        valuesContext,
+      ),
     )
 
     if (effect.type === 'heal')
@@ -131,9 +155,14 @@ export function abilityCanMatter(
       )
 
     if (effect.type === 'remove-status')
-      return Boolean(snapshot.statuses[recipient]?.some((status) => status.id === effect.status))
+      return (
+        effect.stacks !== 0 &&
+        Boolean(snapshot.statuses[recipient]?.some((status) => status.id === effect.status))
+      )
 
     if (effect.type === 'apply-status') {
+      if (effect.stacks === 0 || effect.intensity === 0) return false
+
       if (
         combatStatusImmune(
           definition,

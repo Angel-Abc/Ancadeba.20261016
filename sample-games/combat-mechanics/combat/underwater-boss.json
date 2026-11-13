@@ -42,7 +42,11 @@
       "raise-barrier",
       "rescue-breath",
       "draw-brine",
-      "awaken-conduit"
+      "awaken-conduit",
+      "raise-paced-barrier",
+      "adaptive-breath",
+      "adaptive-barrier",
+      "pressure-lance"
     ],
     "damageDefenses": {
       "resistances": {
@@ -1320,6 +1324,824 @@
           "value": 71
         }
       ]
+    },
+    "trigger-priority": {
+      "label": "Shield priority precedes softening",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "raise",
+          "plan": [
+            {
+              "move": "raise-paced-barrier"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 36
+        }
+      ]
+    },
+    "trigger-limits": {
+      "label": "Three shield charges with cooldown rounds",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal",
+        "statuses": {
+          "player": [
+            {
+              "id": "paced-barrier",
+              "source": "player",
+              "remaining": 12
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "round-1",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 80
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 39
+            }
+          ]
+        },
+        {
+          "id": "round-2",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 80
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 49
+            }
+          ]
+        },
+        {
+          "id": "round-3",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 80
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 58
+            }
+          ]
+        },
+        {
+          "id": "round-4",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 79
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 68
+            }
+          ]
+        },
+        {
+          "id": "round-5",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 79
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 76
+            }
+          ]
+        },
+        {
+          "id": "round-6",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 79
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 86
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 79
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 86
+        }
+      ]
+    },
+    "trigger-per-turn": {
+      "label": "Multiple actions share one turn refund",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal",
+        "statuses": {
+          "player": [
+            {
+              "id": "paced-barrier",
+              "source": "player",
+              "remaining": 12
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "three-actions",
+          "plan": [
+            {
+              "move": "guard"
+            },
+            {
+              "move": "guard"
+            },
+            {
+              "move": "guard"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 42
+        }
+      ]
+    },
+    "dynamic-recovery": {
+      "label": "Missing-health healing and round-based stamina",
+      "setup": {
+        "seed": 1024,
+        "round": 3,
+        "health": {
+          "player": 40
+        },
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "recover",
+          "plan": [
+            {
+              "move": "adaptive-breath"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 53
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 45
+        }
+      ]
+    },
+    "dynamic-periodic-shield": {
+      "label": "Live periodic, modifier, defense and shield values",
+      "setup": {
+        "seed": 1024,
+        "round": 1,
+        "health": {
+          "player": 20
+        },
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "raise",
+          "plan": [
+            {
+              "move": "adaptive-barrier"
+            }
+          ],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 20
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 35
+            },
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "adaptive-current",
+              "measure": "remaining",
+              "operator": "eq",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "id": "tick-two",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 23
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 45
+            },
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "adaptive-current",
+              "measure": "remaining",
+              "operator": "eq",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "id": "tick-three",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 27
+            },
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 55
+            },
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "adaptive-current",
+              "measure": "remaining",
+              "operator": "eq",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 27
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 55
+        }
+      ]
+    },
+    "dynamic-strike": {
+      "label": "Health, attack and round scaling before actual seal charge",
+      "setup": {
+        "seed": 1024,
+        "round": 4,
+        "health": {
+          "player": 50
+        },
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 0
+        },
+        "phase": "first-seal",
+        "statuses": {
+          "guardian": [
+            {
+              "id": "seal-conduit",
+              "source": "guardian",
+              "remaining": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "lance",
+          "plan": [
+            {
+              "move": "pressure-lance",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 37
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 31
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 487
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 13
+        }
+      ]
+    },
+    "assert-passive-shield": {
+      "label": "Assert passive activation, shielding and action execution",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "raise",
+          "plan": [
+            {
+              "move": "raise-paced-barrier"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 36
+        },
+        {
+          "type": "passive-activations",
+          "actor": "player",
+          "library": "environments",
+          "passive": "paced-barrier",
+          "trigger": "absorb",
+          "sourceKind": "status",
+          "sourceId": "paced-barrier",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "interception",
+          "target": "player",
+          "operation": "absorb-damage",
+          "measure": "count",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "interception",
+          "target": "player",
+          "operation": "absorb-damage",
+          "measure": "spent",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "action-choices",
+          "actor": "player",
+          "move": "raise-paced-barrier",
+          "result": "executed",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "trigger-cooldown",
+          "actor": "player",
+          "library": "environments",
+          "passive": "paced-barrier",
+          "trigger": "absorb",
+          "sourceKind": "status",
+          "sourceId": "paced-barrier",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "action-choices",
+          "actor": "guardian",
+          "move": "pressure-surge",
+          "rule": "final-surge",
+          "result": "chosen",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "action-choices",
+          "actor": "guardian",
+          "move": "pressure-surge",
+          "rule": "final-surge",
+          "result": "executed",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "assert-items-healing": {
+      "label": "Assert consumed tonic, reusable stone, healing and cooldowns",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 30
+        },
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "waterlogged",
+              "source": "player",
+              "remaining": 2
+            }
+          ]
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "tonic",
+          "plan": [
+            {
+              "move": "tonic-sip",
+              "item": "brine-tonic"
+            }
+          ],
+          "expect": [
+            {
+              "type": "healing-total",
+              "target": "player",
+              "operator": "eq",
+              "value": 6
+            },
+            {
+              "type": "item-consumption",
+              "item": "brine-tonic",
+              "operator": "eq",
+              "value": 1
+            },
+            {
+              "type": "cooldown",
+              "actor": "player",
+              "move": "tonic-sip",
+              "operator": "eq",
+              "value": 1
+            },
+            {
+              "type": "cooldown",
+              "actor": "player",
+              "move": "tonic-sip",
+              "measure": "readyRound",
+              "operator": "eq",
+              "value": 3
+            },
+            {
+              "type": "interception",
+              "operation": "adjust-effect",
+              "measure": "count",
+              "operator": "eq",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "wait",
+          "plan": [],
+          "expect": [
+            {
+              "type": "healing-total",
+              "target": "player",
+              "scope": "step",
+              "operator": "eq",
+              "value": 0
+            },
+            {
+              "type": "item-consumption",
+              "scope": "step",
+              "operator": "eq",
+              "value": 0
+            },
+            {
+              "type": "cooldown",
+              "actor": "player",
+              "move": "tonic-sip",
+              "operator": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "stone",
+          "plan": [
+            {
+              "move": "tonic-sip",
+              "item": "breath-stone"
+            }
+          ],
+          "expect": [
+            {
+              "type": "healing-total",
+              "target": "player",
+              "scope": "step",
+              "operator": "eq",
+              "value": 12
+            },
+            {
+              "type": "item-consumption",
+              "scope": "step",
+              "operator": "eq",
+              "value": 0
+            },
+            {
+              "type": "action-choices",
+              "actor": "player",
+              "move": "tonic-sip",
+              "result": "executed",
+              "scope": "step",
+              "operator": "eq",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "healing-total",
+          "target": "player",
+          "operator": "eq",
+          "value": 18
+        },
+        {
+          "type": "item-consumption",
+          "itemType": "brine-tonic",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "item-consumption",
+          "itemType": "breath-stone",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "action-choices",
+          "actor": "player",
+          "move": "tonic-sip",
+          "result": "executed",
+          "operator": "eq",
+          "value": 2
+        },
+        {
+          "type": "cooldown",
+          "actor": "player",
+          "move": "tonic-sip",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "assert-conduit-damage": {
+      "label": "Assert actual lightning damage and conduit redirection",
+      "setup": {
+        "seed": 1024,
+        "round": 4,
+        "health": {
+          "player": 50
+        },
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 0
+        },
+        "phase": "first-seal",
+        "statuses": {
+          "guardian": [
+            {
+              "id": "seal-conduit",
+              "source": "guardian",
+              "remaining": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "lance",
+          "plan": [
+            {
+              "move": "pressure-lance",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 37
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 31
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 487
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 13
+        },
+        {
+          "type": "damage-total",
+          "source": "player",
+          "target": "guardian",
+          "damageType": "lightning",
+          "operator": "eq",
+          "value": 13
+        },
+        {
+          "type": "damage-total",
+          "source": "player",
+          "target": "player",
+          "damageType": "lightning",
+          "delivery": "reaction",
+          "operator": "eq",
+          "value": 12
+        },
+        {
+          "type": "interception",
+          "source": "player",
+          "target": "guardian",
+          "operation": "redirect-damage",
+          "measure": "amount",
+          "operator": "eq",
+          "value": 12
+        },
+        {
+          "type": "passive-activations",
+          "actor": "guardian",
+          "library": "environments",
+          "passive": "seal-conduit",
+          "trigger": "redirect",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "action-choices",
+          "actor": "player",
+          "move": "pressure-lance",
+          "result": "executed",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
     }
   },
   "rulesets": [
@@ -1502,6 +2324,26 @@
     {
       "library": "environments",
       "id": "awaken-conduit"
+    },
+    {
+      "library": "environments",
+      "id": "raise-paced-barrier"
+    },
+    {
+      "library": "environments",
+      "id": "adaptive-breath"
+    },
+    {
+      "library": "environments",
+      "id": "adaptive-barrier"
+    },
+    {
+      "library": "environments",
+      "id": "pressure-lance"
     }
-  ]
+  ],
+  "itemUse": {
+    "owner": "diver",
+    "itemTypes": ["brine-tonic", "breath-stone"]
+  }
 }

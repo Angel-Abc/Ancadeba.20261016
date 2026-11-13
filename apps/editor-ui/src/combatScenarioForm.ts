@@ -1,4 +1,9 @@
 import {
+  combatScenarioAssertionsForm,
+  newCombatScenarioAssertion,
+} from './combatScenarioAssertionsForm.js'
+import { combatScenarioRichAssertionTypes } from '@ancadeba/schemas'
+import {
   combatSimulationScenarioSchema,
   combatScenarioStepSchema,
   combatScenarioSetupSchema,
@@ -187,48 +192,77 @@ export function combatScenarioForm(
         select(
           text('expectedType'),
           entry.type,
-          ['outcome', 'phase', 'health', 'guard', 'resource', 'status', 'rounds', 'trigger'],
+          [
+            'outcome',
+            'phase',
+            'health',
+            'guard',
+            'resource',
+            'status',
+            'rounds',
+            'trigger',
+            ...combatScenarioRichAssertionTypes,
+          ],
           (type) => {
             const actor = definition.player.id
             items[index] =
-              type === 'outcome'
-                ? { type, value: 'planning' }
-                : type === 'phase'
-                  ? { type, value: Object.keys(definition.mechanics?.phases ?? {})[0] ?? 'phase' }
-                  : type === 'trigger'
-                    ? {
-                        type,
-                        trigger:
-                          Object.keys(definition.mechanics?.triggers ?? {}).find(
-                            (id) => definition.mechanics!.triggers[id]!.once,
-                          ) ?? 'trigger',
-                        fired: true,
-                      }
-                    : type === 'health' || type === 'guard'
-                      ? { type, actor, operator: 'eq', value: 0 }
-                      : type === 'resource'
-                        ? {
-                            type,
-                            resource:
-                              Object.keys(definition.mechanics?.resources ?? {})[0] ?? 'resource',
-                            operator: 'eq',
-                            value: 0,
-                          }
-                        : type === 'status'
+              type === 'passive-activations' ||
+              type === 'interception' ||
+              type === 'damage-total' ||
+              type === 'healing-total' ||
+              type === 'action-choices' ||
+              type === 'cooldown' ||
+              type === 'trigger-cooldown' ||
+              type === 'item-consumption'
+                ? newCombatScenarioAssertion(type, definition)
+                : type === 'outcome'
+                  ? { type, value: 'planning' }
+                  : type === 'phase'
+                    ? { type, value: Object.keys(definition.mechanics?.phases ?? {})[0] ?? 'phase' }
+                    : type === 'trigger'
+                      ? {
+                          type,
+                          trigger:
+                            Object.keys(definition.mechanics?.triggers ?? {}).find(
+                              (id) => definition.mechanics!.triggers[id]!.once,
+                            ) ?? 'trigger',
+                          fired: true,
+                        }
+                      : type === 'health' || type === 'guard'
+                        ? { type, actor, operator: 'eq', value: 0 }
+                        : type === 'resource'
                           ? {
                               type,
-                              actor,
-                              status: Object.keys(definition.statuses ?? {})[0] ?? 'status',
-                              measure: 'stacks',
+                              resource:
+                                Object.keys(definition.mechanics?.resources ?? {})[0] ?? 'resource',
                               operator: 'eq',
                               value: 0,
                             }
-                          : { type: 'rounds', operator: 'eq', value: 1 }
+                          : type === 'status'
+                            ? {
+                                type,
+                                actor,
+                                status: Object.keys(definition.statuses ?? {})[0] ?? 'status',
+                                measure: 'stacks',
+                                operator: 'eq',
+                                value: 0,
+                              }
+                            : { type: 'rounds', operator: 'eq', value: 1 }
             changed()
             render()
           },
         ),
-        ...('actor' in entry
+        ...(entry.type === 'passive-activations' ||
+        entry.type === 'interception' ||
+        entry.type === 'damage-total' ||
+        entry.type === 'healing-total' ||
+        entry.type === 'action-choices' ||
+        entry.type === 'cooldown' ||
+        entry.type === 'trigger-cooldown' ||
+        entry.type === 'item-consumption'
+          ? combatScenarioAssertionsForm(controls, entry, definition, view)
+          : []),
+        ...(entry.type === 'health' || entry.type === 'guard' || entry.type === 'status'
           ? [
               select(
                 text('expectedActor'),
@@ -430,11 +464,44 @@ export function combatScenarioForm(
                 action.move,
                 [...definition.player.moves, ...(definition.player.equipmentMoves ?? [])],
                 (value) => {
+                  action.item = undefined
                   action.move = value
                   action.target =
                     combatMoveTarget(definition.moves[value]!) === 'self'
                       ? undefined
                       : definition.enemies[0]?.id
+                  changed()
+                  render()
+                },
+              ),
+              select(
+                text('scriptedItem'),
+                action.item ?? '',
+                [
+                  ['', text('nativeMove')],
+                  ...Object.entries(view.inventory?.items ?? {})
+                    .filter(([, item]) => definition.itemUse?.itemTypes.includes(item.itemType))
+                    .map(([id]) => [id, id] as const),
+                ],
+                (item) => {
+                  action.item = item || undefined
+
+                  if (!item && !definition.player.moves.includes(action.move))
+                    action.move = definition.player.moves[0]!
+
+                  if (item) {
+                    const type = view.inventory?.items[item]?.itemType
+                    const ability = type && view.inventory?.itemTypes[type]?.use?.ability.id
+
+                    if (ability && definition.moves[ability]) {
+                      action.move = ability
+                      action.target =
+                        combatMoveTarget(definition.moves[ability]!) === 'self'
+                          ? undefined
+                          : definition.enemies[0]?.id
+                    }
+                  }
+
                   changed()
                   render()
                 },

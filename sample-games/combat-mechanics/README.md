@@ -290,7 +290,7 @@ In the editor, use **Damage type** on attacks, damage effects and periodic
 statuses. Use actor/status **Damage defenses** to add matching type IDs and
 percentages or immunity. Live views and previews show effective defenses and
 typed damage ranges; logs and simulator frames retain mitigation details.
-All forty-two saved scenarios, including the original three-seal victory, remain
+All sixty saved scenarios, including the original three-seal victory, remain
 available for replay.
 
 ## Actual damage, healing and reactions
@@ -502,3 +502,100 @@ Seven saved scenarios exercise the new hooks:
 Edit these reusable triggers under **Shared combat passives**: `air-barrier`,
 `waterlogged-healing`, `rescue-instinct` and `seal-conduit`. The first three
 support both encounters; the last demonstrates the guardian-specific ward.
+
+## Trigger priorities and activation limits
+
+Open **Trigger limits: Water** or **Trigger limits: Underwater guardian** from
+the harbour or diving gear room. **A — Raise paced barrier** costs 5 stamina and
+grants a twelve-turn status. **B** resolves. The shared `paced-barrier` passive
+has deliberately authored its softening trigger before its shield, demonstrating
+that explicit priority determines execution:
+
+- **Absorb**, priority **20**: spend up to 2 stamina to absorb incoming damage.
+  It has **3 charges**, **1 activation per combatant turn**, and **cooldown 1**.
+  With damage each round it activates in rounds 1, 3 and 5; later damage finds
+  its charges exhausted. Empty packets/resources do not spend a charge.
+- **Soften**, priority **10**: halve remaining damage after shield spending.
+  Reversing these priorities changes the stamina spent and can change HP loss.
+- **Reserve**, default priority **0**: refund 2 stamina after an action, limited
+  to **once per turn**. Queue several actions to see additional refunds blocked.
+
+Reapplying the status refreshes its duration but preserves its spent charges and
+cooldown. These limits belong to the granting status and persist through save/load.
+Other shields and passives retain their existing settings.
+
+Each encounter adds three saved scenarios (six new scenarios, forty-eight total):
+
+| Scenario           | Checks                                                                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trigger-priority` | Raising the ward grants one action refund; shield spending occurs before softening. Water ends at 80 HP / 35 stamina, boss at 80 HP / 36 stamina.                                           |
+| `trigger-per-turn` | Three Guard actions grant only one 2-stamina refund; both encounters end at 80 HP / 42 stamina.                                                                                             |
+| `trigger-limits`   | Check HP and stamina after each of six rounds, covering charges spent in rounds 1, 3 and 5 and blocked activations afterward. Water ends at 74 HP / 84 stamina; boss at 79 HP / 86 stamina. |
+
+Filter simulator traces to mechanics and choose **Activated**, **Per-turn limit
+reached**, **Trigger cooling down** or **No charges remaining** entries. Their
+`activation` details show priority, remaining charges, current-turn allowance and
+cooldown readiness. Edit the controls in **Shared combat passives → paced-barrier**
+or on encounter/ruleset triggers, then replay the scenarios to compare results.
+
+## Dynamic effects from health, stats and round
+
+Open **Dynamic effects: Water** or **Dynamic effects: Underwater guardian** from
+the harbour or gear room. These views reuse the existing encounters and gear.
+
+- **A — Raise adaptive current** spends 5 stamina. Duration is 3 plus round,
+  capped at 8. Regeneration is 1 plus round (maximum 8); water resistance gains
+  5 percentage points per round (maximum 40%). Missing health adds defense at
+  0.02 per HP (maximum 4), before status strength multiplication.
+- Its **Adaptive guard** passive absorbs stamina-funded damage before HP loss.
+  Maximum absorption is 1 plus round plus half current defense, capped at 8;
+  the shield has three charges and a per-turn limit. Try higher starting
+  exhaustion in the simulator to increase enemy pressure and exercise the shield.
+- **S — Adaptive breath** heals 4 plus 25% of missing health plus current defense,
+  then restores 2 stamina plus round (maximum 12). Later breaths use the health
+  left by earlier effects, and normal outgoing healing modifiers still apply.
+- **Z — Pressure lance** deals lightning damage based on target health percentage,
+  attack and round. Its stamina cost is 5 plus round. In the boss view,
+  **F — Awaken conduit** redirects half its damage; only guardian HP lost charges
+  the seal. **B** resolves.
+
+Both encounters add `dynamic-recovery`, `dynamic-periodic-shield` and
+`dynamic-strike`, bringing the sample total to **54** saved scenarios. Recovery
+starts in round 3 at 40 HP and finishes at 52 HP in Water or 53 against the boss,
+with 45 stamina. The periodic scenario starts at 20 HP and checks three rounds:
+20/23/27 HP, 35/45/55 stamina, and 4/3/2 remaining status turns. The round-4 lance
+leaves the eel at 65 HP; with the guardian conduit it deals 13 actual guardian
+damage, redirects 12, and grants exactly 13 seal charge.
+
+Author these formulas in **Numeric effect scaling** on status/trigger/effect
+forms, or use the existing move/cost formula sections. Health, missing health,
+stat and round sources are available in both. Replay after editing to inspect
+current values, actual effects and passive shield spending.
+
+## Assert what happened in combat
+
+The sample now includes **60 saved scenarios**. New activity assertions verify
+actual combat behavior independently of the simulator's bounded trace:
+
+| Encounter                 | Scenario                | Checks                                                                                                                                                                                                                     |
+| ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Water and Underwater boss | `assert-passive-shield` | The Paced barrier status fires its shield once, spends 2 stamina in Water or 1 against the guardian, and has one cooldown round remaining. The boss also verifies selection and execution of `final-surge`.                |
+| Water and Underwater boss | `assert-items-healing`  | Brine tonic heals 6 through Waterlogged and is consumed. After a cooldown round, Breath stone heals 12 and remains reusable. Total healing is 18, tonic consumption 1, stone consumption 0; step checks isolate each cast. |
+| Water                     | `assert-enemy-choices`  | Clear mind provokes the eel's `test-clear-mind` AI rule: Brine curse is selected and executed, and Bite is not executed.                                                                                                   |
+| Underwater boss           | `assert-conduit-damage` | Pressure lance deals 13 actual lightning damage to the guardian and redirects 12 to the diver. The conduit passive activates once and the seal gains exactly 13.                                                           |
+
+The carried **Brine tonic** and reusable **Breath stone** share **Sip brine tonic**:
+12 healing, 1 AP, and a one-round cooldown. These are item-granted casts; the
+ability is not a native player move. In the editor, replay the saved item scenario,
+or lower starting health, choose **Simulation item**, and **Queue item**. This
+uses an isolated inventory copy. Captured scenarios store item IDs; neither replay
+nor assertions consume the game's authored or live items.
+
+Add checks with **Expected result type**. Use **Assertion scope: step** for the
+current step's repeat group or the last step in final checks. Default scenario
+scope accumulates all committed rounds. Actual HP totals exclude overkill and
+shield absorption; other measures let you assert packet counts, shield spending,
+prevention, redirection and overheal. **Action stage** separates chosen from
+executed actions, while move/trigger cooldown checks read current readiness.
+The JSON report exposes aggregate `metrics` and simulated `consumedItems`, even
+when its trace is truncated.
