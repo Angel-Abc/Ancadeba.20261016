@@ -1369,6 +1369,73 @@ describe('scene renderer', () => {
     },
   )
 
+  it.each([false, true])(
+    'localizes built-in runtime controls and catalog overrides in preview=%s',
+    async (preview) => {
+      const resources = {
+        ...source,
+        readText: async (path: string) => {
+          const text = await source.readText(path)
+
+          if (path !== 'languages/nl/messages.json') return text
+
+          return JSON.stringify({
+            ...JSON.parse(text),
+            'runtime.inventory.carried': 'Meegedragen',
+            'runtime.save.save': 'Bewaar mijn spel',
+          })
+        },
+      }
+
+      const game = await new GameLoader(new JsonResourceLoader(resources, logger), ['en']).load()
+      const { target } = setup(game)
+      const slots = new Map<string, string>()
+
+      const engine = new Engine(
+        { load: async () => game },
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => slots.get(id),
+            write: (id, value) => {
+              slots.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      startSampleGame(target)
+      const instance = engine.lifecycle!.currentGame
+      const text = (value: string) => target.find((node) => node.textContent === value)
+
+      expect(text('Carried')).toBeDefined()
+      expect(text('Worn')).toBeDefined()
+      expect(text('Save progress')).toBeDefined()
+      game.localization!.select('nl')
+      expect(text('Meegedragen')).toBeDefined()
+      expect(text('Uitrusting')).toBeDefined()
+      expect(text('Amulet: leeg')).toBeDefined()
+      expect(text('Selectie in de buurt wissen')).toBeDefined()
+      expect(text('Bewaar mijn spel')).toBeDefined()
+      expect(text('Carried')).toBeUndefined()
+      expect(text('Worn')).toBeUndefined()
+      expect(engine.lifecycle!.currentGame).toBe(instance)
+
+      engine.lifecycle!.enterScene('inventory')
+      expect(text('Selectie wissen')).toBeDefined()
+      expect(text('Leeg')).toBeDefined()
+      game.localization!.select('en')
+      expect(text('Carried')).toBeDefined()
+      expect(text('Clear selection')).toBeDefined()
+      expect(text('Save progress')).toBeDefined()
+    },
+  )
+
   it('opens the editor preview at the scene being edited instead of the start screen', async () => {
     const game = await new GameLoader(new JsonResourceLoader(source, logger), ['en']).load()
     const { target } = setup(game)
@@ -1450,7 +1517,10 @@ describe('scene renderer', () => {
       expect(slot('6').hidden).toBe(false)
 
       const clear = component('nearby').find(
-        (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear nearby selection',
+        (node) =>
+          node.tagName === 'BUTTON' &&
+          node.textContent ===
+            (language === 'nl' ? 'Selectie in de buurt wissen' : 'Clear nearby selection'),
       )!
 
       clear.focus()

@@ -196,6 +196,7 @@
   "owners": {
     "player": {
       "label": "Player",
+      "labelKey": "status.player",
       "combatStats": {
         "health": {
           "source": "game.state",
@@ -223,22 +224,30 @@
       },
       "equipmentSlots": {
         "charm": "Charm"
+      },
+      "equipmentSlotKeys": {
+        "charm": "inventory.slot.charm"
       }
     },
     "lobby": {
-      "label": "Museum lobby"
+      "label": "Museum lobby",
+      "labelKey": "inventory.owner.lobby"
     },
     "museum-kiosk": {
-      "label": "Museum kiosk"
+      "label": "Museum kiosk",
+      "labelKey": "inventory.owner.kiosk"
     },
     "training-loot": {
-      "label": "Training loot"
+      "label": "Training loot",
+      "labelKey": "inventory.owner.trainingLoot"
     },
     "advanced-loot": {
-      "label": "Advanced training loot"
+      "label": "Advanced training loot",
+      "labelKey": "inventory.owner.advancedLoot"
     },
     "advanced-sentinel": {
       "label": "Advanced opponent",
+      "labelKey": "inventory.owner.opponent",
       "combatStats": {
         "health": {
           "source": "game.state",
@@ -266,6 +275,7 @@
     },
     "advanced-keeper": {
       "label": "Advanced opponent",
+      "labelKey": "inventory.owner.opponent",
       "combatStats": {
         "health": {
           "source": "game.state",

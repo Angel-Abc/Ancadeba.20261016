@@ -1,5 +1,6 @@
 import type { ButtonComponentData } from '@ancadeba/game-runtime'
 import { canEnterScene } from '@ancadeba/game-runtime'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -28,7 +29,8 @@ export class ButtonComponentRenderer implements IComponentRenderer<ButtonCompone
         element.disabled = !context.onButtonActivate || !available
         element.title = available
           ? ''
-          : (context.navigationUnavailableMessage?.() ?? 'The destination is currently blocked.')
+          : (context.navigationUnavailableMessage?.() ??
+            componentRuntimeText(context)('navigation.blocked'))
         element.setAttribute('aria-description', element.title)
 
         return

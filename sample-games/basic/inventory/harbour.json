@@ -30,7 +30,8 @@
   },
   "owners": {
     "display-case": {
-      "label": "Display case"
+      "label": "Display case",
+      "labelKey": "inventory.owner.displayCase"
     }
   },
   "items": {

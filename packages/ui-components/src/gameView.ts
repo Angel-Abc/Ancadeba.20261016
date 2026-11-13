@@ -1,5 +1,5 @@
 import type { GameData, IGameLifecycle, SceneData, IGameSaves } from '@ancadeba/game-runtime'
-import { canEnterScene } from '@ancadeba/game-runtime'
+import { canEnterScene, runtimeText } from '@ancadeba/game-runtime'
 import { mountGameSaveControls, gameSaveMessages } from './gameSaveControls.js'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
 import { SceneRenderer, type SceneRendererOptions } from './sceneRenderer.js'
@@ -86,15 +86,21 @@ export function mountGameView(
       const label = document.createElement('label')
       label.className = 'ancadeba-scene-picker'
       const caption = document.createElement('span')
-      caption.textContent = options.scenePickerLabels?.caption ?? 'Scene'
+
+      const syncPickerLabels = () => {
+        caption.textContent =
+          options.scenePickerLabels?.caption ?? runtimeText(game, 'scene.caption')
+        select.setAttribute(
+          'aria-label',
+          options.scenePickerLabels?.accessibleName ?? runtimeText(game, 'scene.preview'),
+        )
+        empty.textContent = options.scenePickerLabels?.empty ?? runtimeText(game, 'scene.empty')
+      }
+
       const select = document.createElement('select')
-      select.setAttribute(
-        'aria-label',
-        options.scenePickerLabels?.accessibleName ?? 'Preview scene',
-      )
       const empty = document.createElement('option')
       empty.value = ''
-      empty.textContent = options.scenePickerLabels?.empty ?? 'No active scene'
+      syncPickerLabels()
       select.append(empty)
 
       const sceneOptions = new Map<string, HTMLOptionElement>()
@@ -110,6 +116,8 @@ export function mountGameView(
       if (localization)
         cleanups.push(
           localization.subscribe(() => {
+            syncPickerLabels()
+
             for (const [id, option] of sceneOptions) {
               option.textContent = localization.current.scenes.get(id)?.title ?? id
             }
@@ -166,10 +174,7 @@ export function mountGameView(
         canEnterScene(game, action, session.lifecycle.currentGame?.mapMovement),
       subscribeNavigationChanges: (listener) =>
         session.lifecycle.currentGame?.bindings?.subscribeChanges(listener) ?? (() => {}),
-      navigationUnavailableMessage: () =>
-        game.language?.toLowerCase().startsWith('nl')
-          ? 'De bestemming is momenteel geblokkeerd.'
-          : 'The destination is currently blocked.',
+      navigationUnavailableMessage: () => runtimeText(game, 'navigation.blocked'),
       onButtonActivate: (action) => {
         if (disposed) return
 

@@ -1283,8 +1283,13 @@ pinned to an editor revision across its individual file reads.
 
 The preview's **Save progress** and **Load progress** controls use a durable browser
 slot scoped to the project folder and game ID. They preserve progress across preview
-restarts and page reloads. An accepted change to game content makes older saves
-incompatible; loading reports this before replacing the current playthrough.
+restarts and page reloads. Gameplay-definition or stylesheet changes make older
+saves incompatible; loading reports this before replacing the current playthrough.
+Translation catalogs, key assignments and displayed text can change while keeping
+saves compatible. Available/default language changes also preserve saves; a saved
+language that was removed falls back to the current/default language. Older
+full-content fingerprints are incompatible and have no upgrade path. See the README
+for the compatibility boundary.
 The component editor also offers **Save progress** and **Load saved progress** as
 ordinary button actions (`save-game` and `load-game`), without a scene target.
 The Basic Game's main-menu Load Game button is enabled when a slot exists.
@@ -1445,6 +1450,12 @@ Choose **Inventory entry kind → Owners**, enter a **New entry ID**, and choose
 **Add owner**. Set **Owner name** and add named equipment slots with **New slot
 ID**, **New slot name**, and **Add equipment slot**. Optional owner combat stats
 use the numeric health fields declared in Rules.
+
+Owners and their equipment slots expose **Name translation** fields. Saved inventory
+definitions use `labelKey` for the owner and `equipmentSlotKeys` for slot names;
+keys resolve through the same catalogs as item names. The built-in inventory controls
+and feedback use English/Dutch defaults and optional `runtime.*` catalog overrides
+described in the README's **Built-in runtime text** section.
 
 Choose **Item types**, enter an ID, and choose **Add item type**. Set its name,
 description, properties, artwork, icon and optional equipped graphic part.

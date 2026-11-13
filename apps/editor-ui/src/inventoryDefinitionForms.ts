@@ -5,7 +5,12 @@ import {
   inventoryIcon,
   type InventoryDefinition,
 } from '@ancadeba/schemas'
-import { yesNoChoices, onOffChoices, type RuleFormControls } from './ruleFormControls.js'
+import {
+  yesNoChoices,
+  onOffChoices,
+  translationChoices,
+  type RuleFormControls,
+} from './ruleFormControls.js'
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { itemUseForm } from './itemUseForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
@@ -95,15 +100,36 @@ export function inventoryDefinitionForms(
       input(t('items.ownerName'), owner.label, (value) => {
         owner.label = value
       }),
+      controls.translation(
+        t('form.nameTranslation'),
+        owner.labelKey ?? '',
+        translationChoices(view),
+        (value) => {
+          owner.labelKey = value || undefined
+        },
+      ),
       ...Object.entries(owner.equipmentSlots).map(([id, label]) =>
         group(
           t('items.equipmentSlot', { id }),
           input(t('items.equipmentSlotName'), label, (value) => {
             owner.equipmentSlots[id] = value
           }),
+          controls.translation(
+            t('form.nameTranslation'),
+            owner.equipmentSlotKeys?.[id] ?? '',
+            translationChoices(view),
+            (value) => {
+              owner.equipmentSlotKeys ??= {}
+
+              if (value) owner.equipmentSlotKeys[id] = value
+              else delete owner.equipmentSlotKeys[id]
+            },
+          ),
           button(t('items.removeEquipmentSlot'), () =>
             change(() => {
               delete owner.equipmentSlots[id]
+
+              if (owner.equipmentSlotKeys) delete owner.equipmentSlotKeys[id]
             }),
           ),
         ),

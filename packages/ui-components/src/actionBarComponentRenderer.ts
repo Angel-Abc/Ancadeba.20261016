@@ -1,5 +1,6 @@
 import type { ActionBarComponentDefinition } from '@ancadeba/schemas'
 import { cooldownRemaining } from '@ancadeba/game-runtime'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -137,7 +138,8 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
 
         button.title =
           action.type === 'enter-scene' && button.disabled
-            ? (context.navigationUnavailableMessage?.() ?? 'The destination is currently blocked.')
+            ? (context.navigationUnavailableMessage?.() ??
+              componentRuntimeText(context)('navigation.blocked'))
             : (storyIssue ?? itemIssue ?? moveIssue ?? equipmentIssue ?? lock.textContent)
         button.setAttribute('aria-description', button.title)
 

@@ -383,6 +383,39 @@ Both `sample-games/basic` and `sample-games/localized` have complete English and
 Dutch catalogs. The basic sample includes translated narrative, inventory text,
 menus, and status templates.
 
+### Built-in runtime text
+
+Runtime controls, inventory placement and error messages, nearby controls, save/load
+messages, and navigation warnings follow the selected game language. English and Dutch
+defaults are built in. Other languages fall back to English until their catalogs
+provide overrides. Switching language updates these controls without replacing the
+playthrough.
+
+Override built-in text by adding `runtime.*` keys to the existing game catalogs:
+
+```json
+{
+  "runtime.inventory.carried": "Backpack",
+  "runtime.inventory.emptySlot": "{slot}: nothing equipped",
+  "runtime.nearby.clear": "Clear target",
+  "runtime.save.save": "Save adventure",
+  "runtime.navigation.blocked": "That route is closed."
+}
+```
+
+The selected catalog takes precedence, then the game's default catalog, then the
+built-in language defaults. Explicit empty strings remain empty. Substitutions
+such as `{slot}`, `{item}`, `{owner}`, `{container}`, `{destination}`, and `{id}`
+are plain text and are substituted once. Available keys and English/Dutch defaults
+are defined in `packages/schemas/src/runtimeText.ts`; no Rules file is required.
+Authored combat, quest, shop and progression text continues to use its existing
+`messageKeys` and translation-key fields.
+
+Inventory owners also support `labelKey`, and `equipmentSlotKeys` maps existing
+slot IDs to translation keys. Both can be assigned in **Items & equipment →
+Inventory definitions → Owners** using the name translation fields. Literal names
+remain the fallback when no key is assigned.
+
 ## Visual graphic authoring
 
 In **Assets**, choose **Add definition** or select a part/composition to edit
@@ -1296,15 +1329,25 @@ containing only the active scene's map positions still load; unrecorded scenes u
 their authored spawns.
 
 The save format is versioned and validated before replacing the current game.
-Saves must match the game ID, game version, and a fingerprint of its loaded
-definitions, translations, and stylesheet. Editing those resources invalidates an
+Saves must match the game ID, game version, and a fingerprint of the gameplay
+definitions and stylesheet. Changes to IDs, state/bindings, inventory structure,
+rules, maps, combat mechanics, dialogue choices, or quest progression invalidate an
 older slot, including in the preview, even if the manifest version is unchanged.
+Translation catalogs, translation-key assignments, displayed text and messages,
+inventory owner/slot names, and the available/default languages are excluded.
+Presentation-only edits therefore preserve saves; loaded views use the new text.
+Existing captured state strings, activity logs and transcript substitutions retain
+their saved values. A removed saved language falls back to the currently selected
+language or the game's default. Bumping the game version still invalidates saves.
+
+Saves use a `gameplay-v1:` content fingerprint. Older full-content fingerprints
+are incompatible; there is no upgrade path for those slots.
 Invalid, damaged, incompatible, or oversized saves show an error and preserve the
 current playthrough. Storage failures, including blocked storage and quota errors,
 never report success. Slots are separated by browser origin and game location;
 preview slots are additionally separated by project folder. Exports use their own
 hosting location. Clearing browser storage removes saved progress. There is no
-cloud sync, automatic save, or cross-version migration.
+cloud sync, automatic save, or general gameplay-version migration.
 
 Authors can add ordinary buttons with `"action": { "type": "save-game" }` or
 `"action": { "type": "load-game" }` through the component editor. These actions

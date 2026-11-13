@@ -7,6 +7,7 @@ import {
   type SlotAppearance,
 } from '@ancadeba/schemas'
 import { GraphicComponentRenderer, type RenderedGraphic } from './graphicComponentRenderer.js'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -34,6 +35,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
   constructor(private readonly graphics = new GraphicComponentRenderer()) {}
 
   render(component: InventoryComponentData, context: ComponentRenderContext): RenderedComponent {
+    const t = componentRuntimeText(context)
     const { document, assets, inventory, inventoryDefinition: definition } = context
     const scene = context.scene
     const actionBar = scene?.type === 'game' ? scene.game.actionBar : undefined
@@ -69,7 +71,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     root.append(title)
 
     if (!inventory || !definition) {
-      root.append('Inventory unavailable')
+      root.append(t('inventory.unavailable'))
 
       return { element: root, dispose: () => root.remove() }
     }
@@ -103,12 +105,12 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     const controls = document.createElement('div')
     controls.className = 'ancadeba-inventory-controls'
     const label = document.createElement('label')
-    label.textContent = 'Destination '
+    label.textContent = `${t('inventory.destination')} `
     const select = document.createElement('select')
     label.append(select)
     const move = document.createElement('button')
     move.type = 'button'
-    move.textContent = 'Move selected item'
+    move.textContent = t('inventory.move')
     const status = document.createElement('p')
     status.setAttribute('role', 'status')
     controls.append(label, move, status)
@@ -129,7 +131,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
     let selectionChoices: Destination[] = []
     const clearSelection = document.createElement('button')
     clearSelection.type = 'button'
-    clearSelection.textContent = 'Clear selection'
+    clearSelection.textContent = t('inventory.clear')
     clearSelection.addEventListener('click', () => {
       if (scene) {
         if (selection) selection.select(scene, component.id)
@@ -195,7 +197,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
             )
       const placeholder = document.createElement('option')
       placeholder.value = ''
-      placeholder.textContent = selected ? 'Choose a destination' : 'Select an item first'
+      placeholder.textContent = t(selected ? 'inventory.chooseDestination' : 'inventory.selectItem')
       select.replaceChildren(placeholder)
       const names = new Map<string, number>()
 
@@ -300,7 +302,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
         if (type.container)
           choices.push({
-            label: `Inside ${path} / ${type.label}`,
+            label: t('inventory.inside', { container: `${path} / ${type.label}` }),
             placement: { type: 'inside', container: item.id },
           })
 
@@ -308,7 +310,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
         if (contents?.length) {
           const list = document.createElement('ul')
-          list.setAttribute('aria-label', `Inside ${type.label}`)
+          list.setAttribute('aria-label', t('inventory.inside', { container: type.label }))
 
           for (const child of contents) list.append(itemRow(child, `${path} / ${type.label}`))
           row.append(list)
@@ -319,8 +321,8 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           const inspect = document.createElement('button')
           inspect.type = 'button'
           inspect.dataset.inspectItem = item.id
-          inspect.textContent = 'Inspect'
-          inspect.setAttribute('aria-label', `Inspect ${type.label}`)
+          inspect.textContent = t('inventory.inspect')
+          inspect.setAttribute('aria-label', t('inventory.inspectItem', { item: type.label }))
           inspect.addEventListener('click', () => {
             if (!inspectionDetails.has(details)) return
 
@@ -364,7 +366,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         }
 
         choices.push({
-          label: `Carried by ${owner.label}`,
+          label: t('inventory.carriedBy', { owner: owner.label }),
           placement: { type: 'carried', owner: ownerId },
         })
 
@@ -386,7 +388,10 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
           section.append(preview.element)
         }
 
-        const carried = simple ? document.createElement('ul') : appendGroup(section, 'Carried')
+        const carried = simple
+          ? document.createElement('ul')
+          : appendGroup(section, t('inventory.carried'))
+
         carried.className = 'ancadeba-inventory-items'
 
         for (const item of ownerItems) {
@@ -395,7 +400,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
 
         if (!carried.firstChild) {
           const empty = document.createElement(simple ? 'p' : 'li')
-          empty.textContent = 'Empty'
+          empty.textContent = t('inventory.empty')
 
           if (simple) {
             empty.className = 'ancadeba-inventory-empty'
@@ -407,13 +412,13 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
         }
 
         if (equipmentSlots.length) {
-          const worn = appendGroup(section, 'Worn')
+          const worn = appendGroup(section, t('inventory.worn'))
 
           for (const [slot, name] of equipmentSlots) {
             const slotLabel = document.createElement('span')
             const item = equipped.get(slot)
             const row = item ? itemRow(item, owner.label) : document.createElement('li')
-            slotLabel.textContent = item ? `${name}: ` : `${name}: empty`
+            slotLabel.textContent = item ? `${name}: ` : t('inventory.emptySlot', { slot: name })
             row.prepend(slotLabel)
             worn.append(row)
             choices.push({
@@ -455,7 +460,7 @@ export class InventoryComponentRenderer implements IComponentRenderer<InventoryC
       status.textContent =
         result.status === 'rejected'
           ? result.reason
-          : `Selected item is now at ${destination.label}.`
+          : t('inventory.moved', { destination: destination.label })
 
       if (result.status === 'applied') buttons.get(selected)?.focus()
     })

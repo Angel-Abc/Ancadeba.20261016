@@ -1,6 +1,7 @@
 import { inventoryEntry, inventoryOwner } from '@ancadeba/schemas'
 import type { SceneInstance } from './gameLifecycle.js'
 import { resolveStatusValue } from './statusValues.js'
+import { runtimeText } from './runtimeText.js'
 
 /** Resolves display-only information without interpreting game-defined item properties. */
 export function selectedItemDetails(scene: SceneInstance, panel: string) {
@@ -25,8 +26,13 @@ export function selectedItemDetails(scene: SceneInstance, panel: string) {
     placement.type === 'equipped'
       ? `${owner?.label ?? placement.owner} / ${owner?.equipmentSlots[placement.slot] ?? placement.slot}`
       : placement.type === 'inside'
-        ? `Inside ${containerType?.label ?? placement.container} (${owner?.label ?? ownerId ?? ''})`
-        : `Carried by ${owner?.label ?? placement.owner}`
+        ? runtimeText(scene.game.data, 'inventory.insideOwner', {
+            container: containerType?.label ?? placement.container,
+            owner: owner?.label ?? ownerId ?? '',
+          })
+        : runtimeText(scene.game.data, 'inventory.carriedBy', {
+            owner: owner?.label ?? placement.owner,
+          })
 
   const properties = type.properties.map((property) => ({
     ...property,

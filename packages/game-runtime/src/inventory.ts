@@ -6,6 +6,8 @@ import {
   type InventoryDefinition,
   type InventoryItem,
   type InventoryPlacement,
+  createRuntimeTranslator,
+  type RuntimeTranslator,
 } from '@ancadeba/schemas'
 import type { Unsubscribe } from '@ancadeba/utilities'
 
@@ -103,7 +105,10 @@ export class GameInventory implements IGameInventory {
     }
   }
 
-  constructor(private readonly definition: InventoryDefinition) {
+  constructor(
+    private readonly definition: InventoryDefinition,
+    private readonly t: RuntimeTranslator = createRuntimeTranslator(),
+  ) {
     for (const [id, item] of Object.entries(definition.items)) {
       this.items.set(
         id,
@@ -153,11 +158,11 @@ export class GameInventory implements IGameInventory {
   }
 
   private validate(itemId: string, destination: InventoryPlacement) {
-    if (this.disposed) return { reason: 'Inventory is no longer active' }
+    if (this.disposed) return { reason: this.t('inventory.inactive') }
     const parsed = inventoryPlacementSchema.safeParse(destination)
 
-    if (!parsed.success) return { reason: 'Invalid inventory destination' }
-    const reason = inventoryPlacementIssue(this.definition, this.items, itemId, parsed.data)
+    if (!parsed.success) return { reason: this.t('inventory.invalidDestination') }
+    const reason = inventoryPlacementIssue(this.definition, this.items, itemId, parsed.data, this.t)
 
     return reason === undefined ? { destination: parsed.data } : { reason }
   }
@@ -187,7 +192,7 @@ export class GameInventory implements IGameInventory {
     const staged = this.prepareTransfer(itemId, result.destination)
 
     if (!staged?.isCurrent())
-      return { status: 'rejected', reason: 'Equipment transaction is unavailable' }
+      return { status: 'rejected', reason: this.t('inventory.transactionUnavailable') }
     staged.commit()
     staged.notify()
 
@@ -195,16 +200,16 @@ export class GameInventory implements IGameInventory {
   }
 
   private prepareEquip(itemId: string, owner: string, slot: string) {
-    if (this.disposed) return { reason: 'Inventory is no longer active' }
+    if (this.disposed) return { reason: this.t('inventory.inactive') }
     const parsed = inventoryPlacementSchema.safeParse({ type: 'equipped', owner, slot })
 
-    if (!parsed.success) return { reason: 'Invalid equipment destination' }
+    if (!parsed.success) return { reason: this.t('inventory.invalidEquipment') }
     const item = this.items.get(itemId)
 
-    if (!item) return { reason: `Unknown item: ${itemId}` }
+    if (!item) return { reason: this.t('inventory.unknownItem', { id: itemId }) }
 
     if (inventoryOwner(this.items, itemId) !== owner)
-      return { reason: 'Item must belong to the equipment owner' }
+      return { reason: this.t('inventory.wrongOwner') }
     const staged = new Map(this.items)
     const destination = parsed.data
 
@@ -227,7 +232,13 @@ export class GameInventory implements IGameInventory {
     staged.set(itemId, Object.freeze({ ...item, placement: Object.freeze(destination) }))
 
     for (const id of [itemId, ...(displaced ? [displaced[0]] : [])]) {
-      const reason = inventoryPlacementIssue(this.definition, staged, id, staged.get(id)!.placement)
+      const reason = inventoryPlacementIssue(
+        this.definition,
+        staged,
+        id,
+        staged.get(id)!.placement,
+        this.t,
+      )
 
       if (reason) return { reason }
     }
@@ -257,7 +268,7 @@ export class GameInventory implements IGameInventory {
     const staged = this.prepareBatch(result.staged)
 
     if (!staged?.isCurrent())
-      return { status: 'rejected', reason: 'Equipment transaction is unavailable' }
+      return { status: 'rejected', reason: this.t('inventory.transactionUnavailable') }
     staged.commit()
     staged.notify()
 
@@ -424,9 +435,9 @@ export class GameInventory implements IGameInventory {
   }
 
   reserveItem(item: string, token: InventoryReservation): string | undefined {
-    if (this.disposed || !this.items.has(item)) return 'Item is unavailable'
+    if (this.disposed || !this.items.has(item)) return this.t('inventory.itemUnavailable')
 
-    if (this.reservations.has(item)) return 'Item is reserved by a combat plan'
+    if (this.reservations.has(item)) return this.t('inventory.reserved')
     this.reservations.set(item, token)
   }
 
@@ -456,7 +467,7 @@ export class GameInventory implements IGameInventory {
         const next = staged.get(item.id)
 
         if (!next || !samePlacement(item.placement, next.placement))
-          return 'Item is reserved by a combat plan'
+          return this.t('inventory.reserved')
         item =
           item.placement.type === 'inside' ? this.items.get(item.placement.container) : undefined
       }

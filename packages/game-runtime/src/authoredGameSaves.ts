@@ -102,7 +102,8 @@ export function bindAuthoredGameSaves({
         },
       )
 
-      if (save.language) game.localization?.select(save.language)
+      if (save.language && game.localization?.available.some(({ tag }) => tag === save.language))
+        game.localization.select(save.language)
       const scene = lifecycle.enterScene(save.scene)
       const runtime = runtimeFor(lifecycle.currentGame!)!
 
@@ -123,9 +124,7 @@ export function bindAuthoredGameSaves({
       save.contentVersion === (game.saveCompatibility ?? game.version) &&
       game.scenes.get(save.scene)?.type === 'game' &&
       (save.inputContext === undefined ||
-        Object.hasOwn(game.input?.contexts ?? {}, save.inputContext)) &&
-      (save.language === undefined ||
-        game.localization?.available.some(({ tag }) => tag === save.language) === true),
+        Object.hasOwn(game.input?.contexts ?? {}, save.inputContext)),
     onObserverError,
   )
 

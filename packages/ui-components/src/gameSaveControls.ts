@@ -1,37 +1,19 @@
 import type { GameData, IGameSaves } from '@ancadeba/game-runtime'
-
-const messages = {
-  en: {
-    save: 'Save progress',
-    load: 'Load progress',
-    saved: 'Progress saved on this device.',
-    loaded: 'Saved progress loaded.',
-    confirm: 'Load saved progress? Unsaved progress will be replaced.',
-    unavailable: 'Start a game before saving, or save a game before loading.',
-    storage: 'Browser storage is unavailable or full. Your progress could not be saved or loaded.',
-    'invalid-save': 'The saved game is damaged or invalid. Your current progress is unchanged.',
-    'incompatible-save':
-      'This save belongs to a different game or content version. Your current progress is unchanged.',
-    busy: 'Wait for movement to finish before saving.',
-  },
-  nl: {
-    save: 'Voortgang opslaan',
-    load: 'Voortgang laden',
-    saved: 'Voortgang opgeslagen op dit apparaat.',
-    loaded: 'Opgeslagen voortgang geladen.',
-    confirm: 'Opgeslagen voortgang laden? Niet-opgeslagen voortgang wordt vervangen.',
-    unavailable: 'Start een spel om op te slaan, of sla een spel op om het te laden.',
-    storage: 'Browseropslag is niet beschikbaar of vol. Opslaan of laden is niet gelukt.',
-    'invalid-save':
-      'Het opgeslagen spel is beschadigd of ongeldig. Je huidige voortgang is behouden.',
-    'incompatible-save':
-      'Deze opslag hoort bij een ander spel of een andere inhoudsversie. Je huidige voortgang is behouden.',
-    busy: 'Wacht tot de beweging klaar is voordat je opslaat.',
-  },
-} as const
+import { runtimeText } from '@ancadeba/game-runtime'
 
 export function gameSaveMessages(game: GameData) {
-  return messages[game.language?.toLowerCase().startsWith('nl') ? 'nl' : 'en']
+  return {
+    save: runtimeText(game, 'save.save'),
+    load: runtimeText(game, 'save.load'),
+    saved: runtimeText(game, 'save.saved'),
+    loaded: runtimeText(game, 'save.loaded'),
+    confirm: runtimeText(game, 'save.confirm'),
+    unavailable: runtimeText(game, 'save.unavailable'),
+    storage: runtimeText(game, 'save.storage'),
+    'invalid-save': runtimeText(game, 'save.invalid-save'),
+    'incompatible-save': runtimeText(game, 'save.incompatible-save'),
+    busy: runtimeText(game, 'save.busy'),
+  }
 }
 
 export function mountGameSaveControls(

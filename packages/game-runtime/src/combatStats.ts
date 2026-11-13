@@ -11,6 +11,7 @@ import type { InventoryItemSnapshot, InventoryEquipmentPreparation } from './inv
 import { temporaryCombatStats, type TemporaryStatContribution } from './combatEffects.js'
 import { combatOwnerEquipment } from './combatEquipment.js'
 import type { CombatEquippedEffects } from '@ancadeba/schemas'
+import { runtimeText } from './runtimeText.js'
 
 export interface CombatStatsSnapshot {
   readonly equipmentEffects?: readonly CombatEquippedEffects[] | undefined
@@ -389,7 +390,7 @@ export class GameCombatStats implements IGameCombatStats {
 
     if (writes.length && !state)
       return {
-        reason: 'Equipment health adjustment requires a supported state transaction adapter.',
+        reason: runtimeText(this.game.data, 'equipment.healthAdjustmentUnavailable'),
       }
 
     let committed = false,

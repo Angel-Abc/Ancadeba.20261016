@@ -1,0 +1,148 @@
+import type { GameTranslation } from './localization.js'
+
+const en = {
+  'inventory.unavailable': 'Inventory unavailable',
+  'inventory.destination': 'Destination',
+  'inventory.move': 'Move selected item',
+  'inventory.clear': 'Clear selection',
+  'inventory.chooseDestination': 'Choose a destination',
+  'inventory.selectItem': 'Select an item first',
+  'inventory.inside': 'Inside {container}',
+  'inventory.insideOwner': 'Inside {container} ({owner})',
+  'inventory.inspect': 'Inspect',
+  'inventory.inspectItem': 'Inspect {item}',
+  'inventory.carriedBy': 'Carried by {owner}',
+  'inventory.carried': 'Carried',
+  'inventory.worn': 'Worn',
+  'inventory.empty': 'Empty',
+  'inventory.emptySlot': '{slot}: empty',
+  'inventory.moved': 'Selected item is now at {destination}.',
+  'inventory.inactive': 'Inventory is no longer active',
+  'inventory.invalidDestination': 'Invalid inventory destination',
+  'inventory.invalidEquipment': 'Invalid equipment destination',
+  'inventory.transactionUnavailable': 'Equipment transaction is unavailable',
+  'inventory.wrongOwner': 'Item must belong to the equipment owner',
+  'inventory.itemUnavailable': 'Item is unavailable',
+  'inventory.reserved': 'Item is reserved by a combat plan',
+  'inventory.unknownItem': 'Unknown item: {id}',
+  'inventory.unknownType': 'Unknown item type: {id}',
+  'inventory.unknownContainer': 'Unknown container: {id}',
+  'inventory.notContainer': 'Item cannot contain other items: {id}',
+  'inventory.cycle': 'Items cannot form a containment cycle',
+  'inventory.unknownOwner': 'Unknown inventory owner: {id}',
+  'inventory.unknownSlot': 'Unknown equipment slot: {id}',
+  'inventory.incompatibleSlot': 'Item is incompatible with equipment slot: {id}',
+  'inventory.occupiedSlot': 'Equipment slot is occupied: {id}',
+  'equipment.healthAdjustmentUnavailable':
+    'Equipment health adjustment requires a supported state transaction adapter.',
+  'nearby.empty': 'None nearby',
+  'nearby.clear': 'Clear nearby selection',
+  'navigation.blocked': 'The destination is currently blocked.',
+  'scene.caption': 'Scene',
+  'scene.preview': 'Preview scene',
+  'scene.empty': 'No active scene',
+  'combat.unavailable': 'Combat unavailable',
+  'progression.unavailable': 'Character progression unavailable',
+  'itemUse.unavailable': 'Item use is unavailable.',
+  'itemUse.selection': 'Select a usable item.',
+  'quest.unavailable': 'Quest operation is unavailable.',
+  'dialogue.unavailable': 'Conversation is unavailable.',
+  'save.save': 'Save progress',
+  'save.load': 'Load progress',
+  'save.saved': 'Progress saved on this device.',
+  'save.loaded': 'Saved progress loaded.',
+  'save.confirm': 'Load saved progress? Unsaved progress will be replaced.',
+  'save.unavailable': 'Start a game before saving, or save a game before loading.',
+  'save.storage':
+    'Browser storage is unavailable or full. Your progress could not be saved or loaded.',
+  'save.invalid-save': 'The saved game is damaged or invalid. Your current progress is unchanged.',
+  'save.incompatible-save':
+    'This save belongs to a different game or content version. Your current progress is unchanged.',
+  'save.busy': 'Wait for movement to finish before saving.',
+}
+
+export type RuntimeTextKey = keyof typeof en
+
+export type RuntimeTextValues = Readonly<Record<string, string | number>>
+
+export type RuntimeTranslator = (key: RuntimeTextKey, values?: RuntimeTextValues) => string
+
+const nl: Record<RuntimeTextKey, string> = {
+  'inventory.unavailable': 'Inventaris niet beschikbaar',
+  'inventory.destination': 'Bestemming',
+  'inventory.move': 'Geselecteerd voorwerp verplaatsen',
+  'inventory.clear': 'Selectie wissen',
+  'inventory.chooseDestination': 'Kies een bestemming',
+  'inventory.selectItem': 'Selecteer eerst een voorwerp',
+  'inventory.inside': 'In {container}',
+  'inventory.insideOwner': 'In {container} ({owner})',
+  'inventory.inspect': 'Inspecteren',
+  'inventory.inspectItem': '{item} inspecteren',
+  'inventory.carriedBy': 'Gedragen door {owner}',
+  'inventory.carried': 'Gedragen',
+  'inventory.worn': 'Uitrusting',
+  'inventory.empty': 'Leeg',
+  'inventory.emptySlot': '{slot}: leeg',
+  'inventory.moved': 'Het geselecteerde voorwerp bevindt zich nu bij {destination}.',
+  'inventory.inactive': 'De inventaris is niet meer actief',
+  'inventory.invalidDestination': 'Ongeldige inventarisbestemming',
+  'inventory.invalidEquipment': 'Ongeldige uitrustingsbestemming',
+  'inventory.transactionUnavailable': 'Uitrusting wijzigen is niet beschikbaar',
+  'inventory.wrongOwner': 'Het voorwerp moet van de eigenaar van de uitrusting zijn',
+  'inventory.itemUnavailable': 'Voorwerp niet beschikbaar',
+  'inventory.reserved': 'Het voorwerp is gereserveerd voor een gevechtsplan',
+  'inventory.unknownItem': 'Onbekend voorwerp: {id}',
+  'inventory.unknownType': 'Onbekend voorwerptype: {id}',
+  'inventory.unknownContainer': 'Onbekende opbergruimte: {id}',
+  'inventory.notContainer': 'Dit voorwerp kan geen andere voorwerpen bevatten: {id}',
+  'inventory.cycle': 'Voorwerpen kunnen elkaar niet bevatten',
+  'inventory.unknownOwner': 'Onbekende inventariseigenaar: {id}',
+  'inventory.unknownSlot': 'Onbekende uitrustingsplek: {id}',
+  'inventory.incompatibleSlot': 'Het voorwerp past niet op deze uitrustingsplek: {id}',
+  'inventory.occupiedSlot': 'De uitrustingsplek is bezet: {id}',
+  'equipment.healthAdjustmentUnavailable':
+    'Gezondheid aanpassen door uitrusting vereist ondersteuning voor statustransacties.',
+  'nearby.empty': 'Niemand of niets in de buurt',
+  'nearby.clear': 'Selectie in de buurt wissen',
+  'navigation.blocked': 'De bestemming is momenteel geblokkeerd.',
+  'scene.caption': 'Scène',
+  'scene.preview': 'Voorbeeldscène',
+  'scene.empty': 'Geen actieve scène',
+  'combat.unavailable': 'Gevecht niet beschikbaar',
+  'progression.unavailable': 'Personagevoortgang niet beschikbaar',
+  'itemUse.unavailable': 'Voorwerp gebruiken is niet beschikbaar.',
+  'itemUse.selection': 'Selecteer een bruikbaar voorwerp.',
+  'quest.unavailable': 'Missiehandeling niet beschikbaar.',
+  'dialogue.unavailable': 'Gesprek niet beschikbaar.',
+  'save.save': 'Voortgang opslaan',
+  'save.load': 'Voortgang laden',
+  'save.saved': 'Voortgang opgeslagen op dit apparaat.',
+  'save.loaded': 'Opgeslagen voortgang geladen.',
+  'save.confirm': 'Opgeslagen voortgang laden? Niet-opgeslagen voortgang wordt vervangen.',
+  'save.unavailable': 'Start een spel om op te slaan, of sla een spel op om het te laden.',
+  'save.storage': 'Browseropslag is niet beschikbaar of vol. Opslaan of laden is niet gelukt.',
+  'save.invalid-save':
+    'Het opgeslagen spel is beschadigd of ongeldig. Je huidige voortgang is behouden.',
+  'save.incompatible-save':
+    'Deze opslag hoort bij een ander spel of een andere inhoudsversie. Je huidige voortgang is behouden.',
+  'save.busy': 'Wacht tot de beweging klaar is voordat je opslaat.',
+}
+
+/** Built-in player text uses the game's catalogs; missing keys need no manifest changes. */
+export function createRuntimeTranslator(
+  language = 'en',
+  translation?: GameTranslation,
+): RuntimeTranslator {
+  const defaults = language.toLowerCase().split('-')[0] === 'nl' ? nl : en
+
+  return (key, values = {}) => {
+    const catalogKey = `runtime.${key}`
+
+    const template =
+      translation?.messages[catalogKey] ?? translation?.fallback[catalogKey] ?? defaults[key]
+
+    return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (placeholder, name: string) =>
+      Object.hasOwn(values, name) ? String(values[name]) : placeholder,
+    )
+  }
+}

@@ -4,6 +4,7 @@ import { equipmentCombatEffectsSchema } from './combatEquipment.js'
 import { combatBonusesSchema, combatStatsProfileSchema } from './combatStats.js'
 import { gameBindingSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
+import { createRuntimeTranslator, type RuntimeTranslator } from './runtimeText.js'
 import { assertGraphicReference, graphicAppearanceSchema } from './assets.js'
 import {
   assetIdSchema as gameIdSchema,
@@ -94,8 +95,10 @@ export const inventoryItemTypeSchema = itemPresentationSchema.safeExtend({
 
 export const inventoryOwnerSchema = z.object({
   label: labelSchema,
+  labelKey: translationKeySchema.optional(),
   combatStats: combatStatsProfileSchema.optional(),
   equipmentSlots: z.record(gameIdSchema, labelSchema).default({}),
+  equipmentSlotKeys: z.record(gameIdSchema, translationKeySchema).optional(),
 })
 
 export const inventoryStartingItemSchema = z.object({
@@ -154,27 +157,28 @@ export function inventoryPlacementIssue(
   items: ReadonlyMap<string, InventoryItem>,
   id: string,
   destination: InventoryPlacement,
+  t: RuntimeTranslator = createRuntimeTranslator(),
 ): string | undefined {
   const item = items.get(id)
 
-  if (!item) return `Unknown item: ${id}`
+  if (!item) return t('inventory.unknownItem', { id })
   const type = inventoryEntry(definition.itemTypes, item.itemType)
 
-  if (!type) return `Unknown item type: ${item.itemType}`
+  if (!type) return t('inventory.unknownType', { id: item.itemType })
 
   if (destination.type === 'inside') {
     const container = items.get(destination.container)
 
-    if (!container) return `Unknown container: ${destination.container}`
+    if (!container) return t('inventory.unknownContainer', { id: destination.container })
 
     if (!inventoryEntry(definition.itemTypes, container.itemType)?.container)
-      return `Item cannot contain other items: ${destination.container}`
+      return t('inventory.notContainer', { id: destination.container })
 
     const visited = new Set([id])
     let next = destination
 
     for (;;) {
-      if (visited.has(next.container)) return 'Items cannot form a containment cycle'
+      if (visited.has(next.container)) return t('inventory.cycle')
       visited.add(next.container)
       const parent = items.get(next.container)?.placement
 
@@ -185,15 +189,15 @@ export function inventoryPlacementIssue(
 
   const owner = inventoryEntry(definition.owners, destination.owner)
 
-  if (!owner) return `Unknown inventory owner: ${destination.owner}`
+  if (!owner) return t('inventory.unknownOwner', { id: destination.owner })
 
   if (destination.type === 'carried') return
 
   if (!Object.hasOwn(owner.equipmentSlots, destination.slot))
-    return `Unknown equipment slot: ${destination.slot}`
+    return t('inventory.unknownSlot', { id: destination.slot })
 
   if (!type.equipmentSlots.includes(destination.slot))
-    return `Item is incompatible with equipment slot: ${destination.slot}`
+    return t('inventory.incompatibleSlot', { id: destination.slot })
 
   for (const [otherId, { placement }] of items) {
     if (
@@ -202,7 +206,7 @@ export function inventoryPlacementIssue(
       placement.owner === destination.owner &&
       placement.slot === destination.slot
     )
-      return `Equipment slot is occupied: ${destination.slot}`
+      return t('inventory.occupiedSlot', { id: destination.slot })
   }
 }
 

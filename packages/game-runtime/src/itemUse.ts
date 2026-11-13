@@ -8,6 +8,7 @@ import type { IMessageBus } from '@ancadeba/utilities'
 import type { EngineMessages } from './messages.js'
 import type { ActionOrigin } from './actions.js'
 import { usableItem } from './itemUseEligibility.js'
+import { runtimeText } from './runtimeText.js'
 
 export interface ItemUseCapture {
   readonly owner: string | undefined
@@ -128,12 +129,16 @@ export class GameItemUse implements IGameItemUse {
   reason(scene: SceneInstance, panel: string, combat?: string): string | undefined {
     const value = this.resolve(scene, panel, combat)
 
-    if (!value) return 'Item use is unavailable.'
+    if (!value)
+      return runtimeText(scene.type === 'game' ? scene.game.data : undefined, 'itemUse.unavailable')
     const { messages, use, ability, owner } = value
 
     if (value.component.readOnly) return messages.readOnly
 
-    if (value.reason) return value.reason
+    if (value.reason)
+      return value.use
+        ? value.reason
+        : runtimeText(scene.type === 'game' ? scene.game.data : undefined, 'itemUse.selection')
 
     if (!use || !ability || ability.type !== 'ability' || !owner || value.invalidCombat)
       return messages.unavailable

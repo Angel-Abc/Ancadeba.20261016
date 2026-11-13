@@ -9,6 +9,7 @@ import type { ActionOrigin } from './actions.js'
 import { resolveText } from './textBindings.js'
 import { matchesConditions, notifyStory } from './storyConditions.js'
 import type { GameSave } from '@ancadeba/schemas'
+import { runtimeText } from './runtimeText.js'
 
 interface TranscriptEntry {
   readonly node: string
@@ -233,7 +234,10 @@ export class GameDialogue implements IGameDialogue {
   reason(scene: SceneInstance, panel: string, command: DialogueCommand): string | undefined {
     const participant = this.participant(scene, panel)
     const current = this.current(scene, panel)
-    const unavailable = current?.definition.messages.unavailable ?? 'Conversation is unavailable.'
+
+    const unavailable =
+      current?.definition.messages.unavailable ??
+      runtimeText(this.game.data, 'dialogue.unavailable')
 
     if (!participant) return unavailable
 

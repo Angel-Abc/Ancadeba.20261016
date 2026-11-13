@@ -101,3 +101,7 @@ export * from './combatTriggerLimits.js'
 export * from './combatEffectValues.js'
 
 export * from './combatScenarioAssertions.js'
+
+export * from './runtimeText.js'
+
+export * from './saveCompatibility.js'

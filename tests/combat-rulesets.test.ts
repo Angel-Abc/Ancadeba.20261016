@@ -153,6 +153,40 @@ function documents(source: CombatSource, library: ReturnType<typeof fixture>['li
 }
 
 describe('reusable combat rulesets', () => {
+  it('keeps saves compatible with presentation-only sparse overrides while checking resolved mechanics', async () => {
+    const { source, library } = fixture()
+    const files = new Map<string, unknown>(Object.entries(documents(source, library)))
+    const logger = { debug: () => '', info: () => '', warn: () => '', error: () => '' }
+
+    const load = () =>
+      new GameLoader(
+        new JsonResourceLoader(
+          {
+            readText: async (path) => {
+              if (!files.has(path)) throw new Error(`Missing fixture: ${path}`)
+
+              return JSON.stringify(files.get(path))
+            },
+            readBytes: async () => new Uint8Array(),
+          },
+          logger,
+        ),
+      ).load()
+
+    const before = await load()
+    source.mechanicsOverrides = {
+      resources: { gauge: { label: 'Translated gauge' } },
+      phases: { calm: { description: 'Translated phase description' } },
+    }
+    const translated = await load()
+    expect(translated.saveCompatibility).toBe(before.saveCompatibility)
+    expect(translated.combat!.get('first')!.mechanics!.resources.gauge!.label).toBe(
+      'Translated gauge',
+    )
+    source.mechanicsOverrides.resources!.gauge!.maximum = 200
+    expect((await load()).saveCompatibility).not.toBe(before.saveCompatibility)
+  })
+
   it('keeps patches sparse and rejects ambiguous sources and missing rulesets', () => {
     expect(
       combatMechanicsOverridesSchema.parse({

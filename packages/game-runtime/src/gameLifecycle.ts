@@ -17,6 +17,7 @@ import type { IGameTrading } from './trading.js'
 import type { IGameCombat } from './combat.js'
 import type { SceneEntrance } from '@ancadeba/schemas'
 import { canEnterScene } from './sceneNavigation.js'
+import { runtimeText } from './runtimeText.js'
 
 export interface IGameRuntime {
   readonly mapObjects?: IGameMapObjects | undefined
@@ -218,7 +219,10 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
     factory: GameRuntimeFactory | undefined,
     prepare?: (game: GameInstance<TState>) => void,
   ): void {
-    if (this.data.inventory) this.inventoryState = new GameInventory(this.data.inventory)
+    if (this.data.inventory)
+      this.inventoryState = new GameInventory(this.data.inventory, (key, values) =>
+        runtimeText(this.data, key, values),
+      )
     prepare?.(this)
     this.runtime = factory?.(this)
   }

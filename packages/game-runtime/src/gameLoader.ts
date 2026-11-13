@@ -23,8 +23,10 @@ import {
   ruleFile,
   combatFile,
   combatSourceSchema,
+  combatDefinitionSchema,
   combatLibrarySchema,
   combatLibraryFile,
+  gameplaySaveDefinition,
 } from '@ancadeba/schemas'
 import type { IJsonResourceLoader } from '@ancadeba/utilities'
 import { assembleGameData, type GameData } from './gameData.js'
@@ -139,42 +141,57 @@ export class GameLoader implements IGameLoader {
       ),
     )
 
-    const saveSource = JSON.stringify([
-      definition,
-      scenes,
-      [...maps],
-      input,
-      assets,
-      [...inventory],
-      [...rules],
-      [...combat].map(([id, source]) => [id, { ...source, simulationScenarios: undefined }]),
-      [...leveling],
-      [...libraries],
-      [...dialogues],
-      [...quests],
-      styling,
-    ])
-
-    if (!definition.languages)
-      return {
-        saveCompatibility: saveCompatibility(saveSource),
-        ...assembleGameData(
-          definition,
-          new Map(scenes),
+    const gameplayCompatibility = (resolvedCombat: GameData['combat']) =>
+      `gameplay-v1:${saveCompatibility(
+        JSON.stringify([
+          gameplaySaveDefinition(gameSchema, definition),
+          scenes.map(([id, scene]) => [id, gameplaySaveDefinition(sceneSchema, scene)]),
+          [...maps].map(([id, map]) => [id, gameplaySaveDefinition(mapDefinitionSchema, map)]),
           input,
           assets,
-          maps,
-          inventory,
-          undefined,
-          rules,
-          combat,
-          leveling,
-          libraries,
-          dialogues,
-          quests,
-        ),
+          [...inventory].map(([id, value]) => [id, gameplaySaveDefinition(inventorySchema, value)]),
+          [...rules].map(([id, value]) => [id, gameplaySaveDefinition(gameRulesSchema, value)]),
+          [...(resolvedCombat ?? [])].map(([id, value]) => [
+            id,
+            gameplaySaveDefinition(combatDefinitionSchema, value),
+          ]),
+          [...leveling].map(([id, value]) => [
+            id,
+            gameplaySaveDefinition(levelingProfileSchema, value),
+          ]),
+          [...libraries].map(([id, value]) => [
+            id,
+            gameplaySaveDefinition(combatLibrarySchema, value),
+          ]),
+          [...dialogues].map(([id, value]) => [id, gameplaySaveDefinition(dialogueSchema, value)]),
+          [...quests].map(([id, value]) => [id, gameplaySaveDefinition(questSchema, value)]),
+          styling,
+        ]),
+      )}`
+
+    if (!definition.languages) {
+      const data = assembleGameData(
+        definition,
+        new Map(scenes),
+        input,
+        assets,
+        maps,
+        inventory,
+        undefined,
+        rules,
+        combat,
+        leveling,
+        libraries,
+        dialogues,
+        quests,
+      )
+
+      return {
+        ...data,
+        saveCompatibility: gameplayCompatibility(data.combat),
         ...styling,
       }
+    }
 
     const { available, default: fallbackLanguage } = definition.languages
     const saved = this.preferences?.read(definition.id)
@@ -234,7 +251,7 @@ export class GameLoader implements IGameLoader {
 
     return {
       ...variants.get(language)!,
-      saveCompatibility: saveCompatibility(saveSource + JSON.stringify([...catalogs])),
+      saveCompatibility: gameplayCompatibility(variants.get(language)!.combat),
       localization,
       get language() {
         return localization.current.language

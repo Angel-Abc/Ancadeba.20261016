@@ -32,6 +32,13 @@ export function localizeInventory(
         id,
         {
           ...owner,
+          label: text(owner.labelKey, owner.label, true),
+          equipmentSlots: Object.fromEntries(
+            Object.entries(owner.equipmentSlots).map(([slot, label]) => [
+              slot,
+              text(owner.equipmentSlotKeys?.[slot], label, true),
+            ]),
+          ),
           ...(owner.combatStats
             ? {
                 combatStats: {

@@ -1,4 +1,5 @@
 import type { SceneComponentData } from '@ancadeba/game-runtime'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -26,7 +27,8 @@ export class CharacterProgressionComponentRenderer implements IComponentRenderer
       heading.textContent = profile?.label ?? component.profile
 
       if (!profile || !snapshot?.available) {
-        summary.textContent = profile?.messages.unavailable ?? 'Character progression unavailable'
+        summary.textContent =
+          profile?.messages.unavailable ?? componentRuntimeText(context)('progression.unavailable')
         progress.hidden = true
         receipt.textContent = ''
 

@@ -18,7 +18,7 @@ function gameDefinition(title: string) {
 
 function gameData(title: string) {
   return {
-    saveCompatibility: expect.any(String),
+    saveCompatibility: expect.stringMatching(/^gameplay-v1:[a-f0-9]{16}$/),
     id: 'test-game',
     title,
     description: 'Test game',

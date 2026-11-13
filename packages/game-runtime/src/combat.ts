@@ -66,6 +66,7 @@ import type { ActionOrigin } from './actions.js'
 import type { IStateTransactions } from './stateTransactions.js'
 
 import type { PreparedProgression } from './progression.js'
+import { runtimeText } from './runtimeText.js'
 
 import {
   combatOutcome,
@@ -291,6 +292,9 @@ export class GameCombat implements IGameCombat {
   }
 
   restore(save: GameSave['combat'], data: GameData): void {
+    for (const definition of data.combat?.values() ?? [])
+      if (!this.health(definition)) throw new Error('Invalid saved combat health')
+
     for (const [id, saved] of Object.entries(save)) {
       const definition = data.combat?.get(id)
 
@@ -1858,7 +1862,10 @@ export class GameCombat implements IGameCombat {
       this.bindings,
     )
 
-    if (selected.reason) return selected.reason
+    if (selected.reason)
+      return selected.use
+        ? selected.reason
+        : runtimeText(scene.type === 'game' ? scene.game.data : undefined, 'itemUse.selection')
 
     if (
       !definition ||

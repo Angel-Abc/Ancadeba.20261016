@@ -304,5 +304,12 @@
   "dialogue.reply2": "Reply 2",
   "dialogue.end": "End conversation",
   "quest.turnIn": "Turn in survey",
-  "quest.journal": "Quests"
+  "quest.journal": "Quests",
+  "inventory.slot.charm": "Charm",
+  "inventory.owner.lobby": "Museum lobby",
+  "inventory.owner.kiosk": "Museum kiosk",
+  "inventory.owner.trainingLoot": "Training loot",
+  "inventory.owner.advancedLoot": "Advanced training loot",
+  "inventory.owner.opponent": "Advanced opponent",
+  "inventory.owner.displayCase": "Display case"
 }

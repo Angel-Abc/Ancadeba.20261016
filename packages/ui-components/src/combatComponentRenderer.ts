@@ -29,6 +29,7 @@ import {
 } from '@ancadeba/game-runtime'
 import { temporaryModifierNames, combatStatsTextSchema } from '@ancadeba/schemas'
 import { equipmentCombatEffectsText } from './equipmentCombatEffectsText.js'
+import { componentRuntimeText } from './runtimeText.js'
 import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import { renderStatusEffect } from './statusEffectRenderer.js'
 import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
@@ -54,7 +55,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
     root.className = 'ancadeba-combat'
 
     if (!definition || !scene || !combat) {
-      root.textContent = 'Combat unavailable'
+      root.textContent = componentRuntimeText(context)('combat.unavailable')
 
       return { element: root, dispose: () => root.remove() }
     }

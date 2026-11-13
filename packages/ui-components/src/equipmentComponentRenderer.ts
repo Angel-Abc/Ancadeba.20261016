@@ -5,6 +5,7 @@ import {
   type EquipmentComponentDefinition,
 } from '@ancadeba/schemas'
 import { GraphicComponentRenderer, type RenderedGraphic } from './graphicComponentRenderer.js'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -19,6 +20,7 @@ export class EquipmentComponentRenderer implements IComponentRenderer<EquipmentC
     context: ComponentRenderContext,
   ): RenderedComponent {
     const { document, scene, inventory, inventoryDefinition } = context
+    const t = componentRuntimeText(context)
     const game = scene?.type === 'game' ? scene.game : undefined
     const root = document.createElement('section')
     root.className = 'ancadeba-equipment'
@@ -143,7 +145,7 @@ export class EquipmentComponentRenderer implements IComponentRenderer<EquipmentC
           if (focusItem === item.id) restore = worn
         } else {
           const empty = document.createElement('span')
-          empty.textContent = 'Empty'
+          empty.textContent = t('inventory.empty')
           cell.append(empty)
         }
 

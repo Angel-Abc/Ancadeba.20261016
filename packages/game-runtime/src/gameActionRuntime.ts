@@ -67,6 +67,15 @@ export class GameActionRuntime implements IGameRuntime {
 
     if (scene?.type !== 'game') throw new Error('Invalid saved scene')
 
+    // Validate the candidate playthrough before the lifecycle releases current progress.
+    for (const [id, owner] of Object.entries(game.data.inventory?.owners ?? {}))
+      if (owner.combatStats && !this.combatStats.baseSnapshot(id))
+        throw new Error('Invalid saved equipment stats')
+
+    for (const id of game.data.leveling?.keys() ?? [])
+      if (!this.leveling.snapshot(id)?.available)
+        throw new Error('Invalid saved character progression')
+
     this.mapMovement?.restorePositions(game.data, {
       ...save.mapPositions,
       [save.scene]: { ...save.maps, ...save.mapPositions?.[save.scene] },

@@ -16,6 +16,7 @@ import type { EngineMessages } from './messages.js'
 import type { ActionOrigin } from './actions.js'
 import { matchesConditions, notifyStory } from './storyConditions.js'
 import type { GameSave } from '@ancadeba/schemas'
+import { runtimeText } from './runtimeText.js'
 
 export interface QuestSnapshot {
   readonly id: string
@@ -333,7 +334,8 @@ export class GameQuests implements IGameQuests {
   reason(scene: SceneInstance, id: string, operation: QuestOperation): string | undefined {
     const definition = this.definition(id)
 
-    if (!definition || !this.validScene(scene)) return 'Quest operation is unavailable.'
+    if (!definition || !this.validScene(scene))
+      return runtimeText(this.game.data, 'quest.unavailable')
     const status = this.status(definition)
 
     if (operation === 'track')

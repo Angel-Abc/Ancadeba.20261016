@@ -1,4 +1,5 @@
 import type { NearbyComponentDefinition } from '@ancadeba/schemas'
+import { componentRuntimeText } from './runtimeText.js'
 import type {
   ComponentRenderContext,
   IComponentRenderer,
@@ -8,6 +9,7 @@ import type {
 /** Displays selectable targets; descriptions and commands are rendered by their configured components. */
 export class NearbyComponentRenderer implements IComponentRenderer<NearbyComponentDefinition> {
   render(component: NearbyComponentDefinition, context: ComponentRenderContext): RenderedComponent {
+    const t = componentRuntimeText(context)
     const { document, scene } = context
     const nearby = scene?.type === 'game' ? scene.game.nearby : undefined
     const root = document.createElement('section')
@@ -35,10 +37,10 @@ export class NearbyComponentRenderer implements IComponentRenderer<NearbyCompone
     }
 
     const empty = document.createElement('p')
-    empty.textContent = 'None nearby'
+    empty.textContent = t('nearby.empty')
     const clear = document.createElement('button')
     clear.type = 'button'
-    clear.textContent = 'Clear nearby selection'
+    clear.textContent = t('nearby.clear')
     clear.addEventListener('click', () => {
       if (active && scene) nearby?.select(scene, component.id)
     })

@@ -304,5 +304,12 @@
   "dialogue.reply2": "Antwoord 2",
   "dialogue.end": "Beëindig gesprek",
   "quest.turnIn": "Lever verslag in",
-  "quest.journal": "Missies"
+  "quest.journal": "Missies",
+  "inventory.slot.charm": "Amulet",
+  "inventory.owner.lobby": "Museumhal",
+  "inventory.owner.kiosk": "Museumwinkel",
+  "inventory.owner.trainingLoot": "Trainingsbuit",
+  "inventory.owner.advancedLoot": "Gevorderde trainingsbuit",
+  "inventory.owner.opponent": "Gevorderde tegenstander",
+  "inventory.owner.displayCase": "Vitrine"
 }

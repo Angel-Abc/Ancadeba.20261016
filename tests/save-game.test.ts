@@ -538,6 +538,93 @@ describe('persistent player progress', () => {
     expect(engine.lifecycle!.activeScene!.data.id).toBe('standard')
   })
 
+  it.each([
+    { path: ['player', 'health'], value: -1 },
+    { path: ['player', 'health'], value: 41 },
+    { path: ['player', 'health'], value: 1.5 },
+    { path: ['player', 'maximumHealth'], value: 0 },
+    { path: ['player', 'maximumHealth'], value: Number.MAX_SAFE_INTEGER + 1 },
+    { path: ['player', 'experience'], value: -1 },
+    { path: ['player', 'experience'], value: 5 },
+    { path: ['player', 'level'], value: 2 },
+    { path: ['combat', 'sentinel'], value: -1 },
+    { path: ['combat', 'sentinel'], value: 19 },
+  ])('rejects invalid saved $path = $value before replacing progress', async ({ path, value }) => {
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store)
+    const current = start()
+    const scene = engine.lifecycle!.activeScene
+    expect(engine.saves!.save()).toBe(true)
+    const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game')!))
+    const field = save.state.find((field) => JSON.stringify(field.path) === JSON.stringify(path))!
+    field.value = value
+    store.write('basic-game', JSON.stringify(save))
+
+    expect(engine.saves!.load()).toBe(false)
+    expect(engine.saves!.error).toBe('invalid-save')
+    expect(engine.lifecycle!.currentGame).toBe(current)
+    expect(engine.lifecycle!.activeScene).toBe(scene)
+    expect(current.disposed).toBe(false)
+    expect(current.combatStats!.snapshot('player')?.health).toBe(40)
+    expect(engine.saves!.save()).toBe(true)
+  })
+
+  it('accepts zero health and valid leveled stats when loading', async () => {
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store)
+    const current = start()
+    current.leveling!.grantXp('player', 5)
+    expect(engine.saves!.save()).toBe(true)
+    const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game')!))
+    save.state.find(
+      (field) => JSON.stringify(field.path) === JSON.stringify(['player', 'health']),
+    )!.value = 0
+    store.write('basic-game', JSON.stringify(save))
+
+    expect(engine.saves!.load()).toBe(true)
+    expect(engine.lifecycle!.currentGame!.combatStats!.snapshot('player')?.health).toBe(0)
+    expect(engine.lifecycle!.currentGame!.leveling!.snapshot('player')).toMatchObject({
+      available: true,
+      level: 2,
+      xp: 5,
+    })
+  })
+
+  it('validates saved health against restored equipment bonuses', async () => {
+    const inventory = JSON.parse(
+      await readFile(
+        new URL('../sample-games/basic/inventory/museum.json', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    inventory.itemTypes['health-charm'] = {
+      label: 'Health charm',
+      equipmentSlots: ['charm'],
+      combatBonuses: { maximumHealth: 10 },
+    }
+    inventory.items['health-charm'] = {
+      itemType: 'health-charm',
+      placement: { type: 'equipped', owner: 'player', slot: 'charm' },
+    }
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store, { 'inventory/museum.json': inventory })
+    start()
+    expect(engine.saves!.save()).toBe(true)
+    const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game')!))
+    save.state.find(
+      (field) => JSON.stringify(field.path) === JSON.stringify(['player', 'health']),
+    )!.value = 50
+    store.write('basic-game', JSON.stringify(save))
+
+    expect(engine.saves!.load()).toBe(true)
+    expect(engine.lifecycle!.currentGame!.combatStats!.snapshot('player')).toMatchObject({
+      health: 50,
+      total: { maximumHealth: 50 },
+    })
+    expect(engine.lifecycle!.currentGame!.leveling!.snapshot('player')?.available).toBe(true)
+  })
+
   it('rejects changed content even if the game version has not been bumped', async () => {
     const store = new MemorySaves()
     const first = await launch(store)
@@ -555,6 +642,87 @@ describe('persistent player progress', () => {
     expect(second.engine.saves!.load()).toBe(false)
     expect(second.engine.saves!.error).toBe('incompatible-save')
     expect(second.engine.lifecycle!.currentGame).toBeUndefined()
+  })
+
+  it('loads saved progress after catalog and translation-key edits', async () => {
+    const store = new MemorySaves()
+    const first = await launch(store)
+    const game = first.start()
+    game.leveling!.grantXp('player', 5)
+    first.engine.game!.localization!.select('nl')
+    expect(first.engine.saves!.save()).toBe(true)
+
+    const en = JSON.parse(
+      await readFile(
+        new URL('../sample-games/basic/languages/en/messages.json', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    const nl = JSON.parse(
+      await readFile(
+        new URL('../sample-games/basic/languages/nl/messages.json', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    const inventory = JSON.parse(
+      await readFile(
+        new URL('../sample-games/basic/inventory/museum.json', import.meta.url),
+        'utf8',
+      ),
+    )
+
+    en['inventory.owner.renamed'] = 'Explorer'
+    nl['inventory.owner.renamed'] = 'Ontdekkingsreiziger'
+    inventory.owners.player.labelKey = 'inventory.owner.renamed'
+
+    const second = await launch(store, {
+      'languages/en/messages.json': en,
+      'languages/nl/messages.json': nl,
+      'inventory/museum.json': inventory,
+    })
+
+    expect(second.engine.saves!.load()).toBe(true)
+    expect(second.engine.game!.language).toBe('nl')
+    expect(second.engine.game!.inventory!.owners.player!.label).toBe('Ontdekkingsreiziger')
+    expect(second.engine.lifecycle!.currentGame!.leveling!.snapshot('player')).toMatchObject({
+      level: 2,
+      xp: 5,
+    })
+  })
+
+  it('uses the current language when a saved language has been removed', async () => {
+    const store = new MemorySaves()
+    const first = await launch(store)
+    first.start()
+    first.engine.game!.localization!.select('nl')
+    expect(first.engine.saves!.save()).toBe(true)
+
+    const manifest = JSON.parse(
+      await readFile(new URL('../sample-games/basic/game.json', import.meta.url), 'utf8'),
+    )
+
+    manifest.languages.available = ['en']
+    const second = await launch(store, { 'game.json': manifest })
+
+    expect(second.engine.saves!.load()).toBe(true)
+    expect(second.engine.game!.language).toBe('en')
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('standard')
+  })
+
+  it('rejects obsolete full-content fingerprints without replacing current progress', async () => {
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store)
+    const current = start()
+    expect(engine.saves!.save()).toBe(true)
+    const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game')!))
+    save.contentVersion = '0123456789abcdef'
+    store.write('basic-game', JSON.stringify(save))
+    expect(engine.saves!.load()).toBe(false)
+    expect(engine.saves!.error).toBe('incompatible-save')
+    expect(engine.lifecycle!.currentGame).toBe(current)
+    expect(current.disposed).toBe(false)
   })
 
   it('reports blocked storage and keeps separate games and preview namespaces isolated', async () => {

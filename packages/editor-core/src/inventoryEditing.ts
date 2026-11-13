@@ -29,6 +29,7 @@ const fields = new Map<string, readonly string[] | null>([
   ['owners.*', inventoryOwnerSchema.keyof().options],
   ['items.*', inventoryStartingItemSchema.keyof().options],
   ['owners.*.equipmentSlots', null],
+  ['owners.*.equipmentSlotKeys', null],
   ['items.*.colors', null],
   ['items.*.placement', ['type', 'owner', 'slot', 'container']],
   ['itemTypes.*.properties.*', itemPropertySchema.keyof().options],
