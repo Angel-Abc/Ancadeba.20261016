@@ -6,11 +6,14 @@ import type { GameActionRuntime } from './gameActionRuntime.js'
 import type { IGameInput } from './input.js'
 import { GameInventory } from './inventory.js'
 import { GameSaves, GameSaveError, type GameSaveStore } from './gameSaves.js'
+import { GameAutosave } from './gameAutosave.js'
+import type { ITaskScheduler } from '@ancadeba/utilities'
 
 interface AuthoredSaveDependencies {
   game: GameData
   lifecycle: IGameLifecycle
   store: GameSaveStore
+  scheduler: ITaskScheduler
   isRunning: () => boolean
   settleMessages: () => boolean
   runtimeFor: (game: GameInstance) => GameActionRuntime | undefined
@@ -24,6 +27,7 @@ export function bindAuthoredGameSaves({
   game,
   lifecycle,
   store,
+  scheduler,
   isRunning,
   settleMessages,
   runtimeFor,
@@ -32,6 +36,7 @@ export function bindAuthoredGameSaves({
   onObserverError,
 }: AuthoredSaveDependencies) {
   let lastScene: string | undefined
+  let lastGame: GameInstance | undefined
 
   const prepare = (save: GameSave, instance: GameInstance) => {
     const playthrough = playthroughFor(instance)
@@ -53,7 +58,10 @@ export function bindAuthoredGameSaves({
   const saves = new GameSaves(
     game.id,
     store,
-    () => Boolean(isRunning() && lifecycle.currentGame && lastScene),
+    () =>
+      Boolean(
+        isRunning() && lifecycle.currentGame && lifecycle.currentGame === lastGame && lastScene,
+      ),
     () => {
       if (!settleMessages()) throw new GameSaveError('busy')
       const instance = lifecycle.currentGame
@@ -61,7 +69,8 @@ export function bindAuthoredGameSaves({
       const runtime = instance && runtimeFor(instance)
       const playthrough = instance ? playthroughFor(instance) : undefined
 
-      if (!instance || !runtime || !lastScene) throw new GameSaveError('unavailable')
+      if (!instance || instance !== lastGame || !runtime || !lastScene)
+        throw new GameSaveError('unavailable')
 
       return {
         'save-version': 1,
@@ -138,11 +147,26 @@ export function bindAuthoredGameSaves({
     onObserverError,
   )
 
-  const dispose = lifecycle.subscribeSceneChanges(({ current }) => {
-    if (current?.type === 'game') lastScene = current.data.id
-    else if (!lifecycle.currentGame) lastScene = undefined
+  const unsubscribe = lifecycle.subscribeSceneChanges(({ current }) => {
+    if (current?.type === 'game') {
+      lastScene = current.data.id
+      lastGame = current.game
+    } else if (!lifecycle.currentGame) {
+      lastScene = undefined
+      lastGame = undefined
+    }
+
     saves.notify()
   })
+
+  const autosave = new GameAutosave(lifecycle, scheduler, () => {
+    saves.autosave()
+  })
+
+  const dispose = () => {
+    autosave.dispose()
+    unsubscribe()
+  }
 
   return { saves, dispose }
 }

@@ -4,20 +4,20 @@ import {
   GameLoader,
   maxGameSaveBytes,
   type EngineMessages,
-  type GameSaveSlotId,
+  type GameSaveLocation,
   type GameSaveStore,
 } from '@ancadeba/game-runtime'
-import { gameSaveSchema, gameSchema, sceneSchema } from '@ancadeba/schemas'
+import { gameSaveSchema, gameSchema, sceneSchema, mapDefinitionSchema } from '@ancadeba/schemas'
 import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { BrowserGameSaveStore } from '@ancadeba/ui-components'
 import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
 
 class MemorySaves implements GameSaveStore {
   readonly slots = new Map<string, string>()
-  read(id: string, slot: GameSaveSlotId = '1') {
+  read(id: string, slot: GameSaveLocation = '1') {
     return this.slots.get(`${id}:${slot}`)
   }
-  write(id: string, save: string, slot: GameSaveSlotId = '1') {
+  write(id: string, save: string, slot: GameSaveLocation = '1') {
     this.slots.set(`${id}:${slot}`, save)
   }
 }
@@ -100,10 +100,203 @@ async function launch(
     return engine.lifecycle!.currentGame!
   }
 
-  return { engine, start, advance, logError }
+  return { engine, start, advance, logError, tasks }
 }
 
 describe('persistent player progress', () => {
+  it('autosaves progress independently of all five manual slots and resumes after restart', async () => {
+    const store = new MemorySaves()
+    const { engine, start, advance } = await launch(store)
+    advance(60_000)
+    expect(store.read('basic-game', 'autosave')).toBeUndefined()
+    start()
+    const saves = engine.saves!
+    const manual = new Map<string, string>()
+
+    for (const slot of ['1', '2', '3', '4', '5'] as const) {
+      saves.selectSlot(slot)
+      expect(saves.save(`Manual ${slot}`)).toBe(true)
+      manual.set(slot, store.read('basic-game', slot)!)
+    }
+
+    saves.selectSlot('3')
+    const before = vi.fn()
+    saves.subscribe(before)
+    advance(499)
+    expect(saves.canLoadAutosave).toBe(false)
+    advance(1)
+    expect(saves.canLoadAutosave).toBe(true)
+    expect(saves.autosaveStatus).toBe('saved')
+    expect(saves.status).toBe('idle')
+    expect(saves.selectedSlot).toBe('3')
+    engine.actions!.request('walk-east')
+    advance()
+    advance(500)
+    const snapshot = gameSaveSchema.parse(JSON.parse(store.read('basic-game', 'autosave')!))
+    expect(snapshot.scene).toBe('gallery')
+    expect(snapshot.slotName).toBeUndefined()
+
+    for (const slot of ['1', '2', '3', '4', '5'] as const)
+      expect(store.read('basic-game', slot)).toBe(manual.get(slot))
+    expect(before).toHaveBeenCalled()
+    engine.stop()
+    const second = await launch(store)
+    expect(second.engine.saves!.canLoad).toBe(true)
+    expect(second.engine.saves!.canLoadAutosave).toBe(true)
+    second.engine.saves!.selectSlot('4')
+    expect(second.engine.saves!.loadAutosave()).toBe(true)
+    expect(second.engine.saves!.selectedSlot).toBe('4')
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+    expect(store.read('basic-game', '4')).toBe(manual.get('4'))
+  })
+
+  it('autosaves completed movement and keeps the last checkpoint while a step is pending', async () => {
+    const store = new MemorySaves()
+
+    const mapData = mapDefinitionSchema.parse(
+      JSON.parse(
+        await readFile(
+          new URL('../sample-games/square-map/maps/coast.json', import.meta.url),
+          'utf8',
+        ),
+      ),
+    )
+
+    const { engine, start, advance } = await launch(
+      store,
+      {
+        'maps/coast.json': {
+          ...mapData,
+          terrain: Object.fromEntries(
+            Object.entries(mapData.terrain).map(([id, terrain]) => [
+              id,
+              { ...terrain, movementCostMs: 1000 },
+            ]),
+          ),
+        },
+      },
+      'square-map',
+    )
+
+    const game = start('coast')
+    advance(500)
+
+    const original = store.read(engine.game!.id, 'autosave')!
+    const scene = engine.lifecycle!.activeScene!
+    const movement = game.mapMovement!
+    const map = scene.data.components.find((component) => component.type === 'map-view')!
+
+    const direction = (['north', 'east', 'south', 'west'] as const).find((direction) =>
+      movement.canMove(scene, map.id, direction),
+    )!
+
+    expect(movement.move(scene, map.id, direction)).toBe(true)
+    advance(500)
+    expect(movement.isMoving(scene, map.id)).toBe(true)
+    expect(store.read(engine.game!.id, 'autosave')).toBe(original)
+    expect(engine.saves!.autosaveError).toBeUndefined()
+    advance(500)
+    advance(500)
+    const saved = gameSaveSchema.parse(JSON.parse(store.read(engine.game!.id, 'autosave')!))
+    expect(saved.maps[map.id]).toEqual(movement.getPosition(scene, map.id))
+    expect(store.read(engine.game!.id)).toBeUndefined()
+  })
+
+  it('keeps manual feedback and previous checkpoints on autosave errors and recovers', async () => {
+    const store = new MemorySaves()
+    let full = false
+
+    const { engine, start, advance } = await launch({
+      read: (id, slot) => store.read(id, slot),
+      write: (id, text, slot) => {
+        if (full && slot === 'autosave') throw new Error('Quota exceeded')
+        store.write(id, text, slot)
+      },
+    })
+
+    start()
+    const saves = engine.saves!
+    saves.save('Manual')
+    advance(500)
+    const original = store.read('basic-game', 'autosave')
+    full = true
+    engine.actions!.request('walk-east')
+    advance()
+    advance(500)
+    expect(saves.autosaveStatus).toBe('error')
+    expect(saves.autosaveError).toBe('storage')
+    expect(saves.status).toBe('saved')
+    expect(saves.error).toBeUndefined()
+    expect(store.read('basic-game', 'autosave')).toBe(original)
+    full = false
+    advance(30_000)
+    advance(500)
+    expect(saves.autosaveStatus).toBe('saved')
+    expect(saves.autosaveError).toBeUndefined()
+    expect(gameSaveSchema.parse(JSON.parse(store.read('basic-game', 'autosave')!)).scene).toBe(
+      'gallery',
+    )
+    expect(gameSaveSchema.parse(JSON.parse(store.read('basic-game')!)).scene).toBe('standard')
+  })
+
+  it('validates autosaves before loading and cancels old checkpoints on replacement and stop', async () => {
+    const store = new MemorySaves()
+    const { engine, start, advance, tasks } = await launch(store)
+    const original = start()
+    const saves = engine.saves!
+    advance(500)
+    const good = store.read('basic-game', 'autosave')!
+    store.write('basic-game', '{', 'autosave')
+    expect(saves.loadAutosave()).toBe(false)
+    expect(saves.error).toBe('invalid-save')
+    expect(engine.lifecycle!.currentGame).toBe(original)
+    const incompatible = gameSaveSchema.parse(JSON.parse(good))
+    incompatible.gameVersion = 'other'
+    store.write('basic-game', JSON.stringify(incompatible), 'autosave')
+    expect(saves.loadAutosave()).toBe(false)
+    expect(saves.error).toBe('incompatible-save')
+    store.write('basic-game', good, 'autosave')
+    engine.actions!.request('walk-east')
+    advance()
+    start()
+    advance(500)
+    expect(gameSaveSchema.parse(JSON.parse(store.read('basic-game', 'autosave')!)).scene).toBe(
+      'standard',
+    )
+    const checkpoint = store.read('basic-game', 'autosave')
+    engine.actions!.request('walk-east')
+    advance()
+    const pending = [...tasks].map(({ callback }) => callback)
+    engine.stop()
+
+    for (const callback of pending) callback()
+    advance(60_000)
+    expect(store.read('basic-game', 'autosave')).toBe(checkpoint)
+    expect(saves.loadAutosave()).toBe(false)
+    expect(saves.canLoadAutosave).toBe(false)
+  })
+
+  it('periodically checkpoints changes without runtime notifications and leaves ended games alone', async () => {
+    const store = new MemorySaves()
+    const { engine, start, advance } = await launch(store)
+    start()
+    advance(500)
+    engine.game!.localization!.select('nl')
+    advance(30_000)
+    advance(500)
+    expect(gameSaveSchema.parse(JSON.parse(store.read('basic-game', 'autosave')!)).language).toBe(
+      'nl',
+    )
+    const original = store.read('basic-game', 'autosave')
+    engine.lifecycle!.endGame()
+    advance(60_000)
+    expect(store.read('basic-game', 'autosave')).toBe(original)
+    // A new playthrough must enter a gameplay scene before it has a resume point.
+    engine.lifecycle!.startGame()
+    advance(60_000)
+    expect(store.read('basic-game', 'autosave')).toBe(original)
+  })
+
   it('keeps five named slots independent across new games and engine restarts', async () => {
     const store = new MemorySaves()
     const first = await launch(store)
@@ -864,8 +1057,11 @@ describe('persistent player progress', () => {
     const second = new BrowserGameSaveStore(() => storage, 'second')
     first.write('game', 'progress')
     first.write('game', 'second progress', '2')
+    first.write('game', 'automatic progress', 'autosave')
     expect(first.read('game')).toBe('progress')
     expect(first.read('game', '2')).toBe('second progress')
+    expect(first.read('game', 'autosave')).toBe('automatic progress')
+    expect(second.read('game', 'autosave')).toBeUndefined()
     expect(second.read('game', '2')).toBeUndefined()
     expect(first.read('game', '3')).toBeUndefined()
     expect(slots.get('ancadeba.save.first.game')).toBe('progress')

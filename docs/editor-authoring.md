@@ -1286,7 +1286,10 @@ progress** operating on the selected **Save slot**. **Export save** downloads th
 slot as JSON; **Import save** validates a file into the selected slot without
 loading it. Occupied slots require confirmation before import. Slots use durable browser
 storage scoped to the project folder and game ID. They preserve progress across preview
-restarts and page reloads. Gameplay-definition or stylesheet changes make older
+restarts and page reloads. Autosave writes a separate checkpoint after gameplay
+changes and periodically while a playthrough is open, without replacing manual
+slots. **Load autosave** resumes it. Preview restarts cancel pending autosaves;
+the last completed checkpoint remains available. Gameplay-definition or stylesheet changes make older
 saves incompatible; loading reports this before replacing the current playthrough.
 Translation catalogs, key assignments and displayed text can change while keeping
 saves compatible. Available/default language changes also preserve saves; a saved

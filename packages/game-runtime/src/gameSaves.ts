@@ -4,6 +4,8 @@ export const gameSaveSlotIds = ['1', '2', '3', '4', '5'] as const
 
 export type GameSaveSlotId = (typeof gameSaveSlotIds)[number]
 
+export type GameSaveLocation = GameSaveSlotId | 'autosave'
+
 export const maxGameSaveBytes = 5 * 1024 * 1024
 
 export interface GameSaveSlot {
@@ -20,8 +22,8 @@ export interface GameSaveFile {
 
 /** Hosts supply durable storage; the runtime does not depend on browser or filesystem globals. */
 export interface GameSaveStore {
-  read(gameId: string, slot?: GameSaveSlotId): string | undefined
-  write(gameId: string, save: string, slot?: GameSaveSlotId): void
+  read(gameId: string, slot?: GameSaveLocation): string | undefined
+  write(gameId: string, save: string, slot?: GameSaveLocation): void
 }
 
 export type SaveError =
@@ -38,12 +40,16 @@ export interface IGameSaves {
   readonly slots: readonly GameSaveSlot[]
   readonly canSave: boolean
   readonly canLoad: boolean
+  readonly canLoadAutosave: boolean
   readonly canImport: boolean
+  readonly autosaveStatus: 'idle' | 'saved' | 'error'
+  readonly autosaveError: SaveError | undefined
   readonly status: 'idle' | 'saved' | 'loaded' | 'imported' | 'exported' | 'error'
   readonly error: SaveError | undefined
   selectSlot(id: string): boolean
   save(name?: string): boolean
   load(): boolean
+  loadAutosave(): boolean
   importFile(text: string, name?: string): boolean
   exportFile(): GameSaveFile | undefined
   subscribe(listener: () => void): () => void
@@ -78,6 +84,8 @@ export class GameSaves implements IGameSaves {
   private slot: GameSaveSlotId = '1'
   status: IGameSaves['status'] = 'idle'
   error: SaveError | undefined
+  autosaveStatus: IGameSaves['autosaveStatus'] = 'idle'
+  autosaveError: SaveError | undefined
 
   constructor(
     private readonly gameId: string,
@@ -139,10 +147,18 @@ export class GameSaves implements IGameSaves {
   }
 
   get canLoad(): boolean {
+    return this.hasSave(this.slot)
+  }
+
+  get canLoadAutosave(): boolean {
+    return this.hasSave('autosave')
+  }
+
+  private hasSave(location: GameSaveLocation): boolean {
     if (this.disposed || this.working) return false
 
     try {
-      return this.store.read(this.gameId, this.slot) !== undefined
+      return this.store.read(this.gameId, location) !== undefined
     } catch {
       // Leave Load available so the player can request it and see the storage error.
       return true
@@ -164,13 +180,48 @@ export class GameSaves implements IGameSaves {
   }
 
   load(): boolean {
+    return this.loadFrom(this.slot)
+  }
+
+  loadAutosave(): boolean {
+    return this.loadFrom('autosave')
+  }
+
+  /** Background checkpoints have separate feedback and never change the selected manual slot. */
+  autosave(): boolean {
+    if (this.disposed || this.working || this.notifying || !this.available()) return false
+    this.working = true
+
+    try {
+      this.write(gameSaveSchema.parse(this.capture()), 'autosave')
+      this.autosaveStatus = 'saved'
+      this.autosaveError = undefined
+
+      return true
+    } catch (error) {
+      const code = error instanceof GameSaveError ? error.code : 'invalid-save'
+
+      // Movement and message dispatch are transient; retain the last safe checkpoint.
+      if (code !== 'busy' && code !== 'unavailable') {
+        this.autosaveStatus = 'error'
+        this.autosaveError = code
+      }
+
+      return false
+    } finally {
+      this.working = false
+      this.notify()
+    }
+  }
+
+  private loadFrom(location: GameSaveLocation): boolean {
     if (this.disposed || this.working || this.notifying) return false
 
     return this.perform(() => {
       let text: string | undefined
 
       try {
-        text = this.store.read(this.gameId, this.slot)
+        text = this.store.read(this.gameId, location)
       } catch {
         throw new GameSaveError('storage')
       }
@@ -236,13 +287,13 @@ export class GameSaves implements IGameSaves {
     }
   }
 
-  private write(save: GameSave): void {
+  private write(save: GameSave, location: GameSaveLocation = this.slot): void {
     const text = JSON.stringify(save)
 
     if (saveByteLength(text) > maxGameSaveBytes) throw new GameSaveError('too-large')
 
     try {
-      this.store.write(this.gameId, text, this.slot)
+      this.store.write(this.gameId, text, location)
     } catch {
       throw new GameSaveError('storage')
     }

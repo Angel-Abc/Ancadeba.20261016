@@ -1174,6 +1174,97 @@ describe('scene renderer', () => {
     expect(document.defaultView.URL.revokeObjectURL).toHaveBeenCalledTimes(2)
   })
 
+  it.each(['standalone', 'preview'] as const)(
+    'offers separate autosave recovery and feedback in %s',
+    async (host) => {
+      const document = new TestDocument()
+      const target = document.createElement('main')
+      const storage = new Map<string, string>()
+      let full = false
+      vi.useFakeTimers()
+
+      const engine = new Engine(
+        loader,
+        host === 'preview'
+          ? new EditorPreviewHost(target.asElement())
+          : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          clock: { now: () => Date.now() },
+          scheduler: {
+            schedule(callback, delay) {
+              const timer = setTimeout(callback, delay)
+
+              return () => clearTimeout(timer)
+            },
+          },
+          saveStore: {
+            read: (id, slot = '1') => storage.get(`${id}:${slot}`),
+            write: (id, text, slot = '1') => {
+              if (full && slot === 'autosave') throw new Error('Quota exceeded')
+              storage.set(`${id}:${slot}`, text)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => {
+        engine.stop()
+        vi.useRealTimers()
+      })
+
+      await engine.start()
+
+      const button = (text: string) =>
+        target.find((node) => node.tagName === 'BUTTON' && node.textContent === text)!
+
+      const feedback = () =>
+        target.find((node) => node.className === 'ancadeba-autosave-status')!.textContent
+
+      expect(button('Load autosave').disabled).toBe(true)
+      expect(feedback()).toBe('Autosave enabled.')
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('standard')
+      button('Save progress').click()
+      const manual = storage.get('basic-game:1')
+      const name = target.find((node) => node.attributes.get('aria-label') === 'Save name')!
+      name.value = 'Name draft'
+      vi.advanceTimersByTime(500)
+      expect(button('Load autosave').disabled).toBe(false)
+      expect(feedback()).toBe('Progress autosaved on this device.')
+      expect(name.value).toBe('Name draft')
+      expect(target.find((node) => node.attributes.get('role') === 'status')!.textContent).toBe(
+        'Progress saved on this device.',
+      )
+      engine.actions!.request('walk-east')
+
+      for (let i = 0; i < 20; i++) engine.flushMessages()
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+      document.defaultView.confirm.mockReturnValueOnce(false)
+      button('Load autosave').click()
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+      button('Load autosave').click()
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('standard')
+      expect(storage.get('basic-game:1')).toBe(manual)
+      full = true
+      vi.advanceTimersByTime(500)
+      expect(feedback()).toContain('Autosave failed:')
+      expect(target.find((node) => node.attributes.get('role') === 'status')!.textContent).toBe(
+        'Saved progress loaded.',
+      )
+      engine.game!.localization!.select('nl')
+      const load = button('Automatische opslag laden')
+      expect(load.disabled).toBe(false)
+      expect(feedback()).toContain('Automatisch opslaan mislukt:')
+      const resume = vi.spyOn(engine.saves!, 'loadAutosave')
+      engine.stop()
+      load.click()
+      expect(resume).not.toHaveBeenCalled()
+      expect(storage.get('basic-game:1')).toBe(manual)
+    },
+  )
+
   it('names and switches slots, exports snapshots, and imports only after overwrite confirmation', async () => {
     const storage = new Map<string, string>()
     const document = new TestDocument()

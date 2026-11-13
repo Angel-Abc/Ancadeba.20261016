@@ -292,6 +292,7 @@ export class Engine implements IEngine {
           game,
           lifecycle,
           store: this.runtime.saveStore,
+          scheduler: this.runtime.scheduler,
           isRunning: () => this.session === session && session.game !== undefined,
           settleMessages: () => session.messages.settle(),
           runtimeFor: (instance) => session.gameRuntimes.get(instance),

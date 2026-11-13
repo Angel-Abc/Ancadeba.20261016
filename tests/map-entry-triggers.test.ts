@@ -375,7 +375,7 @@ describe('scene entrance coordinates', () => {
       if (current?.data.id === 'second') observed.push(movement.getPosition(current, 'other-map'))
     })
     movement.move(lifecycle.activeScene!, 'map', 'east')
-    tasks[0]!.callback()
+    tasks.find((task) => task.delay === 100 && !task.cancelled)!.callback()
     flush()
     expect(scene.disposed).toBe(true)
     expect(observed).toEqual([{ x: 1, y: 2 }])

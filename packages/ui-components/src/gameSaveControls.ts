@@ -36,7 +36,8 @@ export function mountGameSaveControls(
   const load = document.createElement('button')
   const exportSave = document.createElement('button')
   const importSave = document.createElement('button')
-  save.type = load.type = exportSave.type = importSave.type = 'button'
+  const loadAutosave = document.createElement('button')
+  save.type = load.type = exportSave.type = importSave.type = loadAutosave.type = 'button'
   const slotLabel = document.createElement('label')
   const slotCaption = document.createElement('span')
   const slot = document.createElement('select')
@@ -54,7 +55,22 @@ export function mountGameSaveControls(
   const status = document.createElement('span')
   status.setAttribute('role', 'status')
   status.setAttribute('aria-live', 'polite')
-  controls.append(slotLabel, nameLabel, save, load, exportSave, importSave, file, status)
+  const autosaveStatus = document.createElement('span')
+  autosaveStatus.className = 'ancadeba-autosave-status'
+  autosaveStatus.setAttribute('role', 'status')
+  autosaveStatus.setAttribute('aria-live', 'polite')
+  controls.append(
+    slotLabel,
+    nameLabel,
+    save,
+    load,
+    loadAutosave,
+    exportSave,
+    importSave,
+    file,
+    status,
+    autosaveStatus,
+  )
   root.append(controls)
   const browserDownload = new BrowserGameSaveDownload(document)
   let disposed = false
@@ -100,11 +116,19 @@ export function mountGameSaveControls(
     load.textContent = t.load
     exportSave.textContent = runtimeText(game, 'save.export')
     importSave.textContent = runtimeText(game, 'save.import')
+    loadAutosave.textContent = runtimeText(game, 'save.loadAutosave')
     file.setAttribute('aria-label', importSave.textContent)
     slot.disabled = name.disabled = reading
     save.disabled = reading || !saves.canSave
     load.disabled = exportSave.disabled = reading || !saves.canLoad
     importSave.disabled = reading || !saves.canImport
+    loadAutosave.disabled = reading || !saves.canLoadAutosave
+    autosaveStatus.textContent = saves.autosaveError
+      ? runtimeText(game, 'save.autosaveError', { error: t[saves.autosaveError] })
+      : runtimeText(
+          game,
+          saves.autosaveStatus === 'saved' ? 'save.autosaved' : 'save.autosaveEnabled',
+        )
     status.textContent = reading
       ? runtimeText(game, 'save.reading')
       : message
@@ -133,6 +157,14 @@ export function mountGameSaveControls(
   const onSlot = () => {
     if (reading || disposed) return
     saves.selectSlot(slot.value)
+  }
+
+  const onLoadAutosave = () => {
+    if (reading || disposed) return
+
+    if (hasGame() && document.defaultView?.confirm(gameSaveMessages(game).confirm) !== true) return
+    message = undefined
+    saves.loadAutosave()
   }
 
   const onExport = () => {
@@ -199,6 +231,7 @@ export function mountGameSaveControls(
 
   save.addEventListener('click', onSave)
   load.addEventListener('click', onLoad)
+  loadAutosave.addEventListener('click', onLoadAutosave)
   slot.addEventListener('change', onSlot)
   exportSave.addEventListener('click', onExport)
   importSave.addEventListener('click', onImport)
@@ -213,6 +246,7 @@ export function mountGameSaveControls(
     unsubscribeLanguage?.()
     save.removeEventListener('click', onSave)
     load.removeEventListener('click', onLoad)
+    loadAutosave.removeEventListener('click', onLoadAutosave)
     slot.removeEventListener('change', onSlot)
     exportSave.removeEventListener('click', onExport)
     importSave.removeEventListener('click', onImport)

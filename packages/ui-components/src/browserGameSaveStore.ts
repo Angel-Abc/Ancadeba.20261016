@@ -1,4 +1,4 @@
-import type { GameSaveStore, GameSaveSlotId } from '@ancadeba/game-runtime'
+import type { GameSaveStore, GameSaveLocation } from '@ancadeba/game-runtime'
 
 export interface SaveStorage {
   getItem(key: string): string | null
@@ -12,15 +12,15 @@ export class BrowserGameSaveStore implements GameSaveStore {
     private readonly namespace = '',
   ) {}
 
-  read(gameId: string, slot: GameSaveSlotId = '1'): string | undefined {
+  read(gameId: string, slot: GameSaveLocation = '1'): string | undefined {
     return this.storage().getItem(this.key(gameId, slot)) ?? undefined
   }
 
-  write(gameId: string, save: string, slot: GameSaveSlotId = '1'): void {
+  write(gameId: string, save: string, slot: GameSaveLocation = '1'): void {
     this.storage().setItem(this.key(gameId, slot), save)
   }
 
-  private key(gameId: string, slot: GameSaveSlotId): string {
+  private key(gameId: string, slot: GameSaveLocation): string {
     const base = `ancadeba.save.${encodeURIComponent(this.namespace)}.${encodeURIComponent(gameId)}`
 
     return slot === '1' ? base : `${base}.slot.${slot}`

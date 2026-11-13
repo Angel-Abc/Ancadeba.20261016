@@ -1309,7 +1309,20 @@ slot on this browser and device. Reloading preserves all slots and initially sel
 slot 1; existing single-slot saves remain in slot 1. Loading resumes the saved
 gameplay scene; the Basic Game's main-menu **Load Game** button and authored save/load
 buttons use the selected slot too. Loading while a playthrough is open asks before
-replacing unsaved progress. Starting **New game** leaves all saved slots intact.
+replacing unsaved progress. Starting **New game** leaves all manual slots intact.
+
+Autosave uses a separate checkpoint and never overwrites the five manual slots.
+It saves about half a second after gameplay changes or scene transitions, coalescing
+bursts of updates, with a 30-second fallback for changes without notifications.
+An active map step defers autosave until movement completes. **Load autosave**
+resumes that checkpoint, asking before replacing an active playthrough, and leaves
+the selected manual slot unchanged. Autosave starts after entering a gameplay scene;
+starting a new game replaces the previous autosave when its first checkpoint is
+ready. It also runs in menus while a playthrough remains open. Closing or restarting
+the preview cancels pending checkpoints; changes made immediately before closing
+may not have reached storage yet. Autosave failures have separate feedback and keep
+the previous checkpoint intact. Autosave uses the same validation and compatibility
+checks as manual saves.
 
 **Export save** downloads the selected slot as a `.save.json` file, including its
 name. Save your current progress first if you want to export it. **Import save**
@@ -1358,7 +1371,7 @@ current playthrough. Storage failures, including blocked storage and quota error
 never report success. Slots are separated by browser origin and game location;
 preview slots are additionally separated by project folder. Exports use their own
 hosting location. Clearing browser storage removes saved progress. There is no
-cloud sync, automatic save, or general gameplay-version migration.
+cloud sync or general gameplay-version migration.
 
 Authors can add ordinary buttons with `"action": { "type": "save-game" }` or
 `"action": { "type": "load-game" }` through the component editor. These actions
@@ -1366,12 +1379,15 @@ need no target scene and use the same browser controls and status messages.
 Save is unavailable until there is a current playthrough and a gameplay scene to
 resume. Hosts supply an optional `EngineRuntimeServices.saveStore` implementing
 `GameSaveStore.read(gameId, slot)` and `write(gameId, serializedSave, slot)`;
-stores must isolate slots `1` through `5`, with an omitted slot meaning `1`. Browser hosts inject
+stores must isolate slots `1` through `5` and `autosave`, with an omitted slot meaning `1`. Browser hosts inject
 `BrowserGameSaveStore`. Headless hosts can inject their own durable store. The
 engine exposes `engine.saves` and passes it to its host session. `save()` and
 `load()` return a boolean; `status`, `error`, and `subscribe()` expose feedback.
 `selectedSlot`, `slots`, `selectSlot(id)`, `save(name?)`, `importFile(text)`, and
 `exportFile()` support slot selection and portable snapshots. Hosts handle file I/O.
+`canLoadAutosave`, `loadAutosave()`, `autosaveStatus`, and `autosaveError` expose
+automatic checkpoint recovery and feedback. `status` and `error` remain dedicated
+to player-requested save operations.
 
 Built-in persistence supports the default authored runtime, including games
 without rules. Custom lifecycle, rules, and state-transaction factories disable
