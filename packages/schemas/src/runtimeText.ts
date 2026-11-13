@@ -59,6 +59,22 @@ const en = {
   'save.incompatible-save':
     'This save belongs to a different game or content version. Your current progress is unchanged.',
   'save.busy': 'Wait for movement to finish before saving.',
+  'save.slot': 'Save slot',
+  'save.slotLabel': 'Slot {slot}: {name}',
+  'save.unnamed': 'Saved game',
+  'save.empty': 'Empty',
+  'save.slotUnavailable': 'Storage unavailable',
+  'save.name': 'Save name',
+  'save.export': 'Export save',
+  'save.import': 'Import save',
+  'save.imported': 'Save imported into the selected slot. Choose Load progress to resume it.',
+  'save.exported': 'Save file download requested.',
+  'save.confirmImport': 'Replace the saved game in this slot with the imported file?',
+  'save.reading': 'Reading save file…',
+  'save.fileError': 'The save file could not be read. Choose the file again.',
+  'save.downloadError': 'The save file could not be downloaded. Try exporting again.',
+  'save.invalid-name': 'Use a save name of at most 80 characters.',
+  'save.too-large': 'Save files must be no larger than 5 MiB.',
 }
 
 export type RuntimeTextKey = keyof typeof en
@@ -126,6 +142,24 @@ const nl: Record<RuntimeTextKey, string> = {
   'save.incompatible-save':
     'Deze opslag hoort bij een ander spel of een andere inhoudsversie. Je huidige voortgang is behouden.',
   'save.busy': 'Wacht tot de beweging klaar is voordat je opslaat.',
+  'save.slot': 'Opslagvak',
+  'save.slotLabel': 'Vak {slot}: {name}',
+  'save.unnamed': 'Opgeslagen spel',
+  'save.empty': 'Leeg',
+  'save.slotUnavailable': 'Opslag niet beschikbaar',
+  'save.name': 'Opslagnaam',
+  'save.export': 'Opslag exporteren',
+  'save.import': 'Opslag importeren',
+  'save.imported':
+    'Opslag geïmporteerd in het gekozen vak. Kies Voortgang laden om verder te spelen.',
+  'save.exported': 'Download van het opslagbestand aangevraagd.',
+  'save.confirmImport': 'Het opgeslagen spel in dit vak vervangen door het geïmporteerde bestand?',
+  'save.reading': 'Opslagbestand lezen…',
+  'save.fileError': 'Het opslagbestand kon niet worden gelezen. Kies het bestand opnieuw.',
+  'save.downloadError':
+    'Het opslagbestand kon niet worden gedownload. Probeer opnieuw te exporteren.',
+  'save.invalid-name': 'Gebruik een opslagnaam van maximaal 80 tekens.',
+  'save.too-large': 'Opslagbestanden mogen niet groter zijn dan 5 MiB.',
 }
 
 /** Built-in player text uses the game's catalogs; missing keys need no manifest changes. */

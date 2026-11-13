@@ -1302,13 +1302,24 @@ live in game-runtime; utilities remain generic.
 
 ## Save and load
 
-The standalone engine, exported games, and editor preview provide **Save progress**
-and **Load progress** controls. Saving replaces one manual slot for the current
-game on this browser and device. Reloading the page or closing and reopening it
-preserves the slot. Loading resumes the saved gameplay scene; the Basic Game's
-main-menu **Load Game** button uses the same slot. Loading while a playthrough is
-open asks before replacing unsaved progress. Starting **New game** leaves the
-saved slot intact until the player explicitly saves again.
+The standalone engine, exported games, and editor preview provide five manual save
+slots. Choose a **Save slot**, optionally enter a **Save name** (up to 80 characters),
+then use **Save progress** or **Load progress**. Saving replaces only the selected
+slot on this browser and device. Reloading preserves all slots and initially selects
+slot 1; existing single-slot saves remain in slot 1. Loading resumes the saved
+gameplay scene; the Basic Game's main-menu **Load Game** button and authored save/load
+buttons use the selected slot too. Loading while a playthrough is open asks before
+replacing unsaved progress. Starting **New game** leaves all saved slots intact.
+
+**Export save** downloads the selected slot as a `.save.json` file, including its
+name. Save your current progress first if you want to export it. **Import save**
+validates a file and copies it into the selected slot, asking before overwriting
+an occupied slot. Importing leaves the current playthrough unchanged; use **Load
+progress** to resume the imported game. Files can transfer progress between devices,
+browsers, preview and published games with matching game and gameplay versions.
+Files are limited to 5 MiB of UTF-8 JSON. Invalid or incompatible imports preserve
+both the previous slot and current progress. Files with older full-content
+fingerprints are incompatible and are not upgraded.
 
 Snapshots include authored state and activity logs, inventory placements and
 consumed/generated items, equipment, gold, XP and level receipts, turn/world-time
@@ -1354,10 +1365,13 @@ Authors can add ordinary buttons with `"action": { "type": "save-game" }` or
 need no target scene and use the same browser controls and status messages.
 Save is unavailable until there is a current playthrough and a gameplay scene to
 resume. Hosts supply an optional `EngineRuntimeServices.saveStore` implementing
-`GameSaveStore.read(gameId)` and `write(gameId, serializedSave)`; browser hosts inject
+`GameSaveStore.read(gameId, slot)` and `write(gameId, serializedSave, slot)`;
+stores must isolate slots `1` through `5`, with an omitted slot meaning `1`. Browser hosts inject
 `BrowserGameSaveStore`. Headless hosts can inject their own durable store. The
 engine exposes `engine.saves` and passes it to its host session. `save()` and
 `load()` return a boolean; `status`, `error`, and `subscribe()` expose feedback.
+`selectedSlot`, `slots`, `selectSlot(id)`, `save(name?)`, `importFile(text)`, and
+`exportFile()` support slot selection and portable snapshots. Hosts handle file I/O.
 
 Built-in persistence supports the default authored runtime, including games
 without rules. Custom lifecycle, rules, and state-transaction factories disable

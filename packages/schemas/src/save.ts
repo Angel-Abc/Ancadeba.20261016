@@ -159,6 +159,7 @@ export const savedDialogueSchema = z.strictObject({
 
 export const gameSaveSchema = z.strictObject({
   'save-version': z.literal(1),
+  slotName: z.string().trim().max(80).optional(),
   gameId: gameIdSchema,
   gameVersion: z.string().min(1),
   contentVersion: z.string().min(1),

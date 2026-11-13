@@ -111,6 +111,11 @@ export interface IGameLifecycle<TGameState = unknown, TSceneState = unknown> {
     prepare?: (game: GameInstance<TGameState>) => void,
     restore?: (game: GameInstance<TGameState>) => void,
   ): GameInstance<TGameState>
+  /** Validate a disposable candidate without starting it or replacing current progress. */
+  validateGame(
+    prepare: (game: GameInstance<TGameState>) => void,
+    restore: (game: GameInstance<TGameState>) => void,
+  ): void
   enterScene(id: string, entrance?: SceneEntrance): SceneInstance<TGameState, TSceneState>
   leaveScene(): void
   endGame(): void
@@ -328,24 +333,7 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
     restore?: (game: GameInstance<TGameState>) => void,
   ): GameInstance<TGameState> {
     return this.transition(() => {
-      const next = new OwnedGameInstance(
-        this.data,
-        this.factories.createGameState(this.data),
-        this.factories.disposeGameState,
-      )
-
-      try {
-        next.initialize(this.runtimeFactory, prepare)
-        restore?.(next)
-      } catch (error) {
-        try {
-          next.dispose()
-        } catch (cleanupError) {
-          throw new AggregateError([error, cleanupError], 'Game runtime creation failed')
-        }
-
-        throw error
-      }
+      const next = this.createGame(prepare, restore)
 
       const previous = this.game
       this.game = next
@@ -369,6 +357,39 @@ export class GameLifecycle<TGameState, TSceneState> implements IGameLifecycle<
 
       return next
     })
+  }
+
+  validateGame(
+    prepare: (game: GameInstance<TGameState>) => void,
+    restore: (game: GameInstance<TGameState>) => void,
+  ): void {
+    this.transition(() => this.createGame(prepare, restore).dispose())
+  }
+
+  private createGame(
+    prepare?: (game: GameInstance<TGameState>) => void,
+    restore?: (game: GameInstance<TGameState>) => void,
+  ): OwnedGameInstance<TGameState> {
+    const next = new OwnedGameInstance(
+      this.data,
+      this.factories.createGameState(this.data),
+      this.factories.disposeGameState,
+    )
+
+    try {
+      next.initialize(this.runtimeFactory, prepare)
+      restore?.(next)
+
+      return next
+    } catch (error) {
+      try {
+        next.dispose()
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Game runtime creation failed')
+      }
+
+      throw error
+    }
   }
 
   enterScene(id: string, entrance?: SceneEntrance): SceneInstance<TGameState, TSceneState> {

@@ -1281,8 +1281,11 @@ leveling, and combat libraries. Unchanged reads and external changes held back b
 unsaved drafts leave the preview running. Neither preview loading nor export is
 pinned to an editor revision across its individual file reads.
 
-The preview's **Save progress** and **Load progress** controls use a durable browser
-slot scoped to the project folder and game ID. They preserve progress across preview
+The preview provides five named save slots, with **Save progress** and **Load
+progress** operating on the selected **Save slot**. **Export save** downloads that
+slot as JSON; **Import save** validates a file into the selected slot without
+loading it. Occupied slots require confirmation before import. Slots use durable browser
+storage scoped to the project folder and game ID. They preserve progress across preview
 restarts and page reloads. Gameplay-definition or stylesheet changes make older
 saves incompatible; loading reports this before replacing the current playthrough.
 Translation catalogs, key assignments and displayed text can change while keeping

@@ -17,6 +17,8 @@ import {
   type IEngineHost,
   type GameActionHandler,
   type EngineRuntimeServices,
+  type GameSaveFile,
+  maxGameSaveBytes,
 } from '@ancadeba/game-runtime'
 import {
   JsonResourceLoader,
@@ -35,6 +37,7 @@ import {
 } from '@ancadeba/ui-components'
 import { DomEngineHost } from '../apps/engine/src/engineHost.js'
 import { EditorPreviewHost } from '../apps/editor-ui/src/previewHost.js'
+import { BrowserGameSaveDownload } from '../packages/ui-components/src/browserGameSaveDownload.js'
 
 // A DOM surface harness verifies renderer ownership and real event listener cleanup.
 // Actual CSS layout is also checked in a browser using this same sample game.
@@ -76,6 +79,8 @@ class TestElement extends EventTarget {
   value = ''
   disabled = false
   hidden = false
+  type = ''
+  files: { size: number; text: () => Promise<string> }[] = []
   private content = ''
 
   constructor(
@@ -119,6 +124,9 @@ class TestElement extends EventTarget {
   }
   focus(): void {
     this.ownerDocument.activeElement = this
+  }
+  click(): void {
+    this.dispatchEvent(new Event('click'))
   }
   append(...children: TestElement[]): void {
     for (const child of children) {
@@ -181,7 +189,13 @@ class TestDocument extends EventTarget {
     confirm: vi.fn(() => true),
     setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
     clearTimeout: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
+    URL: {
+      createObjectURL: vi.fn<(blob: Blob) => string>(() => 'blob:test-save'),
+      revokeObjectURL: vi.fn(),
+    },
+    Blob,
   })
+  readonly body = this.createElement('body')
   activeElement: TestElement | null = null
   hidden = false
   createElement(tag: string): TestElement {
@@ -1143,6 +1157,171 @@ describe('scene renderer', () => {
     paint()
     expect(cell.children).toHaveLength(0)
     expect(cell.style.backgroundColor).toBe('#336633')
+  })
+
+  it('downloads save JSON and releases download URLs on replacement and disposal', async () => {
+    const document = new TestDocument()
+    const downloader = new BrowserGameSaveDownload(document.body.asElement().ownerDocument)
+    const file = { fileName: 'museum.save.json', text: '{"save-version":1}' }
+    downloader.download(file)
+    expect(await document.defaultView.URL.createObjectURL.mock.calls[0]![0]!.text()).toBe(file.text)
+    expect(document.body.children).toHaveLength(0)
+    downloader.download(file)
+    expect(document.defaultView.URL.revokeObjectURL).toHaveBeenCalledTimes(1)
+    downloader.dispose()
+    expect(document.defaultView.URL.revokeObjectURL).toHaveBeenCalledTimes(2)
+    downloader.dispose()
+    expect(document.defaultView.URL.revokeObjectURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('names and switches slots, exports snapshots, and imports only after overwrite confirmation', async () => {
+    const storage = new Map<string, string>()
+    const document = new TestDocument()
+    const target = document.createElement('main')
+    const download = vi.fn<(file: GameSaveFile) => void>()
+
+    const engine = new Engine(
+      loader,
+      {
+        mount: (game, session) =>
+          mountGameView(target.asElement(), game, session, { downloadSave: download }),
+      },
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      {
+        ...timing,
+        saveStore: {
+          read: (id, slot = '1') => storage.get(`${id}:${slot}`),
+          write: (id, text, slot = '1') => {
+            storage.set(`${id}:${slot}`, text)
+          },
+        },
+      },
+    )
+
+    onTestFinished(() => engine.stop())
+    await engine.start()
+
+    const button = (text: string) =>
+      target.find((node) => node.tagName === 'BUTTON' && node.textContent === text)!
+
+    const status = () =>
+      target.find((node) => node.attributes.get('role') === 'status')!.textContent
+
+    expect(button('Export save').disabled).toBe(true)
+    expect(button('Import save').disabled).toBe(false)
+    engine.lifecycle!.startGame()
+    engine.lifecycle!.enterScene('standard')
+    const name = target.find((node) => node.attributes.get('aria-label') === 'Save name')!
+    const slot = target.find((node) => node.attributes.get('aria-label') === 'Save slot')!
+    name.value = 'Museum'
+    button('Save progress').click()
+    expect(slot.children[0]?.textContent).toBe('Slot 1: Museum')
+    button('Export save').click()
+    const file = download.mock.calls[0]![0]
+    expect(gameSaveSchema.parse(JSON.parse(file.text)).slotName).toBe('Museum')
+    const old = engine.lifecycle!.currentGame
+    slot.value = '2'
+    slot.dispatchEvent(new Event('change'))
+    expect(name.value).toBe('')
+    expect(button('Load progress').disabled).toBe(true)
+    const input = target.find((node) => node.type === 'file')!
+    input.files = [{ size: file.text.length, text: async () => file.text }]
+    input.dispatchEvent(new Event('change'))
+    expect(slot.disabled).toBe(true)
+    await vi.waitFor(() => expect(status()).toContain('Save imported'))
+    expect(slot.children[1]?.textContent).toBe('Slot 2: Museum')
+    expect(name.value).toBe('Museum')
+    expect(engine.lifecycle!.currentGame).toBe(old)
+    expect(document.defaultView.confirm).not.toHaveBeenCalled()
+    const original = storage.get('basic-game:2')
+    document.defaultView.confirm.mockReturnValueOnce(false)
+    input.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(slot.disabled).toBe(false))
+    expect(document.defaultView.confirm).toHaveBeenCalledWith(
+      'Replace the saved game in this slot with the imported file?',
+    )
+    expect(storage.get('basic-game:2')).toBe(original)
+    input.files = [{ size: 1, text: async () => '{' }]
+    input.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(status()).toContain('damaged or invalid'))
+    expect(storage.get('basic-game:2')).toBe(original)
+    input.files = [{ size: maxGameSaveBytes + 1, text: vi.fn() }]
+    input.dispatchEvent(new Event('change'))
+    expect(status()).toContain('5 MiB')
+    expect(input.files[0]!.text).not.toHaveBeenCalled()
+    input.files = [
+      {
+        size: 1,
+        text: async () => {
+          throw new Error('read failed')
+        },
+      },
+    ]
+    input.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(status()).toContain('could not be read'))
+    button('Load progress').click()
+    expect(engine.lifecycle!.currentGame).not.toBe(old)
+    engine.game!.localization!.select('nl')
+    expect(button('Opslag exporteren')).toBeDefined()
+    expect(button('Opslag importeren')).toBeDefined()
+    expect(slot.attributes.get('aria-label')).toBe('Opslagvak')
+    expect(slot.children[2]?.textContent).toBe('Vak 3: Leeg')
+    download.mockImplementationOnce(() => {
+      throw new Error('download failed')
+    })
+    button('Opslag exporteren').click()
+    expect(status()).toContain('kon niet worden gedownload')
+  })
+
+  it.each(['unmount', 'switch'] as const)('ignores pending file reads after %s', async (action) => {
+    const document = new TestDocument()
+    const target = document.createElement('main')
+    const storage = new Map<string, string>()
+
+    const engine = new Engine(
+      loader,
+      new DomEngineHost(target.asElement()),
+      logger,
+      () => new MessageBus<EngineMessages>(),
+      {
+        ...timing,
+        saveStore: {
+          read: (id) => storage.get(id),
+          write: (id, text) => {
+            storage.set(id, text)
+          },
+        },
+      },
+    )
+
+    onTestFinished(() => engine.stop())
+    await engine.start()
+    engine.lifecycle!.startGame()
+    engine.lifecycle!.enterScene('standard')
+    engine.saves!.save()
+    const original = storage.get('basic-game')!
+    let finish!: (text: string) => void
+    const input = target.find((node) => node.type === 'file')!
+    input.files = [
+      {
+        size: original.length,
+        text: () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      },
+    ]
+    input.dispatchEvent(new Event('change'))
+    const importFile = vi.spyOn(engine.saves!, 'importFile')
+
+    if (action === 'unmount') engine.stop()
+    else engine.saves!.selectSlot('2')
+    finish(original)
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    expect(importFile).not.toHaveBeenCalled()
+    expect(document.defaultView.confirm).not.toHaveBeenCalled()
+    expect(storage.get('basic-game')).toBe(original)
   })
 
   it('saves from the browser controls, confirms replacement, and resumes through the menu after remounting', async () => {

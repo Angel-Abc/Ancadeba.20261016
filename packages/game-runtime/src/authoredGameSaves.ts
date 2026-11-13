@@ -1,4 +1,5 @@
 import type { GameData } from './gameData.js'
+import type { GameSave } from '@ancadeba/schemas'
 import type { GameInstance, IGameLifecycle } from './gameLifecycle.js'
 import type { AuthoredPlaythrough } from './authoredRules.js'
 import type { GameActionRuntime } from './gameActionRuntime.js'
@@ -31,6 +32,23 @@ export function bindAuthoredGameSaves({
   onObserverError,
 }: AuthoredSaveDependencies) {
   let lastScene: string | undefined
+
+  const prepare = (save: GameSave, instance: GameInstance) => {
+    const playthrough = playthroughFor(instance)
+
+    if (playthrough) playthrough.restore(save)
+    else if (save.state.length || save.log.length) throw new GameSaveError('incompatible-save')
+
+    if (instance.inventory instanceof GameInventory) instance.inventory.restore(save.inventory)
+    else if (Object.keys(save.inventory).length) throw new GameSaveError('incompatible-save')
+  }
+
+  const restoreRuntime = (save: GameSave, instance: GameInstance) => {
+    const runtime = runtimeFor(instance)
+
+    if (!runtime) throw new GameSaveError('unavailable')
+    runtime.restore(save, instance)
+  }
 
   const saves = new GameSaves(
     game.id,
@@ -83,23 +101,8 @@ export function bindAuthoredGameSaves({
     (save) => {
       if (!isRunning()) throw new GameSaveError('unavailable')
       lifecycle.startGame(
-        (instance) => {
-          const playthrough = playthroughFor(instance)
-
-          if (playthrough) playthrough.restore(save)
-          else if (save.state.length || save.log.length)
-            throw new GameSaveError('incompatible-save')
-
-          if (instance.inventory instanceof GameInventory)
-            instance.inventory.restore(save.inventory)
-          else if (Object.keys(save.inventory).length) throw new GameSaveError('incompatible-save')
-        },
-        (instance) => {
-          const runtime = runtimeFor(instance)
-
-          if (!runtime) throw new GameSaveError('unavailable')
-          runtime.restore(save, instance)
-        },
+        (instance) => prepare(save, instance),
+        (instance) => restoreRuntime(save, instance),
       )
 
       if (save.language && game.localization?.available.some(({ tag }) => tag === save.language))
@@ -125,6 +128,13 @@ export function bindAuthoredGameSaves({
       game.scenes.get(save.scene)?.type === 'game' &&
       (save.inputContext === undefined ||
         Object.hasOwn(game.input?.contexts ?? {}, save.inputContext)),
+    (save) => {
+      if (!isRunning()) throw new GameSaveError('unavailable')
+      lifecycle.validateGame(
+        (instance) => prepare(save, instance),
+        (instance) => restoreRuntime(save, instance),
+      )
+    },
     onObserverError,
   )
 

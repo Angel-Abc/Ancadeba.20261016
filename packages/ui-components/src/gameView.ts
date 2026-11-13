@@ -1,4 +1,10 @@
-import type { GameData, IGameLifecycle, SceneData, IGameSaves } from '@ancadeba/game-runtime'
+import type {
+  GameData,
+  IGameLifecycle,
+  SceneData,
+  IGameSaves,
+  GameSaveFile,
+} from '@ancadeba/game-runtime'
 import { canEnterScene, runtimeText } from '@ancadeba/game-runtime'
 import { mountGameSaveControls, gameSaveMessages } from './gameSaveControls.js'
 import { bindKeyboardInput, type KeyboardInputSink } from './keyboardInput.js'
@@ -13,6 +19,7 @@ export interface GameViewSession {
 }
 
 export interface GameViewOptions extends SceneRendererOptions {
+  readonly downloadSave?: (file: GameSaveFile) => void
   readonly scenePicker?: boolean
   readonly scenePickerLabels?: {
     readonly caption: string
@@ -77,8 +84,12 @@ export function mountGameView(
 
     if (session.saves)
       cleanups.push(
-        mountGameSaveControls(root, game, session.saves, () =>
-          Boolean(session.lifecycle.currentGame),
+        mountGameSaveControls(
+          root,
+          game,
+          session.saves,
+          () => Boolean(session.lifecycle.currentGame),
+          options.downloadSave,
         ),
       )
 

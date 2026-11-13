@@ -20,9 +20,29 @@
   font-size: 0.875rem;
 }
 
-.ancadeba-save-controls button {
+.ancadeba-save-controls button,
+.ancadeba-save-controls select,
+.ancadeba-save-controls input {
   font: inherit;
   padding: 0.35rem 0.65rem;
+}
+
+.ancadeba-save-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ancadeba-save-controls select,
+.ancadeba-save-controls input {
+  min-width: 0;
+  width: 10rem;
+  max-width: 100%;
+}
+
+.ancadeba-save-controls select {
+  width: 14rem;
 }
 
 .ancadeba-save-controls [role='status'] {

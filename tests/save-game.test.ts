@@ -1,5 +1,12 @@
 import { readFile } from 'node:fs/promises'
-import { Engine, GameLoader, type EngineMessages, type GameSaveStore } from '@ancadeba/game-runtime'
+import {
+  Engine,
+  GameLoader,
+  maxGameSaveBytes,
+  type EngineMessages,
+  type GameSaveSlotId,
+  type GameSaveStore,
+} from '@ancadeba/game-runtime'
 import { gameSaveSchema, gameSchema, sceneSchema } from '@ancadeba/schemas'
 import { JsonResourceLoader, MessageBus, type ILogger } from '@ancadeba/utilities'
 import { BrowserGameSaveStore } from '@ancadeba/ui-components'
@@ -7,11 +14,11 @@ import { describe, expect, it, onTestFinished, vi } from 'vite-plus/test'
 
 class MemorySaves implements GameSaveStore {
   readonly slots = new Map<string, string>()
-  read(id: string) {
-    return this.slots.get(id)
+  read(id: string, slot: GameSaveSlotId = '1') {
+    return this.slots.get(`${id}:${slot}`)
   }
-  write(id: string, save: string) {
-    this.slots.set(id, save)
+  write(id: string, save: string, slot: GameSaveSlotId = '1') {
+    this.slots.set(`${id}:${slot}`, save)
   }
 }
 
@@ -97,6 +104,116 @@ async function launch(
 }
 
 describe('persistent player progress', () => {
+  it('keeps five named slots independent across new games and engine restarts', async () => {
+    const store = new MemorySaves()
+    const first = await launch(store)
+    first.start()
+    const saves = first.engine.saves!
+    expect(saves.selectedSlot).toBe('1')
+    expect(saves.slots).toHaveLength(5)
+    expect(saves.selectSlot('6')).toBe(false)
+    expect(saves.save('  Harbour  ')).toBe(true)
+    const original = store.read('basic-game')
+    expect(saves.slots[0]).toMatchObject({ name: 'Harbour', occupied: true })
+    expect(saves.selectSlot('2')).toBe(true)
+    expect(saves.canLoad).toBe(false)
+    first.engine.lifecycle!.currentGame!.actions!.request('walk-east')
+    expect(saves.save('Gallery')).toBe(true)
+    expect(store.read('basic-game')).toBe(original)
+    expect(saves.load()).toBe(true)
+    expect(first.engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+    first.start()
+    expect(saves.slots.filter(({ occupied }) => occupied)).toHaveLength(2)
+    first.engine.stop()
+    const second = await launch(store)
+    expect(second.engine.saves!.load()).toBe(true)
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('standard')
+    second.engine.saves!.selectSlot('2')
+    expect(second.engine.saves!.load()).toBe(true)
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+  })
+
+  it('round-trips a portable file into a new store without loading or running candidate actions', async () => {
+    const first = await launch(new MemorySaves())
+    const game = first.start()
+    game.leveling!.grantXp('player', 5)
+    first.engine.game!.localization!.select('nl')
+    expect(first.engine.saves!.save('Museum')).toBe(true)
+    // Export contains the selected snapshot, not subsequent unsaved progress.
+    game.actions!.request('walk-east')
+    first.advance()
+    const file = first.engine.saves!.exportFile()!
+    expect(file.fileName).toBe('basic-game-slot-1.save.json')
+    expect(gameSaveSchema.parse(JSON.parse(file.text)).scene).toBe('standard')
+    const store = new MemorySaves()
+    const second = await launch(store)
+    const current = second.start()
+    const scene = second.engine.lifecycle!.activeScene
+    const saves = second.engine.saves!
+    saves.selectSlot('5')
+    current.actions!.request('walk-east')
+    const changed = vi.fn()
+    second.engine.lifecycle!.subscribeSceneChanges(changed)
+    expect(saves.importFile(file.text)).toBe(true)
+    expect(saves.status).toBe('imported')
+    expect(changed).not.toHaveBeenCalled()
+    expect(second.engine.lifecycle!.currentGame).toBe(current)
+    expect(second.engine.lifecycle!.activeScene).toBe(scene)
+    expect(second.engine.game!.language).toBe('en')
+    expect(current.leveling!.snapshot('player')?.xp).toBe(0)
+    expect(store.read('basic-game')).toBeUndefined()
+    expect(saves.slots[4]?.name).toBe('Museum')
+    second.advance()
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('gallery')
+    expect(saves.load()).toBe(true)
+    second.advance()
+    expect(second.engine.lifecycle!.activeScene!.data.id).toBe('standard')
+    expect(second.engine.game!.language).toBe('nl')
+    expect(second.engine.lifecycle!.currentGame!.leveling!.snapshot('player')?.xp).toBe(5)
+    expect(saves.save()).toBe(true)
+    expect(saves.slots[4]?.name).toBe('Museum')
+  })
+
+  it('imports from the main menu and reports empty exports and invalid names', async () => {
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store)
+    const saves = engine.saves!
+    expect(saves.canImport).toBe(true)
+    expect(saves.exportFile()).toBeUndefined()
+    expect(saves.error).toBe('unavailable')
+    start()
+    expect(saves.save('Original')).toBe(true)
+    const original = store.read('basic-game')!
+    expect(saves.save('x'.repeat(81))).toBe(false)
+    expect(saves.error).toBe('invalid-name')
+    expect(store.read('basic-game')).toBe(original)
+    engine.lifecycle!.endGame()
+    engine.lifecycle!.enterScene('start-screen')
+    saves.selectSlot('3')
+    expect(saves.importFile(original)).toBe(true)
+    expect(engine.lifecycle!.currentGame).toBeUndefined()
+    expect(engine.lifecycle!.activeScene!.data.id).toBe('start-screen')
+    expect(saves.load()).toBe(true)
+  })
+
+  it('bounds UTF-8 file size before parsing and preserves saved and live progress', async () => {
+    const store = new MemorySaves()
+    const { engine, start } = await launch(store)
+    const current = start()
+    engine.saves!.save()
+    const original = store.read('basic-game')
+    // Under the limit in UTF-16 code units, over it in UTF-8 bytes.
+    expect(engine.saves!.importFile('é'.repeat(maxGameSaveBytes / 2 + 1))).toBe(false)
+    expect(engine.saves!.error).toBe('too-large')
+    expect(store.read('basic-game')).toBe(original)
+    expect(engine.lifecycle!.currentGame).toBe(current)
+    const saves = engine.saves!
+    engine.stop()
+    expect(saves.importFile(original!)).toBe(false)
+    expect(saves.exportFile()).toBeUndefined()
+    expect(saves.selectSlot('2')).toBe(false)
+  })
+
   it('saves visited scene positions from a menu and restores them in a new engine', async () => {
     const manifest = gameSchema.parse(
       JSON.parse(
@@ -526,12 +643,16 @@ describe('persistent player progress', () => {
         escape: false,
         log: [],
       }
-    store.write(
-      'basic-game',
+
+    const damaged =
       failure === 'bad-json'
         ? '{'
-        : JSON.stringify(failure === 'unsupported-save' ? { ...save, 'save-version': 999 } : save),
-    )
+        : JSON.stringify(failure === 'unsupported-save' ? { ...save, 'save-version': 999 } : save)
+
+    const original = store.read('basic-game')
+    expect(engine.saves!.importFile(damaged)).toBe(false)
+    expect(store.read('basic-game')).toBe(original)
+    store.write('basic-game', damaged)
     expect(engine.saves!.load()).toBe(false)
     expect(engine.lifecycle!.currentGame).toBe(current)
     expect(current.disposed).toBe(false)
@@ -558,6 +679,10 @@ describe('persistent player progress', () => {
     const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game')!))
     const field = save.state.find((field) => JSON.stringify(field.path) === JSON.stringify(path))!
     field.value = value
+    const original = store.read('basic-game')
+    expect(engine.saves!.importFile(JSON.stringify(save))).toBe(false)
+    expect(engine.saves!.error).toBe('invalid-save')
+    expect(store.read('basic-game')).toBe(original)
     store.write('basic-game', JSON.stringify(save))
 
     expect(engine.saves!.load()).toBe(false)
@@ -738,6 +863,12 @@ describe('persistent player progress', () => {
     const first = new BrowserGameSaveStore(() => storage, 'first')
     const second = new BrowserGameSaveStore(() => storage, 'second')
     first.write('game', 'progress')
+    first.write('game', 'second progress', '2')
+    expect(first.read('game')).toBe('progress')
+    expect(first.read('game', '2')).toBe('second progress')
+    expect(second.read('game', '2')).toBeUndefined()
+    expect(first.read('game', '3')).toBeUndefined()
+    expect(slots.get('ancadeba.save.first.game')).toBe('progress')
     expect(second.read('game')).toBeUndefined()
     expect(first.read('other')).toBeUndefined()
 
@@ -772,6 +903,9 @@ describe('persistent player progress', () => {
     const original = store.read('basic-game')
     full = true
     expect(engine.saves!.save()).toBe(false)
+    expect(engine.saves!.error).toBe('storage')
+    expect(store.read('basic-game')).toBe(original)
+    expect(engine.saves!.importFile(original!)).toBe(false)
     expect(engine.saves!.error).toBe('storage')
     expect(store.read('basic-game')).toBe(original)
     expect(engine.saves!.load()).toBe(true)
