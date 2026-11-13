@@ -195,6 +195,7 @@ export function combatRulesetForm(
       controls.markEdited()
     },
     t,
+    controls.folds,
   )
 
   const localRender = () => {

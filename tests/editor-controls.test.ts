@@ -30,7 +30,12 @@ import type {
   ProjectEditorListener,
 } from '../apps/editor-ui/src/projectController.js'
 import { inventoryActionsForm } from '../apps/editor-ui/src/inventoryActionsForm.js'
-import { displayLabel, ruleFormControls } from '../apps/editor-ui/src/ruleFormControls.js'
+import {
+  displayLabel,
+  ruleFormControls,
+  scopedFolds,
+} from '../apps/editor-ui/src/ruleFormControls.js'
+import { combatMovesForm } from '../apps/editor-ui/src/combatMovesForm.js'
 import { ruleTriggerForms } from '../apps/editor-ui/src/ruleTriggerForms.js'
 import { nearbyForm } from '../apps/editor-ui/src/nearbyForm.js'
 import { bindComponentEditor } from '../apps/editor-ui/src/componentEditor.js'
@@ -261,6 +266,7 @@ class Control extends EventTarget {
   disabled = false
   readOnly = false
   hidden = false
+  open = false
   validationMessage = ''
   setCustomValidity(message: string) {
     this.validationMessage = message
@@ -404,6 +410,78 @@ function panel(withInput = true) {
 
   return { controls, commands, root, initial, field, edit, click, submit }
 }
+
+describe('folded form sections', () => {
+  it('keeps a fold as the author left it across re-renders and separates repeated forms', () => {
+    const document = new ControlDocument()
+    const controls = ruleFormControls(document.asDocument(), () => {})
+    const render = (source = controls) => source.fold('move:jab', 'Move: jab', false)
+
+    const first = render()
+    expect(first.open).toBe(false)
+    first.open = true
+    first.dispatchEvent(new Event('toggle'))
+    expect(render().open).toBe(true)
+
+    const scoped = scopedFolds(controls, 'ruleset:reef')
+    expect(render(scoped).open).toBe(false)
+    scoped.unfold('move:jab')
+    expect(render(scoped).open).toBe(true)
+
+    // Controls rebuilt for a nested form share the editor's memory.
+    const rebuilt = ruleFormControls(document.asDocument(), () => {}, controls.t, controls.folds)
+    expect(render(rebuilt).open).toBe(true)
+  })
+
+  it('lists combat moves folded by name and opens a move the author adds', () => {
+    const document = new ControlDocument()
+    const root = document.createElement('section')
+    const controls = ruleFormControls(document.asDocument(), () => {})
+
+    const view = projectViewSchema.parse({
+      revision: 'one',
+      game: null,
+      scenes: [],
+      diagnostics: [],
+    })
+
+    const draft: Parameters<typeof combatMovesForm>[2] = {
+      moves: {
+        jab: {
+          type: 'attack',
+          label: 'Quick jab',
+          description: '',
+          apCost: 1,
+          damage: { min: 1, max: 2 },
+        },
+      },
+      statuses: {},
+      mechanics: undefined,
+    }
+
+    const render = () => {
+      root.replaceChildren()
+      root.asElement().append(...combatMovesForm(controls, view, draft, render))
+    }
+
+    const folds = () =>
+      root.children
+        .filter((node) => node.tagName === 'details')
+        .map((node) => [node.children[0]!.textContent, node.open])
+
+    render()
+    expect(folds()).toEqual([['Move: jab · Quick jab', false]])
+
+    root
+      .all()
+      .find((node) => node.tagName === 'button' && node.textContent === 'Add guard move')!
+      .dispatchEvent(new Event('click'))
+    expect(folds()).toEqual([
+      ['Move: jab · Quick jab', false],
+      ['Move: guard · Guard', true],
+    ])
+  })
+})
 
 describe('translation key fields', () => {
   it('names definitions by literal label, then translated label, then ID', () => {

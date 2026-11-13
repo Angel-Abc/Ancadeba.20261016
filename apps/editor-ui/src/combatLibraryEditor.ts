@@ -7,7 +7,7 @@ import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
 import { combatLibrarySchema, resolveCombatSource, type CombatLibrary } from '@ancadeba/schemas'
 import type { ProjectEditorState } from './projectController.js'
-import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
+import { ruleFormControls, saveBar, languageWatcher, scopedFolds } from './ruleFormControls.js'
 import { combatMovesForm } from './combatMovesForm.js'
 import { combatStatusesForm } from './combatAbilitiesForm.js'
 import { combatRulesetsForm } from './combatRulesetsForm.js'
@@ -204,15 +204,16 @@ export function bindCombatLibraryEditor(
     })
 
     identity.querySelector('input')!.readOnly = !creating
+    const entries = scopedFolds(controls, `library:${current.id}`)
     form.append(
       saveBar(document, saveButton),
       usage,
       entryUsage,
       identity,
-      ...combatMovesForm(controls, view, current, render),
-      combatStatusesForm(controls, view, current, render),
-      combatRulesetsForm(controls, view, current, render),
-      combatAIProfilesForm(controls, view, current, render),
+      ...combatMovesForm(entries, view, current, render),
+      combatStatusesForm(entries, view, current, render),
+      combatRulesetsForm(entries, view, current, render),
+      combatAIProfilesForm(entries, view, current, render),
       combatPassivesForm(controls, view, current, render),
     )
     form.addEventListener('submit', (event) => {

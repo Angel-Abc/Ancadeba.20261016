@@ -2,7 +2,7 @@ import { combatRulesetReferences } from '@ancadeba/schemas'
 import { combatRulesetSchema, type CombatLibrary } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
 import { combatMechanicsForm } from './combatMechanicsForm.js'
-import { translationChoices, type RuleFormControls } from './ruleFormControls.js'
+import { scopedFolds, translationChoices, type RuleFormControls } from './ruleFormControls.js'
 
 export function combatRulesetsForm(
   controls: RuleFormControls,
@@ -10,7 +10,7 @@ export function combatRulesetsForm(
   library: CombatLibrary,
   render: () => void,
 ): HTMLElement {
-  const { input, group, button, translation, create, t } = controls
+  const { input, group, button, fold, translation, create, t } = controls
   const text = (key: string) => t(`combat.rulesets.${key}`)
 
   const edit = (action: () => void) => () => {
@@ -43,55 +43,60 @@ export function combatRulesetsForm(
         enemies: ruleset.actors.slice(1).map((id) => ({ id, label: id })),
       }
 
-      return group(
+      return fold(
+        `ruleset:${id}`,
         t('combat.rulesets.title', { id }),
-        usage,
-        input(t('form.name'), ruleset.label, (value) => {
-          ruleset.label = value
-        }),
-        translation(
-          t('form.nameTranslation'),
-          ruleset.labelKey ?? '',
-          translationChoices(view),
-          (value) => {
-            ruleset.labelKey = value || undefined
-          },
-        ),
-        input(t('metadata.description'), ruleset.description, (value) => {
-          ruleset.description = value
-        }),
-        translation(
-          t('form.descriptionTranslation'),
-          ruleset.descriptionKey ?? '',
-          translationChoices(view),
-          (value) => {
-            ruleset.descriptionKey = value || undefined
-          },
-        ),
-        input(text('actors'), ruleset.actors.join(', '), (value) => {
-          ruleset.actors = value
-            .split(',')
-            .map((id) => id.trim())
-            .filter(Boolean)
-        }),
-        button(
-          text('applyActors'),
-          edit(() => {}),
-        ),
-        combatMechanicsForm(
-          controls,
-          view,
-          mechanicsDraft,
-          render,
-          library.statuses,
-          false,
-          ruleset.actors.map((id) => ({ id, label: id })),
-        ),
-        button(
-          text('remove'),
-          edit(() => {
-            delete library.rulesets![id]
+        false,
+        group(
+          t('combat.rulesets.title', { id }),
+          usage,
+          input(t('form.name'), ruleset.label, (value) => {
+            ruleset.label = value
           }),
+          translation(
+            t('form.nameTranslation'),
+            ruleset.labelKey ?? '',
+            translationChoices(view),
+            (value) => {
+              ruleset.labelKey = value || undefined
+            },
+          ),
+          input(t('metadata.description'), ruleset.description, (value) => {
+            ruleset.description = value
+          }),
+          translation(
+            t('form.descriptionTranslation'),
+            ruleset.descriptionKey ?? '',
+            translationChoices(view),
+            (value) => {
+              ruleset.descriptionKey = value || undefined
+            },
+          ),
+          input(text('actors'), ruleset.actors.join(', '), (value) => {
+            ruleset.actors = value
+              .split(',')
+              .map((id) => id.trim())
+              .filter(Boolean)
+          }),
+          button(
+            text('applyActors'),
+            edit(() => {}),
+          ),
+          combatMechanicsForm(
+            scopedFolds(controls, `ruleset:${id}`),
+            view,
+            mechanicsDraft,
+            render,
+            library.statuses,
+            false,
+            ruleset.actors.map((id) => ({ id, label: id })),
+          ),
+          button(
+            text('remove'),
+            edit(() => {
+              delete library.rulesets![id]
+            }),
+          ),
         ),
       )
     }),
@@ -106,6 +111,7 @@ export function combatRulesetsForm(
 
         while (Object.hasOwn(library.rulesets ?? {}, id)) id = `${nextId || 'ruleset'}-${count++}`
         library.rulesets ??= {}
+        controls.unfold(`ruleset:${id}`)
         library.rulesets[id] = combatRulesetSchema.parse({
           label: id,
           actors: ['player', 'enemy'],

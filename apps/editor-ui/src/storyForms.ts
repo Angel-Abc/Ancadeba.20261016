@@ -415,30 +415,6 @@ function lineBindings(
   return root
 }
 
-/** Open or closed state per node or choice, kept across redraws of the same draft. */
-type DialogueNode = DialogueDefinition['nodes'][string]
-
-type Foldable = DialogueNode | DialogueNode['choices'][number]
-
-const folds = new WeakMap<Foldable, boolean>()
-
-function fold(
-  controls: RuleFormControls,
-  key: Foldable,
-  summary: string,
-  openByDefault: boolean,
-  ...children: HTMLElement[]
-): HTMLElement {
-  const details = controls.create('details')
-  const title = controls.create('summary')
-  title.textContent = summary
-  details.open = folds.get(key) ?? openByDefault
-  details.append(title, ...children)
-  details.addEventListener('toggle', () => folds.set(key, details.open))
-
-  return details
-}
-
 /** Singular and plural have their own messages, so counts read naturally in every language. */
 const count = (t: Translate, amount: number, kind: 'line' | 'choice' | 'condition' | 'effect') =>
   amount === 1 ? t(`story.count.${kind}`) : t(`story.count.${kind}s`, { count: amount })
@@ -535,9 +511,8 @@ export function dialogueForm(
           },
         ),
         // Conditions and effects fold away so a node's choices can be scanned.
-        fold(
-          controls,
-          choice,
+        controls.fold(
+          `dialogue:${draft.id}/node:${id}/choice:${index}`,
           t('story.conditionsAndEffects', {
             conditions: count(t, choice.visibleWhen.length + choice.when.length, 'condition'),
             effects: count(t, choice.effects.length, 'effect'),
@@ -591,9 +566,8 @@ export function dialogueForm(
     )
     const start = id === draft.entry ? t('story.start') : ''
     root.append(
-      fold(
-        controls,
-        node,
+      controls.fold(
+        `dialogue:${draft.id}/node:${id}`,
         t('story.nodeSummary', {
           id,
           start,

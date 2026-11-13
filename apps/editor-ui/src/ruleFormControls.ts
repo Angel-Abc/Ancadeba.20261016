@@ -30,10 +30,48 @@ export function displayLabel(
 
 let suggestionLists = 0
 
+/** Remembers which folded sections an author opened, so re-rendering a form keeps them open. */
+export interface FoldMemory {
+  get(key: string): boolean | undefined
+  set(key: string, open: boolean): void
+}
+
+export function foldMemory(): FoldMemory {
+  const opened = new Map<string, boolean>()
+
+  return {
+    get: (key) => opened.get(key),
+    set(key, open) {
+      opened.set(key, open)
+    },
+  }
+}
+
+function foldControls(document: Document, folds: FoldMemory) {
+  /** A disclosure for a long section; it stays as the author left it across re-renders. */
+  const fold = (key: string, title: string, openByDefault: boolean, ...children: HTMLElement[]) => {
+    const details = document.createElement('details')
+    const summary = document.createElement('summary')
+    summary.textContent = title
+    details.className = 'fold'
+    details.open = folds.get(key) ?? openByDefault
+    details.append(summary, ...children)
+    details.addEventListener('toggle', () => folds.set(key, details.open))
+
+    return details
+  }
+
+  /** Opens a fold before it is rendered, such as the entry an author has just added. */
+  const unfold = (key: string) => folds.set(key, true)
+
+  return { fold, unfold, folds }
+}
+
 export function ruleFormControls(
   document: Document,
   onEdit: () => void,
   t: Translate = editorLocalization().t,
+  folds: FoldMemory = foldMemory(),
 ) {
   const create = <T extends keyof HTMLElementTagNameMap>(tag: T) => document.createElement(tag)
 
@@ -165,10 +203,31 @@ export function ruleFormControls(
     return box
   }
 
-  return { create, input, select, translation, button, group, markEdited: onEdit, t }
+  return {
+    create,
+    input,
+    select,
+    translation,
+    button,
+    group,
+    ...foldControls(document, folds),
+    document,
+    markEdited: onEdit,
+    t,
+  }
 }
 
 export type RuleFormControls = ReturnType<typeof ruleFormControls>
+
+/** Controls that remember their folds separately, for a form that repeats inside one editor. */
+export function scopedFolds(controls: RuleFormControls, scope: string): RuleFormControls {
+  const folds: FoldMemory = {
+    get: (key) => controls.folds.get(`${scope}/${key}`),
+    set: (key, open) => controls.folds.set(`${scope}/${key}`, open),
+  }
+
+  return { ...controls, ...foldControls(controls.document, folds) }
+}
 
 /** Reports, once per change, that the editor language differs from the previous check. */
 export function languageWatcher(t: Translate) {

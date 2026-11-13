@@ -9,7 +9,7 @@ export function combatAIProfilesForm(
   library: CombatLibrary,
   render: () => void,
 ): HTMLElement {
-  const { input, group, button, translation, create, t } = controls
+  const { input, group, button, translation, create, t, fold } = controls
   const text = (key: string) => t(`combat.aiProfiles.${key}`)
 
   const edit = (action: () => void) => () => {
@@ -38,56 +38,61 @@ export function combatAIProfilesForm(
       const help = create('p')
       help.textContent = text('profileHelp')
 
-      return group(
+      return fold(
+        `ai-profile:${id}`,
         t('combat.aiProfiles.title', { id }),
-        usage,
-        help,
-        input(t('form.name'), profile.label, (value) => {
-          profile.label = value
-        }),
-        translation(
-          t('form.nameTranslation'),
-          profile.labelKey ?? '',
-          translationChoices(view),
-          (value) => {
-            profile.labelKey = value || undefined
-          },
-        ),
-        input(t('metadata.description'), profile.description, (value) => {
-          profile.description = value
-        }),
-        translation(
-          t('form.descriptionTranslation'),
-          profile.descriptionKey ?? '',
-          translationChoices(view),
-          (value) => {
-            profile.descriptionKey = value || undefined
-          },
-        ),
-        input(text('actors'), profile.actors.join(', '), (value) => {
-          profile.actors = value
-            .split(',')
-            .map((id) => id.trim())
-            .filter(Boolean)
-        }),
-        button(
-          text('applyActors'),
-          edit(() => {}),
-        ),
-        combatEnemyAIForm(
-          controls,
-          { id: 'self', ai: profile.ai, moves: Object.keys(library.moves) },
-          ['self', ...profile.actors].map((id) => ({ id, label: id })),
-          undefined,
-          Object.keys(library.statuses),
-          render,
-          { allowRemoval: false, freeReferences: true },
-        ),
-        button(
-          text('remove'),
-          edit(() => {
-            delete library.aiProfiles![id]
+        false,
+        group(
+          t('combat.aiProfiles.title', { id }),
+          usage,
+          help,
+          input(t('form.name'), profile.label, (value) => {
+            profile.label = value
           }),
+          translation(
+            t('form.nameTranslation'),
+            profile.labelKey ?? '',
+            translationChoices(view),
+            (value) => {
+              profile.labelKey = value || undefined
+            },
+          ),
+          input(t('metadata.description'), profile.description, (value) => {
+            profile.description = value
+          }),
+          translation(
+            t('form.descriptionTranslation'),
+            profile.descriptionKey ?? '',
+            translationChoices(view),
+            (value) => {
+              profile.descriptionKey = value || undefined
+            },
+          ),
+          input(text('actors'), profile.actors.join(', '), (value) => {
+            profile.actors = value
+              .split(',')
+              .map((id) => id.trim())
+              .filter(Boolean)
+          }),
+          button(
+            text('applyActors'),
+            edit(() => {}),
+          ),
+          combatEnemyAIForm(
+            controls,
+            { id: 'self', ai: profile.ai, moves: Object.keys(library.moves) },
+            ['self', ...profile.actors].map((id) => ({ id, label: id })),
+            undefined,
+            Object.keys(library.statuses),
+            render,
+            { allowRemoval: false, freeReferences: true },
+          ),
+          button(
+            text('remove'),
+            edit(() => {
+              delete library.aiProfiles![id]
+            }),
+          ),
         ),
       )
     }),
@@ -102,6 +107,7 @@ export function combatAIProfilesForm(
 
         while (Object.hasOwn(library.aiProfiles ?? {}, id)) id = `${nextId || 'profile'}-${count++}`
         library.aiProfiles ??= {}
+        controls.unfold(`ai-profile:${id}`)
         library.aiProfiles[id] = combatAIProfileSchema.parse({
           label: id,
           actors: ['opponent'],

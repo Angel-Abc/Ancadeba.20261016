@@ -27,7 +27,7 @@ export function combatForm(
   render: () => void,
   creating = false,
 ): HTMLElement[] {
-  const { input, select, group, button, create, translation, t } = controls
+  const { input, select, group, button, create, fold, translation, t } = controls
   const keys = translationChoices(view)
   const availableStatuses = { ...draft.statuses }
 
@@ -218,14 +218,19 @@ export function combatForm(
                 .map((id) => id.trim())
                 .filter(Boolean)
             }),
-            combatEnemyProfileForm(
-              controls,
-              view,
-              draft,
-              actor,
-              combatDraftMechanics(draft, view),
-              Object.keys(availableStatuses),
-              render,
+            fold(
+              `enemy-ai:${actor.id}`,
+              t('combat.aiProfiles.encounter'),
+              false,
+              combatEnemyProfileForm(
+                controls,
+                view,
+                draft,
+                actor,
+                combatDraftMechanics(draft, view),
+                Object.keys(availableStatuses),
+                render,
+              ),
             ),
           ]),
       ...actions,

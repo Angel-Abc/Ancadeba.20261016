@@ -156,6 +156,7 @@ export function combatEnemyProfileForm(
       controls.markEdited()
     },
     t,
+    controls.folds,
   )
 
   const localRender = () => {

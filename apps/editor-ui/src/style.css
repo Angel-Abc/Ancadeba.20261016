@@ -175,6 +175,30 @@ details > summary {
   cursor: pointer;
 }
 
+/* Folded form sections read as one scannable row each. */
+.fold {
+  margin-block: 0.25rem;
+  border: 1px solid var(--ed-border);
+  border-radius: var(--ed-radius);
+}
+
+.fold > summary {
+  padding: 0.45rem 0.6rem;
+  font-weight: 600;
+}
+
+.fold > summary:hover {
+  background: var(--ed-panel-raised);
+}
+
+.fold[open] > summary {
+  border-bottom: 1px solid var(--ed-border);
+}
+
+.fold > :not(summary) {
+  margin: 0.6rem;
+}
+
 a:where(:not(.ancadeba-game *)) {
   color: var(--ed-accent);
 }

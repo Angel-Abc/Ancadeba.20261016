@@ -8,7 +8,13 @@ import { combatComponentSchema, type CombatSource } from '@ancadeba/schemas'
 import { bindCombatLibraryEditor } from './combatLibraryEditor.js'
 import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
-import { placementFields, ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
+import {
+  placementFields,
+  ruleFormControls,
+  saveBar,
+  languageWatcher,
+  scopedFolds,
+} from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
 import { bindCombatSimulationPanel } from './combatSimulationPanel.js'
 import { sceneChoices } from './choiceLabels.js'
@@ -291,7 +297,7 @@ export function bindCombatEditor(
     button.type = 'submit'
     button.textContent = t('combat.saveEncounter')
     form.append(
-      saveBar(document, button),
+      saveBar(document, button, controls.button(t('combat.discard'), reset)),
       sharedCombatForm(
         controls,
         view,
@@ -308,7 +314,7 @@ export function bindCombatEditor(
           submit(command)
         },
       ),
-      ...combatForm(controls, view, draft, render, creating),
+      ...combatForm(scopedFolds(controls, `encounter:${draft.id}`), view, draft, render, creating),
       controls.group(
         t('form.combatView'),
         controls.input(t('combat.componentId'), current.id, (value) => {
@@ -365,7 +371,6 @@ export function bindCombatEditor(
     })
     fields.append(
       form,
-      controls.button(t('combat.discard'), reset),
       controls.button(t('combat.removeView'), () =>
         submit({ type: 'scene.setCombat', sceneId, component: null }),
       ),

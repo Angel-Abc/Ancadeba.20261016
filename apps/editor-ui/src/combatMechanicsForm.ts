@@ -17,7 +17,7 @@ import {
   type CombatTriggerEffect,
 } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
-import { translationChoices, type RuleFormControls } from './ruleFormControls.js'
+import { displayLabel, translationChoices, type RuleFormControls } from './ruleFormControls.js'
 import { combatConditionsForm, combatEffectConditionsForm } from './combatConditionsForm.js'
 import { combatStatusStrengthForm } from './combatStatusStrengthForm.js'
 import { combatEventValueForm } from './combatEventValueForm.js'
@@ -36,7 +36,7 @@ export function combatMechanicsForm(
   rotationActors = draft.enemies,
   passive = false,
 ): HTMLElement {
-  const { input, select, button, group, translation, t } = controls
+  const { input, select, button, group, fold, translation, t } = controls
   const text = (key: string) => t(`combat.mechanics.${key}`)
 
   const reference = (
@@ -334,6 +334,12 @@ export function combatMechanicsForm(
       render,
     )
 
+  const entrySummary = (id: string, entry: { label?: string; labelKey?: string | undefined }) => {
+    const name = displayLabel(view, id, entry)
+
+    return name === id ? id : `${id} · ${name}`
+  }
+
   let resourceId = 'resource'
   let phaseId = 'phase'
   let triggerId = 'trigger'
@@ -357,28 +363,33 @@ export function combatMechanicsForm(
           group(
             text('resources'),
             ...Object.entries(mechanics.resources).map(([id, resource]) =>
-              group(
-                id,
-                ...presentation(resource),
-                select(
-                  text('actor'),
-                  resource.actor ?? '',
-                  [['', text('encounter')], ...actors],
-                  (value) => {
-                    resource.actor = value || undefined
-                  },
-                ),
-                number(text('initial'), resource.initial, (value) => {
-                  resource.initial = value
-                }),
-                number(text('maximum'), resource.maximum, (value) => {
-                  resource.maximum = value
-                }),
-                button(
-                  text('remove'),
-                  edit(() => {
-                    delete mechanics.resources[id]
+              fold(
+                `resource:${id}`,
+                entrySummary(id, resource),
+                false,
+                group(
+                  id,
+                  ...presentation(resource),
+                  select(
+                    text('actor'),
+                    resource.actor ?? '',
+                    [['', text('encounter')], ...actors],
+                    (value) => {
+                      resource.actor = value || undefined
+                    },
+                  ),
+                  number(text('initial'), resource.initial, (value) => {
+                    resource.initial = value
                   }),
+                  number(text('maximum'), resource.maximum, (value) => {
+                    resource.maximum = value
+                  }),
+                  button(
+                    text('remove'),
+                    edit(() => {
+                      delete mechanics.resources[id]
+                    }),
+                  ),
                 ),
               ),
             ),
@@ -389,6 +400,7 @@ export function combatMechanicsForm(
               text('addResource'),
               edit(() => {
                 const id = unique(resourceId, mechanics.resources)
+                controls.unfold(`resource:${id}`)
                 mechanics.resources[id] = combatResourceSchema.parse({
                   label: id,
                   initial: 0,
@@ -408,38 +420,43 @@ export function combatMechanicsForm(
               },
             ),
             ...Object.entries(mechanics.phases).map(([id, phase]) =>
-              group(
-                id,
-                ...presentation(phase),
-                group(text('onEnter'), ...effectsForm(phase.onEnter)),
+              fold(
+                `phase:${id}`,
+                entrySummary(id, phase),
+                false,
                 group(
-                  text('rotations'),
-                  ...rotationActors.map((enemy) =>
-                    input(
-                      enemy.label || enemy.id,
-                      phase.enemyRotations?.[enemy.id]?.join(', ') ?? '',
-                      (value) => {
-                        const rotation = value
-                          .split(',')
-                          .map((id) => id.trim())
-                          .filter(Boolean)
+                  id,
+                  ...presentation(phase),
+                  group(text('onEnter'), ...effectsForm(phase.onEnter)),
+                  group(
+                    text('rotations'),
+                    ...rotationActors.map((enemy) =>
+                      input(
+                        enemy.label || enemy.id,
+                        phase.enemyRotations?.[enemy.id]?.join(', ') ?? '',
+                        (value) => {
+                          const rotation = value
+                            .split(',')
+                            .map((id) => id.trim())
+                            .filter(Boolean)
 
-                        phase.enemyRotations ??= {}
+                          phase.enemyRotations ??= {}
 
-                        if (rotation.length) phase.enemyRotations[enemy.id] = rotation
-                        else delete phase.enemyRotations[enemy.id]
-                      },
+                          if (rotation.length) phase.enemyRotations[enemy.id] = rotation
+                          else delete phase.enemyRotations[enemy.id]
+                        },
+                      ),
                     ),
                   ),
-                ),
-                button(
-                  text('remove'),
-                  edit(() => {
-                    delete mechanics.phases[id]
+                  button(
+                    text('remove'),
+                    edit(() => {
+                      delete mechanics.phases[id]
 
-                    if (mechanics.initialPhase === id)
-                      mechanics.initialPhase = Object.keys(mechanics.phases)[0]
-                  }),
+                      if (mechanics.initialPhase === id)
+                        mechanics.initialPhase = Object.keys(mechanics.phases)[0]
+                    }),
+                  ),
                 ),
               ),
             ),
@@ -450,6 +467,7 @@ export function combatMechanicsForm(
               text('addPhase'),
               edit(() => {
                 const id = unique(phaseId, mechanics.phases)
+                controls.unfold(`phase:${id}`)
                 mechanics.phases[id] = combatPhaseSchema.parse({ label: id })
                 mechanics.initialPhase ??= id
               }),
@@ -460,166 +478,171 @@ export function combatMechanicsForm(
       text('triggers'),
       triggerHelp,
       ...Object.entries(mechanics.triggers).map(([id, trigger]) =>
-        group(
-          id,
-          select(
-            text('event'),
-            trigger.event,
-            combatTriggerEvents.map((event) => [event, text(`event.${event}`)] as const),
-            (value) => {
-              trigger.event = value
-              const effectEvent = combatEffectEvents.some((event) => event === value)
+        fold(
+          `trigger:${id}`,
+          `${id} · ${text(`event.${trigger.event}`)}`,
+          false,
+          group(
+            id,
+            select(
+              text('event'),
+              trigger.event,
+              combatTriggerEvents.map((event) => [event, text(`event.${event}`)] as const),
+              (value) => {
+                trigger.event = value
+                const effectEvent = combatEffectEvents.some((event) => event === value)
 
-              if (!effectEvent) {
-                trigger.source = undefined
-                trigger.target = undefined
-                trigger.delivery = undefined
-                trigger.includeReactions = undefined
-              }
+                if (!effectEvent) {
+                  trigger.source = undefined
+                  trigger.target = undefined
+                  trigger.delivery = undefined
+                  trigger.includeReactions = undefined
+                }
 
-              if (!value.startsWith('damage-')) trigger.damageType = undefined
-              render()
-            },
-          ),
-          ...(combatEffectEvents.some((event) => event === trigger.event)
-            ? [
-                reference(
-                  t('combat.events.sourceFilter'),
-                  trigger.source ?? '',
-                  [['', text('any')], ...actors],
-                  (value) => {
-                    trigger.source = value || undefined
-                  },
-                ),
-                reference(
-                  t('combat.events.targetFilter'),
-                  trigger.target ?? '',
-                  [['', text('any')], ...actors],
-                  (value) => {
-                    trigger.target = value || undefined
-                  },
-                ),
-                ...(trigger.event.startsWith('damage-')
-                  ? [
-                      input(
-                        t('combat.events.damageTypeFilter'),
-                        trigger.damageType ?? '',
-                        (value) => {
-                          trigger.damageType = value.trim() || undefined
-                        },
-                      ),
-                    ]
-                  : []),
-                select(
-                  t('combat.events.deliveryFilter'),
-                  trigger.delivery ?? '',
-                  [
-                    ['', text('any')],
-                    ...combatEffectDeliveries.map(
-                      (id) => [id, t(`combat.events.delivery.${id}`)] as const,
-                    ),
-                  ],
-                  (value) => {
-                    trigger.delivery = value || undefined
-                  },
-                ),
-                select(
-                  t('combat.events.includeReactions'),
-                  String(
-                    trigger.includeReactions ??
-                      (trigger.event === 'damage-pending' || trigger.event === 'healing-pending'),
+                if (!value.startsWith('damage-')) trigger.damageType = undefined
+                render()
+              },
+            ),
+            ...(combatEffectEvents.some((event) => event === trigger.event)
+              ? [
+                  reference(
+                    t('combat.events.sourceFilter'),
+                    trigger.source ?? '',
+                    [['', text('any')], ...actors],
+                    (value) => {
+                      trigger.source = value || undefined
+                    },
                   ),
-                  [
-                    ['false', t('form.no')],
-                    ['true', t('form.yes')],
-                  ],
-                  (value) => {
-                    trigger.includeReactions = value === 'true'
-                  },
-                ),
-              ]
-            : []),
-          reference(
-            text('actorFilter'),
-            trigger.actor ?? '',
-            [['', text('any')], ...actors],
-            (value) => {
-              trigger.actor = value || undefined
-            },
-          ),
-          input(text('moveFilter'), trigger.move ?? '', (value) => {
-            trigger.move = value.trim() || undefined
-          }),
-          reference(
-            text('resourceFilter'),
-            trigger.resource ?? '',
-            [['', text('any')], ...resources],
-            (value) => {
-              trigger.resource = value || undefined
-            },
-          ),
-          reference(
-            t('combat.conditions.statusFilter'),
-            trigger.status ?? '',
-            [['', text('any')], ...statusIds],
-            (value) => {
-              trigger.status = value || undefined
-            },
-          ),
-          reference(
-            text('phaseFilter'),
-            trigger.phase ?? '',
-            [['', text('any')], ...phases],
-            (value) => {
-              trigger.phase = value || undefined
-            },
-          ),
-          ...combatTriggerLimitsForm(controls, trigger),
-          select(
-            text('once'),
-            String(trigger.once),
-            [
-              ['false', t('form.no')],
-              ['true', t('form.yes')],
-            ],
-            (value) => {
-              trigger.once = value === 'true'
-            },
-          ),
-          group(
-            text('conditions'),
-            ...conditionsForm(
-              trigger.conditions,
-              combatEffectEvents.some((event) => event === trigger.event)
-                ? trigger.event
-                : undefined,
+                  reference(
+                    t('combat.events.targetFilter'),
+                    trigger.target ?? '',
+                    [['', text('any')], ...actors],
+                    (value) => {
+                      trigger.target = value || undefined
+                    },
+                  ),
+                  ...(trigger.event.startsWith('damage-')
+                    ? [
+                        input(
+                          t('combat.events.damageTypeFilter'),
+                          trigger.damageType ?? '',
+                          (value) => {
+                            trigger.damageType = value.trim() || undefined
+                          },
+                        ),
+                      ]
+                    : []),
+                  select(
+                    t('combat.events.deliveryFilter'),
+                    trigger.delivery ?? '',
+                    [
+                      ['', text('any')],
+                      ...combatEffectDeliveries.map(
+                        (id) => [id, t(`combat.events.delivery.${id}`)] as const,
+                      ),
+                    ],
+                    (value) => {
+                      trigger.delivery = value || undefined
+                    },
+                  ),
+                  select(
+                    t('combat.events.includeReactions'),
+                    String(
+                      trigger.includeReactions ??
+                        (trigger.event === 'damage-pending' || trigger.event === 'healing-pending'),
+                    ),
+                    [
+                      ['false', t('form.no')],
+                      ['true', t('form.yes')],
+                    ],
+                    (value) => {
+                      trigger.includeReactions = value === 'true'
+                    },
+                  ),
+                ]
+              : []),
+            reference(
+              text('actorFilter'),
+              trigger.actor ?? '',
+              [['', text('any')], ...actors],
+              (value) => {
+                trigger.actor = value || undefined
+              },
             ),
-          ),
-          group(
-            text('effects'),
-            ...effectsForm(
-              trigger.effects,
-              combatEffectEvents.some((event) => event === trigger.event)
-                ? trigger.event
-                : undefined,
+            input(text('moveFilter'), trigger.move ?? '', (value) => {
+              trigger.move = value.trim() || undefined
+            }),
+            reference(
+              text('resourceFilter'),
+              trigger.resource ?? '',
+              [['', text('any')], ...resources],
+              (value) => {
+                trigger.resource = value || undefined
+              },
             ),
-          ),
-          button(
-            text('moveUp'),
-            edit(() => {
-              const entries = Object.entries(mechanics.triggers)
-              const index = entries.findIndex(([key]) => key === id)
+            reference(
+              t('combat.conditions.statusFilter'),
+              trigger.status ?? '',
+              [['', text('any')], ...statusIds],
+              (value) => {
+                trigger.status = value || undefined
+              },
+            ),
+            reference(
+              text('phaseFilter'),
+              trigger.phase ?? '',
+              [['', text('any')], ...phases],
+              (value) => {
+                trigger.phase = value || undefined
+              },
+            ),
+            ...combatTriggerLimitsForm(controls, trigger),
+            select(
+              text('once'),
+              String(trigger.once),
+              [
+                ['false', t('form.no')],
+                ['true', t('form.yes')],
+              ],
+              (value) => {
+                trigger.once = value === 'true'
+              },
+            ),
+            group(
+              text('conditions'),
+              ...conditionsForm(
+                trigger.conditions,
+                combatEffectEvents.some((event) => event === trigger.event)
+                  ? trigger.event
+                  : undefined,
+              ),
+            ),
+            group(
+              text('effects'),
+              ...effectsForm(
+                trigger.effects,
+                combatEffectEvents.some((event) => event === trigger.event)
+                  ? trigger.event
+                  : undefined,
+              ),
+            ),
+            button(
+              text('moveUp'),
+              edit(() => {
+                const entries = Object.entries(mechanics.triggers)
+                const index = entries.findIndex(([key]) => key === id)
 
-              if (index > 0)
-                [entries[index - 1], entries[index]] = [entries[index]!, entries[index - 1]!]
-              mechanics.triggers = Object.fromEntries(entries)
-            }),
-          ),
-          button(
-            text('remove'),
-            edit(() => {
-              delete mechanics.triggers[id]
-            }),
+                if (index > 0)
+                  [entries[index - 1], entries[index]] = [entries[index]!, entries[index - 1]!]
+                mechanics.triggers = Object.fromEntries(entries)
+              }),
+            ),
+            button(
+              text('remove'),
+              edit(() => {
+                delete mechanics.triggers[id]
+              }),
+            ),
           ),
         ),
       ),
@@ -630,6 +653,7 @@ export function combatMechanicsForm(
         text('addTrigger'),
         edit(() => {
           const id = unique(triggerId, mechanics.triggers)
+          controls.unfold(`trigger:${id}`)
           mechanics.triggers[id] = combatTriggerSchema.parse({
             event: 'round-end',
             effects: [{ type: 'change-resource', resource: resources[0] ?? 'resource', amount: 1 }],
