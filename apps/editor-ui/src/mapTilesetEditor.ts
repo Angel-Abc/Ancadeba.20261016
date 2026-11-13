@@ -108,10 +108,10 @@ export function mapTilesetEditor(
     )
     const range = document.createElement('span')
     range.textContent = t('maps.range', {
-      x: state.column + 1,
-      endX: state.column + columns,
-      y: state.row + 1,
-      endY: state.row + rows,
+      x: state.column,
+      endX: state.column + columns - 1,
+      y: state.row,
+      endY: state.row + rows - 1,
     })
     pages.append(range)
     const grid = document.createElement('div')
@@ -123,7 +123,7 @@ export function mapTilesetEditor(
     const showSelection = () => {
       const tile = map.terrain[terrain]?.tile
       selection.textContent = tile
-        ? `${tile.tileset}: ${t('maps.chosenTile', { column: tile.column + 1, row: tile.row + 1 })}`
+        ? `${tile.tileset}: ${t('maps.chosenTile', { column: tile.column, row: tile.row })}`
         : ''
     }
 
@@ -134,7 +134,7 @@ export function mapTilesetEditor(
         const tile = document.createElement('button')
         tile.type = 'button'
         tile.className = 'map-tileset-tile'
-        const label = t('maps.pickTile', { column: column + 1, row: row + 1 })
+        const label = t('maps.pickTile', { column, row })
         tile.setAttribute('aria-label', label)
         tile.title = label
         const current = map.terrain[terrain]!.tile

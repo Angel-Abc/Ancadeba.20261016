@@ -126,7 +126,7 @@ export function mapTileGrid(
     }
 
     const label = [
-      t('maps.tile', { x: x + 1, y: y + 1, terrain }),
+      t('maps.tile', { x, y, terrain }),
       trigger ? t('maps.entryTile', { id: trigger.id, action: trigger.action, x, y }) : '',
       object
         ? t('maps.objectTile', { id: object.id, label: object.label, action: object.action, x, y })

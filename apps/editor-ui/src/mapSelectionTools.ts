@@ -31,7 +31,7 @@ export function mapSelectionTools(
 ) {
   const element = document.createElement('fieldset')
   element.className = 'map-selection-tools'
-  const controls = ruleFormControls(document, () => {})
+  const controls = ruleFormControls(document, () => {}, t)
   model.reconcile(draft, layer.selected)
 
   const refresh = () => {
@@ -126,8 +126,8 @@ export function mapSelectionTools(
         ? t('maps.selectionSize', {
             width: rect.width,
             height: rect.height,
-            x: rect.x + 1,
-            y: rect.y + 1,
+            x: rect.x,
+            y: rect.y,
           })
         : t('maps.noSelection'),
       model.size ? t(model.moving ? 'maps.moveReady' : 'maps.copyReady', model.size) : '',

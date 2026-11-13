@@ -41,9 +41,13 @@ export function bindSceneControls(
   let replacement = ''
   let pending: EditorCommand | undefined
 
-  const controls = ruleFormControls(document, () => {
-    dirty = true
-  })
+  const controls = ruleFormControls(
+    document,
+    () => {
+      dirty = true
+    },
+    t,
+  )
 
   const scene = () => view?.scenes.find(({ id }) => id === sceneId)
 

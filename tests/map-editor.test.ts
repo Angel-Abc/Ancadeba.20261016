@@ -331,6 +331,21 @@ describe('visual map editor', () => {
   const hasMarker = (tile: Element) =>
     tile.all().some((element) => element.className === 'map-entry-trigger-marker')
 
+  it('shows object states and selection tools in the editor language', () => {
+    const ui = setup(triggerView())
+
+    try {
+      ui.language('nl')
+      ui.editor.render(state(triggerView()), false)
+      ui.button('Kaartobjecten plaatsen of bewerken').dispatchEvent(new Event('click'))
+      ui.tile(1, 1).dispatchEvent(new Event('click'))
+      expect(ui.button('Objecttoestand toevoegen')).toBeDefined()
+      expect(() => ui.button('Add object state')).toThrow()
+    } finally {
+      ui.editor.dispose()
+    }
+  })
+
   it('authors visibility-only object states, keeps hidden objects editable and recovers visibility drafts', async () => {
     const view = triggerView()
     view.rules!.state = [{ path: ['collected'], value: false }]
@@ -962,7 +977,7 @@ describe('visual map editor', () => {
       key(23, 15, 'Enter')
       key(23, 15, 'ArrowRight', { shiftKey: true })
       key(24, 15, 'ArrowDown', { shiftKey: true })
-      expect(ui.root.textContent).toContain('Selection: 2 × 2, column 24, row 16')
+      expect(ui.root.textContent).toContain('Selection: 2 × 2, column 23, row 15')
       key(24, 16, 'x', { metaKey: true })
       expect(ui.root.textContent).toContain('Move ready: 2 × 2')
       key(24, 16, 'Escape')
@@ -1091,7 +1106,7 @@ describe('visual map editor', () => {
 
       const tile = ui.root
         .all()
-        .find((element) => element.attributes.get('aria-label') === 'Use tile at column 2, row 1')!
+        .find((element) => element.attributes.get('aria-label') === 'Use tile at column 1, row 0')!
 
       tile.dispatchEvent(new Event('click'))
       expect(ui.control('Terrain tileset').value).toBe('nature')
@@ -1181,7 +1196,7 @@ describe('visual map editor', () => {
       expect(ui.tile(0, 0).attributes.get('aria-label')).toContain('wall')
       ui.language('nl')
       ui.editor.render(state(updated, { preserveDrafts: true }), false)
-      expect(ui.tile(0, 0).attributes.get('aria-label')).toBe('Kolom 1, rij 1: wall')
+      expect(ui.tile(0, 0).attributes.get('aria-label')).toBe('Kolom 0, rij 0: wall')
       ui.button('Kaartwijzigingen verwerpen').dispatchEvent(new Event('click'))
       expect(ui.editor.hasDrafts()).toBe(false)
       expect(ui.tile(0, 0).attributes.get('aria-label')).toContain('ground')
@@ -1855,14 +1870,14 @@ describe('map minimap', () => {
       expect(outline(ui).style.properties.get('height')).toBe('40%')
       click(ui, 630, 420)
       expect(ui.tile(63, 39)).toBeDefined()
-      expect(minimap(ui).attributes.get('aria-description')).toBe('Columns 41–64, rows 25–40')
+      expect(minimap(ui).attributes.get('aria-description')).toBe('Columns 40–63, rows 24–39')
       expect(outline(ui).style.properties.get('left')).toBe('62.5%')
       expect(outline(ui).style.properties.get('top')).toBe('60%')
       ui.edit('Map zoom', '200', 'change')
       expect(outline(ui).style.properties.get('width')).toBe('18.75%')
       expect(outline(ui).style.properties.get('height')).toBe('20%')
       click(ui, 336, 224)
-      expect(minimap(ui).attributes.get('aria-description')).toBe('Columns 28–39, rows 18–25')
+      expect(minimap(ui).attributes.get('aria-description')).toBe('Columns 27–38, rows 17–24')
       ui.button('Pan right').dispatchEvent(new Event('click'))
       expect(outline(ui).style.properties.get('left')).toBe('43.75%')
       click(ui, 0, 0)

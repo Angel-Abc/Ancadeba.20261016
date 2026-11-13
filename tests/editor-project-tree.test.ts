@@ -296,6 +296,19 @@ describe('extensible project explorer', () => {
     tree.dispose()
   })
 
+  it('opens the branch of a selection made outside the tree without reopening it afterwards', () => {
+    const { tree, row, key } = setup()
+    tree.render(view, false, 'component:standard:health')
+    expect(row('scene:standard').getAttribute('aria-expanded')).toBe('true')
+    expect(row('component:standard:health').getAttribute('aria-selected')).toBe('true')
+
+    row('scene:standard').focus()
+    key('ArrowLeft')
+    tree.render(view, false, 'component:standard:health')
+    expect(row('scene:standard').getAttribute('aria-expanded')).toBe('false')
+    tree.dispose()
+  })
+
   it('keeps selection when navigation is refused or busy and falls back after removal', () => {
     const { tree, row, selections } = setup((node) => node.key !== 'scene:standard')
     tree.select('scene:standard')

@@ -134,10 +134,10 @@ export function mapViewportControls(
 
     for (const { button, disabled } of buttons) button.disabled = disabled()
     range.textContent = t('maps.range', {
-      x: camera.x + 1,
-      endX: camera.x + camera.columns,
-      y: camera.y + 1,
-      endY: camera.y + camera.rows,
+      x: camera.x,
+      endX: camera.x + camera.columns - 1,
+      y: camera.y,
+      endY: camera.y + camera.rows - 1,
     })
   }
 

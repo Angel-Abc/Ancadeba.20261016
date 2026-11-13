@@ -194,35 +194,43 @@ export function bindProjectTree(
     { signal: abort.signal },
   )
 
+  /** Opens the branches above the selected node so its row is rendered. */
+  const revealSelected = () => {
+    const reveal = (entries: ProjectTreeNode[]): boolean =>
+      entries.some((entry) => {
+        if (entry.key === selected) return true
+
+        if (reveal(entry.children ?? [])) {
+          expanded.add(entry.key)
+
+          return true
+        }
+
+        return false
+      })
+
+    reveal(nodes)
+  }
+
   return {
     select(key: string) {
       const node = flattenProjectTree(nodes).find((node) => node.key === key)
 
       if (node) {
         select(node)
-
-        const reveal = (entries: ProjectTreeNode[]): boolean =>
-          entries.some((entry) => {
-            if (entry.key === selected) return true
-
-            if (reveal(entry.children ?? [])) {
-              expanded.add(entry.key)
-
-              return true
-            }
-
-            return false
-          })
-
-        reveal(nodes)
+        revealSelected()
         render()
       }
     },
     render(view: ProjectView | undefined, working: boolean, selection = selected) {
+      const moved = selection !== selected
       selected = selection
       busy = working
       nodes = view ? buildProjectTree(view, t, sections) : []
       const all = flattenProjectTree(nodes)
+
+      // A selection made outside the tree, such as a restored draft, may sit in a closed branch.
+      if (moved) revealSelected()
 
       if (!all.some((node) => node.key === selected)) {
         const fallback = all.find((node) => node.key === 'game')

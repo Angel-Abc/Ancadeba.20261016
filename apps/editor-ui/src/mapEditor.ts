@@ -151,21 +151,25 @@ export function bindMapEditor(
     record()
   }
 
-  const controls = ruleFormControls(document, () => {
-    const input = document.activeElement
-    let group: number | undefined
+  const controls = ruleFormControls(
+    document,
+    () => {
+      const input = document.activeElement
+      let group: number | undefined
 
-    if (input?.tagName === 'INPUT' || input?.tagName === 'TEXTAREA') {
-      group = inputGroups.get(input)
+      if (input?.tagName === 'INPUT' || input?.tagName === 'TEXTAREA') {
+        group = inputGroups.get(input)
 
-      if (group === undefined) {
-        group = nextInputGroup++
-        inputGroups.set(input, group)
+        if (group === undefined) {
+          group = nextInputGroup++
+          inputGroups.set(input, group)
+        }
       }
-    }
 
-    record(group)
-  })
+      record(group)
+    },
+    t,
+  )
 
   const report = (cause: unknown) => {
     error.textContent =
