@@ -14,7 +14,11 @@ export function combatEnemyAIForm(
   mechanics: CombatMechanicsDefinition | undefined,
   statuses: readonly string[],
   render: () => void,
-  options: { allowRemoval?: boolean; freeReferences?: boolean } = {},
+  options: {
+    allowRemoval?: boolean
+    freeReferences?: boolean
+    availableMoves?: readonly string[]
+  } = {},
 ): HTMLElement {
   const { group, input, select, button, t } = controls
   const text = (key: string) => t(`combat.ai.${key}`)
@@ -25,6 +29,7 @@ export function combatEnemyAIForm(
     render()
   }
 
+  const moves = options.availableMoves ?? actor.moves
   const ai = actor.ai
 
   if (!ai)
@@ -82,7 +87,7 @@ export function combatEnemyAIForm(
         input(text('ruleId'), rule.id, (value) => {
           rule.id = value.trim()
         }),
-        select(text('move'), rule.move, actor.moves, (value) => {
+        select(text('move'), rule.move, moves, (value) => {
           rule.move = value
         }),
         input(
@@ -123,7 +128,7 @@ export function combatEnemyAIForm(
         let index = 1
 
         while (ai.rules.some((rule) => rule.id === id)) id = `rule-${index++}`
-        ai.rules.push({ id, move: actor.moves[0] ?? 'move', maxUses: 1, conditions: [] })
+        ai.rules.push({ id, move: moves[0] ?? 'move', maxUses: 1, conditions: [] })
       }),
     ),
     ...(options.allowRemoval === false

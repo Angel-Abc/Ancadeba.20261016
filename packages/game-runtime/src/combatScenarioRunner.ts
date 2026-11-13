@@ -1,3 +1,4 @@
+import { combatRequirementsText } from './combatRequirements.js'
 import {
   combatSimulationScenarioSchema,
   cloneCombatRules,
@@ -137,7 +138,12 @@ export function runCombatScenario(
 
     for (const step of scenario.steps)
       for (const move of step.plan) {
-        if (!definition.player.moves.includes(move.move) || !definition.moves[move.move])
+        if (
+          ![...definition.player.moves, ...(definition.player.equipmentMoves ?? [])].includes(
+            move.move,
+          ) ||
+          !definition.moves[move.move]
+        )
           throw new Error(`Unknown player move in ${step.id}: ${move.move}`)
 
         if (move.target && !ids.has(move.target))
@@ -198,9 +204,13 @@ export function runCombatScenario(
                 'skipped',
                 'stunned',
                 'moveRestricted',
+                'requirementsUnavailable',
               ].includes(entry.type)
             ) {
-              const reason = `${entry.type}${entry.resource ? `: ${entry.resource}` : entry.target ? `: ${entry.target}` : ''}`
+              const reason =
+                entry.type === 'requirementsUnavailable'
+                  ? `${entry.type}: ${combatRequirementsText(definition, entry.requirements ?? [], { self: entry.actor, target: entry.target })}`
+                  : `${entry.type}${entry.resource ? `: ${entry.resource}` : entry.target ? `: ${entry.target}` : ''}`
 
               if (step.unavailable === 'fail')
                 throw new Error(`Iteration ${iteration}, during resolution: ${reason}`)

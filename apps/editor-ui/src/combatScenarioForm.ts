@@ -425,15 +425,20 @@ export function combatScenarioForm(
           ...step.plan.map((action, position) =>
             group(
               `${text('action')} ${position + 1}`,
-              select(text('move'), action.move, definition.player.moves, (value) => {
-                action.move = value
-                action.target =
-                  combatMoveTarget(definition.moves[value]!) === 'self'
-                    ? undefined
-                    : definition.enemies[0]?.id
-                changed()
-                render()
-              }),
+              select(
+                text('move'),
+                action.move,
+                [...definition.player.moves, ...(definition.player.equipmentMoves ?? [])],
+                (value) => {
+                  action.move = value
+                  action.target =
+                    combatMoveTarget(definition.moves[value]!) === 'self'
+                      ? undefined
+                      : definition.enemies[0]?.id
+                  changed()
+                  render()
+                },
+              ),
               select(
                 text('target'),
                 action.target ?? '',

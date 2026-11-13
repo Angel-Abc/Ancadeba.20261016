@@ -1,5 +1,6 @@
 import { combatStatNames, type EquipmentComponentDefinition } from '@ancadeba/schemas'
 import type { SceneInstance } from '@ancadeba/game-runtime'
+import { equipmentCombatEffectsText } from './equipmentCombatEffectsText.js'
 
 /** Semantic markup inherits the game's existing styles. */
 export function equipmentStatsView(
@@ -79,6 +80,32 @@ export function equipmentStatsView(
     list.append(label, value)
   }
 
+  const effectsText = (entries: typeof snapshot.equipmentEffects) =>
+    (entries ?? [])
+      .map(
+        (entry) =>
+          `${entry.label}: ${equipmentCombatEffectsText(
+            entry.effects,
+            profile.messages,
+            (reference) =>
+              scene.game.data.combatLibraries?.get(reference.library)?.moves[reference.id]?.label ??
+              reference.id,
+            (reference) =>
+              scene.game.data.combatLibraries?.get(reference.library)?.passives?.[reference.id]
+                ?.label ?? reference.id,
+          )}`,
+      )
+      .join('\n') || profile.messages.noEquipmentEffects
+
+  if (snapshot.equipmentEffects?.length) {
+    const label = document.createElement('dt'),
+      value = document.createElement('dd')
+
+    label.textContent = profile.messages.equipmentEffects
+    value.textContent = effectsText(snapshot.equipmentEffects)
+    list.append(label, value)
+  }
+
   root.append(list)
   const selection = scene.game.equipment?.get(scene, component.id)
 
@@ -117,6 +144,15 @@ export function equipmentStatsView(
   }
 
   root.append(changes)
+
+  if (comparison.current.equipmentEffects?.length || comparison.proposed.equipmentEffects?.length) {
+    const label = document.createElement('dt'),
+      value = document.createElement('dd')
+
+    label.textContent = profile.messages.equipmentEffects
+    value.textContent = `${effectsText(comparison.current.equipmentEffects)} → ${effectsText(comparison.proposed.equipmentEffects)}`
+    changes.append(label, value)
+  }
 
   if (comparison.issue && comparison.issue !== issue) {
     const message = document.createElement('p')

@@ -1,3 +1,5 @@
+import { combatPassiveSourceSchema } from './combatPassiveReferences.js'
+import { combatConditionSchema } from './combatConditions.js'
 import { combatDamageTypeSchema } from './combatDamage.js'
 import { z } from 'zod'
 import { combatMechanicsStateSchema } from './combatMechanics.js'
@@ -46,8 +48,14 @@ const logEntry = z.strictObject({
     'statusReduced',
     'apUnavailable',
     'statusImmune',
+    'resourceAdjusted',
     'moveRestricted',
+    'requirementsUnavailable',
+    'passiveTriggered',
+    'effectIntercepted',
   ]),
+  passive: combatPassiveSourceSchema.optional(),
+  trigger: id.optional(),
   item: id.optional(),
   actor: id.optional(),
   target: id.optional(),
@@ -55,6 +63,19 @@ const logEntry = z.strictObject({
   damage: counter.optional(),
   damageType: combatDamageTypeSchema.optional(),
   category: id.optional(),
+  requirements: z.array(combatConditionSchema).max(20).optional(),
+  interception: z
+    .enum(['adjust-effect', 'absorb-damage', 'redirect-damage', 'prevent-lethal'])
+    .optional(),
+  redirectTarget: id.optional(),
+  redirected: z.boolean().optional(),
+  originalTarget: id.optional(),
+  incomingAmount: counter.optional(),
+  absorbed: counter.optional(),
+  prevented: counter.optional(),
+  redirectedAmount: counter.optional(),
+  requested: counter.optional(),
+  equipment: z.array(id).max(100).optional(),
   resistance: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   vulnerability: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   immune: z.boolean().optional(),

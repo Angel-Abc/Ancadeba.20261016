@@ -124,6 +124,7 @@ export function editCombat(
       return {
         ...old,
         ...actor,
+        equipmentMoves: undefined,
         labelKey: actor.labelKey,
         descriptionKey: actor.descriptionKey,
         portrait: actor.portrait,
@@ -161,6 +162,7 @@ export function editCombat(
     documents[file] = {
       ...previous,
       ...definition,
+      passiveDefinitions: undefined,
       labelKey: definition.labelKey,
       descriptionKey: definition.descriptionKey,
       player: actor(definition.player, object(previous.player)),

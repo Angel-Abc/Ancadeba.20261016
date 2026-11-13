@@ -1,3 +1,4 @@
+import { mergeCombatPassiveReferences } from './combatPassiveEditing.js'
 import { mergeCombatDamageDefenses } from './combatDamageEditing.js'
 import { mergeCombatScaling } from './combatValueEditing.js'
 import { combatPercentModifierNames } from '@ancadeba/schemas'
@@ -21,6 +22,9 @@ export function mergeCombatEntries(
             ...move,
             labelKey: move.labelKey,
             descriptionKey: move.descriptionKey,
+            requirements: move.requirements
+              ? mergeCombatRuleConditions(old.requirements, move.requirements)
+              : undefined,
             categories: move.categories ? [...move.categories] : undefined,
             damageType: move.type === 'attack' ? move.damageType : undefined,
             damage: move.type === 'attack' ? { ...object(old.damage), ...move.damage } : undefined,
@@ -95,6 +99,7 @@ export function mergeCombatEntries(
               {
                 ...old,
                 ...status,
+                passives: mergeCombatPassiveReferences(old.passives, status.passives),
                 labelKey: status.labelKey,
                 descriptionKey: status.descriptionKey,
                 icon: status.icon,

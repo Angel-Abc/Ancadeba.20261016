@@ -1,3 +1,4 @@
+import { combatPassiveGrantsForm } from './combatPassiveForms.js'
 import { combatDamageDefensesForm } from './combatDamageForm.js'
 import { combatRestrictionsForm } from './combatRestrictionsForm.js'
 import { combatScalingForm } from './combatScalingForm.js'
@@ -204,6 +205,7 @@ export function combatStatusesForm(
           render()
         },
       ),
+      combatPassiveGrantsForm(controls, view, status, render),
       input(t('form.name'), status.label, (value) => {
         status.label = value
       }),

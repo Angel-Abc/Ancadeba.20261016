@@ -1,3 +1,4 @@
+import { combatPassivesForm } from './combatPassiveForms.js'
 import { combatRulesetReferences } from '@ancadeba/schemas'
 import { registerEditorDraft } from './editorDraftState.js'
 import { z } from 'zod'
@@ -147,6 +148,7 @@ export function bindCombatLibraryEditor(
 
     const encounters = Object.values(view.combatSources ?? {}).filter(
       (source) =>
+        Object.hasOwn(view?.combat?.[source.id]?.passiveDefinitions ?? {}, libraryId) ||
         combatRulesetReferences(source).some((reference) => reference.library === libraryId) ||
         source.enemies.some((enemy) => enemy.aiProfile?.library === libraryId) ||
         [...(source.sharedMoves ?? []), ...(source.sharedStatuses ?? [])].some(
@@ -158,7 +160,10 @@ export function bindCombatLibraryEditor(
     )
 
     const items = Object.entries(view.inventory?.itemTypes ?? {}).filter(
-      ([, item]) => item.use?.ability.library === libraryId,
+      ([, item]) =>
+        item.combatEffects?.passives?.some((reference) => reference.library === libraryId) ||
+        item.use?.ability.library === libraryId ||
+        item.combatEffects?.grantedMoves?.some((reference) => reference.library === libraryId),
     )
 
     usage.textContent = t('combat.libraryUsage', {
@@ -208,6 +213,7 @@ export function bindCombatLibraryEditor(
       combatStatusesForm(controls, view, current, render),
       combatRulesetsForm(controls, view, current, render),
       combatAIProfilesForm(controls, view, current, render),
+      combatPassivesForm(controls, view, current, render),
     )
     form.addEventListener('submit', (event) => {
       event.preventDefault()

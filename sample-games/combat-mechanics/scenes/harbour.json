@@ -105,6 +105,104 @@
         "column": 7,
         "columnSpan": 6
       }
+    },
+    {
+      "id": "diving-gear",
+      "type": "button",
+      "label": "Diving gear room",
+      "action": {
+        "type": "enter-scene",
+        "scene": "diving-gear"
+      },
+      "placement": {
+        "row": 5,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "water-requirements",
+      "type": "button",
+      "label": "Action requirements: Water",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water-requirements"
+      },
+      "placement": {
+        "row": 7,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "underwater-boss-requirements",
+      "type": "button",
+      "label": "Action requirements: Underwater guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-requirements"
+      },
+      "placement": {
+        "row": 9,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "water-passives",
+      "type": "button",
+      "label": "Shared passives: Water",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water-passives"
+      },
+      "placement": {
+        "row": 6,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "underwater-boss-passives",
+      "type": "button",
+      "label": "Shared passives: Underwater guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-passives"
+      },
+      "placement": {
+        "row": 8,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "water-interception",
+      "type": "button",
+      "label": "Interception: Water",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water-interception"
+      },
+      "placement": {
+        "row": 10,
+        "column": 7,
+        "columnSpan": 6
+      }
+    },
+    {
+      "id": "underwater-boss-interception",
+      "type": "button",
+      "label": "Interception: Underwater guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-interception"
+      },
+      "placement": {
+        "row": 11,
+        "column": 7,
+        "columnSpan": 6
+      }
     }
   ]
 }

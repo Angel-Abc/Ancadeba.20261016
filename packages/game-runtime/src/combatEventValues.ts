@@ -10,7 +10,7 @@ export function combatEventAmount(
   if (!Number.isSafeInteger(base)) throw new RangeError('Invalid combat reaction amount')
 
   if (!formula) return signed ? base : Math.max(0, base)
-  const value = event?.[formula.field]
+  const value = combatEffectEventValue(event, formula.field)
 
   if (value === undefined) throw new Error(`Combat event value unavailable: ${formula.field}`)
 
@@ -39,4 +39,23 @@ export function combatEventAmount(
     throw new RangeError('Combat reaction amount overflow')
 
   return Number(result)
+}
+
+/** Optional interception counters retain neutral values on effects that needed no interception. */
+export function combatEffectEventValue(
+  event: CombatEffectEventData | undefined,
+  field: CombatEventValue['field'],
+): number | undefined {
+  if (!event) return
+
+  if (field === 'incomingAmount')
+    return (
+      event.incomingAmount ??
+      (event.typeAmount !== undefined ? event.typeAmount - (event.blocked ?? 0) : event.rawAmount)
+    )
+
+  if (field === 'absorbed' || field === 'prevented' || field === 'redirectedAmount')
+    return event[field] ?? 0
+
+  return event[field]
 }

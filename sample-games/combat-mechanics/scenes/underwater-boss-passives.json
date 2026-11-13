@@ -1,0 +1,297 @@
+{
+  "schema-version": "1.0.0",
+  "id": "underwater-boss-passives",
+  "title": "Shared passives: Diving gear: The drowned three-seal guardian",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "underwater-boss",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Equip the Tidal charm in the diving gear room before entering. Its shared Tidal relief passive removes 3 exhaustion after water damage actually received. A: Attune currents grants a status with the shared Current reserve passive. Queue X: Arc bolt after A; half the actual lightning damage restores stamina and 3 exhaustion is recovered. The grant ends on cleansing or expiry. Combat logs name the granting item/status; simulator trigger traces identify each passive source. Actual lightning damage also charges the seal once through the existing boss rule. Water pressure damage in the third phase activates the charm.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Channel",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "channel"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "label": "Brace",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "guard"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        },
+        "3": {
+          "label": "Float and recover",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rest"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "7": {
+          "label": "Flow strike",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "flow-strike"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "9": {
+          "label": "Reviving breath",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "reviving-breath"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-9"
+          }
+        },
+        "10": {
+          "label": "Focus current",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "focus-current"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-10"
+          }
+        },
+        "11": {
+          "label": "Tidal bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "tidal-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-11"
+          }
+        },
+        "12": {
+          "label": "Arc bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "arc-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "label": "Venom dart",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "venom-dart"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
+        },
+        "6": {
+          "label": "Attune currents",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "attune-passives"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        }
+      }
+    },
+    {
+      "id": "control-techniques",
+      "type": "button",
+      "label": "Return to diving gear",
+      "action": {
+        "type": "enter-scene",
+        "scene": "diving-gear"
+      },
+      "placement": {
+        "row": 9,
+        "column": 1,
+        "columnSpan": 12
+      }
+    }
+  ]
+}

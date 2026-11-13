@@ -1,6 +1,7 @@
 import { inventoryFile, type GameDefinition } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
+import { mergeEquipmentCombatEffects } from './equipmentCombatEditing.js'
 
 export type ItemCommand = Extract<
   EditorCommand,
@@ -42,6 +43,14 @@ export function editItems(
         ? {
             ...previous,
             ...command.presentation,
+            ...(command.combatEffects !== undefined
+              ? {
+                  combatEffects: mergeEquipmentCombatEffects(
+                    previous.combatEffects,
+                    command.combatEffects ?? undefined,
+                  ),
+                }
+              : {}),
             ...(command.combatBonuses !== undefined
               ? {
                   combatBonuses: command.combatBonuses

@@ -304,7 +304,11 @@ export function levelingIssues(
       })
 
     for (const [move, level] of Object.entries(combat.player.moveLevels ?? {}))
-      if (!combat.player.moves.includes(move) || !profile || level > profile.levels.length)
+      if (
+        ![...combat.player.moves, ...(combat.player.equipmentMoves ?? [])].includes(move) ||
+        !profile ||
+        level > profile.levels.length
+      )
         issues.push({
           file: `combat/${id}.json`,
           path: ['player', 'moveLevels', move],

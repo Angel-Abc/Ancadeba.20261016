@@ -7,6 +7,9 @@ import {
   combatEffectEvents,
   combatEventActorReferences,
   combatEventValueFieldsFor,
+  combatEventFlagFieldsFor,
+  combatInterceptionEffectTypes,
+  combatPendingEvents,
 } from './combatEvents.js'
 import type { CombatMechanicsDefinition, CombatTriggerEffect } from './combatMechanics.js'
 
@@ -24,11 +27,27 @@ export function combatMechanicsIssues(combat: CombatDefinition) {
     actors: [combat.player, ...combat.enemies].map((actor) => actor.id),
     moves: combat.moves,
     statuses: combat.statuses,
-    enemyMoves: new Map(combat.enemies.map((actor) => [actor.id, actor.moves])),
+    enemyMoves: new Map(
+      combat.enemies.map((actor) => [actor.id, [...actor.moves, ...(actor.equipmentMoves ?? [])]]),
+    ),
   })
 
   for (const [id, move] of Object.entries(combat.moves)) {
     const resources = [...Object.keys(move.resourceCosts ?? {})]
+
+    for (const [index, condition] of (move.requirements ?? []).entries())
+      issues.push(
+        ...combatConditionIssues(
+          condition,
+          {
+            actors: [combat.player, ...combat.enemies].map((actor) => actor.id),
+            resources: combat.mechanics?.resources ?? {},
+            statuses: combat.statuses ?? {},
+            phases: combat.mechanics?.phases ?? {},
+          },
+          ['moves', id, 'requirements', index],
+        ),
+      )
 
     for (const [resource] of Object.entries(move.resourceCostScaling ?? {}))
       if (!Object.hasOwn(move.resourceCosts ?? {}, resource))
@@ -119,9 +138,7 @@ export function combatMechanicsReferenceIssues(combat: CombatMechanicsValidation
         if (
           (leaf.type === 'event-value' &&
             !combatEventValueFieldsFor(eventType).includes(leaf.field)) ||
-          (leaf.type === 'event-flag' &&
-            leaf.field === 'immune' &&
-            !eventType.startsWith('damage-'))
+          (leaf.type === 'event-flag' && !combatEventFlagFieldsFor(eventType).includes(leaf.field))
         )
           issues.push({
             path: [...path, index, ...child, 'field'],
@@ -132,6 +149,23 @@ export function combatMechanicsReferenceIssues(combat: CombatMechanicsValidation
 
   const effect = (effect: CombatTriggerEffect, path: (string | number)[], eventType?: string) => {
     const event = eventType !== undefined
+    const pending = combatPendingEvents.some((event) => event === eventType)
+
+    if (
+      combatInterceptionEffectTypes.some((type) => type === effect.type) &&
+      (!pending || (effect.type !== 'adjust-effect' && eventType !== 'damage-pending'))
+    )
+      issues.push({
+        path,
+        message: 'Interception effects require a compatible pending damage/healing event',
+      })
+
+    if (pending && ['damage', 'heal', 'finish'].includes(effect.type))
+      issues.push({
+        path,
+        message:
+          'Pending events modify the current effect; damage, heal and finish effects are unavailable',
+      })
     eventConditions(effect.conditions, eventType, [...path, 'conditions'])
 
     for (const [index, condition] of (effect.conditions ?? []).entries())

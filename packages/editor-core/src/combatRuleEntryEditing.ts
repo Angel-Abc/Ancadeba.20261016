@@ -32,6 +32,9 @@ export function mergeCombatRuleEffects(
         'source',
         'damageType',
         'eventValue',
+        'percent',
+        'maximum',
+        'minimumHealth',
       ]),
       eventValue: entry.eventValue
         ? {

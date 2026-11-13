@@ -2,6 +2,10 @@ import { readFile, readdir } from 'node:fs/promises'
 import { describe, expect, it, onTestFinished } from 'vite-plus/test'
 import {
   combatDefinitionSchema,
+  combatSourceSchema,
+  combatLibrarySchema,
+  inventorySchema,
+  resolveCombatSource,
   localizeCombat,
   savedCombatSchema,
   type CombatDefinition,
@@ -29,8 +33,20 @@ const root = new URL('../sample-games/combat-mechanics/', import.meta.url)
 const read = async (path: string): Promise<unknown> =>
   JSON.parse(await readFile(new URL(path, root), 'utf8'))
 
-const encounter = async (id = 'boss') =>
-  combatDefinitionSchema.parse(await read(`combat/${id}.json`))
+const encounter = async (id = 'boss') => {
+  const resolved = resolveCombatSource(
+    combatSourceSchema.parse(await read(`combat/${id}.json`)),
+    new Map([
+      ['environments', combatLibrarySchema.parse(await read('combat-libraries/environments.json'))],
+    ]),
+    undefined,
+    inventorySchema.parse(await read('inventory/diving-gear.json')),
+  )
+
+  if (!resolved.definition) throw new Error(JSON.stringify(resolved.issues))
+
+  return combatDefinitionSchema.parse(resolved.definition)
+}
 
 function resolve(
   definition: CombatDefinition,
@@ -743,7 +759,7 @@ describe('combat mechanics runtime and authoring integration', () => {
   })
 
   it('reserves costs, releases them on Undo, pauses encounters and rolls back a rejected trigger cascade', async () => {
-    const water = await encounter('water')
+    const water = combatSourceSchema.parse(await read('combat/water.json'))
     water.mechanics!.resources.stamina!.initial = 30
     const app = await launch(new MemorySaves(), { 'combat/water.json': water })
     app.enter('water')
@@ -793,7 +809,15 @@ describe('combat mechanics runtime and authoring integration', () => {
   it('validates the complete sample and preserves nested extensions through editor saves and removal', async () => {
     const documents: Record<string, unknown> = {}
 
-    for (const directory of ['', 'scenes/', 'rules/', 'input/', 'combat/', 'combat-libraries/']) {
+    for (const directory of [
+      '',
+      'scenes/',
+      'rules/',
+      'input/',
+      'combat/',
+      'combat-libraries/',
+      'inventory/',
+    ]) {
       for (const entry of await readdir(new URL(directory || '.', root), { withFileTypes: true })) {
         if (entry.isFile() && entry.name.endsWith('.json'))
           documents[directory + entry.name] = await read(directory + entry.name)

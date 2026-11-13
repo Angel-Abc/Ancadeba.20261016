@@ -28,6 +28,16 @@ export const combatBonusesSchema = z.object({
 })
 
 export const combatStatsTextSchema = z.object({
+  equipmentEffects: z.string().default('Equipped mechanics'),
+  grantedPassive: z.string().default('Grants passive {passive}'),
+  damageResistance: z.string().default('{type} resistance {amount}%'),
+  damageVulnerability: z.string().default('{type} vulnerability {amount}%'),
+  damageImmunity: z.string().default('Immune to {type} damage'),
+  statusImmunity: z.string().default('Immune to status {status}'),
+  blockedCategory: z.string().default('Blocks category {category}'),
+  resourceGain: z.string().default('{resource} gains: {flat}, then {percent}%'),
+  grantedMove: z.string().default('Grants {move}'),
+  noEquipmentEffects: z.string().default('None'),
   temporary: z.string().default('Temporary'),
   attack: z.string().default('Attack bonus'),
   defense: z.string().default('Defense'),

@@ -34,13 +34,22 @@
       "brine-bind",
       "clear-mind",
       "shake-off",
-      "stunning-bell"
+      "stunning-bell",
+      "rhythm-dive",
+      "seal-release",
+      "steady-breath",
+      "attune-passives",
+      "raise-barrier",
+      "rescue-breath",
+      "draw-brine",
+      "awaken-conduit"
     ],
     "damageDefenses": {
       "resistances": {
         "water": 50
       }
-    }
+    },
+    "equipmentOwner": "diver"
   },
   "enemies": [
     {
@@ -761,6 +770,556 @@
           "value": 80
         }
       ]
+    },
+    "diving-gear": {
+      "label": "Diving gear reduces water damage and exhaustion",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 50
+        },
+        "loadout": {
+          "player": {
+            "body": "diving-suit",
+            "back": "rebreather"
+          }
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "protected",
+          "plan": []
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 52
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "exhausted",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 79
+        }
+      ]
+    },
+    "rebreather-purge": {
+      "label": "Equipped rebreather grants Purge valve",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 50
+        },
+        "loadout": {
+          "player": {
+            "body": "diving-suit",
+            "back": "rebreather"
+          }
+        }
+      },
+      "steps": [
+        {
+          "id": "purge",
+          "plan": [
+            {
+              "move": "purge-valve"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 32
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "exhausted",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        }
+      ]
+    },
+    "rhythm-requirements": {
+      "label": "Rhythm spent by the first dive blocks the second without payment",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "stamina": 30
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "rhythm",
+              "source": "player",
+              "remaining": 3,
+              "stacks": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "dive-twice",
+          "plan": [
+            {
+              "move": "rhythm-dive",
+              "target": "guardian"
+            },
+            {
+              "move": "rhythm-dive",
+              "target": "guardian"
+            }
+          ],
+          "unavailable": "skip"
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 32
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "rhythm",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 488
+        }
+      ]
+    },
+    "seal-release-ready": {
+      "label": "Phase and focus unlock the lightning finisher",
+      "setup": {
+        "seed": 1024,
+        "phase": "third-seal",
+        "resources": {
+          "stamina": 40,
+          "seal": 25,
+          "breaks": 2
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "flow",
+              "source": "player",
+              "remaining": 3,
+              "intensity": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "release",
+          "plan": [
+            {
+              "move": "seal-release",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 70
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 455
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 40
+        }
+      ]
+    },
+    "seal-release-locked": {
+      "label": "Wrong phase blocks a finisher before any costs",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "stamina": 40
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "flow",
+              "source": "player",
+              "remaining": 3,
+              "intensity": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "locked",
+          "plan": [
+            {
+              "move": "seal-release",
+              "target": "guardian"
+            }
+          ],
+          "unavailable": "skip"
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 50
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 500
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 0
+        }
+      ]
+    },
+    "shared-passive-grants": {
+      "label": "Equipment and status grant reusable water passives",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 30,
+          "stamina": 40,
+          "seal": 0,
+          "breaks": 2
+        },
+        "loadout": {
+          "player": {
+            "body": null,
+            "back": null,
+            "charm": "tidal-charm"
+          }
+        },
+        "phase": "third-seal"
+      },
+      "steps": [
+        {
+          "id": "attune-and-cast",
+          "plan": [
+            {
+              "move": "attune-passives"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 54
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 29
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 482
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 18
+        }
+      ]
+    },
+    "passive-expiry": {
+      "label": "Expired attunement stops granting Current reserve",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "stamina": 50
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "conductive-attunement",
+              "source": "player",
+              "remaining": 1
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "let-expire",
+          "plan": []
+        },
+        {
+          "id": "cast-without-passive",
+          "plan": [
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "conductive-attunement",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 65
+        }
+      ]
+    },
+    "intercept-shield": {
+      "label": "Air barrier absorbs damage before HP using stamina",
+      "setup": {
+        "seed": 1024,
+        "phase": "third-seal",
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        }
+      },
+      "steps": [
+        {
+          "id": "barrier",
+          "plan": [
+            {
+              "move": "raise-barrier"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "gte",
+          "value": 33
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "lte",
+          "value": 34
+        }
+      ]
+    },
+    "intercept-healing": {
+      "label": "Waterlogged healing is reduced before HP restoration",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 40
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "waterlogged",
+              "source": "player",
+              "remaining": 2
+            }
+          ]
+        },
+        "phase": "third-seal",
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        }
+      },
+      "steps": [
+        {
+          "id": "heal",
+          "plan": [
+            {
+              "move": "rescue-breath"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 48
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "lte",
+          "value": 49
+        }
+      ]
+    },
+    "intercept-last-breath": {
+      "label": "Rescue charm prevents one lethal hit, then its once-only protection is spent",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 1
+        },
+        "loadout": {
+          "player": {
+            "body": null,
+            "back": null,
+            "charm": "rescue-charm"
+          }
+        },
+        "phase": "third-seal",
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 30,
+          "breaks": 2
+        }
+      },
+      "steps": [
+        {
+          "id": "saved-once",
+          "plan": [],
+          "expect": [
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 1
+            },
+            {
+              "type": "outcome",
+              "value": "planning"
+            }
+          ]
+        },
+        {
+          "id": "spent",
+          "plan": []
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "defeat"
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 0
+        }
+      ]
+    },
+    "intercept-conduit": {
+      "label": "Redirected lightning reduces actual guardian damage and seal charge",
+      "setup": {
+        "seed": 1024,
+        "resources": {
+          "exhaustion": 0,
+          "stamina": 40
+        },
+        "statuses": {
+          "guardian": [
+            {
+              "id": "seal-conduit",
+              "source": "guardian",
+              "remaining": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "redirect",
+          "plan": [
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 491
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 9
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "lte",
+          "value": 71
+        }
+      ]
     }
   },
   "rulesets": [
@@ -911,6 +1470,38 @@
     {
       "library": "environments",
       "id": "brine-curse"
+    },
+    {
+      "library": "environments",
+      "id": "rhythm-dive"
+    },
+    {
+      "library": "environments",
+      "id": "seal-release"
+    },
+    {
+      "library": "environments",
+      "id": "steady-breath"
+    },
+    {
+      "library": "environments",
+      "id": "attune-passives"
+    },
+    {
+      "library": "environments",
+      "id": "raise-barrier"
+    },
+    {
+      "library": "environments",
+      "id": "rescue-breath"
+    },
+    {
+      "library": "environments",
+      "id": "draw-brine"
+    },
+    {
+      "library": "environments",
+      "id": "awaken-conduit"
     }
   ]
 }

@@ -1,4 +1,7 @@
+import { combatMoveRequirements } from './combatRequirements.js'
 import { combatValueContext, combatResourceCosts } from './combatValues.js'
+import { combatActorMoves } from './combatEquipment.js'
+import type { CombatEquipment } from '@ancadeba/schemas'
 import { combatMoveRestriction } from './combatRestrictions.js'
 import type {
   CombatActorDefinition,
@@ -25,6 +28,7 @@ import {
 } from './combatConditions.js'
 
 interface EnemyContext extends CombatConditionContext {
+  readonly equipment?: CombatEquipment | undefined
   readonly health: Readonly<Record<string, number>>
   readonly statuses: CombatStatuses
   readonly cooldowns: CombatCooldowns
@@ -116,7 +120,14 @@ export function chooseEnemyAction(
     const cost = combatActionCost(move, economy, values)
     const cooldown = cooldownRemaining(context.cooldowns, actor.id, id, context.round)
     const resource = combatResourceIssue(move, context.resources, [], {}, values)
-    const restriction = combatMoveRestriction(definition, actor.id, move, context.statuses)
+
+    const restriction = combatMoveRestriction(
+      definition,
+      actor.id,
+      move,
+      context.statuses,
+      context.equipment,
+    )
 
     const conditions =
       rule?.conditions.map((condition) =>
@@ -126,8 +137,16 @@ export function chooseEnemyAction(
         }),
       ) ?? []
 
+    const requirements = combatMoveRequirements(definition, move, {
+      ...context,
+      self: actor.id,
+      target: combatMoveTarget(move) === 'self' ? actor.id : definition.player.id,
+    })
+
     const uses = rule ? (state.uses.get(rule.id) ?? 0) : undefined
     const blockers: EnemyBlocker[] = []
+
+    if (!combatActorMoves(actor, context.equipment).includes(id)) blockers.push('equipment')
 
     if (rule && uses! >= rule.maxUses) blockers.push('use-limit')
 
@@ -143,6 +162,8 @@ export function chooseEnemyAction(
 
     if (restriction) blockers.push('restriction')
 
+    if (requirements.some((entry) => !entry.matched)) blockers.push('requirements')
+
     if (trace)
       candidates.push(
         cloneCombatRules({
@@ -152,6 +173,7 @@ export function chooseEnemyAction(
           uses,
           maximumUses: rule?.maxUses,
           conditions,
+          ...(requirements.length ? { requirements } : {}),
           blockers,
           cost,
           cooldown,
@@ -211,11 +233,13 @@ export function planEnemyTurn(
   mechanics: CombatMechanicsState | undefined,
   trace?: (decision: EnemyDecisionTrace) => void,
   maximumHealth?: Readonly<Record<string, number>>,
+  equipment?: CombatEquipment,
 ) {
   const state = enemyDecisionState(cursor)
   const resources = { ...mechanics?.resources }
 
   const context = {
+    equipment,
     health,
     maximumHealth,
     round,

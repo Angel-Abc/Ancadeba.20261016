@@ -49,6 +49,7 @@ async function fixture(id = 'boss') {
     (binding) =>
       view.rules!.state.find((field) => JSON.stringify(field.path) === JSON.stringify(binding.path))
         ?.value,
+    view.inventory,
   )
 
   return {
@@ -138,7 +139,13 @@ describe('scenario replay and expectations', () => {
       for (const scenario of Object.values(scenarios)) {
         const result = runCombatScenario(definition, base, scenario, 2)
         expect(result.error).toBeUndefined()
-        expect(result.status).toBe('passed')
+        expect(
+          result.status,
+          JSON.stringify({
+            scenario: scenario.label,
+            failed: result.checks.filter((check) => !check.passed),
+          }),
+        ).toBe('passed')
         expect(result.checks.length).toBeGreaterThan(0)
         expect(result.simulation?.report().truncated).toBe(true)
         expect(runCombatScenario(definition, base, scenario).simulation?.snapshot()).toEqual(

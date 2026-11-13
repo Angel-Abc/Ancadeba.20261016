@@ -1,3 +1,4 @@
+import { combatEffectEventValue } from './combatEventValues.js'
 import {
   cloneCombatRules,
   type CombatCondition,
@@ -59,7 +60,16 @@ function leafValue(
   context: CombatConditionContext,
 ): CombatConditionValue {
   if (condition.type === 'event-value' || condition.type === 'event-flag')
-    return { actual: context.event?.[condition.field] }
+    return {
+      actual:
+        condition.type === 'event-value'
+          ? combatEffectEventValue(context.event, condition.field)
+          : context.event
+            ? condition.field === 'redirected'
+              ? (context.event.redirected ?? false)
+              : context.event[condition.field]
+            : undefined,
+    }
   const reference = 'actor' in condition ? condition.actor : undefined
 
   const actor =

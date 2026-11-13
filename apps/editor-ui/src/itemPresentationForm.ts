@@ -6,6 +6,7 @@ import {
   type InventoryDefinition,
 } from '@ancadeba/schemas'
 import { onOffChoices, type RuleFormControls, translationChoices } from './ruleFormControls.js'
+import { equipmentCombatForm } from './equipmentCombatForm.js'
 
 export function itemPresentationForm(
   controls: RuleFormControls,
@@ -24,6 +25,7 @@ export function itemPresentationForm(
   ]
 
   const fields: HTMLElement[] = [
+    equipmentCombatForm(controls, view, draft, render),
     select(
       t('items.equipmentEffects'),
       draft.combatBonuses ? 'enabled' : 'disabled',

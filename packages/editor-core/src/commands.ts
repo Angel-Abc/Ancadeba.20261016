@@ -10,6 +10,7 @@ import { componentSourceSchema } from './componentClipboard.js'
 import {
   itemUseSchema,
   combatBonusesSchema,
+  equipmentCombatEffectsSchema,
   combatStatsProfileSchema,
   gameIdSchema,
   sceneSchema,
@@ -183,6 +184,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     itemType: gameIdSchema,
     presentation: itemPresentationSchema,
     combatBonuses: combatBonusesSchema.nullable().optional(),
+    combatEffects: equipmentCombatEffectsSchema.nullable().optional(),
     use: itemUseSchema.nullable().optional(),
   }),
   z.strictObject({

@@ -411,6 +411,221 @@
           "status": "disarmed"
         }
       ]
+    },
+    "purge-valve": {
+      "type": "ability",
+      "label": "Purge valve",
+      "description": "Only available while the rebreather is equipped. Recover 20 exhaustion for 1 AP and 5 stamina.",
+      "categories": ["utility"],
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "self",
+      "effects": [
+        {
+          "id": "purge",
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": -20
+        }
+      ]
+    },
+    "rhythm-dive": {
+      "type": "ability",
+      "label": "Rhythm dive",
+      "description": "Requires at least 20% available stamina, two Swimming rhythm stacks and no Exhausted status. Spend 8 stamina and one rhythm stack for 12 physical damage. Requirements are checked again before payment.",
+      "apCost": 1,
+      "categories": ["weapon"],
+      "resourceCosts": {
+        "stamina": 8
+      },
+      "target": "enemy",
+      "requirements": [
+        {
+          "type": "and",
+          "conditions": [
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "gte",
+              "value": 20,
+              "unit": "percent"
+            },
+            {
+              "type": "status",
+              "actor": "self",
+              "status": "rhythm",
+              "measure": "stacks",
+              "operator": "gte",
+              "value": 2
+            },
+            {
+              "type": "not",
+              "condition": {
+                "type": "status",
+                "actor": "self",
+                "status": "exhausted",
+                "measure": "stacks",
+                "operator": "gte",
+                "value": 1
+              }
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "id": "dive",
+          "type": "damage",
+          "damageType": "physical",
+          "damage": {
+            "min": 12,
+            "max": 12
+          }
+        },
+        {
+          "id": "spend-rhythm",
+          "type": "remove-status",
+          "target": "self",
+          "status": "rhythm",
+          "stacks": 1
+        }
+      ]
+    },
+    "seal-release": {
+      "type": "ability",
+      "label": "Seal release",
+      "description": "Requires the third seal, at least 20% available stamina, and Current focus intensity 2 or two Swimming rhythm stacks. Deals lightning damage; actual damage charges the seal.",
+      "apCost": 1,
+      "categories": ["spell"],
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "target": "enemy",
+      "requirements": [
+        {
+          "type": "phase",
+          "phase": "third-seal"
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "gte",
+          "value": 20,
+          "unit": "percent"
+        },
+        {
+          "type": "or",
+          "conditions": [
+            {
+              "type": "status",
+              "actor": "self",
+              "status": "flow",
+              "measure": "intensity",
+              "operator": "gte",
+              "value": 2
+            },
+            {
+              "type": "status",
+              "actor": "self",
+              "status": "rhythm",
+              "measure": "stacks",
+              "operator": "gte",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "id": "release",
+          "type": "damage",
+          "damageType": "lightning",
+          "damage": {
+            "min": 20,
+            "max": 20
+          }
+        }
+      ]
+    },
+    "attune-passives": {
+      "type": "ability",
+      "label": "Attune currents",
+      "description": "Gain Conductive attunement for three turns. Later lightning hits restore stamina through its shared passive.",
+      "apCost": 1,
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "attune",
+          "type": "apply-status",
+          "status": "conductive-attunement"
+        }
+      ]
+    },
+    "raise-barrier": {
+      "type": "ability",
+      "label": "Raise air barrier",
+      "description": "Spend 5 stamina to grant a barrier that spends stamina to absorb up to 8 damage per hit.",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "barrier",
+          "type": "apply-status",
+          "status": "air-barrier"
+        }
+      ]
+    },
+    "rescue-breath": {
+      "type": "ability",
+      "label": "Rescue breath",
+      "description": "Restore 20 health before incoming healing modifiers.",
+      "apCost": 1,
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 20
+        }
+      ]
+    },
+    "draw-brine": {
+      "type": "ability",
+      "label": "Draw brine",
+      "description": "Become Waterlogged to demonstrate reduced incoming healing.",
+      "apCost": 1,
+      "target": "self",
+      "categories": ["utility"],
+      "effects": [
+        {
+          "id": "soak",
+          "type": "apply-status",
+          "status": "waterlogged"
+        }
+      ]
+    },
+    "awaken-conduit": {
+      "type": "ability",
+      "label": "Awaken conduit",
+      "description": "Activates the target’s conduit ward: half of direct lightning damage is redirected to its caster.",
+      "apCost": 1,
+      "target": "enemy",
+      "categories": ["spell"],
+      "effects": [
+        {
+          "id": "conduit",
+          "type": "apply-status",
+          "status": "seal-conduit"
+        }
+      ]
     }
   },
   "statuses": {
@@ -529,6 +744,54 @@
       "description": "Prevents new Silence, Disarm and Dazed applications for three affected turns. Existing controls need Shake off.",
       "duration": 3,
       "statusImmunities": ["silenced", "disarmed", "dazed"]
+    },
+    "conductive-attunement": {
+      "type": "composite",
+      "label": "Conductive attunement",
+      "description": "Grants the reusable Current reserve passive while active. Cleansing or expiry removes the grant.",
+      "duration": 3,
+      "passives": [
+        {
+          "library": "environments",
+          "id": "current-reserve"
+        }
+      ]
+    },
+    "air-barrier": {
+      "type": "composite",
+      "label": "Air barrier",
+      "duration": 3,
+      "description": "Spend one stamina per incoming HP damage, absorbing up to 8 per hit after defenses and Guard.",
+      "passives": [
+        {
+          "library": "environments",
+          "id": "air-barrier"
+        }
+      ]
+    },
+    "waterlogged": {
+      "type": "composite",
+      "label": "Waterlogged",
+      "duration": 2,
+      "description": "Halves incoming healing before the missing-health cap.",
+      "passives": [
+        {
+          "library": "environments",
+          "id": "waterlogged-healing"
+        }
+      ]
+    },
+    "seal-conduit": {
+      "type": "composite",
+      "label": "Seal conduit",
+      "duration": 2,
+      "description": "Redirects half of direct lightning damage to its source, reducing damage actually dealt to the bearer.",
+      "passives": [
+        {
+          "library": "environments",
+          "id": "seal-conduit"
+        }
+      ]
     }
   },
   "rulesets": {
@@ -1095,6 +1358,131 @@
           }
         ],
         "fallback": "rotation"
+      }
+    }
+  },
+  "passives": {
+    "tidal-relief": {
+      "label": "Tidal relief",
+      "description": "While granted: after water damage actually received, recover 3 exhaustion. Each granting item or active status contributes once per matching event.",
+      "triggers": {
+        "water-relief": {
+          "event": "damage-received",
+          "target": "self",
+          "damageType": "water",
+          "effects": [
+            {
+              "type": "change-resource",
+              "resource": "exhaustion",
+              "amount": -3
+            }
+          ]
+        }
+      }
+    },
+    "current-reserve": {
+      "label": "Current reserve",
+      "description": "After direct lightning damage dealt by the bearer, restore stamina equal to half the actual damage and recover 3 exhaustion.",
+      "triggers": {
+        "lightning-reserve": {
+          "event": "damage-dealt",
+          "source": "self",
+          "damageType": "lightning",
+          "delivery": "direct",
+          "effects": [
+            {
+              "type": "change-resource",
+              "resource": "stamina",
+              "amount": 0,
+              "eventValue": {
+                "field": "amount",
+                "factor": 0.5
+              }
+            },
+            {
+              "type": "change-resource",
+              "resource": "exhaustion",
+              "amount": -3
+            }
+          ]
+        }
+      }
+    },
+    "air-barrier": {
+      "label": "Air barrier",
+      "description": "Spend one stamina per incoming HP damage, absorbing up to 8 per hit after defenses and Guard.",
+      "triggers": {
+        "absorb": {
+          "event": "damage-pending",
+          "target": "self",
+          "effects": [
+            {
+              "type": "absorb-damage",
+              "resource": "stamina",
+              "maximum": 8
+            }
+          ]
+        }
+      }
+    },
+    "waterlogged-healing": {
+      "label": "Waterlogged healing",
+      "description": "Halves incoming healing before the missing-health cap.",
+      "triggers": {
+        "dampen": {
+          "event": "healing-pending",
+          "target": "self",
+          "effects": [
+            {
+              "type": "adjust-effect",
+              "amount": 0,
+              "percent": -50
+            }
+          ]
+        }
+      }
+    },
+    "rescue-instinct": {
+      "label": "Rescue instinct",
+      "description": "Once per encounter and granting charm: survive a lethal damage effect with at least 1 HP.",
+      "triggers": {
+        "last-breath": {
+          "event": "damage-pending",
+          "target": "self",
+          "once": true,
+          "conditions": [
+            {
+              "type": "event-flag",
+              "field": "lethal",
+              "value": true
+            }
+          ],
+          "effects": [
+            {
+              "type": "prevent-lethal",
+              "minimumHealth": 1
+            }
+          ]
+        }
+      }
+    },
+    "seal-conduit": {
+      "label": "Seal conduit",
+      "description": "Redirects half of direct lightning damage to its source, reducing damage actually dealt to the bearer.",
+      "triggers": {
+        "redirect": {
+          "event": "damage-pending",
+          "target": "self",
+          "damageType": "lightning",
+          "delivery": "direct",
+          "effects": [
+            {
+              "type": "redirect-damage",
+              "actor": "event.source",
+              "percent": 50
+            }
+          ]
+        }
       }
     }
   }

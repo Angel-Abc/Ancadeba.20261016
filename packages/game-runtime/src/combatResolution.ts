@@ -1,4 +1,7 @@
+import { combatInterceptionDetails } from './combatInterception.js'
+import { combatMoveRequirements } from './combatRequirements.js'
 import { combatStatusImmune, combatMoveRestriction } from './combatRestrictions.js'
+import { validateCombatEquipment } from './combatEquipment.js'
 import {
   combatDamageProfile,
   combatTypedDamage,
@@ -12,9 +15,15 @@ import {
   combatResourceCosts,
   type CombatValueContext,
 } from './combatValues.js'
-import type { CombatScaling, CombatEffectEventData } from '@ancadeba/schemas'
+import type {
+  CombatScaling,
+  CombatEffectEventData,
+  CombatEquipment,
+  CombatCondition,
+} from '@ancadeba/schemas'
 import type {
   CombatDefinition,
+  CombatPassiveSource,
   CombatBonuses,
   AbilityEffect,
   CombatMechanicsState,
@@ -73,6 +82,10 @@ export interface CombatLogEntry {
     | 'apUnavailable'
     | 'moveRestricted'
     | 'statusImmune'
+    | 'resourceAdjusted'
+    | 'requirementsUnavailable'
+    | 'passiveTriggered'
+    | 'effectIntercepted'
     | CombatOutcome
   readonly damageType?: string | undefined
   readonly resistance?: number | undefined
@@ -83,6 +96,24 @@ export interface CombatLogEntry {
   readonly rawDamage?: number | undefined
   readonly reactive?: boolean | undefined
   readonly category?: string | undefined
+  readonly interception?:
+    | 'adjust-effect'
+    | 'absorb-damage'
+    | 'redirect-damage'
+    | 'prevent-lethal'
+    | undefined
+  readonly redirectTarget?: string | undefined
+  readonly redirected?: boolean | undefined
+  readonly originalTarget?: string | undefined
+  readonly incomingAmount?: number | undefined
+  readonly absorbed?: number | undefined
+  readonly prevented?: number | undefined
+  readonly redirectedAmount?: number | undefined
+  readonly passive?: CombatPassiveSource | undefined
+  readonly trigger?: string | undefined
+  readonly requirements?: readonly CombatCondition[] | undefined
+  readonly requested?: number | undefined
+  readonly equipment?: readonly string[] | undefined
   readonly typeDamage?: number | undefined
   readonly item?: string | undefined
   readonly actor?: string | undefined
@@ -119,6 +150,7 @@ export function planEnemies(
   mechanics?: CombatMechanicsState,
   trace?: (decision: EnemyDecisionTrace) => void,
   maximumHealth?: Readonly<Record<string, number>>,
+  equipment?: CombatEquipment,
 ): Record<string, EnemyPlan> {
   return Object.fromEntries(
     definition.enemies.map((actor) => [
@@ -134,6 +166,7 @@ export function planEnemies(
         mechanics ?? initialCombatMechanics(definition),
         trace,
         maximumHealth,
+        equipment,
       ),
     ]),
   )
@@ -174,9 +207,12 @@ export function resolveCombatRound(
     cooldowns?: CombatCooldowns | undefined
     round?: number | undefined
     mechanics?: CombatMechanicsState | undefined
+    equipment?: CombatEquipment | undefined
   },
   debug?: CombatDebugSink,
 ) {
+  validateCombatEquipment(definition, current.equipment)
+
   const health = { ...current.health },
     guard = { ...current.guard }
 
@@ -211,7 +247,7 @@ export function resolveCombatRound(
   const capture = (
     details: Pick<
       CombatDebugFrame,
-      'kind' | 'actor' | 'action' | 'decision' | 'mechanicsEvent' | 'spentAp'
+      'kind' | 'actor' | 'action' | 'decision' | 'mechanicsEvent' | 'spentAp' | 'requirements'
     >,
   ) => {
     if (!tracing) return
@@ -257,6 +293,7 @@ export function resolveCombatRound(
     current.mechanics,
     {
       health,
+      equipment: current.equipment,
       damage: (source, target, amount, type) =>
         damage(
           source,
@@ -273,9 +310,9 @@ export function resolveCombatRound(
           Object.entries(current.stats ?? {}).map(([id, stats]) => [id, stats.maximumHealth]),
         ),
       statuses: () => statuses,
-      status: (actor, status, remove, stacks, intensity) =>
+      status: (actor, status, remove, stacks, intensity, source) =>
         effect(
-          actor,
+          source ?? actor,
           actor,
           remove
             ? { id: status, type: 'remove-status', status, stacks }
@@ -361,7 +398,25 @@ export function resolveCombatRound(
       throw new RangeError('Healing requires a valid maximum health')
 
     const rawAmount = applyCombatPercent(amount, percentages(actor, 'healing'))
-    const restored = Math.min(rawAmount, maximum - health[target]!)
+
+    const pending = mechanics.intercept(
+      'healing',
+      {
+        source: actor,
+        target,
+        amount: rawAmount,
+        rawAmount,
+        overheal: Math.max(0, rawAmount - (maximum - health[target]!)),
+        delivery,
+        reactive: delivery === 'reaction',
+      },
+      move,
+      status,
+      maximum - health[target]!,
+    )
+
+    const adjusted = pending?.amount ?? rawAmount
+    const restored = Math.min(adjusted, maximum - health[target]!)
 
     health[target] = safe(health[target]! + restored)
     entries.push({
@@ -369,6 +424,7 @@ export function resolveCombatRound(
       actor,
       target,
       amount: restored,
+      ...combatInterceptionDetails(pending),
       ...(status ? { status } : {}),
       ...(delivery === 'reaction' ? { reactive: true } : {}),
     })
@@ -379,7 +435,8 @@ export function resolveCombatRound(
         target,
         amount: restored,
         rawAmount,
-        overheal: rawAmount - restored,
+        overheal: adjusted - restored,
+        ...combatInterceptionDetails(pending),
         delivery,
         reactive: delivery === 'reaction',
       },
@@ -396,6 +453,8 @@ export function resolveCombatRound(
     delivery: CombatEffectEventData['delivery'],
     status?: string,
     move?: string,
+    redirected = false,
+    originalTarget?: string,
   ) => {
     if (!health[target]) return
     const periodic = delivery === 'periodic'
@@ -404,13 +463,36 @@ export function resolveCombatRound(
     const typed = combatTypedDamage(
       rawAmount - defended,
       damageType,
-      combatDamageProfile(definition, target, statuses),
+      combatDamageProfile(definition, target, statuses, current.equipment),
     )
 
     const blocked = periodic ? 0 : Math.min(typed.amount, guard[target] ?? 0)
 
     if (!periodic) guard[target] = (guard[target] ?? 0) - blocked
-    const amount = Math.min(health[target]!, typed.amount - blocked)
+
+    const pending = mechanics.intercept(
+      'damage',
+      {
+        source: actor,
+        target,
+        rawAmount,
+        amount: typed.amount - blocked,
+        damageType: typed.damageType,
+        typeAmount: typed.amount,
+        defended,
+        blocked,
+        resisted: typed.resisted,
+        amplified: typed.amplified,
+        immune: typed.immune,
+        delivery,
+        reactive: delivery === 'reaction',
+        ...(redirected ? { redirected, originalTarget } : {}),
+      },
+      move,
+      status,
+    )
+
+    const amount = Math.min(health[target]!, pending?.amount ?? typed.amount - blocked)
     health[target] = health[target]! - amount
     entries.push({
       type: periodic ? 'periodicDamage' : 'attack',
@@ -428,8 +510,23 @@ export function resolveCombatRound(
               : {}),
           }),
       ...typedDamageDetails(typed, damageType, rawAmount),
+      ...combatInterceptionDetails(pending),
+      ...(redirected ? { redirected, originalTarget } : {}),
       ...(delivery === 'reaction' ? { reactive: true } : {}),
     })
+
+    for (const redirect of pending?.redirects ?? [])
+      damage(
+        actor,
+        redirect.target,
+        redirect.amount,
+        damageType,
+        'reaction',
+        status,
+        move,
+        true,
+        originalTarget ?? target,
+      )
     resolvedEffect(
       'damage',
       {
@@ -444,6 +541,8 @@ export function resolveCombatRound(
         resisted: typed.resisted,
         amplified: typed.amplified,
         immune: typed.immune,
+        ...combatInterceptionDetails(pending),
+        ...(redirected ? { redirected, originalTarget } : {}),
         delivery,
         reactive: delivery === 'reaction',
       },
@@ -543,7 +642,7 @@ export function resolveCombatRound(
 
         if (!status) throw new Error('Unknown status')
 
-        if (combatStatusImmune(definition, recipient, effect.status, statuses)) {
+        if (combatStatusImmune(definition, recipient, effect.status, statuses, current.equipment)) {
           entries.push({ type: 'statusImmune', actor, target: recipient, status: effect.status })
 
           return
@@ -692,6 +791,7 @@ export function resolveCombatRound(
                 actor,
                 {
                   health,
+                  equipment: current.equipment,
                   statuses,
                   cooldowns,
                   resources: mechanics.state?.resources ?? {},
@@ -718,6 +818,41 @@ export function resolveCombatRound(
 
           if (!health[actor.id]) break
           const move = definition.moves[queued.move]!
+
+          const requirementsPass = () => {
+            const requirements = combatMoveRequirements(definition, move, {
+              health,
+              maximumHealth:
+                current.maximumHealth ??
+                Object.fromEntries(
+                  Object.entries(current.stats ?? {}).map(([id, stats]) => [
+                    id,
+                    stats.maximumHealth,
+                  ]),
+                ),
+              statuses,
+              resources: mechanics.state?.resources ?? {},
+              phase: mechanics.state?.phase,
+              self: actor.id,
+              target: queued.target,
+            })
+
+            const failed = requirements.filter((entry) => !entry.matched)
+
+            if (!failed.length) return true
+            entries.push({
+              type: 'requirementsUnavailable',
+              actor: actor.id,
+              target: queued.target,
+              move: queued.move,
+              requirements: failed.map((entry) => entry.condition),
+            })
+            capture({ kind: 'action', actor: actor.id, action: queued, spentAp, requirements })
+
+            return false
+          }
+
+          if (!requirementsPass()) continue
           mechanics.lifecycle({
             type: 'before-action',
             actor: actor.id,
@@ -734,7 +869,13 @@ export function resolveCombatRound(
             break
           }
 
-          const restriction = combatMoveRestriction(definition, actor.id, move, statuses)
+          const restriction = combatMoveRestriction(
+            definition,
+            actor.id,
+            move,
+            statuses,
+            current.equipment,
+          )
 
           if (restriction) {
             entries.push({
@@ -753,6 +894,8 @@ export function resolveCombatRound(
             capture({ kind: 'action', actor: actor.id, action: queued, spentAp })
             continue
           }
+
+          if (!requirementsPass()) continue
 
           if (cooldownRemaining(cooldowns, actor.id, queued.move, round))
             throw new Error('Move is on cooldown')
@@ -837,6 +980,7 @@ export function resolveCombatRound(
                   entry.type === 'statusReduced' ||
                   entry.type === 'resourceChanged' ||
                   entry.type === 'phaseChanged' ||
+                  entry.type === 'effectIntercepted' ||
                   (entry.type === 'healed' && Boolean(entry.amount)) ||
                   (entry.type === 'guarded' && Boolean(entry.guard)) ||
                   (entry.type === 'attack' && Boolean(entry.damage || entry.blocked)),

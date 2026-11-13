@@ -139,7 +139,7 @@ transition, restart with seal energy `75`, queue one channel, and resolve once.
 seed, actual round inputs, final state and trace, so you can copy a reproducible
 report. Trace collection is capped at 500 frames; inputs and final state remain
 available after that limit. Repeated plans keep their targets and omit moves
-that are currently unavailable. This combat sandbox does not use inventory
+that are currently unavailable. This combat sandbox does not consume inventory
 items, deliver rewards or advance the world clock.
 
 ## Saved regression scenarios
@@ -290,7 +290,7 @@ In the editor, use **Damage type** on attacks, damage effects and periodic
 statuses. Use actor/status **Damage defenses** to add matching type IDs and
 percentages or immunity. Live views and previews show effective defenses and
 typed damage ranges; logs and simulator frames retain mitigation details.
-All twenty-three saved scenarios, including the original three-seal victory, remain
+All forty-two saved scenarios, including the original three-seal victory, remain
 available for replay.
 
 ## Actual damage, healing and reactions
@@ -363,3 +363,142 @@ immunity remains independent of status immunity. Live views and status badges
 show effective restrictions/protections; simulator decisions explain why an
 enemy skips a restricted move. Restricted execution and immunity logs survive
 save/load. The original exhaustion and lightning three-seal routes still work.
+
+## Diving equipment
+
+From the harbour, open **Diving gear room**. Select the diving suit and click
+**Equip**, then do the same for the rebreather. Both start carried so the original
+scenarios still run without gear. The comparison shows each proposed effect.
+
+- **Diving suit**: +25% water resistance. It reduces the eel's water bite and adds
+  to the underwater guardian encounter's innate 50%, giving 75% resistance there.
+- **Rebreather**: -50% positive exhaustion gains, rounded down. Water pressure
+  becomes 5 instead of 10; underwater boss pressure becomes 2 instead of 5. It
+  grants **Purge valve**: recover 20 exhaustion for 1 AP and 5 stamina.
+
+Enter either gear practice scene from the gear room. **A** queues Purge valve,
+**E** queues recovery, and **B** resolves the round. The other original controls
+remain available. The gear action is disabled without the rebreather. The combat
+panel lists equipped mechanics and combined defenses, and logs show exhaustion
+gains before and after gear adjustment. Exhaustion reduction occurs before
+fatigue hooks; action costs and recovery are unchanged. Lightning still charges
+the boss seal gauge by actual damage dealt.
+
+Water and Underwater boss each add two saved scenarios: `diving-gear` checks
+reduced pressure, avoided fatigue and protected HP, and `rebreather-purge` checks
+the equipment-granted action. Their `setup.loadout` explicitly selects both item
+IDs. Change gear in **Starting equipment** to compare runs, then capture a scenario
+to keep the loadout and plan. Replay reads the latest equipment definitions.
+
+Both battles share the diver's loadout. An unfinished fight locks equipment,
+including after returning to the harbour, and prevents starting the other linked
+fight. Escape or finish before changing gear or encounters; **New game** resets
+both battles and returns the items to carried inventory. Save/load retains gear,
+plans, meters and the adjustment log.
+
+## Action requirements
+
+From the harbour, open **Action requirements: Water** or **Action requirements:
+Underwater guardian**. These views share the original encounters and loadout
+locks, while keeping the original controls available in their companion views.
+
+**S — Rhythm dive** requires at least 20% available stamina, two Swimming rhythm
+stacks and NOT Exhausted. It spends 1 AP, 8 stamina and one rhythm stack for
+12 physical damage. In Water, queue **A** three times, resolve with **B**, then
+try **S** twice: the eel removes one stack after your setup, the first dive
+spends another, and the second queued dive is skipped without payment. A queued
+buff does not unlock the dive until that buff has actually resolved.
+
+**Z — Seal release** in the underwater boss view requires the third seal, 20%
+available stamina, and Current focus intensity 2 (**G**) OR two Swimming rhythm
+stacks (**A**). It costs 1 AP and 10 stamina, deals 20 base lightning damage,
+and charges the seal by damage actually dealt through the existing reaction.
+Hover a disabled action to see unmet requirements and current values. The
+simulator shows the same reasons; action traces record execution failures.
+
+Four saved scenarios cover these mechanics:
+
+| Encounter       | Scenario              | Checks                                                                                |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------- |
+| Water           | `rhythm-requirements` | First dive spends a stack; second is skipped with no extra cost.                      |
+| Underwater boss | `rhythm-requirements` | The same reusable action checks stacks and stamina in a composed encounter.           |
+| Underwater boss | `seal-release-ready`  | Third phase and focus permit 45 lightning damage and 45 seal charge.                  |
+| Underwater boss | `seal-release-locked` | First phase blocks the finisher before AP or stamina spending, damage or seal charge. |
+
+Moves expose **Action requirements** in both the encounter and shared library
+editors. Add nested expressions or clear them without JSON edits. Requirements
+are checked during planning and again before payment during resolution, including
+after before-action hooks. Failed actions consume neither items nor cooldowns.
+Existing unmodified moves keep their behavior.
+
+## Shared passives from equipment and statuses
+
+Open **Diving gear room**, select the **Tidal charm** and equip it. It starts
+carried, so existing unarmored scenarios keep their original results. Then open
+**Shared passives: Water** or **Shared passives: Underwater guardian** from the
+harbour or gear room. Both views reuse the original encounters and loadout locks.
+
+- **Tidal charm → Tidal relief**: recover 3 exhaustion after water damage actually
+  received. Immune or fully guarded hits do not activate this received-damage
+  trigger. The boss's water Pressure surge in its third phase activates it.
+- **A — Attune currents → Conductive attunement → Current reserve**: while the
+  three-turn status is active, direct lightning damage dealt restores half its
+  actual amount as stamina, rounded down, and removes 3 exhaustion. Queue **X —
+  Arc bolt** after attuning, then resolve with **B**. Cleansing or expiry removes
+  the grant. The boss still receives seal charge once from actual damage.
+
+These are shared library triggers, granted by references on the item and status.
+Combat logs name both the passive and source. The simulator's event/trigger
+frames identify the granting item/status and show actual event amounts.
+
+Water and Underwater boss each add `shared-passive-grants` and `passive-expiry`.
+The first equips the charm and applies attunement before lightning damage. Water
+ends at exhaustion 34, stamina 64 and eel HP 72. The third-phase boss version ends
+at exhaustion 29, stamina 54, guardian HP 482 and seal 18. The expiry scenario
+waits for attunement to disappear, then confirms that lightning no longer restores
+stamina through the passive.
+
+Author shared definitions in **Shared combat passives**, and select them under
+**Granted combat passives** on equipment or statuses. Multiple granting sources
+each react once; status stacks/intensity do not multiply execution. Once-only
+triggers retain history per granting source across save/load and status
+reapplication. Source removal prevents later reactions, and loops use the same
+bounded transaction rollback as encounter triggers.
+
+## Shields, healing interception and rescue
+
+Open **Interception: Water** or **Interception: Underwater guardian** from the
+harbour or gear room. These views share the encounters, exhaustion, diving gear
+and three-seal rules used by the other practice views.
+
+- **A — Raise air barrier** spends 5 stamina to grant a three-turn shield. Its
+  shared passive spends remaining stamina one-for-one to absorb up to 8 damage
+  per hit, after defense and Guard. Exhaustion and other stamina costs still apply.
+- **F — Draw brine** grants Waterlogged for two turns. Its passive halves incoming
+  healing before the missing-health cap. **S — Rescue breath** heals 20 before
+  this adjustment. Both effects work in water and against the guardian.
+- Equip the **Rescue charm** in the gear room's charm slot before entering. Its
+  once-only **Rescue instinct** preserves 1 HP on a lethal hit; a later hit can
+  defeat you. Save/load preserves its spent receipt. It competes with Tidal charm.
+- Boss only: **Z — Awaken conduit** grants a two-turn ward to the guardian.
+  **X — Arc bolt** then redirects half its direct lightning damage to the caster,
+  whose own defenses/shields apply. Only damage actually received by the guardian
+  charges its seal: an 18-point bolt becomes 9 guardian damage and 9 seal charge.
+  Redirected packets cannot redirect again.
+
+Resolve with **B**. The combat log names interception operations and their source;
+previews display amounts before interception. Inspect the simulator's mechanics
+trace for before/after amounts, shield spending, recipient and pending event facts.
+
+Seven saved scenarios exercise the new hooks:
+
+| Encounter                 | Scenario                | Checks                                                                                  |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------- |
+| Water and Underwater boss | `intercept-shield`      | Barrier absorbs the enemy hit and pays stamina; player remains at 80 HP.                |
+| Water and Underwater boss | `intercept-healing`     | Waterlogged reduces the 20-point breath to 10 before the enemy turn.                    |
+| Water and Underwater boss | `intercept-last-breath` | Rescue charm saves the first lethal hit at 1 HP; the following round defeats the diver. |
+| Underwater boss           | `intercept-conduit`     | Half a lightning bolt redirects; guardian ends at 491 HP and seal charge is 9.          |
+
+Edit these reusable triggers under **Shared combat passives**: `air-barrier`,
+`waterlogged-healing`, `rescue-instinct` and `seal-conduit`. The first three
+support both encounters; the last demonstrates the guardian-specific ward.

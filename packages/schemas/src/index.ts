@@ -89,3 +89,9 @@ export * from './combatDamage.js'
 export * from './combatEvents.js'
 
 export * from './combatRestrictions.js'
+
+export * from './combatEquipment.js'
+
+export * from './combatPassiveReferences.js'
+
+export * from './combatPassives.js'

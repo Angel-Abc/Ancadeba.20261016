@@ -1,4 +1,7 @@
+import { combatMoveRequirementIssue, combatRequirementsText } from './combatRequirements.js'
 import { combatDamageProfile } from './combatDamage.js'
+import { combatEquipmentFor, combatActorMoves } from './combatEquipment.js'
+import type { CombatEquipment } from '@ancadeba/schemas'
 import { combatMoveRestriction, combatMoveRestrictionText } from './combatRestrictions.js'
 import { combatValueContext } from './combatValues.js'
 import { usableItem, abilityCanMatter } from './itemUseEligibility.js'
@@ -110,6 +113,7 @@ export interface CombatCommandRequest {
 }
 
 export interface CombatSnapshot {
+  readonly equipment?: CombatEquipment | undefined
   readonly resources: Readonly<Record<string, number>>
 
   readonly bossPhase: string | undefined
@@ -295,6 +299,26 @@ export class GameCombat implements IGameCombat {
 
       const actors = new Set([definition.player, ...definition.enemies].map((actor) => actor.id))
 
+      if (saved.started && !saved.outcome) {
+        const equipment = this.equipmentValues(definition)
+
+        if (
+          saved.plan.some(
+            (entry) =>
+              !entry.item && !combatActorMoves(definition.player, equipment).includes(entry.move),
+          )
+        )
+          throw new Error('Saved plan requires unequipped combat gear')
+
+        for (const enemy of definition.enemies)
+          if (
+            saved.enemies[enemy.id]?.moves.some(
+              (entry) => !combatActorMoves(enemy, equipment).includes(entry.move),
+            )
+          )
+            throw new Error('Saved enemy plan requires unequipped combat gear')
+      }
+
       for (const entry of [
         ...saved.plan,
 
@@ -459,6 +483,14 @@ export class GameCombat implements IGameCombat {
       : undefined
   }
 
+  private equipmentValues(definition: CombatDefinition): CombatEquipment {
+    return combatEquipmentFor(
+      definition,
+      this.lifecycle.currentGame?.data.inventory,
+      this.inventory?.snapshot ?? [],
+    )
+  }
+
   private health(definition: CombatDefinition) {
     const health: Record<string, number> = {}
 
@@ -544,7 +576,7 @@ export class GameCombat implements IGameCombat {
       }
 
       for (const actor of [definition.player, ...definition.enemies])
-        for (const moveId of actor.moves) {
+        for (const moveId of combatActorMoves(actor, this.equipmentValues(definition))) {
           const move = definition.moves[moveId]!
 
           const session = this.sessions.get(definition.id)
@@ -571,7 +603,12 @@ export class GameCombat implements IGameCombat {
             0,
             context,
             effects,
-            combatDamageProfile(definition, target ?? actor.id, session?.statuses ?? {}),
+            combatDamageProfile(
+              definition,
+              target ?? actor.id,
+              session?.statuses ?? {},
+              this.equipmentValues(definition),
+            ),
           )
 
           if (move.type === 'ability')
@@ -586,6 +623,7 @@ export class GameCombat implements IGameCombat {
                   definition,
                   effect.target === 'self' ? actor.id : (target ?? actor.id),
                   session?.statuses ?? {},
+                  this.equipmentValues(definition),
                 ),
               )
         }
@@ -628,7 +666,18 @@ export class GameCombat implements IGameCombat {
         plan: [],
 
         enemies: values
-          ? planEnemies(definition, health, {}, 1, {}, {}, undefined, undefined, values.maximum)
+          ? planEnemies(
+              definition,
+              health,
+              {},
+              1,
+              {},
+              {},
+              undefined,
+              undefined,
+              values.maximum,
+              this.equipmentValues(definition),
+            )
           : {},
 
         escape: false,
@@ -679,6 +728,7 @@ export class GameCombat implements IGameCombat {
           undefined,
           undefined,
           values.maximum,
+          this.equipmentValues(definition),
         )
 
       if (!session.outcome) {
@@ -775,7 +825,10 @@ export class GameCombat implements IGameCombat {
       reservedAp = 0
     }
 
+    const equipment = this.equipmentValues(definition)
+
     return Object.freeze({
+      ...(Object.keys(equipment).length ? { equipment } : {}),
       ap: economy?.ap ?? Object.freeze({}),
 
       moveCosts: economy?.moveCosts ?? Object.freeze({}),
@@ -1063,7 +1116,7 @@ export class GameCombat implements IGameCombat {
       !this.moveIssue(scene, id, command.move) &&
       (!definition.player.leveling ||
         (this.leveling?.moveAvailable(definition, command.move) ?? false)) &&
-      definition.player.moves.includes(command.move) &&
+      combatActorMoves(definition.player, snapshot.equipment).includes(command.move) &&
       !snapshot.escape &&
       (snapshot.moveCosts[definition.player.id]?.[command.move] ?? Infinity) <=
         snapshot.remainingAp &&
@@ -1088,12 +1141,54 @@ export class GameCombat implements IGameCombat {
 
     const candidate = definition.moves[moveId]
 
+    if (
+      includeAp &&
+      candidate &&
+      definition.player.equipmentMoves?.includes(moveId) &&
+      !combatActorMoves(definition.player, this.equipmentValues(definition)).includes(moveId)
+    )
+      return definition.messages.requiresEquipment.replaceAll('{move}', candidate.label)
+
     const restriction =
       candidate &&
-      combatMoveRestriction(definition, definition.player.id, candidate, session.statuses)
+      combatMoveRestriction(
+        definition,
+        definition.player.id,
+        candidate,
+        session.statuses,
+        this.equipmentValues(definition),
+      )
 
     if (candidate && restriction)
       return combatMoveRestrictionText(definition, definition.player.id, candidate, restriction)
+
+    if (candidate) {
+      try {
+        const values = this.health(definition)
+
+        if (!values) return definition.messages.unavailable
+
+        const issue = combatMoveRequirementIssue(
+          definition,
+          candidate,
+          {
+            health: values.health,
+            maximumHealth: values.maximum,
+            statuses: session.statuses,
+            resources: session.mechanics?.resources ?? {},
+            phase: session.mechanics?.phase,
+            self: definition.player.id,
+            target:
+              combatMoveTarget(candidate) === 'self' ? definition.player.id : session.target?.id,
+          },
+          session.plan,
+        )
+
+        if (issue) return issue
+      } catch {
+        return definition.messages.unavailable
+      }
+    }
 
     const remaining = cooldownRemaining(
       session.cooldowns,
@@ -1387,6 +1482,7 @@ export class GameCombat implements IGameCombat {
         round: session.round,
 
         mechanics: session.mechanics,
+        equipment: this.equipmentValues(definition),
       })
 
       const round = session.round + 1
@@ -1443,6 +1539,7 @@ export class GameCombat implements IGameCombat {
             candidate.mechanics,
             undefined,
             values.maximum,
+            this.equipmentValues(definition),
           )
 
       removal?.commit()
@@ -1540,6 +1637,35 @@ export class GameCombat implements IGameCombat {
           damage: String(entry.damage ?? 0),
           damageType: entry.damageType ?? 'physical',
           category: entry.category ?? '',
+          requested: String(entry.requested ?? 0),
+          interception:
+            entry.interception === 'adjust-effect'
+              ? definition.messages.interceptAdjust
+              : entry.interception === 'absorb-damage'
+                ? definition.messages.interceptAbsorb
+                : entry.interception === 'redirect-damage'
+                  ? definition.messages.interceptRedirect.replaceAll(
+                      '{recipient}',
+                      name(entry.redirectTarget),
+                    )
+                  : definition.messages.interceptPreventLethal,
+          passive: entry.passive
+            ? definition.passiveDefinitions?.[entry.passive.library]?.[entry.passive.passive]
+                ?.label || entry.passive.passive
+            : '',
+          source:
+            entry.passive?.kind === 'status'
+              ? definition.statuses?.[entry.passive.id]?.label || entry.passive.id
+              : entry.passive
+                ? this.lifecycle.currentGame?.data.inventory?.itemTypes[
+                    this.inventory?.snapshot.find((item) => item.id === entry.passive?.id)
+                      ?.itemType ?? ''
+                  ]?.label || entry.passive.id
+                : '',
+          requirements: combatRequirementsText(definition, entry.requirements ?? [], {
+            self: entry.actor,
+            target: entry.target,
+          }),
           resistance: String(entry.resistance ?? 0),
           vulnerability: String(entry.vulnerability ?? 0),
           resisted: String(entry.resisted ?? 0),
@@ -1587,7 +1713,7 @@ export class GameCombat implements IGameCombat {
 
       const replace = (text: string) =>
         text.replace(
-          /\{(actor|target|damage|damageType|category|resistance|vulnerability|resisted|amplified|rawDamage|typeDamage|blocked|guard|defended|status|amount|duration|item|resource|phase|stacks|intensity|cost|remaining|move)\}/g,
+          /\{(actor|target|damage|damageType|category|resistance|vulnerability|resisted|amplified|rawDamage|typeDamage|blocked|guard|defended|status|amount|duration|item|resource|phase|stacks|intensity|cost|remaining|move|requested|requirements|passive|source|interception)\}/g,
           (_, key: string) => tokens.get(key) ?? '',
         )
 

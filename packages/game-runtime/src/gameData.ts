@@ -572,7 +572,12 @@ export function assembleGameData(
 
           const definition = view?.type === 'combat' ? combat.get(view.encounter) : undefined
 
-          if (!definition?.player.moves.includes(slot.action.command.move))
+          if (
+            ![
+              ...(definition?.player.moves ?? []),
+              ...(definition?.player.equipmentMoves ?? []),
+            ].includes(slot.action.command.move)
+          )
             throw new Error('Unknown player combat move')
         }
 

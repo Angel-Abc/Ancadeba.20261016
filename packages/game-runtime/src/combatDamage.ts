@@ -1,4 +1,4 @@
-import type { CombatDamageDefenses, CombatDefinition } from '@ancadeba/schemas'
+import type { CombatDamageDefenses, CombatDefinition, CombatEquipment } from '@ancadeba/schemas'
 import { combatStatusAmount, type CombatStatuses } from './combatEffects.js'
 import { applyCombatPercent } from './combatValues.js'
 
@@ -13,6 +13,7 @@ export function combatDamageProfile(
   definition: CombatDefinition,
   actor: string,
   statuses: CombatStatuses = {},
+  equipment: CombatEquipment = {},
 ): CombatDamageProfile {
   const owner = [definition.player, ...definition.enemies].find((entry) => entry.id === actor)
 
@@ -39,6 +40,8 @@ export function combatDamageProfile(
   }
 
   add(owner.damageDefenses, (value) => value)
+
+  for (const entry of equipment[actor] ?? []) add(entry.effects.damageDefenses, (value) => value)
 
   for (const active of statuses[actor] ?? [])
     add(definition.statuses?.[active.id]?.damageDefenses, (value) =>

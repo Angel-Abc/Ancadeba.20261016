@@ -9,8 +9,11 @@ import type { IGameBindings } from './gameBindings.js'
 import type { IStateTransactions, StateWrite } from './stateTransactions.js'
 import type { InventoryItemSnapshot, InventoryEquipmentPreparation } from './inventory.js'
 import { temporaryCombatStats, type TemporaryStatContribution } from './combatEffects.js'
+import { combatOwnerEquipment } from './combatEquipment.js'
+import type { CombatEquippedEffects } from '@ancadeba/schemas'
 
 export interface CombatStatsSnapshot {
+  readonly equipmentEffects?: readonly CombatEquippedEffects[] | undefined
   readonly temporary: readonly TemporaryStatContribution[]
   readonly base: Readonly<CombatBonuses>
   readonly equipment: Readonly<CombatBonuses>
@@ -188,7 +191,17 @@ export class GameCombatStats implements IGameCombatStats {
       return
     }
 
-    const signature = JSON.stringify([base, contributions, temporary, health, lockedBy])
+    const equipmentEffects = combatOwnerEquipment(this.game.data.inventory, items, owner)
+
+    const signature = JSON.stringify([
+      base,
+      contributions,
+      equipmentEffects,
+      temporary,
+      health,
+      lockedBy,
+    ])
+
     let version = candidateHealth || !withTemporary ? undefined : this.versions.get(owner)
 
     if (!version || version.signature !== signature) {
@@ -198,6 +211,7 @@ export class GameCombatStats implements IGameCombatStats {
     }
 
     return Object.freeze({
+      ...(equipmentEffects.length ? { equipmentEffects } : {}),
       base: Object.freeze(base),
       equipment: Object.freeze(equipment),
       total: effective,

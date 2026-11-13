@@ -536,6 +536,7 @@ describe('underwater boss composition example', () => {
         view.rules!.state.find(
           (field) => JSON.stringify(field.path) === JSON.stringify(binding.path),
         )?.value,
+      view.inventory,
     )
 
     for (const scenario of Object.values(source.simulationScenarios!)) {

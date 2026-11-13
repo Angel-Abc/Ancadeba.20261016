@@ -1,4 +1,4 @@
-import type { CombatDefinition, CombatMoveDefinition } from '@ancadeba/schemas'
+import type { CombatDefinition, CombatMoveDefinition, CombatEquipment } from '@ancadeba/schemas'
 import type { CombatStatuses } from './combatEffects.js'
 
 export interface CombatRestrictionProfile {
@@ -11,13 +11,19 @@ export interface CombatMoveRestriction {
   readonly status?: string | undefined
 }
 
-function owners(definition: CombatDefinition, actor: string, statuses: CombatStatuses) {
+function owners(
+  definition: CombatDefinition,
+  actor: string,
+  statuses: CombatStatuses,
+  equipment: CombatEquipment = {},
+) {
   const owner = [definition.player, ...definition.enemies].find((entry) => entry.id === actor)
 
   if (!owner) throw new Error('Unknown restricted combat actor')
 
   return [
     { owner, status: undefined },
+    ...(equipment[actor] ?? []).map((entry) => ({ owner: entry.effects, status: undefined })),
     ...(statuses[actor] ?? []).flatMap((active) => {
       const status = definition.statuses?.[active.id]
 
@@ -31,8 +37,9 @@ export function combatRestrictionProfile(
   definition: CombatDefinition,
   actor: string,
   statuses: CombatStatuses = {},
+  equipment: CombatEquipment = {},
 ): CombatRestrictionProfile {
-  const entries = owners(definition, actor, statuses)
+  const entries = owners(definition, actor, statuses, equipment)
 
   return Object.freeze({
     statusImmunities: Object.freeze([
@@ -49,8 +56,9 @@ export function combatStatusImmune(
   actor: string,
   status: string,
   statuses: CombatStatuses = {},
+  equipment: CombatEquipment = {},
 ): boolean {
-  return owners(definition, actor, statuses).some(({ owner }) =>
+  return owners(definition, actor, statuses, equipment).some(({ owner }) =>
     owner.statusImmunities?.includes(status),
   )
 }
@@ -60,8 +68,9 @@ export function combatMoveRestriction(
   actor: string,
   move: CombatMoveDefinition,
   statuses: CombatStatuses = {},
+  equipment: CombatEquipment = {},
 ): CombatMoveRestriction | undefined {
-  for (const entry of owners(definition, actor, statuses)) {
+  for (const entry of owners(definition, actor, statuses, equipment)) {
     const category = move.categories?.find((category) =>
       entry.owner.blockedMoveCategories?.includes(category),
     )

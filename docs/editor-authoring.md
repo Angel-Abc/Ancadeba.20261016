@@ -1546,6 +1546,38 @@ wardrobe demonstrates larger artwork, two dyed cloaks for replacement, paper-dol
 updates, and Q/W equipment commands. Saves use the shared revision checks;
 conflicts and unrelated saves preserve item drafts until saved or discarded.
 
+### Equipment-granted combat mechanics
+
+In **Inventory definitions**, select an item type, or select it under **Item views
+and advanced settings**. Enable **Equipment combat mechanics**. Its equipped
+mechanics form edits typed damage defenses, status immunity IDs, blocked move
+categories, flat/percentage resource gain modifiers and shared move grants. Save
+with the containing inventory or item form. Disable the switch to remove all
+advanced mechanics; slot compatibility and flat equipment bonuses are separate.
+
+For a rebreather, add the `exhaustion` resource modifier with **Gain modifier (%)**
+`-50`, then grant the shared `environments/purge-valve` move. Set the actor's
+**Equipment owner** in Combat and give that owner's profile the same health
+binding. Only worn items contribute. Modifiers affect positive gains to resources
+owned by that actor, before threshold triggers; recovery and costs keep their
+normal values. Multiple items sum flats first, then percentages, rounding down.
+Damage defenses combine with actor/status defenses; grants keep normal costs,
+restrictions and cooldowns.
+
+Enable **Show combat stats** on equipment/item-details views to compare proposed
+mechanics before equipping. The combat view displays equipped mechanics and
+merged damage defenses. The engine and editor preview share these rules. Loadout
+locks apply until victory, defeat or escape, including when a fight is paused.
+
+In **Combat simulation**, **Starting equipment: actor / slot** offers the starting
+inventory, an empty slot, or a compatible item. Start/reset to apply the loadout;
+the move picker then includes equipped grants. Capture the simulation as a saved
+scenario, or use its current starting conditions to update an existing scenario.
+The saved `setup.loadout` stores item IDs and re-evaluates current gear definitions
+on replay. **Load scenario starting conditions** restores those selectors.
+The combat-mechanics sample includes a gear room and `diving-gear` /
+`rebreather-purge` scenarios in Water and Underwater boss.
+
 ## Shops and trading
 
 Choose **Shops & trading**, select a game scene, and add a shop. Choose the player
@@ -1794,3 +1826,127 @@ The basic sample demonstrates a localized curator survey. The graphics sample's
 ranger post demonstrates an exact-letter transfer, XP/level gains, and a dyed
 cloak reward. Repeatable or failed quests, branching quest stages, deadlines,
 procedural dialogue, type-matched hand-ins, and random quest rewards are deferred.
+
+## Action requirements on combat moves
+
+In **Combat**, open a move's **Action requirements** group and choose **Add action
+requirement**. The condition editor supports AND/OR/NOT, resource and health
+percentages, status stacks/intensity/remaining turns and boss phases. `self`
+means the move's user and `target` means its selected recipient. Several top-level
+requirements must all match. Use **Clear action requirements** to remove them.
+The same form is available for reusable moves in **Shared combat libraries**.
+Requirements travel with copied, imported and equipment-granted moves.
+
+Requirements gate the entire action. Conditional effects continue to gate only
+their individual effects. Resource requirements do not themselves pay a cost;
+use the separate resource-cost controls for payment. Planning accounts for
+reserved costs and does not assume a queued buff or gain will succeed. Resolve
+that setup action first, then queue the newly available move.
+
+Game action buttons explain unmet requirements in tooltips/accessibility text,
+including current values. The simulator shows the reason and disables Queue.
+At resolution, changed statuses, resources or phases can block an already queued
+move; its AP, costs, cooldown and item remain unspent. Failed actions and their
+condition evaluations appear in the action trace. Enemy decision traces also
+show move requirements separately from AI rule conditions. Saved scenario
+fail/skip policies cover both planning and execution failures.
+
+Try the combat-mechanics sample's harbour **Action requirements: Water** and
+**Action requirements: Underwater guardian** buttons. **A** builds Swimming rhythm,
+**S** queues Rhythm dive, and **B** resolves. Start with three rhythm stacks to
+retain two after the eel's disruption. The dive needs at least 20% stamina and
+no Exhausted status, then spends a stack. In the boss practice view, **Z** queues
+Seal release, gated by the third seal and either Current focus intensity 2 (**G**)
+or two rhythm stacks. Replay `rhythm-requirements`, `seal-release-ready` and
+`seal-release-locked` to inspect successful and unavailable actions.
+
+## Reusable combat passives
+
+In **Shared combat libraries**, open **Shared combat passives**, enter a **New
+passive ID** and choose **Add shared passive**. Edit its name, description,
+translations and trigger definitions with the existing structured event,
+condition and effect controls. `self` is the bearer. Passive trigger forms accept
+typed resource/phase/actor references because their encounter context is resolved
+when granted. Resource and phase declarations belong to the encounter/rulesets.
+Save with **Save combat library**.
+
+In item settings, enable **Equipment combat mechanics**, then use **Granted combat
+passives → Shared passive to grant → Grant shared passive**. Status settings have
+the same grant picker. Remove a reference or choose **Clear passive grants** to
+stop granting it. Composite statuses can have only passive effects, but still
+need at least one effect when saved. Save through the containing item, inventory
+or encounter/library form. Referenced definitions cannot be deleted until their
+grants are updated.
+
+Only equipped items and active statuses grant triggers. Each granting source
+reacts independently, while stacks/intensity do not multiply the number of
+executions. **Run once per encounter** remembers that individual item/status and
+trigger through save/load; reapplying the same status does not reset it. Removing
+or expiring a status prevents its future reactions. A matched trigger completes
+its own effect list. New grants do not react retroactively to earlier events.
+
+Equipment comparisons and status descriptions show passive names. Combat logs
+identify the passive and granting item/status. In **Combat simulation and
+debugging**, filter to event/trigger frames and inspect `passive` for source kind,
+actor, source ID, library and passive ID, alongside the tested conditions and
+actual damage/healing event. Saved loadouts and starting statuses exercise these
+same rules; replay after editing the shared definition to detect regressions.
+
+In the combat-mechanics sample, equip the **Tidal charm** in the gear room and
+enter either **Shared passives** practice view. **A** grants Conductive attunement;
+**X** queues Arc bolt; **B** resolves. The charm relieves exhaustion after water
+damage actually received. Attunement restores stamina from actual direct lightning
+damage and relieves exhaustion. In the underwater boss fight that damage also
+charges the existing seal gauge once. Replay `shared-passive-grants` and
+`passive-expiry` in both encounters.
+
+## Intercepting damage and healing
+
+In an encounter's **Mechanics**, a reusable ruleset, or **Shared combat passives**,
+add a trigger and select **Pending damage** or **Pending healing** as its event.
+The same structured trigger editor supports both. Set target/source filters to
+limit the affected packets; a shared passive can select `self` for its bearer.
+
+Choose one of the pending effect types:
+
+- **Adjust pending effect**: edit **Pending amount adjustment** and optional
+  **Pending adjustment (%)**. The flat adjustment happens first; -100% cancels
+  the packet. Both damage and healing can be adjusted.
+- **Absorb damage with a resource**: select the resource and optionally set
+  **Maximum per effect (empty = unlimited)**. Resource units pay for absorption
+  one-for-one after defense and Guard.
+- **Redirect pending damage**: choose **Redirect recipient**, **Damage redirected (%)**
+  and optional maximum. Recipient defenses and shields still apply. Redirected
+  packets cannot redirect again.
+- **Prevent a lethal hit**: edit **Minimum surviving health**. Add an event-flag
+  condition for **Lethal** = true and enable **Once** for once-per-fight protection.
+
+The event picker limits the effect and condition fields to valid combinations.
+Healing has adjustment only; damage-only operations are unavailable there.
+Pending hooks cannot apply HP damage/healing or finish combat directly. Existing
+resource, status and phase effects remain available. Switching effect types
+clears obsolete fields while preserving extension data on save.
+
+Use **Include reaction effects** to control protection against reactions and
+redirected packets; pending hooks include these by default. Ordinary resolved
+reactions keep their existing default. Event conditions expose pending **Amount**,
+**Incoming amount**, shield **Absorbed**, lethal **Prevented**, **Redirected amount**
+and flags for lethal/redirected damage. Later triggers see earlier adjustments.
+Resolved events continue to expose actual HP changes.
+
+Save the library/encounter, grant the passive through a status or equipment, and
+open **Combat simulation and debugging**. Replay a saved scenario, filter the
+trace to mechanics, then select an `absorb-damage`, `redirect-damage`,
+`prevent-lethal` or `adjust-effect` step. Its `interception` details show before,
+after, shield resource/spending or redirect recipient; source passive details
+identify the granting item/status. Live combat previews display a notice that
+interception is applied during resolution.
+
+In the combat-mechanics sample, open either **Interception** view from the
+harbour or gear room. **A** raises a stamina-funded air barrier, **F** applies
+Waterlogged, **S** heals, and **B** resolves. Equip the **Rescue charm** in the
+gear room before entering for lethal protection. In the underwater boss view,
+**Z** awakens the guardian's conduit and **X** fires Arc bolt. Replay
+`intercept-shield`, `intercept-healing` and `intercept-last-breath` in both
+encounters, and `intercept-conduit` for the underwater boss. The latter confirms
+9 actual guardian damage and 9 seal charge after half the bolt redirects.

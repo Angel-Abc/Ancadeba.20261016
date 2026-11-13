@@ -1,3 +1,4 @@
+import { combatEquipmentFor, combatActorMoves } from './combatEquipment.js'
 import {
   combatStatNames,
   type CombatDefinition,
@@ -17,6 +18,7 @@ export function combatSimulationSetup(
   const health: Record<string, number> = {}
   const maximumHealth: Record<string, number> = {}
   const stats: Record<string, CombatBonuses> = {}
+  const baseStats: Record<string, CombatBonuses> = {}
 
   const number = (source: number | GameBindingDefinition) => {
     const value = typeof source === 'number' ? source : read(source)
@@ -41,9 +43,11 @@ export function combatSimulationSetup(
       if (JSON.stringify(profile.health.path) !== JSON.stringify(actor.health.path))
         throw new Error(`Equipment health binding differs: ${actor.id}`)
       const total: CombatBonuses = { attack: 0, defense: 0, guard: 0, maximumHealth: 0 }
+      const base: CombatBonuses = { ...total }
 
       for (const stat of combatStatNames) {
         total[stat] = number(profile[stat])
+        base[stat] = total[stat]
 
         for (const item of Object.values(inventory?.items ?? {}))
           if (item.placement.type === 'equipped' && item.placement.owner === actor.equipmentOwner)
@@ -54,6 +58,7 @@ export function combatSimulationSetup(
       }
 
       stats[actor.id] = total
+      baseStats[actor.id] = base
       maximumHealth[actor.id] = total.maximumHealth
     } else maximumHealth[actor.id] = number(actor.maximumHealth)
   }
@@ -61,11 +66,17 @@ export function combatSimulationSetup(
   if (definition.player.leveling && (!Number.isSafeInteger(level) || level! < 1))
     throw new Error('Simulation requires a resolved character level')
 
+  const equipment = combatEquipmentFor(definition, inventory)
+
   return {
+    ...(inventory && Object.keys(baseStats).length
+      ? { equipmentContext: { inventory, baseStats, level } }
+      : {}),
+    ...(Object.keys(equipment).length ? { equipment } : {}),
     health,
     maximumHealth,
     stats,
-    availableMoves: definition.player.moves.filter(
+    availableMoves: combatActorMoves(definition.player, equipment).filter(
       (id) => !definition.player.leveling || (definition.player.moveLevels?.[id] ?? 1) <= level!,
     ),
   }

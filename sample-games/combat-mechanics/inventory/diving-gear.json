@@ -1,0 +1,108 @@
+{
+  "schema-version": "1.0.0",
+  "owners": {
+    "diver": {
+      "label": "Diver",
+      "equipmentSlots": {
+        "body": "Body",
+        "back": "Back",
+        "charm": "Charm"
+      },
+      "combatStats": {
+        "health": {
+          "source": "game.state",
+          "path": ["player-health"]
+        },
+        "maximumHealth": 80
+      }
+    }
+  },
+  "itemTypes": {
+    "diving-suit": {
+      "label": "Diving suit",
+      "description": "While equipped: 25% water resistance. Adds to the underwater guardian encounter’s innate 50% resistance.",
+      "equipmentSlots": ["body"],
+      "combatEffects": {
+        "damageDefenses": {
+          "resistances": {
+            "water": 25
+          }
+        }
+      }
+    },
+    "rebreather": {
+      "label": "Rebreather",
+      "description": "While equipped: halve positive exhaustion gains, rounding down. Grants Purge valve (1 AP, 5 stamina) to recover 20 exhaustion. Recovery and action costs remain unchanged.",
+      "equipmentSlots": ["back"],
+      "combatEffects": {
+        "resourceGains": {
+          "exhaustion": {
+            "percent": -50
+          }
+        },
+        "grantedMoves": [
+          {
+            "library": "environments",
+            "id": "purge-valve"
+          }
+        ]
+      }
+    },
+    "tidal-charm": {
+      "label": "Tidal charm",
+      "description": "While equipped, grants Tidal relief: after water damage actually received, recover 3 exhaustion. Carried charms grant no passive.",
+      "equipmentSlots": ["charm"],
+      "combatEffects": {
+        "passives": [
+          {
+            "library": "environments",
+            "id": "tidal-relief"
+          }
+        ]
+      }
+    },
+    "rescue-charm": {
+      "label": "Rescue charm",
+      "description": "While equipped: once per encounter, survive a lethal damage effect with at least 1 HP. Shares the charm slot with the Tidal charm.",
+      "equipmentSlots": ["charm"],
+      "combatEffects": {
+        "passives": [
+          {
+            "library": "environments",
+            "id": "rescue-instinct"
+          }
+        ]
+      }
+    }
+  },
+  "items": {
+    "diving-suit": {
+      "itemType": "diving-suit",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    },
+    "rebreather": {
+      "itemType": "rebreather",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    },
+    "tidal-charm": {
+      "itemType": "tidal-charm",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    },
+    "rescue-charm": {
+      "itemType": "rescue-charm",
+      "placement": {
+        "type": "carried",
+        "owner": "diver"
+      }
+    }
+  }
+}

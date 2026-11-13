@@ -1,3 +1,4 @@
+import { combatPassiveReceiptSchema } from './combatPassiveReferences.js'
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
@@ -37,9 +38,46 @@ export const combatResourceSchema = z
 export const combatTriggerConditionSchema = combatConditionSchema
 
 const conditional = { conditions: z.array(combatConditionSchema).max(20).optional() }
+
+const percent = z
+  .number()
+  .finite()
+  .min(-100)
+  .max(1000)
+  .refine(
+    (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+    'Use at most two decimal places',
+  )
+
 const eventAmount = { eventValue: combatEventValueSchema.optional() }
 
 export const combatTriggerEffectSchema = z.discriminatedUnion('type', [
+  z.object({
+    ...conditional,
+    type: z.literal('adjust-effect'),
+    amount: z.number().int().safe().default(0),
+    percent: percent.optional(),
+  }),
+  z.object({
+    ...conditional,
+    type: z.literal('absorb-damage'),
+    resource: id,
+    maximum: amount.positive().optional(),
+  }),
+  z.object({
+    ...conditional,
+    type: z.literal('redirect-damage'),
+    actor: combatEffectActorSchema,
+    percent: percent
+      .refine((value) => value >= 0 && value <= 100, 'Redirect percentage must be 0–100')
+      .default(100),
+    maximum: amount.positive().optional(),
+  }),
+  z.object({
+    ...conditional,
+    type: z.literal('prevent-lethal'),
+    minimumHealth: amount.positive().default(1),
+  }),
   z.object({
     ...conditional,
     type: z.literal('change-resource'),
@@ -126,6 +164,8 @@ export const combatTriggerSchema = z.object({
   effects: z.array(combatTriggerEffectSchema).min(1).max(20),
 })
 
+export type CombatTriggerDefinition = z.infer<typeof combatTriggerSchema>
+
 export const combatPhaseSchema = z.object({
   ...presentation,
   onEnter: z.array(combatTriggerEffectSchema).max(20).default([]),
@@ -170,6 +210,7 @@ export type CombatTriggerEvent = (typeof combatTriggerEvents)[number]
 
 /** Encounter-local state, saved independently of authored definitions and world state. */
 export const combatMechanicsStateSchema = z.strictObject({
+  passiveFired: z.array(combatPassiveReceiptSchema).max(10000).optional(),
   resources: z.record(id, amount),
   phase: id.optional(),
   fired: z.array(id).max(100),

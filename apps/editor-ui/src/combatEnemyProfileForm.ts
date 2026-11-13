@@ -1,5 +1,6 @@
 import {
   resolveCombatEnemyAI,
+  combatEquipmentMoveReferences,
   resolveCombatSource,
   cloneCombatRules,
   diffCombatAI,
@@ -25,6 +26,16 @@ export function combatEnemyProfileForm(
   const text = (key: string) => t(`combat.aiProfiles.${key}`)
   const libraries = new Map(Object.entries(view.combatLibraries ?? {}))
   const actors = [draft.player, ...draft.enemies]
+
+  const availableMoves = [
+    ...new Set([
+      ...enemy.moves,
+      ...combatEquipmentMoveReferences(view.inventory, enemy.equipmentOwner).map(
+        (reference) => reference.id,
+      ),
+    ]),
+  ]
+
   const reference = enemy.aiProfile
   const resolved = resolveCombatEnemyAI(enemy, actors, libraries)
   const profile = reference && libraries.get(reference.library)?.aiProfiles?.[reference.id]
@@ -97,7 +108,7 @@ export function combatEnemyProfileForm(
     return group(
       text('encounter'),
       picker,
-      combatEnemyAIForm(controls, enemy, actors, mechanics, statuses, render),
+      combatEnemyAIForm(controls, enemy, actors, mechanics, statuses, render, { availableMoves }),
     )
   const help = create('p')
   help.textContent = text('inheritHelp')
@@ -208,6 +219,7 @@ export function combatEnemyProfileForm(
     ...settings,
     reset,
     combatEnemyAIForm(local, editable, actors, mechanics, statuses, localRender, {
+      availableMoves,
       allowRemoval: false,
     }),
   )

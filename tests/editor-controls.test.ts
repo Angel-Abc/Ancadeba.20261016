@@ -4081,6 +4081,305 @@ describe('editor draft workflows', () => {
     }
   }
 
+  it('edits shield, redirect, lethal and healing interception effects in the shared trigger editor', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat library', 'environments')
+    ui.edit('Maximum per effect (empty = unlimited)', '6', 'Passive: air-barrier')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['air-barrier']!.triggers.absorb!
+        .effects[0],
+    ).toMatchObject({ type: 'absorb-damage', resource: 'stamina', maximum: 6 })
+    ui.edit('Effect type', 'redirect-damage', 'Passive: air-barrier')
+    ui.edit('Redirect recipient', 'event.source', 'Passive: air-barrier')
+    ui.edit('Damage redirected (%)', '25', 'Passive: air-barrier')
+    ui.edit('Maximum per effect (empty = unlimited)', '3', 'Passive: air-barrier')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['air-barrier']!.triggers.absorb!
+        .effects[0],
+    ).toMatchObject({ type: 'redirect-damage', actor: 'event.source', percent: 25, maximum: 3 })
+    ui.edit('Effect type', 'prevent-lethal', 'Passive: air-barrier')
+    ui.edit('Minimum surviving health', '2', 'Passive: air-barrier')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['air-barrier']!.triggers.absorb!
+        .effects[0],
+    ).toEqual({ type: 'prevent-lethal', minimumHealth: 2 })
+    ui.edit('Event', 'healing-pending', 'Passive: air-barrier')
+    ui.edit('Effect type', 'adjust-effect', 'Passive: air-barrier')
+    ui.edit('Pending amount adjustment', '-2', 'Passive: air-barrier')
+    ui.edit('Pending adjustment (%)', '-50', 'Passive: air-barrier')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['air-barrier']!.triggers.absorb!
+        .effects[0],
+    ).toEqual({ type: 'adjust-effect', amount: -2, percent: -50 })
+    expect(
+      ui
+        .field('Effect type', 'Passive: air-barrier')
+        .children.some((option) => option.value === 'absorb-damage'),
+    ).toBe(false)
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('replays interception examples and inspects shield spending and redirected damage before HP resolution', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Simulation scenario', 'intercept-shield')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('intercept-shield: Passed')
+    ui.edit('Trace filter', 'mechanics')
+
+    let option = [...ui.field('Inspect trace step').children]
+      .reverse()
+      .find((option) => option.textContent.includes('absorb-damage'))!
+
+    ui.edit('Inspect trace step', option.value)
+    expect(ui.root.textContent).toContain('"interception"')
+    expect(ui.root.textContent).toContain('"spent": 2')
+    ui.edit('Simulation scenario', 'intercept-last-breath')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('intercept-last-breath: Passed')
+    ui.edit('Combat encounter', 'underwater-boss')
+    ui.edit('Simulation scenario', 'intercept-conduit')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('intercept-conduit: Passed')
+    option = [...ui.field('Inspect trace step').children]
+      .reverse()
+      .find((option) => option.textContent.includes('redirect-damage'))!
+    ui.edit('Inspect trace step', option.value)
+    expect(ui.root.textContent).toContain('"redirectTarget": "player"')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors reusable passive triggers and grants them from statuses with structured controls', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat library', 'environments')
+    ui.edit('New passive ID', 'guard-relief')
+    ui.click('Add shared passive')
+    ui.edit('Event', 'turn-end', 'Passive: guard-relief')
+    ui.edit('Amount', '-2', 'Passive: guard-relief')
+    ui.edit('Run once per encounter', 'true', 'Passive: guard-relief')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(
+      ui.read().combatLibraries!.environments!.passives!['guard-relief']!.triggers.recover,
+    ).toMatchObject({
+      event: 'turn-end',
+      actor: 'self',
+      once: true,
+      effects: [{ type: 'change-resource', resource: 'exhaustion', amount: -2 }],
+    })
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Shared passive to grant', 'environments/guard-relief', 'Status: flow')
+
+    const grant = () =>
+      ui.root
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some(
+              (child) => child.tagName === 'legend' && child.ownText === 'Status: flow',
+            ),
+        )!
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Grant shared passive')!
+        .dispatchEvent(new Event('click'))
+
+    grant()
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.water!.statuses!.flow!.passives).toEqual([
+      { library: 'environments', id: 'guard-relief' },
+    ])
+    expect(ui.read().combat!.water!.passiveDefinitions!.environments!['guard-relief']).toBeDefined()
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('edits equipment passive grants and detects shared passive regressions in saved scenarios', async () => {
+    const source = await simulationProject()
+    const item = await connected(bindItemEditor, source)
+    item.edit('Item editing target', 'item:tidal-charm')
+    item.edit('Shared passive to grant', 'environments/current-reserve')
+    item.click('Grant shared passive')
+    item.submit('Save items and equipment')
+    await item.flush()
+    expect(item.read().inventory!.itemTypes['tidal-charm']!.combatEffects!.passives).toHaveLength(2)
+    item.click('Clear passive grants')
+    item.submit('Save items and equipment')
+    await item.flush()
+    expect(item.read().inventory!.itemTypes['tidal-charm']!.combatEffects!.passives).toBeUndefined()
+    const ui = await connected(bindCombatEditor, source)
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Simulation scenario', 'shared-passive-grants')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('shared-passive-grants: Passed')
+    ui.edit('Combat library', 'environments')
+    ui.edit('Amount', '1', 'Passive: current-reserve')
+    ui.submit('Save combat library')
+    await ui.flush()
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('shared-passive-grants: Failed checks')
+    ui.edit('Amount', '0', 'Passive: current-reserve')
+    ui.submit('Save combat library')
+    await ui.flush()
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('shared-passive-grants: Passed')
+    ui.edit('Trace filter', 'mechanics')
+    expect(ui.root.textContent).toContain('current-reserve')
+    expect(ui.root.textContent).toContain('conductive-attunement')
+    ui.edit('Combat encounter', 'underwater-boss')
+    ui.edit('Simulation scenario', 'shared-passive-grants')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('shared-passive-grants: Passed')
+  })
+
+  it('authors and clears nested action requirements in encounter and shared move editors', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+    ui.click('Add action requirement')
+    ui.edit('Resource', 'stamina', 'Move: jab')
+    ui.edit('Value', '20', 'Move: jab')
+    ui.edit('Threshold unit', 'percent', 'Move: jab')
+    ui.edit('Condition type', 'and', 'Move: jab')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.water!.moves.jab!.requirements).toEqual([
+      {
+        type: 'and',
+        conditions: [
+          { type: 'resource', resource: 'stamina', operator: 'gte', value: 20, unit: 'percent' },
+        ],
+      },
+    ])
+    ui.click('Clear action requirements')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.water!.moves.jab!.requirements).toBeUndefined()
+    ui.edit('Combat library', 'environments')
+    ui.root
+      .all()
+      .find(
+        (node) =>
+          node.tagName === 'fieldset' &&
+          node.children.some(
+            (child) => child.tagName === 'legend' && child.ownText === 'Move: pulse',
+          ),
+      )!
+      .all()
+      .find((node) => node.tagName === 'button' && node.textContent === 'Add action requirement')!
+      .dispatchEvent(new Event('click'))
+    ui.edit('Condition type', 'status', 'Move: pulse')
+    ui.edit('Status', 'flow', 'Move: pulse')
+    ui.edit('Status measure', 'intensity', 'Move: pulse')
+    ui.edit('Value', '2', 'Move: pulse')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().combatLibraries!.environments!.moves.pulse!.requirements).toEqual([
+      {
+        type: 'status',
+        actor: 'self',
+        status: 'flow',
+        measure: 'intensity',
+        operator: 'gte',
+        value: 2,
+      },
+    ])
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('explains locked simulation moves and replays requirement scenarios from both battles', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+    ui.click('Start/reset simulation')
+    ui.edit('Simulation move', 'rhythm-dive')
+    expect(ui.root.textContent).toContain('Rhythm dive unavailable')
+    expect(
+      ui.root
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === 'Queue simulation move')!
+        .disabled,
+    ).toBe(true)
+    ui.edit('Simulation scenario', 'rhythm-requirements')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('rhythm-requirements: Passed')
+    ui.edit('Trace filter', 'action')
+    const selector = ui.field('Inspect trace step')
+    const rejected = selector.children.find((option) => option.textContent.includes('rhythm-dive'))!
+    ui.edit('Inspect trace step', rejected.value)
+    expect(ui.root.textContent).toContain('requirementsUnavailable')
+    ui.edit('Combat encounter', 'underwater-boss')
+    ui.edit('Simulation scenario', 'seal-release-ready')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('seal-release-ready: Passed')
+    ui.edit('Simulation scenario', 'seal-release-locked')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('seal-release-locked: Passed')
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('edits equipment defenses, restrictions, exhaustion modifiers and shared grants without raw JSON', async () => {
+    const ui = await connected(bindItemEditor, await simulationProject())
+    ui.edit('Item editing target', 'item:diving-suit')
+    ui.edit('Resistance (%)', '40', 'Damage type: water')
+    ui.edit('Modified resource ID', 'exhaustion')
+    ui.click('Add resource gain modifier')
+    ui.edit('Gain modifier (%)', '-25')
+    ui.edit('Status immunity IDs (comma-separated)', 'silenced')
+    ui.edit('Blocked move categories (comma-separated)', 'weapon')
+    ui.edit('Shared move to grant', 'environments/purge-valve')
+    ui.click('Grant shared move')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.read().inventory!.itemTypes['diving-suit']!.combatEffects).toMatchObject({
+      damageDefenses: { resistances: { water: 40 } },
+      resourceGains: { exhaustion: { percent: -25 } },
+      statusImmunities: ['silenced'],
+      blockedMoveCategories: ['weapon'],
+      grantedMoves: [{ library: 'environments', id: 'purge-valve' }],
+    })
+    expect(ui.read().diagnostics).toEqual([])
+    ui.edit('Equipment combat mechanics', 'disabled')
+    ui.submit('Save items and equipment')
+    await ui.flush()
+    expect(ui.read().inventory!.itemTypes['diving-suit']!.combatEffects).toBeUndefined()
+    expect(ui.read().inventory!.itemTypes['diving-suit']!.equipmentSlots).toEqual(['body'])
+  })
+
+  it('selects simulation gear, captures the loadout and replays saved equipment scenarios', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Starting equipment: player / body', 'diving-suit')
+    ui.edit('Starting equipment: player / back', 'rebreather')
+    ui.edit('Starting resource · exhaustion', '50')
+    ui.click('Start/reset simulation')
+    ui.edit('Simulation move', 'purge-valve')
+    ui.click('Queue simulation move')
+    ui.click('Resolve simulation round')
+    ui.edit('New scenario ID', 'gear-check')
+    ui.click('Capture simulation as new scenario')
+    ui.click('Capture expected final state')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(
+      ui.read().combatSources!.water!.simulationScenarios!['gear-check']!.setup.loadout,
+    ).toEqual({ player: { body: 'diving-suit', back: 'rebreather' } })
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('gear-check: Passed')
+    ui.click('Load scenario starting conditions')
+    expect(ui.field('Starting equipment: player / back').value).toBe('rebreather')
+    ui.edit('Simulation scenario', 'diving-gear')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('diving-gear: Passed')
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
   it('simulates water exhaustion and stack decisions without changing documents or marking drafts', async () => {
     const source = await simulationProject()
     const before = JSON.stringify(source)

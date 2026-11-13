@@ -1,4 +1,9 @@
-import type { CombatMechanicsState, CombatEffectEventData } from '@ancadeba/schemas'
+import type { CombatInterceptionChange } from './combatInterception.js'
+import type {
+  CombatMechanicsState,
+  CombatEffectEventData,
+  CombatPassiveSource,
+} from '@ancadeba/schemas'
 import type { CombatCooldowns, CombatStatuses } from './combatEffects.js'
 import type { CombatLogEntry, CombatOutcome, PlannedMove } from './combatResolution.js'
 import type { CombatConditionEvaluation } from './combatConditions.js'
@@ -14,8 +19,11 @@ export type EnemyBlocker =
   | 'reserved'
   | 'resource'
   | 'restriction'
+  | 'equipment'
+  | 'requirements'
 
 export interface EnemyCandidateTrace {
+  readonly requirements?: readonly CombatConditionEvaluation[] | undefined
   readonly restriction?: CombatMoveRestriction | undefined
   readonly kind: 'rule' | 'rotation'
   readonly rule?: string | undefined
@@ -46,6 +54,8 @@ export interface EnemyDecisionTrace {
 }
 
 export interface CombatMechanicsTrace {
+  readonly interception?: CombatInterceptionChange | undefined
+  readonly passive?: CombatPassiveSource | undefined
   readonly source?: string | undefined
   readonly effect?: CombatEffectEventData | undefined
   readonly event: string
@@ -60,6 +70,7 @@ export interface CombatMechanicsTrace {
 }
 
 export interface CombatDebugFrame {
+  readonly requirements?: readonly CombatConditionEvaluation[] | undefined
   readonly kind:
     | 'round-start'
     | 'turn-start'

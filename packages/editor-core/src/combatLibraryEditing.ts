@@ -1,3 +1,4 @@
+import { mergeCombatPassives } from './combatPassiveEditing.js'
 import {
   combatFile,
   combatLibraryFile,
@@ -59,6 +60,13 @@ export function editCombatLibrary(
         'Include aiProfiles explicitly when saving a library that contains them',
       )
 
+    if (Object.keys(object(previous.passives)).length && library.passives === undefined)
+      throw new EditorError(
+        422,
+        'passives_required',
+        'Include passives explicitly when saving a library that contains them',
+      )
+
     if (Object.keys(object(previous.rulesets)).length && library.rulesets === undefined)
       throw new EditorError(
         422,
@@ -78,6 +86,7 @@ export function editCombatLibrary(
       ...previous,
       ...library,
       ...mergeCombatEntries(previous, library),
+      passives: mergeCombatPassives(previous.passives, library.passives),
       rulesets: mergeCombatRulesets(previous.rulesets, library.rulesets),
       aiProfiles: mergeCombatAIProfiles(previous.aiProfiles, library.aiProfiles),
     }

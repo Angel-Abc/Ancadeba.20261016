@@ -521,6 +521,7 @@ export function bindItemEditor(
           itemType: target.slice(5),
           presentation: item,
           combatBonuses: item.combatBonuses ?? null,
+          combatEffects: item.combatEffects ?? null,
           use: item.use ?? null,
         })
       else if (slots) {

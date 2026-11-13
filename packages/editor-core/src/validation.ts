@@ -433,7 +433,10 @@ export function validateProject(
 
           if (
             view?.type !== 'combat' ||
-            !combats.get(view.encounter)?.player.moves.includes(action.command.move)
+            ![
+              ...(combats.get(view.encounter)?.player.moves ?? []),
+              ...(combats.get(view.encounter)?.player.equipmentMoves ?? []),
+            ].includes(action.command.move)
           )
             diagnostics.push({
               code: 'invalid_combat',

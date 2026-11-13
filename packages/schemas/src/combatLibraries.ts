@@ -1,3 +1,12 @@
+import {
+  combatPassiveSchema,
+  combatPassiveLibraryIssues,
+  type CombatPassiveDefinitions,
+} from './combatPassives.js'
+import {
+  combatEquipmentMoveReferences,
+  combatEquipmentPassiveReferences,
+} from './combatEquipment.js'
 import { combatMoveScalings, combatScalingIssues } from './combatValues.js'
 import { combatStatusImmunityIssues } from './combatRestrictions.js'
 import { combatConditionIssues, visitCombatCondition } from './combatConditions.js'
@@ -125,6 +134,11 @@ export const combatSourceSchema = combatFieldsSchema
 export function moveStatusIds(move: CombatMoveDefinition): string[] {
   const ids = new Set<string>()
 
+  for (const condition of move.requirements ?? [])
+    visitCombatCondition(condition, (leaf) => {
+      if ('status' in leaf) ids.add(leaf.status)
+    })
+
   for (const { scaling } of combatMoveScalings(move))
     for (const term of scaling.terms) if (term.type === 'status') ids.add(term.status)
 
@@ -147,6 +161,13 @@ export const combatLibrarySchema = z
     id: gameIdSchema,
     moves: z.record(entryId, combatMoveSchema).default({}),
     statuses: z.record(entryId, combatStatusSchema).default({}),
+    passives: z
+      .record(entryId, combatPassiveSchema)
+      .refine(
+        (entries) => Object.keys(entries).length <= 100,
+        'At most 100 passives per library are supported',
+      )
+      .optional(),
     rulesets: z
       .record(entryId, combatRulesetSchema)
       .refine((entries) => Object.keys(entries).length <= 100, 'At most 100 rulesets are supported')
@@ -160,11 +181,28 @@ export const combatLibrarySchema = z
       .optional(),
   })
   .superRefine((library, context) => {
+    for (const [id, passive] of Object.entries(library.passives ?? {}))
+      for (const issue of combatPassiveLibraryIssues(passive, library.moves, library.statuses))
+        context.addIssue({
+          code: 'custom',
+          path: ['passives', id, ...issue.path],
+          message: issue.message,
+        })
+
     for (const [id, status] of Object.entries(library.statuses))
       for (const issue of combatStatusImmunityIssues(status, library.statuses, ['statuses', id]))
         context.addIssue({ code: 'custom', ...issue })
 
     for (const [id, move] of Object.entries(library.moves)) {
+      for (const [index, condition] of (move.requirements ?? []).entries())
+        for (const issue of combatConditionIssues(condition, { statuses: library.statuses }, [
+          'moves',
+          id,
+          'requirements',
+          index,
+        ]))
+          context.addIssue({ code: 'custom', ...issue })
+
       for (const resource of Object.keys(move.resourceCostScaling ?? {}))
         if (!Object.hasOwn(move.resourceCosts ?? {}, resource))
           context.addIssue({
@@ -454,6 +492,26 @@ export function resolveCombatSource(
     else addMove(use.ability, path, true)
   }
 
+  const equipmentMoves = new Map<string, string[]>()
+
+  for (const [actorIndex, actor] of [source.player, ...source.enemies].entries()) {
+    if (!actor.equipmentOwner) continue
+    const ids = new Set<string>()
+
+    for (const reference of combatEquipmentMoveReferences(inventory, actor.equipmentOwner)) {
+      ids.add(reference.id)
+      addMove(
+        reference,
+        actorIndex === 0
+          ? ['player', 'equipmentOwner']
+          : ['enemies', actorIndex - 1, 'equipmentOwner'],
+        true,
+      )
+    }
+
+    if (ids.size) equipmentMoves.set(actor.id, [...ids])
+  }
+
   const enemies = source.enemies.map((enemy, index) => {
     const resolved = resolveCombatEnemyAI(enemy, [source.player, ...source.enemies], libraries)
 
@@ -516,7 +574,7 @@ export function resolveCombatSource(
       }
     }
 
-    return { ...enemy, ai: resolved.ai }
+    return { ...enemy, ai: resolved.ai, equipmentMoves: equipmentMoves.get(enemy.id) }
   })
 
   const references = combatRulesetReferences(source)
@@ -610,8 +668,96 @@ export function resolveCombatSource(
       for (const move of actor.moves) requireEntry('moves', move)
   }
 
+  const passiveDefinitions: CombatPassiveDefinitions = {}
+  const pending = Object.values(statuses).flatMap((status) => status.passives ?? [])
+
+  for (const actor of [source.player, ...source.enemies])
+    pending.push(...combatEquipmentPassiveReferences(inventory, actor.equipmentOwner))
+  const seenPassives = new Set<string>()
+
+  while (pending.length) {
+    const reference = pending.shift()!
+    const identity = `${reference.library}/${reference.id}`
+
+    if (seenPassives.has(identity)) continue
+    seenPassives.add(identity)
+
+    if (seenPassives.size > 1000) {
+      issues.push({
+        file,
+        path: ['passiveDefinitions'],
+        message: 'Passive dependency limit exceeded',
+      })
+      break
+    }
+
+    const passive = libraries.get(reference.library)?.passives?.[reference.id]
+
+    if (!passive) {
+      issues.push({
+        file,
+        path: ['passiveDefinitions'],
+        message: `Missing shared passive: ${identity}`,
+      })
+      continue
+    }
+
+    ;(passiveDefinitions[reference.library] ??= {})[reference.id] = passive
+
+    const dependencies = combatRulesetDependencies({
+      resources: {},
+      phases: {},
+      triggers: passive.triggers,
+      victory: 'enemies-defeated',
+    })
+
+    const checkProvider = (kind: 'moves' | 'statuses', id: string) => {
+      const previous = origins[kind][id]
+
+      if (previous?.library && previous.library !== reference.library)
+        issues.push({
+          file,
+          path: ['passiveDefinitions', reference.library, reference.id],
+          message: `Passive ${identity} requires ${kind} ${id} from ${reference.library}, conflicting with ${previous.file}`,
+        })
+    }
+
+    for (const kind of ['moves', 'statuses'] as const)
+      for (const id of dependencies[kind]) {
+        checkProvider(kind, id)
+
+        if (kind === 'moves') {
+          if (!Object.hasOwn(moves, id))
+            addMove(
+              { library: reference.library, id },
+              ['passiveDefinitions', reference.library, reference.id],
+              true,
+              true,
+            )
+
+          if (origins.moves[id]?.library === reference.library)
+            for (const status of moveStatusIds(moves[id]!)) checkProvider('statuses', status)
+        } else if (!Object.hasOwn(statuses, id))
+          addStatus({ library: reference.library, id }, [
+            'passiveDefinitions',
+            reference.library,
+            reference.id,
+          ])
+      }
+
+    for (const status of Object.values(statuses))
+      for (const reference of status.passives ?? [])
+        if (
+          !seenPassives.has(`${reference.library}/${reference.id}`) &&
+          !pending.some((entry) => entry.library === reference.library && entry.id === reference.id)
+        )
+          pending.push(reference)
+  }
+
   const resolved = combatDefinitionSchema.safeParse({
     ...source,
+    passiveDefinitions: Object.keys(passiveDefinitions).length ? passiveDefinitions : undefined,
+    player: { ...source.player, equipmentMoves: equipmentMoves.get(source.player.id) },
     enemies,
     moves,
     statuses,
@@ -668,6 +814,7 @@ export function localizeCombatLibrary(
       moves: entries(library.moves),
       statuses: entries(library.statuses),
       ...(library.aiProfiles && { aiProfiles: entries(library.aiProfiles) }),
+      ...(library.passives && { passives: entries(library.passives) }),
       ...(library.rulesets && {
         rulesets: Object.fromEntries(
           Object.entries(entries(library.rulesets)).map(([id, ruleset]) => [

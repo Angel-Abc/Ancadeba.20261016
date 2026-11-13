@@ -1,3 +1,4 @@
+import { combatPassiveReferencesSchema } from './combatPassiveReferences.js'
 import { combatDamageTypeSchema, combatDamageDefensesSchema } from './combatDamage.js'
 import { combatRestrictionFields } from './combatRestrictions.js'
 import { combatScalingSchema, combatPercentModifiersSchema } from './combatValues.js'
@@ -81,6 +82,7 @@ export const abilityEffectSchema = z.discriminatedUnion('type', [
 ])
 
 const presentation = {
+  passives: combatPassiveReferencesSchema.optional(),
   label: z.string().default(''),
   labelKey: translationKeySchema.optional(),
   description: z.string().default(''),
@@ -141,7 +143,8 @@ export const combatStatusSchema = z
           status.damageDefenses !== undefined ||
           status.statusImmunities !== undefined ||
           status.blockedMoveCategories !== undefined ||
-          status.stun === true,
+          status.stun === true ||
+          Boolean(status.passives?.length),
         'Choose at least one composite status effect',
       ),
   ])

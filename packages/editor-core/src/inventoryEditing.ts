@@ -17,6 +17,7 @@ import {
 } from '@ancadeba/schemas'
 import { EditorError, object } from './project.js'
 import type { EditorCommand } from './commands.js'
+import { mergeEquipmentCombatEffects } from './equipmentCombatEditing.js'
 
 // null denotes an ID dictionary: removed entries must not be restored as extensions.
 const fields = new Map<string, readonly string[] | null>([
@@ -75,6 +76,14 @@ type InventoryValue =
 
 /** Keep extensions at stable entry/property IDs while dropping removed entries and optional fields. */
 function merge(previous: unknown, next: unknown, path: string[] = []): InventoryValue {
+  if (path.length === 3 && path[0] === 'itemTypes' && path[2] === 'combatEffects')
+    return mergeEquipmentCombatEffects(
+      previous,
+      next && typeof next === 'object'
+        ? inventoryItemTypeSchema.shape.combatEffects.unwrap().parse(next)
+        : undefined,
+    )
+
   if (Array.isArray(next)) {
     const before = Array.isArray(previous) ? previous : []
 

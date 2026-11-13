@@ -191,3 +191,11 @@ export * from './combatDamage.js'
 export * from './combatEventValues.js'
 
 export * from './combatRestrictions.js'
+
+export * from './combatEquipment.js'
+
+export * from './combatRequirements.js'
+
+export * from './combatPassives.js'
+
+export * from './combatInterception.js'

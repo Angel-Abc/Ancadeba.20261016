@@ -331,7 +331,12 @@ export function actionBarForm(
           select(
             t('controls.combatMove'),
             command.move,
-            component ? (view.combat?.[component.encounter]?.player.moves ?? []) : [],
+            component
+              ? [
+                  ...(view.combat?.[component.encounter]?.player.moves ?? []),
+                  ...(view.combat?.[component.encounter]?.player.equipmentMoves ?? []),
+                ]
+              : [],
             (value) => {
               command.move = value
             },

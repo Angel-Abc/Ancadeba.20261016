@@ -9,6 +9,7 @@ import { combatStatusesForm } from './combatAbilitiesForm.js'
 import type { ProjectView } from '@ancadeba/editor-core'
 import {
   combatHealthSchema,
+  combatEquipmentMoveReferences,
   combatTextSchema,
   gameBindingSchema,
   type CombatSource,
@@ -192,7 +193,14 @@ export function combatForm(
               },
             ),
             ...(actor.leveling
-              ? actor.moves.map((move) =>
+              ? [
+                  ...new Set([
+                    ...actor.moves,
+                    ...combatEquipmentMoveReferences(view.inventory, actor.equipmentOwner).map(
+                      (reference) => reference.id,
+                    ),
+                  ]),
+                ].map((move) =>
                   number(
                     t('combat.moveMinLevel', { move }),
                     actor.moveLevels?.[move] ?? 1,
@@ -300,6 +308,7 @@ export function combatForm(
       render,
       (id) => draft.player.moves.push(id),
       availableStatuses,
+      [draft.player, ...draft.enemies],
     ),
   )
   result.push(

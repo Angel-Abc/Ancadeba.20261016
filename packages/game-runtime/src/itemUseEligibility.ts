@@ -67,12 +67,21 @@ export function abilityCanMatter(
     CombatSnapshot,
     'health' | 'maximumHealth' | 'statuses' | 'guard' | 'stats' | 'resources'
   > &
-    Partial<Pick<CombatSnapshot, 'bossPhase'>>,
+    Partial<Pick<CombatSnapshot, 'bossPhase' | 'equipment'>>,
   target: string,
 ): boolean {
   if (move.type !== 'ability') return false
 
-  if (combatMoveRestriction(definition, definition.player.id, move, snapshot.statuses)) return false
+  if (
+    combatMoveRestriction(
+      definition,
+      definition.player.id,
+      move,
+      snapshot.statuses,
+      snapshot.equipment,
+    )
+  )
+    return false
 
   const context = combatConditionContext(definition, {
     ...snapshot,
@@ -80,6 +89,8 @@ export function abilityCanMatter(
     self: definition.player.id,
     target,
   })
+
+  if (!combatConditionsMatch(move.requirements, context)) return false
 
   return move.effects.some((effect) => {
     if (!combatConditionsMatch(effect.conditions, context)) return false
@@ -111,7 +122,7 @@ export function abilityCanMatter(
         target,
       ),
       statusContributions(definition, snapshot.statuses[definition.player.id] ?? []),
-      combatDamageProfile(definition, recipient, snapshot.statuses),
+      combatDamageProfile(definition, recipient, snapshot.statuses, snapshot.equipment),
     )
 
     if (effect.type === 'heal')
@@ -123,7 +134,16 @@ export function abilityCanMatter(
       return Boolean(snapshot.statuses[recipient]?.some((status) => status.id === effect.status))
 
     if (effect.type === 'apply-status') {
-      if (combatStatusImmune(definition, recipient, effect.status, snapshot.statuses)) return false
+      if (
+        combatStatusImmune(
+          definition,
+          recipient,
+          effect.status,
+          snapshot.statuses,
+          snapshot.equipment,
+        )
+      )
+        return false
       const status = definition.statuses?.[effect.status]
 
       return Boolean(

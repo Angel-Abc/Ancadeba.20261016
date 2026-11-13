@@ -13,6 +13,7 @@ import {
   cloneCombatRules,
   type CombatSource,
   type CombatDefinition,
+  type CombatSimulationLoadout,
 } from '@ancadeba/schemas'
 import type { ProjectView, EditorCommand } from '@ancadeba/editor-core'
 import type { Translate } from '@ancadeba/utilities'
@@ -24,6 +25,7 @@ import { z } from 'zod'
 import { combatSimulationScenarioSchema } from '@ancadeba/schemas'
 
 interface StartingConditions {
+  loadout?: CombatSimulationLoadout | undefined
   seed: number
   round: number
   health: Record<string, number>
@@ -243,6 +245,15 @@ export function bindCombatSimulationPanel(
       const checks = create('ul')
 
       for (const check of candidate.conditions) appendCheck(check, checks)
+
+      if (candidate.requirements?.length) {
+        const heading = create('li')
+        heading.textContent = t('combat.requirements.heading')
+        checks.append(heading)
+
+        for (const check of candidate.requirements) appendCheck(check, checks)
+      }
+
       row.append(checks)
 
       rows.append(row)
@@ -293,6 +304,42 @@ export function bindCombatSimulationPanel(
         }),
         numeric(text('startingRound'), setup.round, (value) => {
           setup.round = value
+        }),
+        ...actors.flatMap((actor) => {
+          const inventory = base?.equipmentContext?.inventory
+          const owner = actor.equipmentOwner
+
+          if (!inventory || !owner) return []
+
+          return Object.keys(inventory.owners[owner]?.equipmentSlots ?? {}).map((slot) =>
+            select(
+              t('equipment.combat.simSlot', { actor: actor.id, slot }),
+              setup.loadout?.[actor.id]?.[slot] === undefined
+                ? '@inherit'
+                : (setup.loadout[actor.id]![slot] ?? ''),
+              [
+                ['@inherit', t('equipment.combat.inheritLoadout')],
+                ['', t('equipment.combat.emptySlot')],
+                ...Object.entries(inventory.items)
+                  .filter(
+                    ([, item]) =>
+                      item.placement.type !== 'inside' &&
+                      item.placement.owner === owner &&
+                      inventory.itemTypes[item.itemType]?.equipmentSlots.includes(slot),
+                  )
+                  .map(
+                    ([id, item]) => [id, inventory.itemTypes[item.itemType]?.label || id] as const,
+                  ),
+              ],
+              (value) => {
+                const loadout = (setup.loadout ??= {})
+                const slots = (loadout[actor.id] ??= {})
+
+                if (value === '@inherit') delete slots[slot]
+                else slots[slot] = value || null
+              },
+            ),
+          )
         }),
         ...actors.map((actor) =>
           numeric(
@@ -403,6 +450,7 @@ export function bindCombatSimulationPanel(
               ...(starting.phase ? { phase: starting.phase } : {}),
               statuses: starting.statuses,
               cooldowns: starting.cooldowns,
+              loadout: starting.loadout,
             })
             sourceAtStart = cloneCombatRules(source!)
             inspectIndex = -1
@@ -441,6 +489,7 @@ export function bindCombatSimulationPanel(
             signature = fingerprint()
             const current = definition!
             config = {
+              loadout: cloneCombatRules(scenario.setup.loadout),
               seed: scenario.setup.seed,
               round: scenario.setup.round,
               health: { ...base!.health, ...scenario.setup.health },
@@ -480,7 +529,9 @@ export function bindCombatSimulationPanel(
     if (!simulation) return
     const sandbox = simulation
     const state = sandbox.snapshot()
-    const playerMoves = base.availableMoves ?? definition.player.moves
+
+    const playerMoves =
+      sandbox.report().setup.availableMoves ?? base.availableMoves ?? definition.player.moves
 
     if (!playerMoves.includes(selectedMove)) selectedMove = playerMoves[0] ?? ''
     const living = definition.enemies.filter((actor) => state.health[actor.id]! > 0)
@@ -495,6 +546,15 @@ export function bindCombatSimulationPanel(
       .join(' · ')} · ${Object.entries(state.mechanics?.resources ?? {})
       .map(([id, amount]) => `${id}: ${amount}`)
       .join(' · ')}`
+    const queueIssue = selectedMove ? sandbox.queueIssue(selectedMove, selectedTarget) : undefined
+
+    const queueButton = button(
+      text('queue'),
+      act(() => sandbox.queue(selectedMove, selectedTarget)),
+      Boolean(state.outcome) || !selectedMove || Boolean(queueIssue),
+    )
+
+    queueButton.title = queueIssue ?? ''
     root.append(
       summary,
       group(
@@ -516,15 +576,11 @@ export function bindCombatSimulationPanel(
           living.map((actor) => [actor.id, actor.label || actor.id] as const),
           (value) => {
             selectedTarget = value
+            render()
           },
         ),
-        button(
-          text('queue'),
-          act(() => {
-            sandbox.queue(selectedMove, selectedTarget)
-          }),
-          Boolean(state.outcome) || !selectedMove,
-        ),
+        queueButton,
+        ...(queueIssue ? [pre(queueIssue)] : []),
         pre(state.plan),
         button(
           text('undo'),
@@ -576,7 +632,7 @@ export function bindCombatSimulationPanel(
         ? [
             [
               String(index),
-              `${frame.round} · ${frame.kind} · ${frame.actor ?? ''} ${frame.action?.move ?? frame.mechanicsEvent?.trigger ?? ''}`,
+              `${frame.round} · ${frame.kind} · ${frame.actor ?? ''} ${frame.action?.move ?? frame.mechanicsEvent?.trigger ?? ''}${frame.mechanicsEvent?.interception ? ` · ${frame.mechanicsEvent.interception.type}` : ''}`,
             ] as const,
           ]
         : [],

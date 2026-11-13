@@ -1,3 +1,4 @@
+import { combatInterceptionForm } from './combatInterceptionForm.js'
 import {
   combatMechanicsSchema,
   combatResourceSchema,
@@ -31,9 +32,20 @@ export function combatMechanicsForm(
   statuses = draft.statuses,
   allowRemoval = true,
   rotationActors = draft.enemies,
+  passive = false,
 ): HTMLElement {
   const { input, select, button, group, translation, t } = controls
   const text = (key: string) => t(`combat.mechanics.${key}`)
+
+  const reference = (
+    label: string,
+    value: string,
+    choices: readonly (string | readonly [string, string])[],
+    change: (value: string) => void,
+  ) =>
+    passive
+      ? input(label, value, (value) => change(value.trim()))
+      : select(label, value, choices, change)
 
   const edit = (action: () => void) => () => {
     action()
@@ -118,46 +130,77 @@ export function combatMechanicsForm(
         select(
           t('form.effectType'),
           effect.type,
-          [
-            'change-resource',
-            'set-resource',
-            'apply-status',
-            'remove-status',
-            'set-phase',
-            'finish',
-            'damage',
-            'heal',
-          ],
+          (
+            [
+              'change-resource',
+              'set-resource',
+              'apply-status',
+              'remove-status',
+              'set-phase',
+              ...(eventType === 'damage-pending' || eventType === 'healing-pending'
+                ? [
+                    'adjust-effect',
+                    ...(eventType === 'damage-pending'
+                      ? ['absorb-damage', 'redirect-damage', 'prevent-lethal']
+                      : []),
+                  ]
+                : ['finish', 'damage', 'heal']),
+            ] as const
+          ).map(
+            (type) =>
+              [
+                type,
+                ['adjust-effect', 'absorb-damage', 'redirect-damage', 'prevent-lethal'].includes(
+                  type,
+                )
+                  ? t(`combat.interception.type.${type}`)
+                  : type,
+              ] as const,
+          ),
           (type) => {
             effects[index] =
-              type === 'change-resource' || type === 'set-resource'
-                ? { type, resource: resources[0] ?? 'resource', amount: 1 }
-                : type === 'damage' || type === 'heal'
-                  ? { type, actor: draft.player.id, amount: 1 }
-                  : type === 'apply-status' || type === 'remove-status'
-                    ? { type, actor: draft.player.id, status: statusIds[0] ?? 'status' }
-                    : type === 'set-phase'
-                      ? { type, phase: phases[0] ?? 'phase' }
-                      : { type: 'finish', outcome: 'victory' }
+              type === 'adjust-effect'
+                ? { type, amount: 0, percent: -50 }
+                : type === 'absorb-damage'
+                  ? { type, resource: resources[0] ?? 'resource', maximum: 8 }
+                  : type === 'redirect-damage'
+                    ? { type, actor: 'event.source', percent: 50 }
+                    : type === 'prevent-lethal'
+                      ? { type, minimumHealth: 1 }
+                      : type === 'change-resource' || type === 'set-resource'
+                        ? { type, resource: resources[0] ?? 'resource', amount: 1 }
+                        : type === 'damage' || type === 'heal'
+                          ? { type, actor: draft.player.id, amount: 1 }
+                          : type === 'apply-status' || type === 'remove-status'
+                            ? { type, actor: draft.player.id, status: statusIds[0] ?? 'status' }
+                            : type === 'set-phase'
+                              ? { type, phase: phases[0] ?? 'phase' }
+                              : { type: 'finish', outcome: 'victory' }
             render()
           },
         ),
         ...('resource' in effect
           ? [
-              select(text('resource'), effect.resource, resources, (value) => {
+              reference(text('resource'), effect.resource, resources, (value) => {
                 effect.resource = value
               }),
-              number(t('form.amount'), effect.amount, (value) => {
-                effect.amount = value
-              }),
+              ...('amount' in effect
+                ? [
+                    number(t('form.amount'), effect.amount, (value) => {
+                      effect.amount = value
+                    }),
+                  ]
+                : []),
             ]
           : []),
         ...('actor' in effect
           ? [
-              select(
-                effect.type === 'damage' || effect.type === 'heal'
-                  ? t('combat.events.effectRecipient')
-                  : text('actor'),
+              reference(
+                effect.type === 'redirect-damage'
+                  ? t('combat.interception.recipient')
+                  : effect.type === 'damage' || effect.type === 'heal'
+                    ? t('combat.events.effectRecipient')
+                    : text('actor'),
                 effect.actor,
                 event ? effectActors : actors,
                 (value) => {
@@ -168,7 +211,7 @@ export function combatMechanicsForm(
           : []),
         ...('status' in effect
           ? [
-              select(t('form.status'), effect.status, statusIds, (value) => {
+              reference(t('form.status'), effect.status, statusIds, (value) => {
                 effect.status = value
               }),
               ...combatStatusStrengthForm(controls, effect),
@@ -176,7 +219,7 @@ export function combatMechanicsForm(
           : []),
         ...(effect.type === 'damage' || effect.type === 'heal'
           ? [
-              select(
+              reference(
                 t('combat.events.effectSource'),
                 effect.source ?? '',
                 [['', t('combat.events.sameActor')], ...effectActors],
@@ -196,7 +239,11 @@ export function combatMechanicsForm(
                 : []),
             ]
           : []),
-        ...('amount' in effect && (event || effect.eventValue)
+        ...((effect.type === 'change-resource' ||
+          effect.type === 'set-resource' ||
+          effect.type === 'damage' ||
+          effect.type === 'heal') &&
+        (event || effect.eventValue)
           ? [
               combatEventValueForm(
                 controls,
@@ -208,7 +255,7 @@ export function combatMechanicsForm(
           : []),
         ...('phase' in effect
           ? [
-              select(text('phase'), effect.phase, phases, (value) => {
+              reference(text('phase'), effect.phase, phases, (value) => {
                 effect.phase = value
               }),
             ]
@@ -220,6 +267,7 @@ export function combatMechanicsForm(
               }),
             ]
           : []),
+        ...combatInterceptionForm(controls, effect),
         combatEffectConditionsForm(
           controls,
           effect,
@@ -229,6 +277,7 @@ export function combatMechanicsForm(
             phases,
             statuses: statusIds,
             defaultActor: draft.player.id,
+            freeReferences: passive,
             event,
             eventType,
           },
@@ -268,6 +317,7 @@ export function combatMechanicsForm(
     phases,
     statuses: statusIds,
     defaultActor: draft.player.id,
+    freeReferences: passive,
   }
 
   const conditionsForm = (conditions: CombatTriggerCondition[], eventType?: string) =>
@@ -284,118 +334,122 @@ export function combatMechanicsForm(
 
   return group(
     text('heading'),
-    select(
-      text('victory'),
-      mechanics.victory,
-      [
-        ['enemies-defeated', text('healthVictory')],
-        ['triggers', text('triggerVictory')],
-      ],
-      (value) => {
-        mechanics.victory = value
-      },
-    ),
-    group(
-      text('resources'),
-      ...Object.entries(mechanics.resources).map(([id, resource]) =>
-        group(
-          id,
-          ...presentation(resource),
+    ...(passive
+      ? []
+      : [
           select(
-            text('actor'),
-            resource.actor ?? '',
-            [['', text('encounter')], ...actors],
+            text('victory'),
+            mechanics.victory,
+            [
+              ['enemies-defeated', text('healthVictory')],
+              ['triggers', text('triggerVictory')],
+            ],
             (value) => {
-              resource.actor = value || undefined
+              mechanics.victory = value
             },
           ),
-          number(text('initial'), resource.initial, (value) => {
-            resource.initial = value
-          }),
-          number(text('maximum'), resource.maximum, (value) => {
-            resource.maximum = value
-          }),
-          button(
-            text('remove'),
-            edit(() => {
-              delete mechanics.resources[id]
-            }),
-          ),
-        ),
-      ),
-      input(text('resourceId'), resourceId, (value) => {
-        resourceId = value.trim()
-      }),
-      button(
-        text('addResource'),
-        edit(() => {
-          const id = unique(resourceId, mechanics.resources)
-          mechanics.resources[id] = combatResourceSchema.parse({
-            label: id,
-            initial: 0,
-            maximum: 100,
-          })
-        }),
-      ),
-    ),
-    group(
-      text('phases'),
-      select(
-        text('initialPhase'),
-        mechanics.initialPhase ?? '',
-        [['', t('combat.notSet')], ...phases],
-        (value) => {
-          mechanics.initialPhase = value || undefined
-        },
-      ),
-      ...Object.entries(mechanics.phases).map(([id, phase]) =>
-        group(
-          id,
-          ...presentation(phase),
-          group(text('onEnter'), ...effectsForm(phase.onEnter)),
           group(
-            text('rotations'),
-            ...rotationActors.map((enemy) =>
-              input(
-                enemy.label || enemy.id,
-                phase.enemyRotations?.[enemy.id]?.join(', ') ?? '',
-                (value) => {
-                  const rotation = value
-                    .split(',')
-                    .map((id) => id.trim())
-                    .filter(Boolean)
-
-                  phase.enemyRotations ??= {}
-
-                  if (rotation.length) phase.enemyRotations[enemy.id] = rotation
-                  else delete phase.enemyRotations[enemy.id]
-                },
+            text('resources'),
+            ...Object.entries(mechanics.resources).map(([id, resource]) =>
+              group(
+                id,
+                ...presentation(resource),
+                select(
+                  text('actor'),
+                  resource.actor ?? '',
+                  [['', text('encounter')], ...actors],
+                  (value) => {
+                    resource.actor = value || undefined
+                  },
+                ),
+                number(text('initial'), resource.initial, (value) => {
+                  resource.initial = value
+                }),
+                number(text('maximum'), resource.maximum, (value) => {
+                  resource.maximum = value
+                }),
+                button(
+                  text('remove'),
+                  edit(() => {
+                    delete mechanics.resources[id]
+                  }),
+                ),
               ),
             ),
-          ),
-          button(
-            text('remove'),
-            edit(() => {
-              delete mechanics.phases[id]
-
-              if (mechanics.initialPhase === id)
-                mechanics.initialPhase = Object.keys(mechanics.phases)[0]
+            input(text('resourceId'), resourceId, (value) => {
+              resourceId = value.trim()
             }),
+            button(
+              text('addResource'),
+              edit(() => {
+                const id = unique(resourceId, mechanics.resources)
+                mechanics.resources[id] = combatResourceSchema.parse({
+                  label: id,
+                  initial: 0,
+                  maximum: 100,
+                })
+              }),
+            ),
           ),
-        ),
-      ),
-      input(text('phaseId'), phaseId, (value) => {
-        phaseId = value.trim()
-      }),
-      button(
-        text('addPhase'),
-        edit(() => {
-          const id = unique(phaseId, mechanics.phases)
-          mechanics.phases[id] = combatPhaseSchema.parse({ label: id })
-          mechanics.initialPhase ??= id
-        }),
-      ),
-    ),
+          group(
+            text('phases'),
+            select(
+              text('initialPhase'),
+              mechanics.initialPhase ?? '',
+              [['', t('combat.notSet')], ...phases],
+              (value) => {
+                mechanics.initialPhase = value || undefined
+              },
+            ),
+            ...Object.entries(mechanics.phases).map(([id, phase]) =>
+              group(
+                id,
+                ...presentation(phase),
+                group(text('onEnter'), ...effectsForm(phase.onEnter)),
+                group(
+                  text('rotations'),
+                  ...rotationActors.map((enemy) =>
+                    input(
+                      enemy.label || enemy.id,
+                      phase.enemyRotations?.[enemy.id]?.join(', ') ?? '',
+                      (value) => {
+                        const rotation = value
+                          .split(',')
+                          .map((id) => id.trim())
+                          .filter(Boolean)
+
+                        phase.enemyRotations ??= {}
+
+                        if (rotation.length) phase.enemyRotations[enemy.id] = rotation
+                        else delete phase.enemyRotations[enemy.id]
+                      },
+                    ),
+                  ),
+                ),
+                button(
+                  text('remove'),
+                  edit(() => {
+                    delete mechanics.phases[id]
+
+                    if (mechanics.initialPhase === id)
+                      mechanics.initialPhase = Object.keys(mechanics.phases)[0]
+                  }),
+                ),
+              ),
+            ),
+            input(text('phaseId'), phaseId, (value) => {
+              phaseId = value.trim()
+            }),
+            button(
+              text('addPhase'),
+              edit(() => {
+                const id = unique(phaseId, mechanics.phases)
+                mechanics.phases[id] = combatPhaseSchema.parse({ label: id })
+                mechanics.initialPhase ??= id
+              }),
+            ),
+          ),
+        ]),
     group(
       text('triggers'),
       ...Object.entries(mechanics.triggers).map(([id, trigger]) =>
@@ -422,7 +476,7 @@ export function combatMechanicsForm(
           ),
           ...(combatEffectEvents.some((event) => event === trigger.event)
             ? [
-                select(
+                reference(
                   t('combat.events.sourceFilter'),
                   trigger.source ?? '',
                   [['', text('any')], ...actors],
@@ -430,7 +484,7 @@ export function combatMechanicsForm(
                     trigger.source = value || undefined
                   },
                 ),
-                select(
+                reference(
                   t('combat.events.targetFilter'),
                   trigger.target ?? '',
                   [['', text('any')], ...actors],
@@ -464,7 +518,10 @@ export function combatMechanicsForm(
                 ),
                 select(
                   t('combat.events.includeReactions'),
-                  String(trigger.includeReactions ?? false),
+                  String(
+                    trigger.includeReactions ??
+                      (trigger.event === 'damage-pending' || trigger.event === 'healing-pending'),
+                  ),
                   [
                     ['false', t('form.no')],
                     ['true', t('form.yes')],
@@ -475,7 +532,7 @@ export function combatMechanicsForm(
                 ),
               ]
             : []),
-          select(
+          reference(
             text('actorFilter'),
             trigger.actor ?? '',
             [['', text('any')], ...actors],
@@ -486,7 +543,7 @@ export function combatMechanicsForm(
           input(text('moveFilter'), trigger.move ?? '', (value) => {
             trigger.move = value.trim() || undefined
           }),
-          select(
+          reference(
             text('resourceFilter'),
             trigger.resource ?? '',
             [['', text('any')], ...resources],
@@ -494,7 +551,7 @@ export function combatMechanicsForm(
               trigger.resource = value || undefined
             },
           ),
-          select(
+          reference(
             t('combat.conditions.statusFilter'),
             trigger.status ?? '',
             [['', text('any')], ...statusIds],
@@ -502,7 +559,7 @@ export function combatMechanicsForm(
               trigger.status = value || undefined
             },
           ),
-          select(
+          reference(
             text('phaseFilter'),
             trigger.phase ?? '',
             [['', text('any')], ...phases],

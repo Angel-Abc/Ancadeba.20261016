@@ -338,6 +338,334 @@ function flush(engine: Engine): void {
 
 describe('scene renderer', () => {
   it.each([false, true])(
+    'displays interception and restores consumed lethal protection in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) => {
+          const raw = await readFile(
+            new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path !== 'rules/state.json') return raw
+          const rules = JSON.parse(raw)
+          rules.state.find((field: { path: string[] }) => field.path[0] === 'player-health').value =
+            1
+
+          return JSON.stringify(rules)
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const saves = new Map<string, string>()
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => saves.get(id),
+            write: (id, value) => {
+              saves.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('diving-gear')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+
+      const click = (id: string) => {
+        slot(id).dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      const snapshot = () =>
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+
+      engine.lifecycle!.currentGame!.inventorySelection!.select(
+        engine.lifecycle!.activeScene!,
+        'gear-items',
+        'rescue-charm',
+      )
+      flush(engine)
+      click('1')
+      click('8')
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('water-interception')
+      expect(target.textContent).toContain('previews are before interception')
+      click('15')
+      expect(snapshot().health.player).toBe(1)
+      expect(snapshot().outcome).toBeUndefined()
+      expect(target.textContent).toContain('Lethal-hit prevention changes')
+      expect(engine.saves!.save()).toBe(true)
+      click('15')
+      const defeated = snapshot()
+      expect(defeated.outcome).toBe('defeat')
+      expect(engine.saves!.load()).toBe(true)
+      click('15')
+      expect(snapshot().outcome).toBe('defeat')
+      expect(snapshot().log).toEqual(defeated.log)
+    },
+  )
+
+  it.each([false, true])(
+    'shows equipment/status passives and restores once-only source history in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) => {
+          const raw = await readFile(
+            new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path !== 'combat-libraries/environments.json') return raw
+          const library = JSON.parse(raw)
+          library.passives['tidal-relief'].triggers['water-relief'].once = true
+
+          return JSON.stringify(library)
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument(),
+        target = document.createElement('main')
+
+      const saves = new Map<string, string>()
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => saves.get(id),
+            write: (id, value) => {
+              saves.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('diving-gear')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+
+      const click = (id: string) => {
+        slot(id).dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      const snapshot = () =>
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+
+      engine.lifecycle!.currentGame!.inventorySelection!.select(
+        engine.lifecycle!.activeScene!,
+        'gear-items',
+        'tidal-charm',
+      )
+      flush(engine)
+      expect(target.textContent).toContain('Grants passive Tidal relief')
+      click('1')
+      click('6')
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('water-passives')
+      click('6')
+      click('12')
+      click('15')
+      expect(snapshot().resources.exhaustion).toBe(4)
+      expect(target.textContent).toContain('Current reserve (Conductive attunement) activates')
+      expect(target.textContent).toContain('Tidal relief (Tidal charm) activates')
+      expect(
+        target.find((node) => node.dataset.statusEffect === 'conductive-attunement')!.textContent,
+      ).toContain('Passives: Current reserve')
+      expect(engine.saves!.save()).toBe(true)
+      click('15')
+      const next = snapshot()
+      expect(next.resources.exhaustion).toBe(14)
+      expect(engine.saves!.load()).toBe(true)
+      click('15')
+      expect(snapshot().log).toEqual(next.log)
+      expect(snapshot().resources).toEqual(next.resources)
+      click('8')
+      click('15')
+      engine.lifecycle!.enterScene('underwater-boss-passives')
+      click('6')
+      click('12')
+      click('15')
+      expect(snapshot().resources.seal).toBe(18)
+      expect(target.textContent).toContain('Current reserve (Conductive attunement) activates')
+    },
+  )
+
+  it.each([false, true])(
+    'explains action requirements and restores queued requirement failures in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: (path) =>
+          readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url), 'utf8'),
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+      const saves = new Map<string, string>()
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => saves.get(id),
+            write: (id, value) => {
+              saves.set(id, value)
+            },
+          },
+        },
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water-requirements')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+
+      const snapshot = () =>
+        engine.lifecycle!.currentGame!.combat!.snapshot(engine.lifecycle!.activeScene!, 'combat')!
+
+      const click = (id: string) => {
+        slot(id).dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      expect(slot('7').disabled).toBe(true)
+      expect(slot('7').title).toContain('Rhythm dive unavailable')
+      expect(slot('7').title).toContain('current 0')
+      expect(slot('7').attributes.get('aria-description')).toBe(slot('7').title)
+
+      for (let i = 0; i < 3; i++) click('6')
+      expect(slot('7').disabled).toBe(true)
+      click('15')
+      expect(slot('7').disabled).toBe(false)
+      click('7')
+      click('7')
+      expect(engine.saves!.save()).toBe(true)
+      click('15')
+      const first = snapshot()
+      expect(first.log.some((entry) => entry.type === 'requirementsUnavailable')).toBe(true)
+      expect(first.resources.stamina).toBe(82)
+      expect(slot('7').disabled).toBe(true)
+      expect(target.textContent).toContain('Rhythm dive unavailable: requires')
+      expect(engine.saves!.load()).toBe(true)
+      expect(snapshot().plan).toHaveLength(2)
+      click('15')
+      expect(snapshot().log).toEqual(first.log)
+      expect(snapshot().resources).toEqual(first.resources)
+      click('8')
+      click('15')
+      engine.lifecycle!.enterScene('underwater-boss-requirements')
+      expect(slot('11').disabled).toBe(true)
+      expect(slot('11').title).toContain('Seal release unavailable')
+      expect(slot('11').title).toContain('Phase')
+      expect(slot('11').title).toContain('OR')
+    },
+  )
+
+  it.each([false, true])(
+    'compares diving gear, equips it and displays defenses and granted moves in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: (path) =>
+          readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url), 'utf8'),
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('diving-gear')
+      const game = engine.lifecycle!.currentGame!
+      const scene = engine.lifecycle!.activeScene!
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+      game.inventorySelection!.select(scene, 'gear-items', 'diving-suit')
+      flush(engine)
+      expect(target.textContent).toContain('Equipment comparison')
+      expect(target.textContent).toContain('water resistance 25%')
+      slot('1').dispatchEvent(new Event('click'))
+      flush(engine)
+      game.inventorySelection!.select(scene, 'gear-items', 'rebreather')
+      flush(engine)
+      expect(target.textContent).toContain('exhaustion gains: +0, then -50%')
+      expect(target.textContent).toContain('Grants Purge valve')
+      slot('1').dispatchEvent(new Event('click'))
+      slot('3').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('water-gear')
+      expect(
+        target.find((node) => node.dataset.combatEquipment === 'player')!.textContent,
+      ).toContain('Rebreather')
+      expect(
+        target.find((node) => node.dataset.combatDamageDefenses === 'player')!.textContent,
+      ).toContain('water: resistance 25%')
+      expect(slot('6').disabled).toBe(false)
+      slot('6').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.textContent).toContain('equipment changes gain 10 → 5')
+      const battle = engine.lifecycle!.activeScene!
+      expect(game.combat!.snapshot(battle, 'combat')!.resources.exhaustion).toBe(0)
+      expect(game.inventory!.move('rebreather', { type: 'carried', owner: 'diver' }).status).toBe(
+        'rejected',
+      )
+      game.combat!.request(battle, 'combat', { type: 'escape' })
+      game.combat!.request(battle, 'combat', { type: 'end-turn' })
+      flush(engine)
+      engine.lifecycle!.enterScene('underwater-boss-gear')
+      expect(
+        target.find((node) => node.dataset.combatDamageDefenses === 'player')!.textContent,
+      ).toContain('water: resistance 75%')
+      expect(slot('6').disabled).toBe(false)
+    },
+  )
+
+  it.each([false, true])(
     'shows restriction reasons, utility recovery and status immunity in preview=%s',
     async (preview) => {
       const resources: IResourceSource = {
@@ -408,6 +736,10 @@ describe('scene renderer', () => {
       flush(engine)
       expect(engine.lifecycle!.activeScene!.data.id).toBe('water')
       expect(target.textContent).toContain('Round 3')
+      // Both fights share the diver loadout; finish the first before starting another.
+      slot('8').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
       engine.lifecycle!.enterScene('underwater-boss-controls')
       expect(
         target.find((node) => node.dataset.combatRestrictions === 'guardian')!.textContent,

@@ -1,6 +1,6 @@
 import {
   combatEventValueFields,
-  combatEventFlagFields,
+  combatEventFlagFieldsFor,
   combatEventActorReferences,
   combatEventValueFieldsFor,
   type CombatCondition,
@@ -233,9 +233,9 @@ export function combatConditionsForm(
           select(
             t('combat.events.flag'),
             condition.field,
-            combatEventFlagFields
-              .filter((field) => field !== 'immune' || !choices.eventType?.startsWith('healing-'))
-              .map((field) => [field, t(`combat.events.flag.${field}`)] as const),
+            combatEventFlagFieldsFor(choices.eventType ?? 'damage-resolved').map(
+              (field) => [field, t(`combat.events.flag.${field}`)] as const,
+            ),
             (value) => {
               condition.field = value
             },

@@ -25,7 +25,8 @@ import {
   type PlannedMove,
   type CombatSnapshot,
 } from '@ancadeba/game-runtime'
-import { temporaryModifierNames } from '@ancadeba/schemas'
+import { temporaryModifierNames, combatStatsTextSchema } from '@ancadeba/schemas'
+import { equipmentCombatEffectsText } from './equipmentCombatEffectsText.js'
 import { StatusPanelComponentRenderer } from './statusPanelComponentRenderer.js'
 import { renderStatusEffect } from './statusEffectRenderer.js'
 import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
@@ -91,6 +92,23 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
       root.append(hint)
     }
 
+    const interceptionTriggers = [
+      ...Object.values(definition.mechanics?.triggers ?? {}),
+      ...Object.values(definition.passiveDefinitions ?? {}).flatMap((entries) =>
+        Object.values(entries).flatMap((passive) => Object.values(passive.triggers)),
+      ),
+    ]
+
+    if (
+      interceptionTriggers.some(
+        (trigger) => trigger.event === 'damage-pending' || trigger.event === 'healing-pending',
+      )
+    ) {
+      const hint = document.createElement('p')
+      hint.textContent = definition.messages.interceptionPreview
+      root.append(hint)
+    }
+
     if (definition.enemies.some((actor) => actor.ai)) {
       const hint = document.createElement('p')
       hint.textContent = definition.messages.enemyConditional
@@ -134,6 +152,8 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
         defenses.dataset.combatDamageDefenses = actor.id
         const restrictions = document.createElement('p')
         restrictions.dataset.combatRestrictions = actor.id
+        const gear = document.createElement('p')
+        gear.dataset.combatEquipment = actor.id
         const target = document.createElement('button')
         target.type = 'button'
         target.textContent = `${definition.messages.target}: ${actor.label}`
@@ -150,7 +170,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
           effectViews.clear()
         })
         plan.className = 'ancadeba-combat-plan'
-        box.append(status.element, resources, defenses, restrictions)
+        box.append(status.element, resources, defenses, restrictions, gear)
 
         if (actor.id !== definition.player.id) box.append(target)
         box.append(activeEffects, plan)
@@ -161,6 +181,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
           resources,
           defenses,
           restrictions,
+          gear,
           target,
           plan,
           activeEffects,
@@ -218,7 +239,14 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
       const moveText = (queued: PlannedMove, actor: string, snapshot: CombatSnapshot) => {
         try {
           const move = definition.moves[queued.move]!
-          const restriction = combatMoveRestriction(definition, actor, move, snapshot.statuses)
+
+          const restriction = combatMoveRestriction(
+            definition,
+            actor,
+            move,
+            snapshot.statuses,
+            snapshot.equipment,
+          )
 
           if (restriction) return combatMoveRestrictionText(definition, actor, move, restriction)
 
@@ -273,7 +301,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
                 snapshot.stats[recipient]?.defense ?? 0,
                 valueContext,
                 contributions,
-                combatDamageProfile(definition, recipient, snapshot.statuses),
+                combatDamageProfile(definition, recipient, snapshot.statuses, snapshot.equipment),
               )
 
               const status =
@@ -329,7 +357,7 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
               snapshot.stats[queued.target]?.defense ?? 0,
               valueContext,
               contributions,
-              combatDamageProfile(definition, queued.target, snapshot.statuses),
+              combatDamageProfile(definition, queued.target, snapshot.statuses, snapshot.equipment),
             )
           } catch {
             return definition.messages.unavailable
@@ -372,10 +400,17 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
           resources,
           defenses,
           restrictions,
+          gear,
           activeEffects,
           effectViews,
         } of views) {
-          const profile = combatDamageProfile(definition, actor.id, snapshot.statuses)
+          const profile = combatDamageProfile(
+            definition,
+            actor.id,
+            snapshot.statuses,
+            snapshot.equipment,
+          )
+
           defenses.textContent = damageDefenseText(profile)
           defenses.hidden = !defenses.textContent
 
@@ -403,6 +438,26 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
               : []),
           ].join(' · ')
           restrictions.hidden = !restrictions.textContent
+
+          const gearMessages =
+            scene.type === 'game' && actor.equipmentOwner
+              ? scene.game.data.inventory?.owners[actor.equipmentOwner]?.combatStats?.messages
+              : undefined
+
+          gear.textContent = (snapshot.equipment?.[actor.id] ?? [])
+            .map(
+              (entry) =>
+                `${entry.label}: ${equipmentCombatEffectsText(
+                  entry.effects,
+                  gearMessages ?? combatStatsTextSchema.parse({}),
+                  (reference) => definition.moves[reference.id]?.label ?? reference.id,
+                  (reference) =>
+                    definition.passiveDefinitions?.[reference.library]?.[reference.id]?.label ??
+                    reference.id,
+                )}`,
+            )
+            .join(' · ')
+          gear.hidden = !gear.textContent
 
           const queued =
             actor.id === definition.player.id
@@ -485,6 +540,20 @@ export class CombatComponentRenderer implements IComponentRenderer<CombatCompone
             const modifiers = parts.modifiers ? scaledCombatModifiers(parts.modifiers, status) : {}
 
             const magnitude = [
+              ...(data.passives?.length
+                ? [
+                    definition.messages.passiveGrants.replaceAll(
+                      '{passives}',
+                      data.passives
+                        .map(
+                          (reference) =>
+                            definition.passiveDefinitions?.[reference.library]?.[reference.id]
+                              ?.label || reference.id,
+                        )
+                        .join(', '),
+                    ),
+                  ]
+                : []),
               ...(data.statusImmunities?.length ? [immunityText(data.statusImmunities)] : []),
               ...(data.blockedMoveCategories?.length
                 ? [blockedText(data.blockedMoveCategories)]

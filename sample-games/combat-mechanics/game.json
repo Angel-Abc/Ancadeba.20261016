@@ -13,10 +13,20 @@
     "rough-water",
     "underwater-boss",
     "water-controls",
-    "underwater-boss-controls"
+    "underwater-boss-controls",
+    "diving-gear",
+    "water-gear",
+    "underwater-boss-gear",
+    "water-requirements",
+    "underwater-boss-requirements",
+    "water-passives",
+    "underwater-boss-passives",
+    "water-interception",
+    "underwater-boss-interception"
   ],
   "input": "controls",
   "rules": ["state"],
   "combat": ["water", "boss", "shared-water", "rough-water", "underwater-boss"],
-  "combatLibraries": ["environments"]
+  "combatLibraries": ["environments"],
+  "inventory": ["diving-gear"]
 }

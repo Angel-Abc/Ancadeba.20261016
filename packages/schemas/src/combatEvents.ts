@@ -1,7 +1,17 @@
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
 
+export const combatPendingEvents = ['damage-pending', 'healing-pending'] as const
+
+export const combatInterceptionEffectTypes = [
+  'adjust-effect',
+  'absorb-damage',
+  'redirect-damage',
+  'prevent-lethal',
+] as const
+
 export const combatEffectEvents = [
+  ...combatPendingEvents,
   'damage-received',
   'damage-dealt',
   'damage-resolved',
@@ -19,9 +29,13 @@ export const combatEventValueFields = [
   'resisted',
   'amplified',
   'overheal',
+  'incomingAmount',
+  'absorbed',
+  'prevented',
+  'redirectedAmount',
 ] as const
 
-export const combatEventFlagFields = ['immune', 'reactive'] as const
+export const combatEventFlagFields = ['immune', 'reactive', 'redirected', 'lethal'] as const
 export const combatEffectDeliveries = ['direct', 'periodic', 'reaction'] as const
 export const combatEventActorReferences = ['event.source', 'event.target'] as const
 
@@ -31,9 +45,24 @@ export function combatEventValueFieldsFor(
   if (event.startsWith('damage-'))
     return combatEventValueFields.filter((field) => field !== 'overheal')
 
-  if (event.startsWith('healing-')) return ['amount', 'rawAmount', 'overheal']
+  if (event.startsWith('healing-')) return ['amount', 'rawAmount', 'overheal', 'incomingAmount']
 
   return []
+}
+
+export function combatEventFlagFieldsFor(
+  event: string,
+): readonly (typeof combatEventFlagFields)[number][] {
+  return event.startsWith('damage-')
+    ? [
+        'immune',
+        'reactive',
+        'redirected',
+        ...(event === 'damage-pending' ? ['lethal' as const] : []),
+      ]
+    : event.startsWith('healing-')
+      ? ['reactive']
+      : []
 }
 
 export const combatEffectActorSchema = z.union([
@@ -61,7 +90,7 @@ export const combatEventValueSchema = z.object({
 
 export type CombatEventValue = z.infer<typeof combatEventValueSchema>
 
-/** Immutable facts about one resolved effect; amount is the actual HP change. */
+/** Immutable effect facts; amount is pending before HP commit, or actual HP change after resolution. */
 export interface CombatEffectEventData {
   readonly source: string
   readonly target: string
@@ -76,5 +105,12 @@ export interface CombatEffectEventData {
   readonly resisted?: number | undefined
   readonly amplified?: number | undefined
   readonly immune?: boolean | undefined
+  readonly incomingAmount?: number | undefined
+  readonly absorbed?: number | undefined
+  readonly prevented?: number | undefined
+  readonly redirectedAmount?: number | undefined
+  readonly redirected?: boolean | undefined
+  readonly lethal?: boolean | undefined
+  readonly originalTarget?: string | undefined
   readonly overheal?: number | undefined
 }

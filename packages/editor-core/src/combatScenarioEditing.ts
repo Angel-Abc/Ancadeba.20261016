@@ -44,6 +44,14 @@ export function mergeCombatScenarios(
             ...setup,
             ...scenario.setup,
             phase: scenario.setup.phase,
+            loadout: scenario.setup.loadout
+              ? Object.fromEntries(
+                  Object.entries(scenario.setup.loadout).map(([actor, slots]) => [
+                    actor,
+                    { ...slots },
+                  ]),
+                )
+              : undefined,
             health: { ...scenario.setup.health },
             resources: { ...scenario.setup.resources },
             cooldowns: { ...scenario.setup.cooldowns },

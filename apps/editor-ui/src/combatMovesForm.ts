@@ -1,3 +1,4 @@
+import { combatRequirementsForm } from './combatRequirementsForm.js'
 import { combatScalingForm } from './combatScalingForm.js'
 import type { CombatSource } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
@@ -11,6 +12,7 @@ export function combatMovesForm(
   render: () => void,
   onAdd?: (id: string) => void,
   availableStatuses = draft.statuses,
+  actors: readonly { id: string; label: string }[] = [],
 ): HTMLElement[] {
   const { input, select, button, group, translation, t } = controls
   const keys = translationChoices(view)
@@ -67,6 +69,19 @@ export function combatMovesForm(
 
             move.categories = ids.length ? ids : undefined
           },
+        ),
+        combatRequirementsForm(
+          controls,
+          move,
+          {
+            resources: Object.keys(draft.mechanics?.resources ?? {}),
+            statuses: Object.keys(availableStatuses ?? {}),
+            phases: Object.keys(draft.mechanics?.phases ?? {}),
+            actors: actors.map((actor) => [actor.id, actor.label || actor.id] as const),
+            defaultActor: 'self',
+            freeReferences: !actors.length,
+          },
+          render,
         ),
         number(t('combat.apCost'), move.apCost, (value) => {
           move.apCost = value

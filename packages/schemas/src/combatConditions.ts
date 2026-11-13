@@ -167,6 +167,12 @@ export function combatConditionIssues(
         message: 'Event conditions require a damage or healing event',
       })
 
+    if ('actor' in leaf && leaf.actor.startsWith('event.') && !references.event)
+      issues.push({
+        path: [...path, ...child, 'actor'],
+        message: 'Event actors require a damage or healing event',
+      })
+
     if (
       'actor' in leaf &&
       references.actors &&

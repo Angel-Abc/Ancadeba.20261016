@@ -3389,6 +3389,184 @@ Existing games need no migration. V1 uses individual finite instances and
 player-controlled use. Quantities, charges, durability, enemy item use, ally
 targeting, persistent outside-combat statuses and world-time cooldowns are deferred.
 
+## Reusable passive mechanics
+
+Combat libraries can define `passives`, each with localized presentation and an
+ordered `triggers` record using the existing combat trigger schema. Equipment
+`combatEffects.passives` and any status variant's `passives` contain unique
+`{ "library": "environments", "id": "tidal-relief" }` references. A composite
+status may consist entirely of passive grants.
+
+```json
+{
+  "passives": {
+    "tidal-relief": {
+      "label": "Tidal relief",
+      "triggers": {
+        "water-relief": {
+          "event": "damage-received",
+          "target": "self",
+          "damageType": "water",
+          "effects": [{ "type": "change-resource", "resource": "exhaustion", "amount": -3 }]
+        }
+      }
+    }
+  }
+}
+```
+
+`self` binds to the bearer of each granting item or status, including enemy
+bearers. Trigger actor/source/target filters can use it; nested conditions and
+effect recipients bind it too. Condition `target` still follows the current
+event recipient, and damage/healing events support `event.source` and
+`event.target`. Passive damage/healing and applied statuses attribute their source
+to the bearer by default. Explicit reactive sources remain available.
+
+Only directly equipped items and currently active statuses grant passives.
+Carried items and contents of equipped bags do not. Each item/status grants its
+own copy; two items granting the same passive each react. Status stacks and
+intensity do not multiply trigger execution, although conditions can inspect
+both. Dead bearers do not react. Existing equipment loadout locks apply.
+
+For each dispatched event, the engine snapshots current grants, runs encounter
+triggers first, then passive triggers in actor order, equipment order, active
+status order and authored trigger order. Each passive source is checked again
+before its trigger runs. Removing or expiring a status stops later reactions;
+a matched trigger finishes its effect list even if it removes its own grant.
+New grants receive subsequent dispatched events, including notifications already
+waiting in the queue and their own status-application event, but do not
+retroactively receive the event currently creating them. A removed
+status does not receive its own removal/expiry event through its former passive.
+
+`once: true` means once per encounter, granting source and trigger. Stable item
+IDs and actor/status IDs distinguish sources. Removing and reapplying the same
+status does not reset its history. Optional `mechanics.passiveFired` receipts
+persist through rounds, scene changes and save/load; encounter `fired` IDs remain
+separate. Fresh simulations, simulation reset and New Game start fresh histories.
+Passives also work in encounters without authored mechanics; an empty mechanics
+state then tracks initialization and receipts.
+
+The engine resolves passive references and their shared move/status dependencies
+without copying library content into authored encounters. References, contextual
+resources/phases and event contracts are validated before play. Passive triggers
+refer to encounter resources and phases; they do not declare new ones. The
+resolved `passiveDefinitions` registry is derived data. Cross-referencing
+status/passive dependencies terminate without recursively applying effects.
+
+Passives use the same FIFO reaction queue, opt-in `includeReactions`, actual HP
+amounts and transaction rollback as encounter triggers. Triggers on received/dealt/resolved events remain post-resolution. Pending-event
+hooks provide interception before HP changes (see below). The 1,000-operation limit
+bounds cycles; limits also cap resolved definitions and active grants at 1,000
+and once-only receipts at 10,000. Failure commits no candidate state, RNG or
+simulation history.
+
+**Shared combat libraries → Shared combat passives** edits trigger definitions,
+conditions, event amount formulas, order, translations and once behavior.
+**Granted combat passives** on item mechanics and statuses selects shared grants.
+Library changes flow into every encounter using them. Revision checks preserve
+extensions and conflicting drafts; deletion checks protect referenced passives.
+Equipment comparisons and status descriptions name their grants. Combat logs
+identify the activated passive and granting source; event/trigger traces include
+`passive` with kind, bearer, source ID, library and passive ID.
+
+The combat-mechanics sample adds a carried **Tidal charm**, granting Tidal relief
+after water damage actually received. **Attune currents** grants Conductive
+attunement, whose shared Current reserve restores stamina equal to half the
+actual direct lightning damage and removes 3 exhaustion. The underwater boss's
+existing rule still charges the seal once from actual lightning damage.
+Harbour and gear-room links open both passive practice views. Four saved
+scenarios cover combined item/status grants and status expiry in both battles.
+
+## Shared action requirements
+
+Attack, Guard and ability moves accept optional `requirements`, using the same
+condition expressions as triggers, effect conditions and enemy AI. Top-level
+requirements are ANDed; nested AND/OR/NOT groups support resources, health,
+status stacks/intensity/remaining turns and boss phases, including percentage
+thresholds. For example:
+
+```json
+{
+  "type": "ability",
+  "label": "Seal release",
+  "target": "enemy",
+  "apCost": 1,
+  "resourceCosts": { "stamina": 10 },
+  "requirements": [
+    { "type": "phase", "phase": "third-seal" },
+    {
+      "type": "resource",
+      "resource": "stamina",
+      "operator": "gte",
+      "value": 20,
+      "unit": "percent"
+    },
+    {
+      "type": "status",
+      "actor": "self",
+      "status": "flow",
+      "measure": "intensity",
+      "operator": "gte",
+      "value": 2
+    }
+  ],
+  "effects": [
+    {
+      "id": "release",
+      "type": "damage",
+      "damageType": "lightning",
+      "damage": { "min": 20, "max": 20 }
+    }
+  ]
+}
+```
+
+`self` is the acting combatant; `target` is the action's selected recipient,
+including self-targeted abilities and Guard. Named encounter actors also work.
+Requirements on shared and equipment-granted moves resolve through the same
+validation and runtime path. Referenced statuses import with shared moves;
+resource, actor and phase references must exist in the resolved encounter.
+Event-only conditions and event actor references are invalid here. Lists support
+up to 20 requirements with the existing expression depth/node limits. Missing
+context fails closed, including inside NOT.
+
+Planning checks current state, subtracting reserved costs of earlier queued
+moves from available resources. It does not predict queued buffs, healing,
+resource gains or phase changes. Undo/Clear releases reservations. Requirements
+are non-consuming preconditions, separate from resource costs. The selected
+queued target stays attached to the action.
+
+Resolution checks each action before `before-action` hooks, then checks again
+after those hooks, before paying AP or resources. A failed action logs
+`requirementsUnavailable` and skips without spending AP, resource costs,
+cooldowns, inventory items or damage RNG. Initially blocked actions do not emit
+`before-action`; ordinary round/turn events still run. Requirements are not
+rechecked after payment or between effects of the same action. Earlier actions
+and lifecycle hooks can therefore invalidate a queued move safely.
+
+Action-bar tooltips and accessibility descriptions show unmet expressions and
+current values, using localized actor/resource/status/phase labels and optional
+combat message overrides. Logs retain failed conditions for localization and
+save/load; simulator rejection frames additionally record structured evaluations
+and observed values. The simulator disables its Queue button with an explanation.
+Enemy AI checks move requirements in addition to its rule conditions and explains
+both in decision traces, including rotation candidates. Scenario replay applies
+its existing fail/skip policy to requirement failures in planning or resolution.
+
+In the encounter and shared move editors, use **Action requirements → Add action
+requirement**, edit the existing condition tree, or **Clear action requirements**.
+Shared libraries allow typed reference IDs; encounters offer resolved choices.
+Saves preserve extension properties and clear removed requirements. Outside-combat
+item abilities cannot have combat requirements; combat item uses enforce them.
+
+The combat-mechanics harbour links to two **Action requirements** practice views.
+**Rhythm dive** needs 20% available stamina, two Swimming rhythm stacks and no
+Exhausted status. It spends 8 stamina and one rhythm stack, so the next queued
+dive may be skipped. **Seal release** also needs the third seal and either
+Current focus intensity 2 or two rhythm stacks. Its actual lightning damage
+charges the existing boss gauge. Four saved scenarios cover spent rhythm,
+phase-locked actions and an unlocked finisher, alongside the original scenarios.
+
 ## Equipment effects on combat
 
 Use **Items & equipment → Inventory definitions** to create item types, owners,
@@ -3488,9 +3666,84 @@ demonstrates damage, defense, Guard, maximum health, dyes, and paper-doll update
 Its training encounter retains the loadout lock when paused back to the wardrobe.
 
 Games without profiles keep their existing combat behavior and require no
-migration. Equipment penalties, equipment-granted damage defenses, critical
-hits, equipment-granted moves, durability, set bonuses, and equipment changes
+migration. Negative flat stat bonuses, critical
+hits, durability, set bonuses, and equipment changes
 during unfinished combat are deferred.
+
+### Equipment defenses, resource gains and moves
+
+Item types can also declare `combatEffects`, independent of their flat
+`combatBonuses`. These effects apply only to directly equipped items on the actor's
+`equipmentOwner`. Player and enemy actors use the same rules. Carried items and
+contents of equipped bags grant no effects.
+
+```json
+{
+  "label": "Rebreather",
+  "equipmentSlots": ["back"],
+  "combatEffects": {
+    "damageDefenses": { "resistances": { "water": 25 } },
+    "statusImmunities": ["silenced"],
+    "resourceGains": { "exhaustion": { "percent": -50 } },
+    "grantedMoves": [{ "library": "environments", "id": "purge-valve" }]
+  }
+}
+```
+
+`damageDefenses` uses the existing resistance, vulnerability and immunity format.
+Percentages add to actor and active-status defenses before Guard. Categorical
+damage/status immunities and `blockedMoveCategories` form unions; immunity
+prevents new status applications without cleansing an existing status.
+
+`resourceGains` maps a combat resource ID to optional signed integer `flat` and
+percentage `percent` modifiers. For positive `change-resource` effects on a
+resource whose `actor` is the equipped combatant, sum all equipped flats, clamp
+the base gain to zero, then apply summed percentages and round down. Percentages
+accept two decimal places, from -100 to 1000 per contribution. Recovery losses,
+fixed `set-resource` values, action payments and resources without an actor bypass
+these modifiers. Adjustments happen before bounds and resource-changed hooks,
+so reduced exhaustion can avoid a fatigue threshold. A `resourceAdjusted` log
+entry records `requested`, adjusted `amount`, resource ID and contributing
+`equipment` item IDs, including a gain reduced to zero. The localized message
+supports `{requested}` and `{amount}`.
+
+`grantedMoves` references shared moves from declared combat libraries. Compatible
+owner slots determine which potential moves and dependencies are imported into
+an encounter; only currently equipped instances grant availability. Grants can
+be attacks, abilities or Guard moves. They obey normal AP/resource costs,
+cooldowns, level requirements and category restrictions. A native move remains
+available when its granting item is removed. Shared move IDs must resolve
+without collisions and their resource/status dependencies must be valid in each
+linked encounter. Derived `equipmentMoves` metadata is rebuilt by source
+resolution and must not be used to author permanent grants.
+
+The editor exposes **Equipment combat mechanics** in both inventory definitions
+and item settings. Add damage defenses, immunities, restrictions, resource gain
+modifiers and shared move grants without JSON edits. Equipment comparisons show
+current and proposed mechanics alongside flat stats. Combat panels show equipped
+mechanics and effective defenses; AI debug traces explain an unavailable
+gear-granted candidate. Loadouts remain locked during unfinished combat and
+save/load derives effects from restored item placements.
+
+The simulator's **Starting equipment** selectors inherit the initial inventory,
+empty a slot, or equip a carried/equipped compatible item belonging to that owner.
+Captured scenarios store `setup.loadout` as actor → slot → item ID (or `null` for
+an empty slot). Unspecified slots inherit. Replay rebuilds bonuses and grants
+from current definitions, validates ownership/slots and rejects invalid starting
+health rather than silently clamping it. Programmatic simulations use
+`combatSimulationSetup(definition, readBinding, inventory, level)` to supply the
+inventory and pre-equipment base stats; direct pure simulations can supply an
+explicit `equipment` context instead. Reports include equipped contributions and
+gain-adjustment entries.
+
+In `sample-games/combat-mechanics`, visit **Diving gear room** from the harbour.
+The diving suit grants 25% water resistance, adding to the underwater boss's 50%.
+The rebreather halves exhaustion gains and grants **Purge valve** (1 AP, 5 stamina,
+recover 20 exhaustion). Both items start carried. Equip before entering either
+gear practice scene; finish or escape a fight before changing the shared loadout.
+Water and underwater boss each include `diving-gear` and `rebreather-purge` saved
+scenarios that equip the gear explicitly, leaving existing unarmored scenarios
+unchanged.
 
 ## Character progression and leveling
 
@@ -3715,6 +3968,79 @@ deployed file to switch games without rebuilding JavaScript; configure the stati
 host to avoid caching `config.json`. Source settings such as ports are not exposed
 to the browser. Vite preview serves the emitted config file. Both web apps still
 require their source app config files when invoking Vite tooling.
+
+## Damage and healing interception
+
+Triggers in encounters, composed rulesets and shared passives can use
+`damage-pending` and `healing-pending` to change a packet before HP is committed.
+Damage reaches this stage after outgoing modifiers, flat defense, type defenses
+and Guard; Guard has already been spent. Healing reaches it after outgoing
+modifiers but before the missing-HP cap. Damage immunity remains absolute.
+
+```json
+{
+  "event": "damage-pending",
+  "target": "self",
+  "conditions": [{ "type": "event-flag", "field": "lethal", "value": true }],
+  "once": true,
+  "effects": [{ "type": "prevent-lethal", "minimumHealth": 1 }]
+}
+```
+
+Here `self` is a shared passive's bearer. Encounter triggers use actor IDs or
+`event.source` / `event.target` in effect actor references as usual. Available
+interception effects are:
+
+| Effect            | Behavior                                                                                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adjust-effect`   | Add signed `amount` (default 0), then apply optional `percent` (-100 to 1000, at most two decimal places). Clamp to nonnegative HP units. Works for damage and healing.     |
+| `absorb-damage`   | Spend one unit of `resource` per damage prevented, limited by the current packet, available resource and optional positive `maximum`.                                       |
+| `redirect-damage` | Transfer `percent` (0–100, default 100) of the remaining damage to `actor`, with an optional positive `maximum`. Dead/self recipients leave the packet unchanged.           |
+| `prevent-lethal`  | On a currently lethal packet, preserve at least `minimumHealth` (positive, default 1), capped at current HP. Later adjustments in the same packet cannot defeat that floor. |
+
+Interceptors run in the existing order: encounter triggers, then active equipment
+and status passive sources in their authored order. Conditions and event formulas
+see the latest pending amount. Gate once-only lethal protection with
+`event-flag: lethal = true`, as above, so nonlethal hits do not spend its receipt.
+Receipts are saved per source through the existing passive mechanism.
+
+Redirected portions come from already mitigated damage. Each recipient applies
+its own defense, damage-type defenses, Guard and interception; outgoing modifiers
+and RNG are not applied twice. Redirected packets keep the original attacker,
+are marked `delivery: reaction`, `reactive: true`, `redirected: true`, and expose
+`originalTarget`. They cannot be redirected again. The original target commits
+its HP loss first, then redirected packets resolve, then its resolved notification
+is delivered. Pending hooks include reaction packets by default; explicitly set
+`includeReactions: false` to exclude them. Post-resolution hooks retain their
+existing opt-in behavior for reactions.
+
+During pending events, `amount` is the remaining packet before the HP cap,
+`incomingAmount` is its amount before interception, and `lethal` tests remaining
+damage against current HP. Damage facts add `absorbed`, `prevented` and
+`redirectedAmount`; `redirected` can be used in damage event conditions.
+After resolution, `amount` still means actual HP changed, so lightning gauges,
+life steal and other existing reactions use actual damage/healing. Unaffected
+packets provide neutral new counters (zero) and derive `incomingAmount` from
+the normal pre-HP result. Healing `overheal` reflects the adjusted packet.
+
+Pending hooks can also alter resources, statuses and phases. They cannot directly
+apply `damage`, `heal` or `finish`: validation and runtime guards reject these
+operations in pending hooks. Interception is synchronous, including inside a
+reactive effect. Resource/status/phase notifications it creates wait in the FIFO
+queue until HP commits. Existing operation limits and candidate rollback cover
+HP, resource spending, once receipts, logs and RNG if an effect fails.
+
+Logs identify each interception, source passive, before/after values, shield
+spending and redirect recipient. Simulation trace choices label interception
+operations and their frames expose an `interception` object and updated pending
+facts. Live previews show a before-interception notice; they do not speculatively
+run triggers. An intercepted item cast still pays normal costs and consumes the
+item even when interception cancels its HP effect.
+
+The combat-mechanics sample adds air barriers paid from stamina, Waterlogged
+healing suppression, a once-per-fight Rescue charm, and a guardian conduit that
+redirects half of lightning damage. Seven saved scenarios cover both water
+encounters and verify that the conduit reduces actual seal charge from 18 to 9.
 
 ## Standalone game exports
 

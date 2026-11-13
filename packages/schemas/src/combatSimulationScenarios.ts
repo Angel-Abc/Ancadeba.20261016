@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { bindingAliasSchema } from './bindings.js'
+import { combatSimulationLoadoutSchema } from './combatEquipment.js'
 
 const id = bindingAliasSchema.refine(
   (value) => !['__proto__', 'constructor', 'prototype'].includes(value),
@@ -30,6 +31,7 @@ export const combatScenarioExpectationSchema = z.discriminatedUnion('type', [
 ])
 
 export const combatScenarioSetupSchema = z.object({
+  loadout: combatSimulationLoadoutSchema.optional(),
   seed: z.number().int().min(1).max(0xffffffff).default(1),
   round: z.number().int().positive().safe().default(1),
   health: z.record(id, amount).default({}),

@@ -1,3 +1,8 @@
+import { combatMoveRequirementIssue } from './combatRequirements.js'
+import { combatActorMoves, validateCombatEquipment } from './combatEquipment.js'
+import type { CombatEquipment } from '@ancadeba/schemas'
+import type { InventoryDefinition, CombatSimulationLoadout } from '@ancadeba/schemas'
+import { applyCombatSimulationLoadout } from './combatSimulationLoadout.js'
 import { combatValueContext } from './combatValues.js'
 import { combatMoveRestriction, combatMoveRestrictionText } from './combatRestrictions.js'
 import {
@@ -35,6 +40,15 @@ import {
 import type { CombatDebugFrame, EnemyDecisionTrace } from './combatDebug.js'
 
 export interface CombatSimulationSetup {
+  readonly loadout?: CombatSimulationLoadout | undefined
+  readonly equipmentContext?:
+    | {
+        readonly inventory: InventoryDefinition
+        readonly baseStats: Readonly<Record<string, CombatBonuses>>
+        readonly level?: number | undefined
+      }
+    | undefined
+  readonly equipment?: CombatEquipment | undefined
   readonly health: Readonly<Record<string, number>>
   readonly maximumHealth: Readonly<Record<string, number>>
   readonly stats?: Readonly<Record<string, CombatBonuses>>
@@ -50,6 +64,7 @@ export interface CombatSimulationSetup {
 export type CombatSimulationState = ReturnType<typeof initialState>
 
 function initialState(definition: CombatDefinition, setup: CombatSimulationSetup) {
+  validateCombatEquipment(definition, setup.equipment)
   const actors = [definition.player, ...definition.enemies]
   const ids = new Set(actors.map((actor) => actor.id))
   const seed = setup.seed ?? definition.seed
@@ -126,6 +141,7 @@ function initialState(definition: CombatDefinition, setup: CombatSimulationSetup
     mechanics,
     undefined,
     setup.maximumHealth,
+    setup.equipment,
   )
 
   const guard: Record<string, number> = {}
@@ -162,7 +178,7 @@ export class CombatSimulation {
     if (!Number.isInteger(traceLimit) || traceLimit < 1 || traceLimit > 2000)
       throw new Error('Simulation trace limit must be 1–2000')
     this.definition = freezeCombatDefinition(combatDefinitionSchema.parse(definition))
-    this.setup = cloneCombatRules(setup)
+    this.setup = applyCombatSimulationLoadout(this.definition, cloneCombatRules(setup))
     this.current = initialState(this.definition, this.setup)
   }
 
@@ -206,6 +222,7 @@ export class CombatSimulation {
         if (decisions.length < this.traceLimit) decisions.push(decision)
       },
       this.setup.maximumHealth,
+      this.setup.equipment,
     )
 
     return cloneCombatRules(decisions)
@@ -219,14 +236,23 @@ export class CombatSimulation {
     if (state.outcome) return 'Combat has finished'
 
     if (
-      !player.moves.includes(moveId) ||
-      !(this.setup.availableMoves ?? player.moves).includes(moveId) ||
+      !combatActorMoves(player, this.setup.equipment).includes(moveId) ||
+      !(this.setup.availableMoves ?? combatActorMoves(player, this.setup.equipment)).includes(
+        moveId,
+      ) ||
       !move
     )
       return 'Move is unavailable or locked by level'
 
     if (combatStunned(this.definition, state.statuses[player.id])) return 'Player is stunned'
-    const restriction = combatMoveRestriction(this.definition, player.id, move, state.statuses)
+
+    const restriction = combatMoveRestriction(
+      this.definition,
+      player.id,
+      move,
+      state.statuses,
+      this.setup.equipment,
+    )
 
     if (restriction) return combatMoveRestrictionText(this.definition, player.id, move, restriction)
 
@@ -235,6 +261,23 @@ export class CombatSimulation {
       !this.definition.enemies.some((enemy) => enemy.id === target && state.health[enemy.id]! > 0)
     )
       return 'Choose a living enemy target'
+
+    const requirement = combatMoveRequirementIssue(
+      this.definition,
+      move,
+      {
+        health: state.health,
+        maximumHealth: this.setup.maximumHealth,
+        statuses: state.statuses,
+        resources: state.mechanics?.resources ?? {},
+        phase: state.mechanics?.phase,
+        self: player.id,
+        target: combatMoveTarget(move) === 'self' ? player.id : target,
+      },
+      state.plan,
+    )
+
+    if (requirement) return requirement
 
     if (cooldownRemaining(state.cooldowns, player.id, moveId, state.round))
       return 'Move is on cooldown'
@@ -310,7 +353,13 @@ export class CombatSimulation {
 
     const result = resolveCombatRound(
       this.definition,
-      { ...this.current, escape, stats: this.setup.stats, maximumHealth: this.setup.maximumHealth },
+      {
+        ...this.current,
+        escape,
+        stats: this.setup.stats,
+        maximumHealth: this.setup.maximumHealth,
+        equipment: this.setup.equipment,
+      },
       this.truncated
         ? undefined
         : (frame) => {
@@ -340,6 +389,7 @@ export class CombatSimulation {
           result.mechanics,
           undefined,
           this.setup.maximumHealth,
+          this.setup.equipment,
         )
 
     this.current = {

@@ -1,3 +1,5 @@
+import { combatPassiveDefinitionsSchema, bindCombatPassiveTrigger } from './combatPassives.js'
+import { combatMechanicsReferenceIssues } from './combatMechanicsValidation.js'
 import { combatDamageTypeSchema, combatDamageDefensesSchema } from './combatDamage.js'
 import {
   combatMoveCategoriesSchema,
@@ -5,7 +7,7 @@ import {
   combatStatusImmunityIssues,
 } from './combatRestrictions.js'
 import { combatScalingSchema } from './combatValues.js'
-import { combatConditionIssues } from './combatConditions.js'
+import { combatConditionSchema, combatConditionIssues } from './combatConditions.js'
 import { z } from 'zod'
 import { combatMechanicsSchema } from './combatMechanics.js'
 import { combatEnemyAISchema } from './combatEnemyAI.js'
@@ -39,7 +41,10 @@ const label = {
   descriptionKey: translationKeySchema.optional(),
 }
 
-const moveCategories = { categories: combatMoveCategoriesSchema.optional() }
+const moveCategories = {
+  requirements: z.array(combatConditionSchema).max(20).optional(),
+  categories: combatMoveCategoriesSchema.optional(),
+}
 
 const resourceCosts = z.record(id, amount.positive()).optional()
 
@@ -107,6 +112,7 @@ export const combatActorSchema = z
     ...label,
     portrait: id.optional(),
     equipmentOwner: id.optional(),
+    equipmentMoves: z.array(id).max(100).optional(),
     damageDefenses: combatDamageDefensesSchema.optional(),
     ...combatRestrictionFields,
     leveling: id.optional(),
@@ -134,6 +140,32 @@ export const combatActorSchema = z
   )
 
 export const combatTextSchema = z.object({
+  interceptionPreview: z
+    .string()
+    .default(
+      'Damage and healing previews are before interception; shields, redirection and lethal protection apply during resolution.',
+    ),
+  effectIntercepted: z.string().default('{target}: {interception} changes {requested} → {amount}.'),
+  interceptAdjust: z.string().default('Effect adjustment'),
+  interceptAbsorb: z.string().default('Shield absorption'),
+  interceptRedirect: z.string().default('Damage redirection to {recipient}'),
+  interceptPreventLethal: z.string().default('Lethal-hit prevention'),
+  passiveTriggered: z.string().default('{actor}: {passive} ({source}) activates.'),
+  passiveGrants: z.string().default('Passives: {passives}'),
+  requirementsUnavailable: z.string().default('{move} unavailable: requires {requirements}.'),
+  requirementAnd: z.string().default('AND'),
+  requirementOr: z.string().default('OR'),
+  requirementNot: z.string().default('NOT'),
+  requirementCurrent: z.string().default('{requirement} (current {actual})'),
+  requirementUnknown: z.string().default('unknown'),
+  requirementPhase: z.string().default('Phase'),
+  requirementStacks: z.string().default('stacks'),
+  requirementIntensity: z.string().default('intensity'),
+  requirementRemaining: z.string().default('turns remaining'),
+  resourceAdjusted: z
+    .string()
+    .default('{resource}: equipment changes gain {requested} → {amount}.'),
+  requiresEquipment: z.string().default('Equip an item granting {move}.'),
   statusImmune: z.string().default('{target} is immune to {status}.'),
   moveRestricted: z.string().default('{actor}: {move} is blocked ({category}).'),
   statusImmunities: z.string().default('Status immunities: {statuses}'),
@@ -225,6 +257,7 @@ export const combatTextSchema = z.object({
 })
 
 export const combatFieldsSchema = z.object({
+  passiveDefinitions: combatPassiveDefinitionsSchema.optional(),
   'schema-version': z.literal('1.0.0'),
   id,
   ...label,
@@ -269,6 +302,54 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
       index === 0 ? ['player'] : ['enemies', index - 1],
     ))
       context.addIssue({ code: 'custom', ...issue })
+
+  for (const [library, entries] of Object.entries(combat.passiveDefinitions ?? {}))
+    for (const [id, passive] of Object.entries(entries))
+      for (const owner of actors) {
+        const mechanics = {
+          resources: combat.mechanics?.resources ?? {},
+          phases: Object.fromEntries(
+            Object.entries(combat.mechanics?.phases ?? {}).map(([id, phase]) => [
+              id,
+              { ...phase, onEnter: [], enemyRotations: undefined },
+            ]),
+          ),
+          victory: 'enemies-defeated' as const,
+          triggers: Object.fromEntries(
+            Object.entries(passive.triggers).map(([id, trigger]) => [
+              id,
+              bindCombatPassiveTrigger(trigger, owner.id),
+            ]),
+          ),
+        }
+
+        for (const issue of combatMechanicsReferenceIssues({
+          mechanics,
+          actors: actors.map((actor) => actor.id),
+          moves: combat.moves,
+          statuses: combat.statuses,
+          enemyMoves: new Map(
+            combat.enemies.map((actor) => [
+              actor.id,
+              [...actor.moves, ...(actor.equipmentMoves ?? [])],
+            ]),
+          ),
+        }))
+          context.addIssue({
+            code: 'custom',
+            path: ['passiveDefinitions', library, id, owner.id, ...issue.path],
+            message: issue.message,
+          })
+      }
+
+  for (const [id, status] of Object.entries(combat.statuses ?? {}))
+    for (const [index, reference] of (status.passives ?? []).entries())
+      if (!combat.passiveDefinitions?.[reference.library]?.[reference.id])
+        context.addIssue({
+          code: 'custom',
+          path: ['statuses', id, 'passives', index],
+          message: `Unknown combat passive: ${reference.library}/${reference.id}`,
+        })
 
   for (const [id, status] of Object.entries(combat.statuses ?? {}))
     for (const issue of combatStatusImmunityIssues(status, combat.statuses ?? {}, ['statuses', id]))
@@ -325,7 +406,7 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
     for (const [index, rule] of (actor.ai?.rules ?? []).entries()) {
       const path = ['enemies', combat.enemies.indexOf(actor), 'ai', 'rules', index]
 
-      if (!actor.moves.includes(rule.move))
+      if (![...actor.moves, ...(actor.equipmentMoves ?? [])].includes(rule.move))
         context.addIssue({
           code: 'custom',
           path: [...path, 'move'],
@@ -346,7 +427,7 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
           context.addIssue({ code: 'custom', ...issue })
     }
 
-    for (const move of actor.moves)
+    for (const move of [...actor.moves, ...(actor.equipmentMoves ?? [])])
       if (!Object.hasOwn(combat.moves, move))
         context.addIssue({
           code: 'custom',
@@ -357,7 +438,9 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
     if (
       actor !== combat.player &&
       ((!actor.rotation.length && actor.ai?.fallback !== 'wait') ||
-        actor.rotation.some((move) => !actor.moves.includes(move)))
+        actor.rotation.some(
+          (move) => ![...actor.moves, ...(actor.equipmentMoves ?? [])].includes(move),
+        ))
     )
       context.addIssue({
         code: 'custom',
@@ -488,6 +571,21 @@ export function localizeCombat(
   return combatDefinitionSchema.parse({
     ...combat,
     ...presentation(combat),
+    ...(combat.passiveDefinitions
+      ? {
+          passiveDefinitions: Object.fromEntries(
+            Object.entries(combat.passiveDefinitions).map(([library, entries]) => [
+              library,
+              Object.fromEntries(
+                Object.entries(entries).map(([id, entry]) => [
+                  id,
+                  { ...entry, ...presentation(entry) },
+                ]),
+              ),
+            ]),
+          ),
+        }
+      : {}),
     ...(combat.mechanics && {
       mechanics: {
         ...combat.mechanics,

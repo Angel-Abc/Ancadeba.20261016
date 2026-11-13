@@ -4,7 +4,7 @@ import { combatSourceSchema } from '@ancadeba/schemas'
 import type { Translate } from '@ancadeba/utilities'
 import { editorLocalization } from './localization.js'
 import { commandSchema, type EditorCommand, type ProjectView } from '@ancadeba/editor-core'
-import { combatDefinitionSchema, combatComponentSchema, type CombatSource } from '@ancadeba/schemas'
+import { combatComponentSchema, type CombatSource } from '@ancadeba/schemas'
 import { bindCombatLibraryEditor } from './combatLibraryEditor.js'
 import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
@@ -240,7 +240,7 @@ export function bindCombatEditor(
         while (view?.game?.combat?.some((entry) => entry.toLowerCase() === id.toLowerCase()))
           id = `training-${number++}`
 
-        draft = combatDefinitionSchema.parse({
+        draft = combatSourceSchema.parse({
           'schema-version': '1.0.0',
           id,
           label: 'Training',
