@@ -182,7 +182,17 @@ export function abilityCanMatter(
           effect.status,
           definition.player.id,
           snapshot.statuses[recipient]?.find((active) => active.id === effect.status),
-          effect,
+          {
+            ...effect,
+            stacks:
+              effect.stacks === undefined
+                ? undefined
+                : Math.min(effect.stacks, status.stacking?.maximum ?? 1),
+            intensity:
+              effect.intensity === undefined
+                ? undefined
+                : Math.min(effect.intensity, status.intensity?.maximum ?? 1),
+          },
         ).changed,
       )
     }

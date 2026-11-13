@@ -6,6 +6,7 @@ import {
   resolveCombatSource,
   bindCombatRulesetActors,
   combatRulesetSchema,
+  inventorySchema,
   type CombatDefinition,
 } from '@ancadeba/schemas'
 import {
@@ -228,6 +229,57 @@ describe('dynamic values across combat effects', () => {
     sim.resolve()
     expect(sim.snapshot().statuses.player).toEqual([])
   })
+
+  it.each(['stacks', 'intensity'] as const)(
+    'allows status items whose scaled %s exceed the status maximum',
+    (strength) => {
+      const definition = fixture()
+      definition.itemUse = { owner: 'player', itemTypes: ['tonic'] }
+      definition.moves.ward = {
+        type: 'ability',
+        label: 'Ward',
+        description: '',
+        target: 'self',
+        apCost: 1,
+        effects: [
+          {
+            id: 'ward',
+            type: 'apply-status',
+            status: 'ward',
+            stacks: 1,
+            intensity: 1,
+            valueScaling: { [strength]: { terms: [{ type: 'round', factor: 10 }] } },
+          },
+        ],
+      }
+
+      const inventory = inventorySchema.parse({
+        'schema-version': '1.0.0',
+        owners: { player: { label: 'Player' } },
+        itemTypes: {
+          tonic: {
+            label: 'Ward tonic',
+            use: { ability: { library: 'items', id: 'ward' }, contexts: ['combat'] },
+          },
+        },
+        items: { tonic: { itemType: 'tonic', placement: { type: 'carried', owner: 'player' } } },
+      })
+
+      const sim = new CombatSimulation(definition, {
+        health: { player: 50, eel: 200 },
+        maximumHealth: { player: 100, eel: 200 },
+        itemContext: { inventory },
+      })
+
+      expect(sim.queueIssue('ward', 'player', 'tonic')).toBeUndefined()
+      sim.queue('ward', 'player', 'tonic')
+      sim.resolve()
+      expect(sim.snapshot().statuses.player).toEqual([
+        { id: 'ward', source: 'player', remaining: 10, stacks: 1, intensity: 1, [strength]: 5 },
+      ])
+      expect(sim.queueIssue('ward', 'player', 'tonic')).toBe('Item is consumed or already reserved')
+    },
+  )
 
   it('evaluates periodic payloads live on each tick and applies strength afterward', () => {
     const definition = fixture()
