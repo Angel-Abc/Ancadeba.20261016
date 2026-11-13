@@ -66,6 +66,16 @@ export function equipmentStatsView(
           `${profile.messages[stat]} ${(contribution.modifiers[stat] ?? 0) >= 0 ? '+' : ''}${contribution.modifiers[stat]}`,
       )
       .join(' · ')
+
+    const percentages = (['attack', 'defense', 'guard'] as const)
+      .filter((stat) => contribution.percentModifiers?.[stat])
+      .map(
+        (stat) =>
+          `${profile.messages[stat]} ${(contribution.percentModifiers?.[stat] ?? 0) >= 0 ? '+' : ''}${contribution.percentModifiers?.[stat]}%`,
+      )
+      .join(' · ')
+
+    value.textContent = [value.textContent, percentages].filter(Boolean).join(' · ')
     list.append(label, value)
   }
 

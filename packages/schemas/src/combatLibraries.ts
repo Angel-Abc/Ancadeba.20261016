@@ -1,13 +1,33 @@
+import { combatMoveScalings, combatScalingIssues } from './combatValues.js'
+import { combatStatusImmunityIssues } from './combatRestrictions.js'
+import { combatConditionIssues, visitCombatCondition } from './combatConditions.js'
 import { z } from 'zod'
 import { gameIdSchema } from './game.js'
 import {
   combatDefinitionSchema,
   combatFieldsSchema,
   combatMoveSchema,
+  combatActorSchema,
   type CombatDefinition,
   type CombatMoveDefinition,
 } from './combat.js'
-import { combatStatusSchema } from './combatAbilities.js'
+import { combatStatusSchema, combatStatusApplicationIssues } from './combatAbilities.js'
+import {
+  combatRulesetSchema,
+  combatRulesetLayerSchema,
+  combatRulesetReferences,
+  combatRulesetReferenceSchema,
+  combatMechanicsOverridesSchema,
+} from './combatRulesets.js'
+import { resolveCombatRuleset, combatRulesetDependencies } from './combatRulesetResolution.js'
+import { combatMechanicsReferenceIssues } from './combatMechanicsValidation.js'
+import {
+  combatAIProfileSchema,
+  combatAIProfileReferenceSchema,
+  combatAIOverridesSchema,
+} from './combatAIProfiles.js'
+import { resolveCombatEnemyAI } from './combatAIProfileResolution.js'
+import { combatSimulationScenarioSchema } from './combatSimulationScenarios.js'
 import { assertGraphicReference, graphicAppearanceSchema, type AssetCatalog } from './assets.js'
 import type { GameTranslation } from './localization.js'
 import type { InventoryDefinition } from './inventory.js'
@@ -22,24 +42,103 @@ const entryId = z
 
 export const combatReferenceSchema = z.object({ library: gameIdSchema, id: entryId })
 
-export const combatSourceSchema = combatFieldsSchema.extend({
-  moves: z.record(entryId, combatMoveSchema).default({}),
-  sharedMoves: z.array(combatReferenceSchema).optional(),
-  sharedStatuses: z.array(combatReferenceSchema).optional(),
-})
+export const combatActorSourceSchema = combatActorSchema
+  .safeExtend({
+    aiProfile: combatAIProfileReferenceSchema.nullable().optional(),
+    aiOverrides: combatAIOverridesSchema.optional(),
+  })
+  .superRefine((actor, context) => {
+    if (actor.aiProfile && actor.ai)
+      context.addIssue({
+        code: 'custom',
+        path: ['ai'],
+        message: 'Use aiOverrides with an AI profile, or inline ai without a profile',
+      })
+
+    if (actor.aiOverrides && !actor.aiProfile)
+      context.addIssue({
+        code: 'custom',
+        path: ['aiOverrides'],
+        message: 'AI overrides require a profile',
+      })
+  })
+
+export type CombatActorSource = z.infer<typeof combatActorSourceSchema>
+
+export const combatSourceSchema = combatFieldsSchema
+  .extend({
+    player: combatActorSourceSchema,
+    enemies: z.array(combatActorSourceSchema).min(1).max(32),
+    moves: z.record(entryId, combatMoveSchema).default({}),
+    sharedMoves: z.array(combatReferenceSchema).optional(),
+    sharedStatuses: z.array(combatReferenceSchema).optional(),
+    ruleset: combatRulesetReferenceSchema.nullable().optional(),
+    rulesets: z
+      .array(combatRulesetLayerSchema)
+      .max(16)
+      .refine(
+        (layers) =>
+          new Set(layers.map((layer) => `${layer.library}/${layer.id}`)).size === layers.length,
+        'Composed rulesets must be unique',
+      )
+      .optional(),
+    mechanicsOverrides: combatMechanicsOverridesSchema.optional(),
+    simulationScenarios: z
+      .record(entryId, combatSimulationScenarioSchema)
+      .refine(
+        (entries) => Object.keys(entries).length <= 100,
+        'At most 100 simulation scenarios are supported',
+      )
+      .optional(),
+  })
+  .superRefine((source, context) => {
+    if (source.player.aiProfile || source.player.aiOverrides)
+      context.addIssue({
+        code: 'custom',
+        path: ['player', 'aiProfile'],
+        message: 'AI profiles are only supported for enemies',
+      })
+
+    if (source.ruleset && source.rulesets !== undefined)
+      context.addIssue({
+        code: 'custom',
+        path: ['rulesets'],
+        message: 'Use ruleset or rulesets, not both',
+      })
+    const linked = combatRulesetReferences(source).length > 0
+
+    if (linked && source.mechanics)
+      context.addIssue({
+        code: 'custom',
+        path: ['mechanics'],
+        message: 'Use mechanicsOverrides with a ruleset, or inline mechanics without a ruleset',
+      })
+
+    if (source.mechanicsOverrides && !linked)
+      context.addIssue({
+        code: 'custom',
+        path: ['mechanicsOverrides'],
+        message: 'Mechanics overrides require a ruleset',
+      })
+  })
 
 export function moveStatusIds(move: CombatMoveDefinition): string[] {
-  return move.type === 'ability'
-    ? [
-        ...new Set(
-          move.effects.flatMap((effect) =>
-            effect.type === 'apply-status' || effect.type === 'remove-status'
-              ? [effect.status]
-              : [],
-          ),
-        ),
-      ]
-    : []
+  const ids = new Set<string>()
+
+  for (const { scaling } of combatMoveScalings(move))
+    for (const term of scaling.terms) if (term.type === 'status') ids.add(term.status)
+
+  if (move.type === 'ability')
+    for (const effect of move.effects) {
+      if ('status' in effect) ids.add(effect.status)
+
+      for (const condition of effect.conditions ?? [])
+        visitCombatCondition(condition, (leaf) => {
+          if ('status' in leaf) ids.add(leaf.status)
+        })
+    }
+
+  return [...ids]
 }
 
 export const combatLibrarySchema = z
@@ -48,8 +147,104 @@ export const combatLibrarySchema = z
     id: gameIdSchema,
     moves: z.record(entryId, combatMoveSchema).default({}),
     statuses: z.record(entryId, combatStatusSchema).default({}),
+    rulesets: z
+      .record(entryId, combatRulesetSchema)
+      .refine((entries) => Object.keys(entries).length <= 100, 'At most 100 rulesets are supported')
+      .optional(),
+    aiProfiles: z
+      .record(entryId, combatAIProfileSchema)
+      .refine(
+        (entries) => Object.keys(entries).length <= 100,
+        'At most 100 AI profiles are supported',
+      )
+      .optional(),
   })
   .superRefine((library, context) => {
+    for (const [id, status] of Object.entries(library.statuses))
+      for (const issue of combatStatusImmunityIssues(status, library.statuses, ['statuses', id]))
+        context.addIssue({ code: 'custom', ...issue })
+
+    for (const [id, move] of Object.entries(library.moves)) {
+      for (const resource of Object.keys(move.resourceCostScaling ?? {}))
+        if (!Object.hasOwn(move.resourceCosts ?? {}, resource))
+          context.addIssue({
+            code: 'custom',
+            path: ['moves', id, 'resourceCostScaling', resource],
+            message: 'Scaling requires a declared resource cost',
+          })
+
+      for (const { scaling, path } of combatMoveScalings(move))
+        for (const issue of combatScalingIssues(scaling, { statuses: library.statuses }, [
+          'moves',
+          id,
+          ...path,
+        ]))
+          context.addIssue({ code: 'custom', ...issue })
+    }
+
+    for (const [id, move] of Object.entries(library.moves))
+      if (move.type === 'ability')
+        for (const [index, effect] of move.effects.entries())
+          for (const [conditionIndex, condition] of (effect.conditions ?? []).entries())
+            for (const issue of combatConditionIssues(condition, { statuses: library.statuses }, [
+              'moves',
+              id,
+              'effects',
+              index,
+              'conditions',
+              conditionIndex,
+            ]))
+              context.addIssue({ code: 'custom', ...issue })
+
+    for (const [id, profile] of Object.entries(library.aiProfiles ?? {}))
+      for (const [index, rule] of profile.ai.rules.entries()) {
+        const path = ['aiProfiles', id, 'ai', 'rules', index]
+
+        if (!Object.hasOwn(library.moves, rule.move))
+          context.addIssue({
+            code: 'custom',
+            path: [...path, 'move'],
+            message: `Unknown profile move: ${rule.move}`,
+          })
+
+        for (const [index, condition] of rule.conditions.entries())
+          for (const issue of combatConditionIssues(
+            condition,
+            { actors: profile.actors, statuses: library.statuses },
+            [...path, 'conditions', index],
+          ))
+            context.addIssue({ code: 'custom', ...issue })
+      }
+
+    for (const [id, move] of Object.entries(library.moves))
+      if (move.type === 'ability')
+        for (const [index, effect] of move.effects.entries())
+          if (effect.type === 'apply-status' || effect.type === 'remove-status') {
+            const status = library.statuses[effect.status]
+
+            if (status)
+              for (const issue of combatStatusApplicationIssues(effect, status))
+                context.addIssue({
+                  code: 'custom',
+                  path: ['moves', id, 'effects', index, ...issue.path],
+                  message: issue.message,
+                })
+          }
+
+    for (const [id, ruleset] of Object.entries(library.rulesets ?? {}))
+      for (const issue of combatMechanicsReferenceIssues({
+        mechanics: ruleset.mechanics,
+        actors: ruleset.actors,
+        moves: library.moves,
+        statuses: library.statuses,
+        enemyMoves: new Map(ruleset.actors.map((role) => [role, Object.keys(library.moves)])),
+      }))
+        context.addIssue({
+          code: 'custom',
+          path: ['rulesets', id, ...issue.path],
+          message: issue.message,
+        })
+
     for (const [id, move] of Object.entries(library.moves))
       for (const status of moveStatusIds(move))
         if (!Object.hasOwn(library.statuses, status))
@@ -70,11 +265,23 @@ export const combatOriginSchema = z.object({
   file: z.string(),
   path: z.array(z.union([z.string(), z.number()])),
   library: gameIdSchema.optional(),
+  ruleset: entryId.optional(),
 })
+
+export type CombatOrigin = z.infer<typeof combatOriginSchema>
+
+export const combatMechanicsOriginsSchema = z.object({
+  resources: z.record(z.string(), combatOriginSchema),
+  triggers: z.record(z.string(), combatOriginSchema),
+  phases: z.record(z.string(), combatOriginSchema),
+})
+
+export type CombatMechanicsOrigins = z.infer<typeof combatMechanicsOriginsSchema>
 
 export const combatOriginsSchema = z.object({
   moves: z.record(z.string(), combatOriginSchema),
   statuses: z.record(z.string(), combatOriginSchema),
+  mechanics: combatMechanicsOriginsSchema.optional(),
 })
 
 export type CombatOrigins = z.infer<typeof combatOriginsSchema>
@@ -117,7 +324,10 @@ export function resolveCombatSource(
   const moves = { ...source.moves }
   const statuses = { ...source.statuses }
   const origins: CombatOrigins = { moves: {}, statuses: {} }
-  const issues: CombatLibraryIssue[] = []
+  const ruleset = resolveCombatRuleset(source, libraries, file)
+  const issues: CombatLibraryIssue[] = [...ruleset.issues]
+
+  if (ruleset.origins) origins.mechanics = ruleset.origins
 
   for (const id of Object.keys(moves)) origins.moves[id] = { file, path: ['moves', id] }
 
@@ -149,15 +359,29 @@ export function resolveCombatSource(
       return
     }
 
+    if (old?.library === ref.library) return
+
     statuses[ref.id] = status
     origins.statuses[ref.id] = {
       library: ref.library,
       file: combatLibraryFile(ref.library),
       path: ['statuses', ref.id],
+      ...(path[0] === 'ruleset' && source.ruleset
+        ? { ruleset: source.ruleset.id }
+        : path[0] === 'rulesets' && typeof path[1] === 'number'
+          ? { ruleset: source.rulesets?.[path[1]]?.id }
+          : {}),
     }
+
+    for (const id of status.statusImmunities ?? []) addStatus({ library: ref.library, id }, path)
   }
 
-  const addMove = (ref: CombatReference, path: (string | number)[], implicit = false) => {
+  const addMove = (
+    ref: CombatReference,
+    path: (string | number)[],
+    implicit = false,
+    localDependencies = false,
+  ) => {
     const move = libraries.get(ref.library)?.moves[ref.id]
 
     if (!move) {
@@ -186,9 +410,16 @@ export function resolveCombatSource(
       library: ref.library,
       file: combatLibraryFile(ref.library),
       path: ['moves', ref.id],
+      ...(path[0] === 'ruleset' && source.ruleset
+        ? { ruleset: source.ruleset.id }
+        : path[0] === 'rulesets' && typeof path[1] === 'number'
+          ? { ruleset: source.rulesets?.[path[1]]?.id }
+          : {}),
     }
 
-    for (const id of moveStatusIds(move)) addStatus({ library: ref.library, id }, path)
+    for (const id of moveStatusIds(move))
+      if (!localDependencies || !Object.hasOwn(statuses, id))
+        addStatus({ library: ref.library, id }, path)
   }
 
   for (const key of ['sharedMoves', 'sharedStatuses'] as const) {
@@ -223,7 +454,169 @@ export function resolveCombatSource(
     else addMove(use.ability, path, true)
   }
 
-  const resolved = combatDefinitionSchema.safeParse({ ...source, moves, statuses })
+  const enemies = source.enemies.map((enemy, index) => {
+    const resolved = resolveCombatEnemyAI(enemy, [source.player, ...source.enemies], libraries)
+
+    for (const issue of resolved.issues)
+      issues.push({ file, path: ['enemies', index, ...issue.path], message: issue.message })
+
+    if (enemy.aiProfile && resolved.ai) {
+      const library = enemy.aiProfile.library
+      const path = ['enemies', index, 'aiProfile']
+      const definitions = libraries.get(library)
+
+      // Available moves remain dependencies even when their conditional rule is excluded.
+      // Another mechanics library may provide the other encounter moves later.
+      const requiredMoves = new Set([
+        ...enemy.moves.filter((id) => Object.hasOwn(definitions?.moves ?? {}, id)),
+        ...resolved.ai.rules.map((rule) => rule.move),
+      ])
+
+      for (const id of requiredMoves) {
+        if (!Object.hasOwn(moves, id)) addMove({ library, id }, path, true, true)
+        else if (
+          origins.moves[id]?.library &&
+          origins.moves[id]?.library !== library &&
+          Object.hasOwn(definitions?.moves ?? {}, id)
+        )
+          issues.push({
+            file,
+            path,
+            message: `AI profile move ${id} conflicts with ${origins.moves[id]?.file}`,
+          })
+
+        if (origins.moves[id]?.library === library)
+          for (const status of moveStatusIds(moves[id]!))
+            if (origins.statuses[status]?.library && origins.statuses[status]?.library !== library)
+              issues.push({
+                file,
+                path,
+                message: `AI profile status ${status} conflicts with ${origins.statuses[status]?.file}`,
+              })
+      }
+
+      for (const rule of resolved.ai.rules) {
+        for (const condition of rule.conditions)
+          visitCombatCondition(condition, (leaf) => {
+            if ('status' in leaf) {
+              if (!Object.hasOwn(statuses, leaf.status))
+                addStatus({ library, id: leaf.status }, path)
+              else if (
+                origins.statuses[leaf.status]?.library &&
+                origins.statuses[leaf.status]?.library !== library &&
+                Object.hasOwn(definitions?.statuses ?? {}, leaf.status)
+              )
+                issues.push({
+                  file,
+                  path,
+                  message: `AI profile status ${leaf.status} conflicts with ${origins.statuses[leaf.status]?.file}`,
+                })
+            }
+          })
+      }
+    }
+
+    return { ...enemy, ai: resolved.ai }
+  })
+
+  const references = combatRulesetReferences(source)
+
+  if (references.length && ruleset.mechanics) {
+    const requireEntry = (kind: 'moves' | 'statuses', id: string, owner?: CombatOrigin) => {
+      const existing = origins[kind][id]
+
+      const candidates = references.filter((reference) =>
+        Object.hasOwn(libraries.get(reference.library)?.[kind] ?? {}, id),
+      )
+
+      const preferred =
+        candidates.find(
+          (reference) => reference.library === owner?.library && reference.id === owner?.ruleset,
+        ) ?? candidates.find((reference) => reference.library === owner?.library)
+
+      const suppliers = [...new Set(candidates.map((reference) => reference.library))]
+
+      const path = owner?.ruleset
+        ? source.rulesets
+          ? [
+              'rulesets',
+              references.findIndex(
+                (reference) =>
+                  reference.library === owner.library && reference.id === owner.ruleset,
+              ),
+            ]
+          : ['ruleset']
+        : ['mechanicsOverrides']
+
+      if (existing) {
+        if (existing.library && preferred && existing.library !== preferred.library)
+          issues.push({
+            file,
+            path,
+            message: `Ruleset ${kind === 'moves' ? 'move' : 'status'} ${id} conflicts with ${existing.file}; required by ${owner?.library}/${owner?.ruleset}`,
+          })
+
+        return
+      }
+
+      if (!preferred && suppliers.length !== 1) {
+        issues.push({
+          file,
+          path,
+          message: suppliers.length
+            ? `Ambiguous ruleset ${kind === 'moves' ? 'move' : 'status'} ${id}: supplied by ${suppliers.join(', ')}; import it explicitly`
+            : `Missing shared ${kind === 'moves' ? 'move' : 'status'}: ${id}`,
+        })
+
+        return
+      }
+
+      const reference = preferred ?? candidates[0]!
+
+      const dependencyPath = source.rulesets
+        ? ['rulesets', references.indexOf(reference)]
+        : ['ruleset']
+
+      if (kind === 'statuses') addStatus({ library: reference.library, id }, dependencyPath)
+      else {
+        addMove({ library: reference.library, id }, dependencyPath, true, true)
+
+        for (const status of moveStatusIds(moves[id]!)) {
+          const previous = origins.statuses[status]
+
+          if (previous?.library && previous.library !== reference.library)
+            issues.push({
+              file,
+              path: dependencyPath,
+              message: `Ruleset move ${id} requires status ${status} from ${reference.library}, conflicting with ${previous.file}`,
+            })
+        }
+      }
+    }
+
+    // Attribute dependencies to the effective entry's supplying layer, after replacements/exclusions.
+    for (const section of ['triggers', 'phases'] as const)
+      for (const [id, entry] of Object.entries(ruleset.mechanics[section])) {
+        const part = { ...ruleset.mechanics, triggers: {}, phases: {}, [section]: { [id]: entry } }
+        const dependencies = combatRulesetDependencies(part)
+        const owner = ruleset.baseOrigins[section][id]
+
+        for (const status of dependencies.statuses) requireEntry('statuses', status, owner)
+
+        for (const move of dependencies.moves) requireEntry('moves', move, owner)
+      }
+
+    for (const actor of [source.player, ...source.enemies])
+      for (const move of actor.moves) requireEntry('moves', move)
+  }
+
+  const resolved = combatDefinitionSchema.safeParse({
+    ...source,
+    enemies,
+    moves,
+    statuses,
+    mechanics: ruleset.mechanics,
+  })
 
   if (!resolved.success)
     for (const issue of resolved.error.issues)
@@ -274,6 +667,22 @@ export function localizeCombatLibrary(
       ...library,
       moves: entries(library.moves),
       statuses: entries(library.statuses),
+      ...(library.aiProfiles && { aiProfiles: entries(library.aiProfiles) }),
+      ...(library.rulesets && {
+        rulesets: Object.fromEntries(
+          Object.entries(entries(library.rulesets)).map(([id, ruleset]) => [
+            id,
+            {
+              ...ruleset,
+              mechanics: {
+                ...ruleset.mechanics,
+                resources: entries(ruleset.mechanics.resources),
+                phases: entries(ruleset.mechanics.phases),
+              },
+            },
+          ]),
+        ),
+      }),
     }),
   )
 }
@@ -286,6 +695,36 @@ export function combatLibraryIssues(
 ): CombatLibraryIssue[] {
   const issues: CombatLibraryIssue[] = []
   const file = combatLibraryFile(library.id)
+
+  for (const [id, profile] of Object.entries(library.aiProfiles ?? {}))
+    for (const key of ['labelKey', 'descriptionKey'] as const)
+      if (profile[key] && (!translation || !Object.hasOwn(translation.fallback, profile[key])))
+        issues.push({
+          file,
+          path: ['aiProfiles', id, key],
+          message: `Missing combat translation: ${profile[key]}`,
+        })
+
+  for (const [id, ruleset] of Object.entries(library.rulesets ?? {})) {
+    const entries = [
+      { entry: ruleset, path: ['rulesets', id] },
+      ...(['resources', 'phases'] as const).flatMap((section) =>
+        Object.entries(ruleset.mechanics[section]).map(([key, entry]) => ({
+          entry,
+          path: ['rulesets', id, 'mechanics', section, key],
+        })),
+      ),
+    ]
+
+    for (const { entry, path } of entries)
+      for (const key of ['labelKey', 'descriptionKey'] as const)
+        if (entry[key] && (!translation || !Object.hasOwn(translation.fallback, entry[key])))
+          issues.push({
+            file,
+            path: [...path, key],
+            message: `Missing combat translation: ${entry[key]}`,
+          })
+  }
 
   for (const kind of ['moves', 'statuses'] as const)
     for (const [id, entry] of Object.entries(library[kind])) {

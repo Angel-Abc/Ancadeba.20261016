@@ -1,0 +1,40 @@
+{
+  "schema-version": "1.0.0",
+  "id": "start",
+  "title": "Tides and the Three Seals",
+  "type": "stand-alone",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Combat examples with resources, triggers, reusable rulesets and boss phases. The underwater guardian combines exhaustion and the three-seal gauge. Start a new game to reset encounters.",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "start",
+      "type": "button",
+      "label": "New game",
+      "action": {
+        "type": "new-game",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 5,
+        "column": 1,
+        "columnSpan": 5
+      }
+    }
+  ]
+}

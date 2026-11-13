@@ -337,6 +337,275 @@ function flush(engine: Engine): void {
 }
 
 describe('scene renderer', () => {
+  it.each([false, true])(
+    'shows restriction reasons, utility recovery and status immunity in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) => {
+          const source = await readFile(
+            new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path !== 'combat/water.json') return source
+          const combat = JSON.parse(source)
+          combat.mechanics.triggers['start-controls'] = {
+            event: 'encounter-start',
+            effects: [
+              { type: 'apply-status', actor: 'player', status: 'silenced' },
+              { type: 'apply-status', actor: 'player', status: 'disarmed' },
+            ],
+          }
+
+          return JSON.stringify(combat)
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water-controls')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+      slot('11').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(slot('12').disabled).toBe(true)
+      expect(slot('12').title).toContain('blocked (spell)')
+      expect(slot('13').disabled).toBe(true)
+      expect(slot('13').title).toContain('blocked (weapon)')
+      expect(slot('3').disabled).toBe(false)
+      expect(
+        target.find((node) => node.dataset.combatRestrictions === 'player')!.textContent,
+      ).toContain('spell, weapon')
+      expect(
+        target.find((node) => node.dataset.statusEffect === 'silenced')!.textContent,
+      ).toContain('Blocked move categories: spell')
+      slot('3').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(slot('12').disabled).toBe(false)
+      expect(slot('13').disabled).toBe(false)
+      target
+        .find(
+          (node) => node.tagName === 'BUTTON' && node.textContent === 'Return to standard controls',
+        )!
+        .dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(engine.lifecycle!.activeScene!.data.id).toBe('water')
+      expect(target.textContent).toContain('Round 3')
+      engine.lifecycle!.enterScene('underwater-boss-controls')
+      expect(
+        target.find((node) => node.dataset.combatRestrictions === 'guardian')!.textContent,
+      ).toContain('Dazed, Disarmed')
+      slot('1').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.find((node) => node.dataset.combatActor === 'player')!.textContent).toContain(
+        'immune to Disarmed',
+      )
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.textContent).toContain('Tidal guardian is immune to Disarmed')
+    },
+  )
+
+  it.each([false, true])(
+    'shows typed previews, defenses and immune periodic damage in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: (path) =>
+          readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url), 'utf8'),
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water')
+      const defenses = target.find((node) => node.dataset.combatDamageDefenses === 'eel')!
+      expect(defenses.textContent).toContain('water: resistance 50%')
+      expect(defenses.textContent).toContain('lightning: vulnerability 50%')
+      expect(defenses.textContent).toContain('Immune to poison')
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+
+      for (const id of ['11', '12', '13']) {
+        slot(id).dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      const player = target.find((node) => node.dataset.combatActor === 'player')!
+      expect(player.textContent).toContain('6–6 water')
+      expect(player.textContent).toContain('18–18 lightning')
+      expect(player.textContent).toContain('Immune to poison')
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.textContent).toContain('6 water damage')
+      expect(target.textContent).toContain('18 lightning damage')
+      expect(target.find((node) => node.dataset.statusEffect === 'venom')!.textContent).toContain(
+        '0 damage',
+      )
+    },
+  )
+
+  it.each([false, true])(
+    'shows scaled status badges, effective AP and increased queued costs in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: async (path) => {
+          const text = await readFile(
+            new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url),
+            'utf8',
+          )
+
+          if (path === 'combat/water.json' || path === 'combat/rough-water.json') {
+            const encounter = JSON.parse(text)
+
+            if (path === 'combat/water.json') encounter.mechanics.resources.exhaustion.initial = 55
+            else encounter.mechanicsOverrides.resources.exhaustion = { initial: 55 }
+
+            return JSON.stringify(encounter)
+          }
+
+          return text
+        },
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('water')
+      expect(target.textContent).toContain(
+        'Enemy plans are previews. Conditional enemies choose again before each action.',
+      )
+      const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
+      slot('6').dispatchEvent(new Event('click'))
+      slot('6').dispatchEvent(new Event('click'))
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.find((node) => node.dataset.combatActor === 'player')!.textContent).toContain(
+        'AP 2/2',
+      )
+      expect(target.find((node) => node.dataset.statusEffect === 'rhythm')!.textContent).toContain(
+        'Stacks: 1',
+      )
+      expect(
+        target.find((node) => node.dataset.statusEffect === 'exhausted')!.textContent,
+      ).toContain('AP budget -1')
+      engine.lifecycle!.enterScene('rough-water')
+      slot('15').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(
+        target.find((node) => node.dataset.statusEffect === 'exhausted')!.textContent,
+      ).toContain('Action AP cost +1')
+      slot('3').dispatchEvent(new Event('click'))
+      flush(engine)
+      expect(target.find((node) => node.dataset.combatActor === 'swimmer')!.textContent).toContain(
+        'AP 1/3',
+      )
+      expect(target.textContent).toContain('Float and recover · 2 AP')
+      expect(slot('2').disabled).toBe(true)
+      expect(slot('2').title).toContain('AP')
+    },
+  )
+
+  it.each([false, true])(
+    'renders combat meters and boss phase transitions in preview=%s',
+    async (preview) => {
+      const resources: IResourceSource = {
+        readText: (path) =>
+          readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url), 'utf8'),
+        readBytes: async (path) =>
+          new Uint8Array(
+            await readFile(new URL(`../sample-games/combat-mechanics/${path}`, import.meta.url)),
+          ),
+      }
+
+      const document = new TestDocument()
+      const target = document.createElement('main')
+
+      const engine = new Engine(
+        new GameLoader(new JsonResourceLoader(resources, logger)),
+        preview ? new EditorPreviewHost(target.asElement()) : new DomEngineHost(target.asElement()),
+        logger,
+        () => new MessageBus<EngineMessages>(),
+        timing,
+      )
+
+      onTestFinished(() => engine.stop())
+      await engine.start()
+      engine.lifecycle!.startGame()
+      engine.lifecycle!.enterScene('boss')
+      const meter = (id: string) => target.find((node) => node.dataset.combatResource === id)!
+
+      expect(meter('seal').textContent).toContain('Seal energy: 0/100')
+      expect(
+        meter('seal')
+          .find((node) => node.tagName === 'METER')!
+          .attributes.get('aria-label'),
+      ).toBe('Seal energy')
+      expect(target.textContent).toContain('First seal')
+
+      for (let index = 0; index < 4; index++) {
+        target.find((node) => node.dataset.actionBarSlot === '1')!.dispatchEvent(new Event('click'))
+        target
+          .find((node) => node.dataset.actionBarSlot === '15')!
+          .dispatchEvent(new Event('click'))
+        flush(engine)
+      }
+
+      expect(meter('seal').textContent).toContain('0/100')
+      expect(meter('breaks').textContent).toContain('Seals broken: 1/3')
+      expect(target.textContent).toContain('Second seal')
+      engine.lifecycle!.enterScene('water')
+      expect(meter('exhaustion').textContent).toContain('Diver · Exhaustion: 0/100')
+      engine.lifecycle!.enterScene('boss')
+      expect(meter('breaks').textContent).toContain('1/3')
+    },
+  )
+
   it('composites visible object layers above unchanged ground in the saved draw order', () => {
     const document = new TestDocument()
     const cell = new TestElement(document, 'DIV')

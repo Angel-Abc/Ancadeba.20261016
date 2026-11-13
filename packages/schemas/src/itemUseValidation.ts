@@ -23,11 +23,18 @@ export function itemUseIssues(
       })
     else if (
       use.contexts.includes('outside-combat') &&
-      (ability.target !== 'self' || ability.effects.some((effect) => effect.type !== 'heal'))
+      (ability.target !== 'self' ||
+        Boolean(ability.apCostScaling) ||
+        ability.effects.some(
+          (effect) =>
+            effect.type !== 'heal' || Boolean(effect.conditions?.length) || Boolean(effect.scaling),
+        ) ||
+        Object.keys(ability.resourceCosts ?? {}).length > 0)
     )
       issues.push({
         path: ['itemTypes', id, 'use', 'contexts'],
-        message: 'Outside-combat use requires self-targeted healing-only abilities',
+        message:
+          'Outside-combat use requires fixed, unconditional self-targeted healing-only abilities without encounter resource costs',
       })
 
     if (

@@ -14,6 +14,7 @@ import { editItems } from './itemEditing.js'
 import { editShop } from './shopEditing.js'
 import { editCombat } from './combatEditing.js'
 import { editCombatLibrary } from './combatLibraryEditing.js'
+import { editCombatScenario } from './combatScenarioEditing.js'
 import { editSceneStructure, type SceneEditResult } from './sceneEditing.js'
 import { editMap } from './mapEditing.js'
 import { editInventory } from './inventoryEditing.js'
@@ -101,6 +102,11 @@ export function applyCommand(project: ProjectSnapshot, input: EditorCommand): Co
     command.type === 'scene.setCombat'
   ) {
     changedFiles.push(...editCombat(documents, game, command))
+  } else if (
+    command.type === 'combat.upsertSimulationScenario' ||
+    command.type === 'combat.removeSimulationScenario'
+  ) {
+    changedFiles.push(...editCombatScenario(documents, game, command))
   } else if (command.type === 'scene.upsertShop' || command.type === 'scene.removeShop') {
     changedFiles.push(...editShop(documents, game, command))
   } else if (

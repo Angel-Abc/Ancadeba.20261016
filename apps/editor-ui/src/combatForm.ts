@@ -1,4 +1,8 @@
+import { combatDamageDefensesForm } from './combatDamageForm.js'
+import { combatRestrictionsForm } from './combatRestrictionsForm.js'
 import { combatItemUseForm } from './combatItemUseForm.js'
+import { combatEnemyProfileForm } from './combatEnemyProfileForm.js'
+import { combatRulesetForm, combatDraftMechanics } from './combatRulesetForm.js'
 import { combatMovesForm } from './combatMovesForm.js'
 import { combatRewardsForm } from './combatRewardsForm.js'
 import { combatStatusesForm } from './combatAbilitiesForm.js'
@@ -8,8 +12,9 @@ import {
   combatTextSchema,
   gameBindingSchema,
   type CombatSource,
+  moveStatusIds,
   resolveCombatSource,
-  type CombatActorDefinition,
+  type CombatActorSource,
 } from '@ancadeba/schemas'
 import { humanizeCode, type RuleFormControls, translationChoices } from './ruleFormControls.js'
 import { sceneChoices } from './choiceLabels.js'
@@ -23,6 +28,45 @@ export function combatForm(
 ): HTMLElement[] {
   const { input, select, group, button, create, translation, t } = controls
   const keys = translationChoices(view)
+  const availableStatuses = { ...draft.statuses }
+
+  const resolved = resolveCombatSource(
+    draft,
+    new Map(Object.entries(view.combatLibraries ?? {})),
+    undefined,
+    view.inventory,
+  )
+
+  for (const [id, origin] of Object.entries(resolved.origins.statuses)) {
+    const status = origin.library
+      ? view.combatLibraries?.[origin.library]?.statuses[id]
+      : draft.statuses?.[id]
+
+    if (status) availableStatuses[id] = status
+  }
+
+  const addSharedStatus = (library: string, id: string) => {
+    const status = view.combatLibraries?.[library]?.statuses[id]
+
+    if (status) availableStatuses[id] = status
+  }
+
+  for (const ref of draft.sharedStatuses ?? []) addSharedStatus(ref.library, ref.id)
+
+  const sharedMoves = [
+    ...(draft.sharedMoves ?? []),
+    ...(draft.itemUse?.itemTypes ?? []).flatMap((type) => {
+      const ability = view.inventory?.itemTypes[type]?.use?.ability
+
+      return ability ? [ability] : []
+    }),
+  ]
+
+  for (const ref of sharedMoves) {
+    const move = view.combatLibraries?.[ref.library]?.moves[ref.id]
+
+    if (move) for (const id of moveStatusIds(move)) addSharedStatus(ref.library, id)
+  }
 
   const fields = (view.rules?.state ?? [])
     .filter((field) => typeof field.value === 'number')
@@ -73,7 +117,7 @@ export function combatForm(
     ),
   ]
 
-  const actorForm = (actor: CombatActorDefinition, title: string, ...actions: HTMLElement[]) =>
+  const actorForm = (actor: CombatActorSource, title: string, ...actions: HTMLElement[]) =>
     group(
       title,
       input(t('metadata.id'), actor.id, (value) => {
@@ -123,6 +167,8 @@ export function combatForm(
         : select(t('form.maxHealthField'), JSON.stringify(actor.maximumHealth), fields, (value) => {
             actor.maximumHealth = gameBindingSchema.parse(JSON.parse(value))
           }),
+      combatDamageDefensesForm(controls, actor, render),
+      combatRestrictionsForm(controls, actor),
       number('AP', actor.ap, (value) => {
         actor.ap = value
       }),
@@ -164,6 +210,15 @@ export function combatForm(
                 .map((id) => id.trim())
                 .filter(Boolean)
             }),
+            combatEnemyProfileForm(
+              controls,
+              view,
+              draft,
+              actor,
+              combatDraftMechanics(draft, view),
+              Object.keys(availableStatuses),
+              render,
+            ),
           ]),
       ...actions,
     )
@@ -241,15 +296,10 @@ export function combatForm(
     ...combatMovesForm(
       controls,
       view,
-      draft,
+      { ...draft, mechanics: combatDraftMechanics(draft, view) },
       render,
       (id) => draft.player.moves.push(id),
-      resolveCombatSource(
-        draft,
-        new Map(Object.entries(view.combatLibraries ?? {})),
-        undefined,
-        view.inventory,
-      ).definition?.statuses ?? draft.statuses,
+      availableStatuses,
     ),
   )
   result.push(
@@ -269,6 +319,7 @@ export function combatForm(
   )
   result.push(combatRewardsForm(controls, view, draft, render))
   result.push(combatStatusesForm(controls, view, draft, render))
+  result.push(combatRulesetForm(controls, view, draft, render, availableStatuses))
   const messages = create('details')
   const summary = create('summary')
   summary.textContent = t('combat.texts')

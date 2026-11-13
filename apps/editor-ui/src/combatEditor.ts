@@ -10,6 +10,7 @@ import { sharedCombatForm } from './sharedCombatForm.js'
 import type { ProjectEditorState } from './projectController.js'
 import { placementFields, ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { combatForm } from './combatForm.js'
+import { bindCombatSimulationPanel } from './combatSimulationPanel.js'
 import { sceneChoices } from './choiceLabels.js'
 
 export function bindCombatEditor(
@@ -23,7 +24,9 @@ export function bindCombatEditor(
   error.setAttribute('role', 'alert')
   const fields = document.createElement('fieldset')
   const libraryRoot = document.createElement('section')
-  root.replaceChildren(error, fields, libraryRoot)
+  const simulationRoot = document.createElement('fieldset')
+  root.replaceChildren(error, fields, simulationRoot, libraryRoot)
+  const simulation = bindCombatSimulationPanel(simulationRoot, t, (command) => submit(command))
   const libraryEditor = bindCombatLibraryEditor(libraryRoot, save, t)
   let view: ProjectView | undefined
   let path: string | undefined
@@ -43,6 +46,7 @@ export function bindCombatEditor(
     document,
     () => {
       dirty = true
+      simulation.invalidateResults()
     },
     t,
   )
@@ -78,7 +82,7 @@ export function bindCombatEditor(
     )
       return true
 
-    if (dirty) {
+    if (dirty || simulation.hasDrafts()) {
       error.textContent = t('combat.saveFirstTargets')
 
       return false
@@ -119,6 +123,7 @@ export function bindCombatEditor(
 
   function render() {
     fields.replaceChildren()
+    simulation.render(view, draft)
 
     if (!view?.game) return
     const scene = view.scenes.find((scene) => scene.id === sceneId)
@@ -207,7 +212,7 @@ export function bindCombatEditor(
         ),
       ),
       controls.button(t('combat.addEncounter'), () => {
-        if (dirty) {
+        if (dirty || simulation.hasDrafts()) {
           error.textContent = t('combat.saveFirst')
 
           return
@@ -385,10 +390,20 @@ export function bindCombatEditor(
       creating: z.boolean(),
       playerHealth: z.string(),
       enemyHealth: z.string(),
+      encounterDirty: z.boolean().default(true),
     }),
     () =>
-      dirty
-        ? { sceneId, encounterId, draft, component, creating, playerHealth, enemyHealth }
+      dirty || simulation.hasDrafts()
+        ? {
+            sceneId,
+            encounterId,
+            draft,
+            component,
+            creating,
+            playerHealth,
+            enemyHealth,
+            encounterDirty: dirty,
+          }
         : undefined,
     (saved) => {
       sceneId = saved.sceneId
@@ -398,14 +413,14 @@ export function bindCombatEditor(
       creating = saved.creating
       playerHealth = saved.playerHealth
       enemyHealth = saved.enemyHealth
-      dirty = true
+      dirty = saved.encounterDirty
       render()
     },
   )
 
   return {
     navigate,
-    hasDrafts: () => dirty || libraryEditor.hasDrafts(),
+    hasDrafts: () => dirty || libraryEditor.hasDrafts() || simulation.hasDrafts(),
     render(state: ProjectEditorState, replaceFields: boolean) {
       const translated = languageChanged()
       libraryEditor.render(state, replaceFields)
@@ -414,6 +429,17 @@ export function bindCombatEditor(
       path = state.path
       view = state.view
       busy = state.busy
+
+      if (
+        changed &&
+        draft &&
+        ['combat.upsertSimulationScenario', 'combat.removeSimulationScenario'].includes(
+          state.lastCommand ?? '',
+        )
+      )
+        draft.simulationScenarios = structuredClone(
+          view?.combatSources?.[draft.id]?.simulationScenarios,
+        )
 
       const saved =
         replaceFields &&
@@ -434,6 +460,7 @@ export function bindCombatEditor(
       if (resetFields || saved || (changed && !dirty)) reset()
       else if (changed || translated) render()
       fields.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
+      simulationRoot.disabled = fields.disabled
     },
   }
 }

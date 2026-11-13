@@ -1,3 +1,4 @@
+import { combatScalingForm } from './combatScalingForm.js'
 import type { CombatSource } from '@ancadeba/schemas'
 import type { ProjectView } from '@ancadeba/editor-core'
 import { abilityEffectsForm } from './combatAbilitiesForm.js'
@@ -6,7 +7,7 @@ import { translationChoices, type RuleFormControls } from './ruleFormControls.js
 export function combatMovesForm(
   controls: RuleFormControls,
   view: ProjectView,
-  draft: Pick<CombatSource, 'moves' | 'statuses'>,
+  draft: Pick<CombatSource, 'moves' | 'statuses' | 'mechanics'>,
   render: () => void,
   onAdd?: (id: string) => void,
   availableStatuses = draft.statuses,
@@ -55,12 +56,95 @@ export function combatMovesForm(
       group(
         t('combat.moveTitle', { id }),
         ...presentation('', move),
+        input(
+          t('combat.restrictions.moveCategories'),
+          move.categories?.join(', ') ?? '',
+          (value) => {
+            const ids = value
+              .split(',')
+              .map((id) => id.trim())
+              .filter(Boolean)
+
+            move.categories = ids.length ? ids : undefined
+          },
+        ),
         number(t('combat.apCost'), move.apCost, (value) => {
           move.apCost = value
         }),
+        combatScalingForm(
+          controls,
+          t('combat.scaling.apCost'),
+          move.apCostScaling,
+          (value) => {
+            move.apCostScaling = value
+          },
+          render,
+          Object.keys(draft.mechanics?.resources ?? {}),
+          Object.keys(availableStatuses ?? {}),
+        ),
         number(t('combat.cooldown'), move.cooldown ?? 0, (value) => {
           move.cooldown = value || undefined
         }),
+        group(
+          t('combat.mechanics.costs'),
+          ...Object.entries(move.resourceCosts ?? {}).map(([id, amount]) => {
+            let resource = id
+
+            return group(
+              id,
+              input(t('combat.mechanics.resourceId'), resource, (value) => {
+                const next = value.trim()
+
+                if (!next || next === resource || Object.hasOwn(move.resourceCosts ?? {}, next))
+                  return
+                const cost = move.resourceCosts![resource]!
+
+                if (move.resourceCostScaling?.[resource]) {
+                  move.resourceCostScaling[next] = move.resourceCostScaling[resource]!
+                  delete move.resourceCostScaling[resource]
+                }
+
+                delete move.resourceCosts![resource]
+                move.resourceCosts![next] = cost
+                resource = next
+              }),
+              number(t('form.amount'), amount, (value) => {
+                move.resourceCosts![resource] = value
+              }),
+              combatScalingForm(
+                controls,
+                t('combat.scaling.resourceCost'),
+                move.resourceCostScaling?.[resource],
+                (value) => {
+                  if (value) (move.resourceCostScaling ??= {})[resource] = value
+                  else delete move.resourceCostScaling?.[resource]
+                },
+                render,
+                Object.keys(draft.mechanics?.resources ?? {}),
+                Object.keys(availableStatuses ?? {}),
+              ),
+              button(t('combat.mechanics.remove'), () => {
+                delete move.resourceCosts![resource]
+                delete move.resourceCostScaling?.[resource]
+                controls.markEdited()
+                render()
+              }),
+            )
+          }),
+          button(t('combat.mechanics.addCost'), () => {
+            let id =
+              Object.keys(draft.mechanics?.resources ?? {}).find(
+                (id) => !Object.hasOwn(move.resourceCosts ?? {}, id),
+              ) ?? 'resource'
+
+            let index = 1
+
+            while (Object.hasOwn(move.resourceCosts ?? {}, id)) id = `resource-${index++}`
+            move.resourceCosts = { ...move.resourceCosts, [id]: 1 }
+            controls.markEdited()
+            render()
+          }),
+        ),
         ...(move.type === 'ability'
           ? [
               select(t('combat.abilityTarget'), move.target, ['self', 'enemy'], (value) => {
@@ -68,7 +152,7 @@ export function combatMovesForm(
               }),
               ...abilityEffectsForm(
                 controls,
-                { statuses: availableStatuses },
+                { statuses: availableStatuses, mechanics: draft.mechanics },
                 move.effects,
                 render,
               ),
@@ -76,6 +160,9 @@ export function combatMovesForm(
           : []),
         ...(move.type === 'attack'
           ? [
+              input(t('combat.damage.type'), move.damageType ?? '', (value) => {
+                move.damageType = value.trim() || undefined
+              }),
               number(t('combat.minDamage'), move.damage.min, (value) => {
                 move.damage.min = value
               }),
@@ -90,6 +177,21 @@ export function combatMovesForm(
                 }),
               ]
             : []),
+        ...(move.type !== 'ability'
+          ? [
+              combatScalingForm(
+                controls,
+                t('combat.scaling.effect'),
+                move.scaling,
+                (value) => {
+                  move.scaling = value
+                },
+                render,
+                Object.keys(draft.mechanics?.resources ?? {}),
+                Object.keys(availableStatuses ?? {}),
+              ),
+            ]
+          : []),
         button(t('combat.removeMove', { id }), () => {
           delete draft.moves[id]
           controls.markEdited()

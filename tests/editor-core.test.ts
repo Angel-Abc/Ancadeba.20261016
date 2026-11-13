@@ -355,7 +355,13 @@ describe('editor core', () => {
   })
 
   it('publishes machine-readable requests and examples for every command', () => {
-    expect(capabilities.commands).toHaveLength(56)
+    expect(capabilities.commands).toHaveLength(58)
+    expect(capabilities.commands.map((command) => command.type)).toEqual(
+      expect.arrayContaining([
+        'combat.upsertSimulationScenario',
+        'combat.removeSimulationScenario',
+      ]),
+    )
     expect(capabilities.requestSchema).toHaveProperty('properties')
 
     for (const command of capabilities.commands) expect(command.example.type).toBe(command.type)

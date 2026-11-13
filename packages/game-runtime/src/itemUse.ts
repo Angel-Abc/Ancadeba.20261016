@@ -119,6 +119,7 @@ export class GameItemUse implements IGameItemUse {
       selected,
       component,
       ability,
+      snapshot,
       mode,
       invalidCombat: Boolean(combat && !combatComponent),
     }
@@ -143,7 +144,15 @@ export class GameItemUse implements IGameItemUse {
 
     if (!use.contexts.includes('outside-combat')) return messages.context
 
-    if (ability.target !== 'self' || ability.effects.some((effect) => effect.type !== 'heal'))
+    if (
+      ability.target !== 'self' ||
+      Boolean(ability.apCostScaling) ||
+      ability.effects.some(
+        (effect) =>
+          effect.type !== 'heal' || Boolean(effect.conditions?.length) || Boolean(effect.scaling),
+      ) ||
+      Object.keys(ability.resourceCosts ?? {}).length > 0
+    )
       return messages.context
     const profile = scene.type === 'game' ? scene.game.combatStats?.snapshot(owner) : undefined
 
@@ -319,6 +328,11 @@ export class GameItemUse implements IGameItemUse {
 
     if (!value?.use || !value.ability) return ''
     const { use, ability, messages } = value
+    const definition = value.mode && this.combat()?.definition(scene, value.mode)
+
+    const apCost = definition
+      ? (value.snapshot?.moveCosts[definition.player.id]?.[use.ability.id] ?? ability.apCost)
+      : ability.apCost
 
     return [
       messages.details
@@ -331,7 +345,7 @@ export class GameItemUse implements IGameItemUse {
             .join(', '),
         ),
       messages.cost
-        .replaceAll('{ap}', String(ability.apCost))
+        .replaceAll('{ap}', String(apCost))
         .replaceAll('{cooldown}', String(ability.cooldown ?? 0)),
       this.reason(scene, panel, combat),
     ]

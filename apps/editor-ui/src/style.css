@@ -1771,3 +1771,16 @@ input[aria-invalid='true'] + datalist + .translation-preview {
   overflow: auto;
   white-space: pre-wrap;
 }
+/* Keep simulation state and copyable reports within the editor panel. */
+.combat-simulation pre {
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.combat-simulation textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 14rem;
+}

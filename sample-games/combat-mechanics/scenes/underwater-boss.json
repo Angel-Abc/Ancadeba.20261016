@@ -1,0 +1,282 @@
+{
+  "schema-version": "1.0.0",
+  "id": "underwater-boss",
+  "title": "The drowned three-seal guardian",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "underwater-boss",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Q: channel (10 stamina, +15 exhaustion). E: float and recover. Water pressure adds 5 exhaustion per turn. At 60 exhaustion you lose AP and take fatigue damage. Fill the seal gauge three times; recovery restores your action budget. S: Flow strike scales damage and costs. F: Reviving breath scales healing. G: Focus current grants intensity-based percentage bonuses. Z: Tidal bolt (water), X: Arc bolt (lightning), C: Venom dart (poison). Inspect the enemy's damage defenses. With Focus current (G), lightning damage siphons HP; actual healing reduces exhaustion. Actual lightning damage charges seal energy one-for-one; Tidal shell reflects a quarter of lightning damage received. Recover and use X to break all three seals without Channel. Click Brine bind to silence/disarm, Clear mind to prevent new controls, Shake off to cleanse, or Stunning bell to test stun immunity.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Channel",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "channel"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "label": "Brace",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "guard"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        },
+        "3": {
+          "label": "Float and recover",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rest"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "7": {
+          "label": "Flow strike",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "flow-strike"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-7"
+          }
+        },
+        "9": {
+          "label": "Reviving breath",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "reviving-breath"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-9"
+          }
+        },
+        "10": {
+          "label": "Focus current",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "focus-current"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-10"
+          }
+        },
+        "11": {
+          "label": "Tidal bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "tidal-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-11"
+          }
+        },
+        "12": {
+          "label": "Arc bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "arc-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "label": "Venom dart",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "venom-dart"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
+        }
+      }
+    },
+    {
+      "id": "control-techniques",
+      "type": "button",
+      "label": "Open control techniques",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss-controls"
+      },
+      "placement": {
+        "row": 9,
+        "column": 1,
+        "columnSpan": 12
+      }
+    }
+  ]
+}

@@ -1,0 +1,520 @@
+{
+  "schema-version": "1.0.0",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 10000,
+  "logCapacity": 40,
+  "outcomes": {
+    "victory": "harbour",
+    "defeat": "harbour",
+    "escaped": "harbour"
+  },
+  "id": "boss",
+  "label": "The three-seal guardian",
+  "description": "Q: channel 25 seal energy (1 AP). Fill the gauge to 100 three times. Each break resets it and advances the boss phase. Health damage is not the victory condition. The guardian braces at half a seal, attacks twice in phase two and surges in the final phase.",
+  "player": {
+    "id": "player",
+    "label": "Sealbreaker",
+    "health": {
+      "source": "game.state",
+      "path": ["player-health"]
+    },
+    "maximumHealth": 80,
+    "ap": 3,
+    "moves": ["channel", "guard"]
+  },
+  "enemies": [
+    {
+      "id": "guardian",
+      "label": "Tidal guardian",
+      "health": {
+        "source": "game.state",
+        "path": ["guardian-health"]
+      },
+      "maximumHealth": 500,
+      "ap": 2,
+      "moves": ["pulse", "surge", "guard"],
+      "rotation": ["guard", "pulse"],
+      "ai": {
+        "fallback": "rotation",
+        "rules": [
+          {
+            "id": "final-surge",
+            "move": "surge",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "phase",
+                "phase": "third-seal"
+              }
+            ]
+          },
+          {
+            "id": "protect-seal",
+            "move": "guard",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "and",
+                "conditions": [
+                  {
+                    "type": "resource",
+                    "resource": "seal",
+                    "operator": "gte",
+                    "value": 50,
+                    "unit": "percent"
+                  },
+                  {
+                    "type": "not",
+                    "condition": {
+                      "type": "or",
+                      "conditions": [
+                        {
+                          "type": "phase",
+                          "phase": "second-seal"
+                        },
+                        {
+                          "type": "phase",
+                          "phase": "third-seal"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "second-pulse",
+            "move": "pulse",
+            "maxUses": 2,
+            "conditions": [
+              {
+                "type": "phase",
+                "phase": "second-seal"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "moves": {
+    "channel": {
+      "type": "ability",
+      "label": "Channel seal energy",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "type": "change-resource",
+          "resource": "seal",
+          "amount": 25,
+          "id": "effect-0"
+        }
+      ]
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Brace",
+      "apCost": 1,
+      "guard": 5
+    },
+    "pulse": {
+      "type": "attack",
+      "label": "Tidal pulse",
+      "apCost": 1,
+      "damage": {
+        "min": 1,
+        "max": 2
+      }
+    },
+    "surge": {
+      "type": "attack",
+      "label": "Angry surge",
+      "apCost": 2,
+      "damage": {
+        "min": 3,
+        "max": 4
+      }
+    }
+  },
+  "mechanics": {
+    "victory": "triggers",
+    "initialPhase": "first-seal",
+    "resources": {
+      "seal": {
+        "label": "Seal energy",
+        "initial": 0,
+        "maximum": 100
+      },
+      "breaks": {
+        "label": "Seals broken",
+        "initial": 0,
+        "maximum": 3
+      }
+    },
+    "phases": {
+      "first-seal": {
+        "label": "First seal",
+        "description": "The guardian tests your resolve."
+      },
+      "second-seal": {
+        "label": "Second seal",
+        "description": "The guardian attacks twice per round.",
+        "enemyRotations": {
+          "guardian": ["pulse"]
+        }
+      },
+      "third-seal": {
+        "label": "Final seal",
+        "description": "Break the last seal to win.",
+        "enemyRotations": {
+          "guardian": ["surge"]
+        }
+      }
+    },
+    "triggers": {
+      "seal-filled": {
+        "event": "resource-changed",
+        "resource": "seal",
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "seal",
+            "operator": "gte",
+            "value": 100,
+            "unit": "percent"
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-resource",
+            "resource": "seal",
+            "amount": 0
+          },
+          {
+            "type": "change-resource",
+            "resource": "breaks",
+            "amount": 1
+          }
+        ]
+      },
+      "second-seal": {
+        "event": "resource-changed",
+        "resource": "breaks",
+        "once": true,
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "breaks",
+            "operator": "eq",
+            "value": 1
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-phase",
+            "phase": "second-seal"
+          }
+        ]
+      },
+      "third-seal": {
+        "event": "resource-changed",
+        "resource": "breaks",
+        "once": true,
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "breaks",
+            "operator": "eq",
+            "value": 2
+          }
+        ],
+        "effects": [
+          {
+            "type": "set-phase",
+            "phase": "third-seal"
+          }
+        ]
+      },
+      "victory": {
+        "event": "resource-changed",
+        "resource": "breaks",
+        "once": true,
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "breaks",
+            "operator": "gte",
+            "value": 3
+          }
+        ],
+        "effects": [
+          {
+            "type": "finish",
+            "outcome": "victory"
+          }
+        ]
+      },
+      "channel-focus": {
+        "event": "before-action",
+        "actor": "player",
+        "move": "channel",
+        "conditions": [
+          {
+            "type": "and",
+            "conditions": [
+              {
+                "type": "health",
+                "actor": "self",
+                "operator": "lte",
+                "value": 25,
+                "unit": "percent"
+              },
+              {
+                "type": "not",
+                "condition": {
+                  "type": "phase",
+                  "phase": "third-seal"
+                }
+              }
+            ]
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "focused"
+          }
+        ]
+      },
+      "release-focus": {
+        "event": "after-action",
+        "actor": "player",
+        "move": "channel",
+        "conditions": [
+          {
+            "type": "status",
+            "actor": "self",
+            "status": "focused",
+            "measure": "stacks",
+            "operator": "gte",
+            "value": 1
+          }
+        ],
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "seal",
+            "amount": 5,
+            "conditions": [
+              {
+                "type": "not",
+                "condition": {
+                  "type": "phase",
+                  "phase": "third-seal"
+                }
+              }
+            ]
+          },
+          {
+            "type": "remove-status",
+            "actor": "player",
+            "status": "focused"
+          }
+        ]
+      }
+    }
+  },
+  "rewards": {
+    "numeric": [
+      {
+        "id": "seals",
+        "label": "Seals released",
+        "field": {
+          "source": "game.state",
+          "path": ["seals-broken"]
+        },
+        "amount": 3
+      }
+    ]
+  },
+  "simulationScenarios": {
+    "three-seals": {
+      "label": "Break all three seals",
+      "description": "Three channels per round break the three seals in four rounds without defeating the guardian.",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        }
+      },
+      "steps": [
+        {
+          "id": "break-seals",
+          "repeat": 4,
+          "plan": [
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "victory"
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 4
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 3
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "phase",
+          "value": "third-seal"
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 500
+        },
+        {
+          "type": "trigger",
+          "trigger": "victory",
+          "fired": true
+        }
+      ]
+    },
+    "phase-response": {
+      "label": "Respond to the second seal immediately",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        },
+        "resources": {
+          "seal": 75
+        }
+      },
+      "steps": [
+        {
+          "id": "transition",
+          "plan": [
+            {
+              "move": "channel"
+            }
+          ],
+          "expect": [
+            {
+              "type": "phase",
+              "value": "second-seal"
+            },
+            {
+              "type": "trigger",
+              "trigger": "second-seal",
+              "fired": true
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "planning"
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "last-resolve": {
+      "label": "Low-health channel lifecycle hooks",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 20,
+          "guardian": 500
+        }
+      },
+      "steps": [
+        {
+          "id": "channel",
+          "plan": [
+            {
+              "move": "channel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 30
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "focused",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "phase",
+          "value": "first-seal"
+        }
+      ]
+    }
+  },
+  "statuses": {
+    "focused": {
+      "type": "modifier",
+      "label": "Last resolve",
+      "description": "At 25% health, channeling in the first two phases gains 5 extra seal energy after the action.",
+      "duration": 1,
+      "modifiers": {
+        "defense": 1
+      }
+    }
+  }
+}

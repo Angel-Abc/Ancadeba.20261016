@@ -1,7 +1,22 @@
+import { combatDamageTypeSchema, combatDamageDefensesSchema } from './combatDamage.js'
+import {
+  combatMoveCategoriesSchema,
+  combatRestrictionFields,
+  combatStatusImmunityIssues,
+} from './combatRestrictions.js'
+import { combatScalingSchema } from './combatValues.js'
+import { combatConditionIssues } from './combatConditions.js'
 import { z } from 'zod'
+import { combatMechanicsSchema } from './combatMechanics.js'
+import { combatEnemyAISchema } from './combatEnemyAI.js'
+import { combatMechanicsIssues } from './combatMechanicsValidation.js'
 import { combatItemUseIssues } from './itemUseValidation.js'
 import { combatItemUseSchema } from './itemUse.js'
-import { abilityEffectSchema, combatStatusSchema } from './combatAbilities.js'
+import {
+  abilityEffectSchema,
+  combatStatusSchema,
+  combatStatusApplicationIssues,
+} from './combatAbilities.js'
 import { gameBindingSchema, bindingAliasSchema } from './bindings.js'
 import { translationKeySchema } from './languages.js'
 import { assertGraphicReference, graphicAppearanceSchema, type AssetCatalog } from './assets.js'
@@ -24,6 +39,10 @@ const label = {
   descriptionKey: translationKeySchema.optional(),
 }
 
+const moveCategories = { categories: combatMoveCategoriesSchema.optional() }
+
+const resourceCosts = z.record(id, amount.positive()).optional()
+
 export const combatHealthSchema = gameBindingSchema.safeExtend({
   source: z.literal('game.state'),
   path: z
@@ -35,6 +54,12 @@ export const combatMoveSchema = z
   .discriminatedUnion('type', [
     z.object({
       type: z.literal('attack'),
+      ...moveCategories,
+      damageType: combatDamageTypeSchema.optional(),
+      scaling: combatScalingSchema.optional(),
+      resourceCosts,
+      apCostScaling: combatScalingSchema.optional(),
+      resourceCostScaling: z.record(id, combatScalingSchema).optional(),
       ...label,
       apCost: z.number().int().positive().max(100),
       cooldown: amount.optional(),
@@ -44,6 +69,11 @@ export const combatMoveSchema = z
     }),
     z.object({
       type: z.literal('guard'),
+      ...moveCategories,
+      scaling: combatScalingSchema.optional(),
+      resourceCosts,
+      apCostScaling: combatScalingSchema.optional(),
+      resourceCostScaling: z.record(id, combatScalingSchema).optional(),
       ...label,
       apCost: z.number().int().positive().max(100),
       guard: amount,
@@ -51,6 +81,10 @@ export const combatMoveSchema = z
     }),
     z.object({
       type: z.literal('ability'),
+      ...moveCategories,
+      resourceCosts,
+      apCostScaling: combatScalingSchema.optional(),
+      resourceCostScaling: z.record(id, combatScalingSchema).optional(),
       ...label,
       apCost: z.number().int().positive().max(100),
       cooldown: amount.optional(),
@@ -73,6 +107,8 @@ export const combatActorSchema = z
     ...label,
     portrait: id.optional(),
     equipmentOwner: id.optional(),
+    damageDefenses: combatDamageDefensesSchema.optional(),
+    ...combatRestrictionFields,
     leveling: id.optional(),
     moveLevels: z.record(id, z.number().int().positive().safe()).optional(),
     health: combatHealthSchema,
@@ -83,6 +119,7 @@ export const combatActorSchema = z
       .min(1)
       .refine((ids) => new Set(ids).size === ids.length),
     rotation: z.array(id).default([]),
+    ai: combatEnemyAISchema.optional(),
   })
   .refine(
     (actor) => Boolean(actor.label || actor.labelKey),
@@ -97,6 +134,38 @@ export const combatActorSchema = z
   )
 
 export const combatTextSchema = z.object({
+  statusImmune: z.string().default('{target} is immune to {status}.'),
+  moveRestricted: z.string().default('{actor}: {move} is blocked ({category}).'),
+  statusImmunities: z.string().default('Status immunities: {statuses}'),
+  blockedMoveCategories: z.string().default('Blocked move categories: {categories}'),
+  reaction: z.string().default('Reaction'),
+  typedAttack: z
+    .string()
+    .default(
+      '{actor} attacks {target}: {damage} {damageType} damage ({resisted} resisted, {amplified} extra, {defended} defense, {blocked} Guard).',
+    ),
+  typedPeriodicDamage: z
+    .string()
+    .default(
+      '{target}: {status} deals {amount} {damageType} damage ({resisted} resisted, {amplified} extra).',
+    ),
+  damageImmunity: z.string().default('Immune to {damageType}.'),
+  damageResistance: z.string().default('{damageType}: resistance {resistance}%'),
+  damageVulnerability: z.string().default('{damageType}: vulnerability {vulnerability}%'),
+  typedDamagePreview: z.string().default('{amount} {damageType}'),
+  statDamage: z.string().default('Damage'),
+  statHealing: z.string().default('Healing'),
+  statAp: z.string().default('AP budget'),
+  statApCost: z.string().default('Action AP cost'),
+  statusStrength: z.string().default('Stacks: {stacks} · Intensity: {intensity}'),
+  removeStacks: z.string().default('Remove {stacks} stacks of {status}'),
+  statusReduced: z.string().default('{target}: {status} reduced to {stacks} stacks.'),
+  apUnavailable: z.string().default('{actor}: {move} needs {cost} AP ({remaining} available).'),
+  resourceChanged: z.string().default('{resource}: {amount}'),
+  phaseChanged: z.string().default('Phase: {phase}'),
+  resourceUnavailable: z.string().default('{actor}: requires more {resource}.'),
+  resourceEffect: z.string().default('{resource}: {amount}'),
+  resourceCost: z.string().default('{resource}: costs {amount}'),
   itemUsed: z.string().default('{actor} uses {item}.'),
   itemSkipped: z.string().default('{actor}: {item} had no effect.'),
   statAttack: z.string().default('Attack bonus'),
@@ -112,9 +181,13 @@ export const combatTextSchema = z.object({
   stunned: z.string().default('{actor} is stunned and skips this turn.'),
   cooldown: z.string().default('Cooldown: {rounds} rounds'),
   reserved: z.string().default('Already queued'),
+  conditionalEffect: z.string().default('Conditional effect'),
   conditional: z
     .string()
     .default('Previews use current effects; earlier moves may change the result.'),
+  enemyConditional: z
+    .string()
+    .default('Enemy plans are previews. Conditional enemies choose again before each action.'),
   turnsRemaining: z.string().default('{turns} turns remaining'),
   healing: z.string().default('Heal {amount}'),
   mitigated: z
@@ -158,6 +231,7 @@ export const combatFieldsSchema = z.object({
   player: combatActorSchema,
   enemies: z.array(combatActorSchema).min(1).max(32),
   moves: z.record(id, combatMoveSchema),
+  mechanics: combatMechanicsSchema.optional(),
   statuses: z
     .record(id, combatStatusSchema)
     .refine((statuses) => Object.keys(statuses).length <= 100, 'At most 100 statuses are supported')
@@ -178,6 +252,8 @@ export const combatFieldsSchema = z.object({
 })
 
 export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, context) => {
+  for (const issue of combatMechanicsIssues(combat)) context.addIssue({ code: 'custom', ...issue })
+
   if (!combat.label && !combat.labelKey)
     context.addIssue({
       code: 'custom',
@@ -186,9 +262,33 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
     })
   const actors = [combat.player, ...combat.enemies]
 
+  for (const [index, actor] of actors.entries())
+    for (const issue of combatStatusImmunityIssues(
+      actor,
+      combat.statuses ?? {},
+      index === 0 ? ['player'] : ['enemies', index - 1],
+    ))
+      context.addIssue({ code: 'custom', ...issue })
+
+  for (const [id, status] of Object.entries(combat.statuses ?? {}))
+    for (const issue of combatStatusImmunityIssues(status, combat.statuses ?? {}, ['statuses', id]))
+      context.addIssue({ code: 'custom', ...issue })
+
   for (const [moveId, move] of Object.entries(combat.moves))
     if (move.type === 'ability')
       for (const [index, effect] of move.effects.entries()) {
+        if (effect.type === 'apply-status' || effect.type === 'remove-status') {
+          const status = combat.statuses?.[effect.status]
+
+          if (status)
+            for (const issue of combatStatusApplicationIssues(effect, status))
+              context.addIssue({
+                code: 'custom',
+                path: ['moves', moveId, 'effects', index, ...issue.path],
+                message: issue.message,
+              })
+        }
+
         if (
           (effect.type === 'apply-status' || effect.type === 'remove-status') &&
           !Object.hasOwn(combat.statuses ?? {}, effect.status)
@@ -215,6 +315,37 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
     })
 
   for (const actor of actors) {
+    if (actor.ai && actor === combat.player)
+      context.addIssue({
+        code: 'custom',
+        path: ['player', 'ai'],
+        message: 'AI is only supported for enemies',
+      })
+
+    for (const [index, rule] of (actor.ai?.rules ?? []).entries()) {
+      const path = ['enemies', combat.enemies.indexOf(actor), 'ai', 'rules', index]
+
+      if (!actor.moves.includes(rule.move))
+        context.addIssue({
+          code: 'custom',
+          path: [...path, 'move'],
+          message: 'Enemy rules must use that actor’s available moves',
+        })
+
+      for (const [index, condition] of rule.conditions.entries())
+        for (const issue of combatConditionIssues(
+          condition,
+          {
+            actors: actors.map((actor) => actor.id),
+            resources: combat.mechanics?.resources ?? {},
+            statuses: combat.statuses ?? {},
+            phases: combat.mechanics?.phases ?? {},
+          },
+          [...path, 'conditions', index],
+        ))
+          context.addIssue({ code: 'custom', ...issue })
+    }
+
     for (const move of actor.moves)
       if (!Object.hasOwn(combat.moves, move))
         context.addIssue({
@@ -225,7 +356,8 @@ export const combatDefinitionSchema = combatFieldsSchema.superRefine((combat, co
 
     if (
       actor !== combat.player &&
-      (!actor.rotation.length || actor.rotation.some((move) => !actor.moves.includes(move)))
+      ((!actor.rotation.length && actor.ai?.fallback !== 'wait') ||
+        actor.rotation.some((move) => !actor.moves.includes(move)))
     )
       context.addIssue({
         code: 'custom',
@@ -343,7 +475,12 @@ export function localizeCombat(
     return value
   }
 
-  const presentation = (entry: typeof combat.player | CombatMoveDefinition | CombatDefinition) => ({
+  const presentation = (entry: {
+    label: string
+    labelKey?: string | undefined
+    description: string
+    descriptionKey?: string | undefined
+  }) => ({
     label: text(entry.labelKey, entry.label),
     description: text(entry.descriptionKey, entry.description),
   })
@@ -351,6 +488,23 @@ export function localizeCombat(
   return combatDefinitionSchema.parse({
     ...combat,
     ...presentation(combat),
+    ...(combat.mechanics && {
+      mechanics: {
+        ...combat.mechanics,
+        resources: Object.fromEntries(
+          Object.entries(combat.mechanics.resources).map(([id, entry]) => [
+            id,
+            { ...entry, ...presentation(entry) },
+          ]),
+        ),
+        phases: Object.fromEntries(
+          Object.entries(combat.mechanics.phases).map(([id, entry]) => [
+            id,
+            { ...entry, ...presentation(entry) },
+          ]),
+        ),
+      },
+    }),
     ...(combat.statuses && {
       statuses: Object.fromEntries(
         Object.entries(combat.statuses).map(([id, status]) => [

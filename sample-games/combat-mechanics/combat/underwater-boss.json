@@ -1,0 +1,916 @@
+{
+  "schema-version": "1.0.0",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 10000,
+  "logCapacity": 40,
+  "outcomes": {
+    "victory": "harbour",
+    "defeat": "harbour",
+    "escaped": "harbour"
+  },
+  "id": "underwater-boss",
+  "label": "The drowned three-seal guardian",
+  "description": "Combines Underwater and Three-seal boss rules. Channel costs 10 stamina and adds 15 exhaustion after acting. Water pressure adds 5 per turn in this encounter. Recover between channels to keep enough AP, and fill the seal gauge three times. Actual lightning HP damage also charges the seal gauge one-for-one. Tidal shell reflects 25% of lightning damage received. Focus current enables lightning siphon and healing relief. Click the control techniques to try Brine bind, Clear mind, Shake off and Stunning bell.",
+  "player": {
+    "id": "player",
+    "label": "Sealbreaker",
+    "health": {
+      "source": "game.state",
+      "path": ["player-health"]
+    },
+    "maximumHealth": 80,
+    "ap": 3,
+    "moves": [
+      "channel",
+      "rest",
+      "guard",
+      "flow-strike",
+      "reviving-breath",
+      "focus-current",
+      "tidal-bolt",
+      "arc-bolt",
+      "venom-dart",
+      "brine-bind",
+      "clear-mind",
+      "shake-off",
+      "stunning-bell"
+    ],
+    "damageDefenses": {
+      "resistances": {
+        "water": 50
+      }
+    }
+  },
+  "enemies": [
+    {
+      "id": "guardian",
+      "label": "Tidal guardian",
+      "health": {
+        "source": "game.state",
+        "path": ["underwater-guardian-health"]
+      },
+      "maximumHealth": 500,
+      "ap": 2,
+      "moves": ["pulse", "surge", "guard", "pressure-surge", "brine-curse"],
+      "rotation": ["guard", "pulse"],
+      "ai": {
+        "fallback": "rotation",
+        "rules": [
+          {
+            "id": "test-clear-mind",
+            "move": "brine-curse",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "status",
+                "actor": "player",
+                "status": "unshaken",
+                "measure": "stacks",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "final-surge",
+            "move": "pressure-surge",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "phase",
+                "phase": "third-seal"
+              }
+            ]
+          },
+          {
+            "id": "protect-seal",
+            "move": "guard",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "and",
+                "conditions": [
+                  {
+                    "type": "resource",
+                    "resource": "seal",
+                    "operator": "gte",
+                    "value": 50,
+                    "unit": "percent"
+                  },
+                  {
+                    "type": "not",
+                    "condition": {
+                      "type": "or",
+                      "conditions": [
+                        {
+                          "type": "phase",
+                          "phase": "second-seal"
+                        },
+                        {
+                          "type": "phase",
+                          "phase": "third-seal"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "second-pulse",
+            "move": "pulse",
+            "maxUses": 2,
+            "conditions": [
+              {
+                "type": "phase",
+                "phase": "second-seal"
+              }
+            ]
+          }
+        ]
+      },
+      "damageDefenses": {
+        "resistances": {
+          "fire": 75
+        },
+        "vulnerabilities": {
+          "lightning": 50
+        },
+        "immunities": ["water", "poison"]
+      },
+      "statusImmunities": ["dazed", "disarmed"]
+    }
+  ],
+  "moves": {
+    "channel": {
+      "type": "ability",
+      "label": "Channel seal energy",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "type": "change-resource",
+          "resource": "seal",
+          "amount": 25,
+          "id": "effect-0"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "categories": ["spell"]
+    },
+    "pressure-surge": {
+      "type": "attack",
+      "label": "Pressure surge",
+      "description": "Damage rises by current exhaustion percent plus 10% per target Exhausted intensity.",
+      "apCost": 2,
+      "damage": {
+        "min": 3,
+        "max": 4
+      },
+      "scaling": {
+        "mode": "percent",
+        "terms": [
+          {
+            "type": "resource",
+            "resource": "exhaustion",
+            "measure": "percent",
+            "factor": 1
+          },
+          {
+            "type": "status",
+            "actor": "target",
+            "status": "exhausted",
+            "measure": "intensity",
+            "factor": 10
+          }
+        ]
+      },
+      "damageType": "water",
+      "categories": ["spell"]
+    }
+  },
+  "simulationScenarios": {
+    "three-seals-underwater": {
+      "label": "Break three seals while managing exhaustion",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        }
+      },
+      "steps": [
+        {
+          "id": "opening",
+          "plan": [
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            }
+          ],
+          "expect": [
+            {
+              "type": "resource",
+              "resource": "exhaustion",
+              "operator": "eq",
+              "value": 50
+            }
+          ]
+        },
+        {
+          "id": "recover-and-channel",
+          "repeat": 2,
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        },
+        {
+          "id": "recover-with-two-ap",
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        },
+        {
+          "id": "finish-seals",
+          "repeat": 2,
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "channel"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "victory"
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 3
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 6
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 500
+        },
+        {
+          "type": "trigger",
+          "trigger": "victory",
+          "fired": true
+        }
+      ]
+    },
+    "recover-before-seal": {
+      "label": "Clear fatigue before breaking the first seal",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        },
+        "resources": {
+          "exhaustion": 55,
+          "seal": 75
+        }
+      },
+      "steps": [
+        {
+          "id": "recover-and-break",
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 45
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "exhausted",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "phase",
+          "value": "second-seal"
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 70
+        }
+      ]
+    },
+    "scaled-last-seal": {
+      "label": "Scale healing before breaking the last seal",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 40,
+          "guardian": 500
+        },
+        "phase": "third-seal",
+        "resources": {
+          "seal": 75,
+          "breaks": 2,
+          "exhaustion": 65,
+          "stamina": 60
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "flow",
+              "source": "player",
+              "remaining": 3,
+              "intensity": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "heal-and-break",
+          "plan": [
+            {
+              "move": "reviving-breath"
+            },
+            {
+              "move": "channel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "victory"
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 46
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 3
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 70
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 500
+        }
+      ]
+    },
+    "pressure-surge-scaling": {
+      "label": "Boss scales damage with exhaustion and its target intensity",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        },
+        "phase": "third-seal",
+        "resources": {
+          "exhaustion": 90
+        }
+      },
+      "steps": [
+        {
+          "id": "surge",
+          "plan": []
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 95
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 70
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "lte",
+          "value": 71
+        }
+      ]
+    },
+    "typed-damage": {
+      "label": "Test the guardian's damage affinities",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        }
+      },
+      "steps": [
+        {
+          "id": "types",
+          "plan": [
+            {
+              "move": "tidal-bolt",
+              "target": "guardian"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            },
+            {
+              "move": "venom-dart",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 482
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "venom",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 55
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 18
+        }
+      ]
+    },
+    "seal-shell": {
+      "label": "The second seal grants a temporary typed ward",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "guardian": 500
+        },
+        "resources": {
+          "seal": 75
+        }
+      },
+      "steps": [
+        {
+          "id": "shell",
+          "plan": [
+            {
+              "move": "channel"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "phase",
+          "value": "second-seal"
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 488
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "tidal-shell",
+          "measure": "intensity",
+          "operator": "eq",
+          "value": 2
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "tidal-shell",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 12
+        }
+      ]
+    },
+    "lightning-three-seals": {
+      "label": "Break three seals with actual lightning damage",
+      "description": "Recover and cast two Arc bolts each round. Guard and Tidal shell reduce both HP damage and gauge charge. Three fills win with the guardian still alive, without Channel.",
+      "setup": {
+        "seed": 1024
+      },
+      "steps": [
+        {
+          "id": "lightning",
+          "repeat": 10,
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "victory"
+        },
+        {
+          "type": "resource",
+          "resource": "breaks",
+          "operator": "eq",
+          "value": 3
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "gt",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "lte",
+          "value": 200
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 10
+        }
+      ]
+    },
+    "boss-control-immunity": {
+      "label": "Permanent and temporary boss status immunities",
+      "setup": {
+        "seed": 1024,
+        "phase": "second-seal",
+        "statuses": {
+          "guardian": [
+            {
+              "id": "tidal-shell",
+              "source": "guardian",
+              "remaining": 2,
+              "intensity": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "warded",
+          "plan": [
+            {
+              "move": "brine-bind",
+              "target": "guardian"
+            },
+            {
+              "move": "stunning-bell",
+              "target": "guardian"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "silenced",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "disarmed",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "dazed",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "guardian",
+          "operator": "eq",
+          "value": 488
+        },
+        {
+          "type": "resource",
+          "resource": "seal",
+          "operator": "eq",
+          "value": 12
+        }
+      ]
+    },
+    "boss-silence": {
+      "label": "Silence works before the shell, disarm remains immune",
+      "setup": {
+        "seed": 1024
+      },
+      "steps": [
+        {
+          "id": "silence",
+          "plan": [
+            {
+              "move": "brine-bind",
+              "target": "guardian"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "silenced",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "status",
+          "actor": "guardian",
+          "status": "disarmed",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        }
+      ]
+    }
+  },
+  "rulesets": [
+    {
+      "library": "environments",
+      "id": "underwater",
+      "actors": {
+        "swimmer": "player"
+      }
+    },
+    {
+      "library": "environments",
+      "id": "three-seals",
+      "actors": {
+        "player": "player",
+        "guardian": "guardian"
+      }
+    }
+  ],
+  "mechanicsOverrides": {
+    "resources": {
+      "stamina": {
+        "initial": 60
+      }
+    },
+    "triggers": {
+      "water-pressure": {
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": 5
+          }
+        ]
+      },
+      "channel-pressure": {
+        "event": "after-action",
+        "actor": "player",
+        "move": "channel",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": 15
+          }
+        ]
+      },
+      "lightning-charge": {
+        "event": "damage-dealt",
+        "source": "player",
+        "target": "guardian",
+        "damageType": "lightning",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "seal",
+            "amount": 0,
+            "eventValue": {
+              "field": "amount",
+              "factor": 1
+            }
+          }
+        ]
+      },
+      "shell-reflection": {
+        "event": "damage-received",
+        "target": "guardian",
+        "damageType": "lightning",
+        "conditions": [
+          {
+            "type": "status",
+            "actor": "guardian",
+            "status": "tidal-shell",
+            "measure": "stacks",
+            "operator": "gte",
+            "value": 1
+          }
+        ],
+        "effects": [
+          {
+            "type": "damage",
+            "actor": "event.source",
+            "source": "event.target",
+            "amount": 0,
+            "damageType": "lightning",
+            "eventValue": {
+              "field": "amount",
+              "factor": 0.25
+            }
+          }
+        ]
+      }
+    },
+    "phases": {
+      "second-seal": {
+        "onEnter": [
+          {
+            "type": "apply-status",
+            "actor": "guardian",
+            "status": "tidal-shell",
+            "intensity": 2
+          }
+        ]
+      }
+    }
+  },
+  "sharedMoves": [
+    {
+      "library": "environments",
+      "id": "flow-strike"
+    },
+    {
+      "library": "environments",
+      "id": "reviving-breath"
+    },
+    {
+      "library": "environments",
+      "id": "focus-current"
+    },
+    {
+      "library": "environments",
+      "id": "tidal-bolt"
+    },
+    {
+      "library": "environments",
+      "id": "arc-bolt"
+    },
+    {
+      "library": "environments",
+      "id": "venom-dart"
+    },
+    {
+      "library": "environments",
+      "id": "brine-bind"
+    },
+    {
+      "library": "environments",
+      "id": "clear-mind"
+    },
+    {
+      "library": "environments",
+      "id": "shake-off"
+    },
+    {
+      "library": "environments",
+      "id": "stunning-bell"
+    },
+    {
+      "library": "environments",
+      "id": "brine-curse"
+    }
+  ]
+}

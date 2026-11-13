@@ -3,12 +3,18 @@ import type {
   CombatBonuses,
   TemporaryModifiers,
   CombatMoveDefinition,
+  CombatStatusDefinition,
+  CombatPercentModifiers,
 } from '@ancadeba/schemas'
+import { applyCombatPercent } from './combatValues.js'
+import { temporaryModifierNames, combatPercentModifierNames } from '@ancadeba/schemas'
 
 export interface ActiveCombatStatus {
   readonly id: string
   readonly source: string
   readonly remaining: number
+  readonly stacks?: number | undefined
+  readonly intensity?: number | undefined
 }
 
 export type CombatStatuses = Readonly<Record<string, readonly ActiveCombatStatus[]>>
@@ -19,6 +25,7 @@ export interface TemporaryStatContribution {
   readonly id: string
   readonly label: string
   readonly modifiers: Readonly<TemporaryModifiers>
+  readonly percentModifiers?: Readonly<CombatPercentModifiers> | undefined
 }
 
 export function statusContributions(
@@ -29,12 +36,26 @@ export function statusContributions(
     statuses.flatMap((active) => {
       const status = definition.statuses?.[active.id]
 
-      return status?.type === 'modifier'
+      if (!status) return []
+
+      const { modifiers, percentModifiers } = combatStatusParts(status)
+
+      return modifiers || percentModifiers
         ? [
             Object.freeze({
               id: active.id,
               label: status.label,
-              modifiers: Object.freeze({ ...status.modifiers }),
+              modifiers: scaledCombatModifiers(modifiers ?? {}, active),
+              ...(percentModifiers
+                ? {
+                    percentModifiers: Object.fromEntries(
+                      Object.entries(percentModifiers).map(([stat, value]) => [
+                        stat,
+                        combatStatusAmount(Math.round((value ?? 0) * 100), active) / 100,
+                      ]),
+                    ),
+                  }
+                : {}),
             }),
           ]
         : []
@@ -55,7 +76,7 @@ export function temporaryCombatStats(
       if (!Number.isSafeInteger(total[stat])) throw new RangeError('Temporary stat overflow')
     }
 
-    total[stat] = Math.max(0, total[stat])
+    total[stat] = applyCombatPercent(Math.max(0, total[stat]), combatPercentModifier(effects, stat))
   }
 
   return Object.freeze(total)
@@ -71,7 +92,68 @@ export function combatStunned(
   definition: CombatDefinition,
   statuses: readonly ActiveCombatStatus[] = [],
 ): boolean {
-  return statuses.some((status) => definition.statuses?.[status.id]?.type === 'stun')
+  return statuses.some((status) => {
+    const data = definition.statuses?.[status.id]
+
+    return data && combatStatusParts(data).stun
+  })
+}
+
+export function combatStatusParts(status: CombatStatusDefinition) {
+  return {
+    damageType:
+      status.type === 'damage' || status.type === 'composite' ? status.damageType : undefined,
+    damage:
+      status.type === 'damage'
+        ? status.amount
+        : status.type === 'composite'
+          ? status.damage
+          : undefined,
+    regeneration:
+      status.type === 'regeneration'
+        ? status.amount
+        : status.type === 'composite'
+          ? status.regeneration
+          : undefined,
+    modifiers:
+      status.type === 'modifier' || status.type === 'composite' ? status.modifiers : undefined,
+    percentModifiers:
+      status.type === 'modifier' || status.type === 'composite'
+        ? status.percentModifiers
+        : undefined,
+    stun: status.type === 'stun' || (status.type === 'composite' && status.stun === true),
+  }
+}
+
+export function combatStatusAmount(amount: number, active: ActiveCombatStatus): number {
+  const stacks = active.stacks ?? 1
+  const intensity = active.intensity ?? 1
+  const scaled = amount * stacks * intensity
+
+  if (
+    !Number.isInteger(stacks) ||
+    stacks < 1 ||
+    stacks > 100 ||
+    !Number.isInteger(intensity) ||
+    intensity < 1 ||
+    intensity > 100 ||
+    !Number.isSafeInteger(scaled)
+  )
+    throw new RangeError('Combat status magnitude overflow')
+
+  return scaled
+}
+
+export function scaledCombatModifiers(
+  modifiers: Readonly<TemporaryModifiers>,
+  active: ActiveCombatStatus,
+): Readonly<TemporaryModifiers> {
+  const scaled: TemporaryModifiers = {}
+
+  for (const stat of temporaryModifierNames)
+    if (modifiers[stat] !== undefined) scaled[stat] = combatStatusAmount(modifiers[stat], active)
+
+  return Object.freeze(scaled)
 }
 
 export function cooldownRemaining(
@@ -81,4 +163,19 @@ export function cooldownRemaining(
   round: number,
 ): number {
   return Math.max(0, (cooldowns[actor]?.[move] ?? round) - round)
+}
+
+export function combatPercentModifier(
+  effects: readonly TemporaryStatContribution[],
+  stat: (typeof combatPercentModifierNames)[number],
+): number {
+  let total = 0
+
+  for (const effect of effects) {
+    total += Math.round((effect.percentModifiers?.[stat] ?? 0) * 100)
+
+    if (!Number.isSafeInteger(total)) throw new RangeError('Combat percentage overflow')
+  }
+
+  return total / 100
 }

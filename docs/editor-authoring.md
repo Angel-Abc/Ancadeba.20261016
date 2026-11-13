@@ -861,6 +861,311 @@ without regard to letter case and cannot overwrite an existing definition.
 Saved definition IDs are read-only; editing their other fields updates the
 selected definition. Failed saves retain the draft for correction and retry.
 
+For encounter-specific mechanics, expand **Resources, triggers and phases** in
+the Combat form. Add meters with initial/maximum values and optional actor
+ownership, then configure event triggers with filters, ANDed conditions, ordered
+effects and optional once-per-encounter execution. Add named phases, choose the
+initial phase, and configure phase entry effects or alternate enemy rotations.
+Choose trigger-defined victory for objectives that do not require defeating all
+enemies. Moves can reserve resource costs, and abilities can change a named meter.
+All controls use the normal draft, validation and revision-checked save workflow.
+Removing referenced definitions requires updating their references in the draft.
+
+The `sample-games/combat-mechanics` game demonstrates an underwater fight with
+stamina/exhaustion and a boss gauge filled three times. The runtime preserves
+meters, phases and trigger history across pauses and saves. Initial phase entry
+and encounter-start triggers run on the first committed round; previewing or
+queuing does not activate them. Rotation-only enemies use changed phase rotations
+in the next round. Conditional enemies choose using the current phase before each action.
+
+Each enemy has a **Conditional enemy AI** section. Enable it, add ordered rules
+and choose an available move and maximum uses per turn. Add ANDed conditions for
+resource amounts, actor health, status stacks/intensity or boss phase. Raise a
+rule's priority to check it earlier. Empty conditions always match; an absent
+status has zero strength. Choose rotation fallback or wait when no rule can act.
+Unavailable moves are skipped to allow lower rules to run. Resources and phases
+come from the fight's effective inline/shared mechanics. Removing inline
+conditional AI returns to the normal rotation.
+Rules choose again before each action, so earlier actions can change the next
+decision. Displayed enemy plans are previews of current conditions.
+
+Combat libraries provide **Reusable enemy AI profiles**. Create a profile and
+author its AI rules with the same controls. `self` means the enemy using the
+profile. Declare other actor roles and apply them to the controls, then bind
+those roles in each encounter. Profile moves and status conditions refer to
+definitions in the same library. Resource and phase IDs can be entered directly
+and are validated against the encounter when the profile is linked.
+
+Choose **Shared AI profile** under an enemy's **Enemy AI profile** section.
+The form shows its effective rules and whether each is inherited, overridden or
+excluded. Editing saves only changed fields for that enemy. Conditions are
+replaced as an array; untouched fields follow later library updates. Add/remove
+rules, change priority or fallback, and reset a rule, setting or all overrides to
+inherit again. Every chosen move must be in the enemy's available moves.
+Choose **Inline enemy AI** to detach a copy while retaining required shared
+move/status imports. Profiles, references and patches use normal draft recovery,
+validation, revision checks, undo/redo and export. Reef and Deep water share the
+Eel hunter profile; Deep water lowers its exhaustion threshold locally.
+
+The condition editor is shared by enemy AI, AI profiles, triggers, phase-entry
+and ability effects. Existing condition lists mean AND. Choose `and` (all), `or`
+(any), or `not` (one inverted child) to nest expressions. Add/remove child
+conditions inside each group; groups require at least one child. Trees allow
+eight levels, 100 nodes, and 20 children per group. Conditions inspect health,
+resources, phases, or status stacks, intensity, and remaining turns.
+
+For health/resource thresholds choose **Percentage of maximum** and enter a
+number from 0 to 100, with up to two decimal places. Runtime health uses the
+effective maximum, including equipment; resources use their authored maximum.
+Missing actors/resources/phases or an unavailable maximum remain unresolved,
+including under NOT. An OR can still match another resolved branch. `self` and
+`target` refer to the acting combatant and selected target in action/ability
+conditions. For status events both aliases identify the affected combatant;
+resource events have `self` only when that resource has an owner. Other events
+may have no actor/target, so use an explicit actor ID/role when appropriate.
+
+Use **Add effect condition** to gate individual ability, trigger or phase-entry
+effects. Conditions are evaluated immediately before each effect, so later
+effects see changes made by earlier effects. Removing all effect conditions
+makes the effect unconditional. Shared definitions preserve nested expressions,
+actor-role bindings, and per-encounter overrides. Combat-only conditions are not
+supported for outside-combat healing items.
+
+Lifecycle events include **Before action**, **After action**, **Status applied**,
+**Status refreshed**, **Status removed**, **Status expired**, and **Status changed**.
+Before-action runs for each attempted selected/queued action before paying costs;
+AP, resource availability, target health and stun are checked again afterward.
+A blocked action spends no action costs or RNG and does not emit after-action.
+Successful actions emit the existing action-resolved event before after-action.
+A terminal outcome stops further hooks. Status events run after mutation: an
+actual application/refresh/removal/expiry emits its specific event followed by
+status-changed; partial stack removal and duration ticks emit only status-changed.
+No-op applications/removals emit nothing. A status filter selects a single status.
+Hooks use the existing ordered queue, once-only flags, cascade limit and atomic
+combat transaction. Debug event entries record trigger matches and failures with
+nested observed values; enemy decision entries display the same expression tree.
+
+Move forms now include **AP cost scaling**, **Resource cost scaling**, and
+**Effect value scaling** for attacks/guards and damage/heal/guard ability effects.
+Enable scaling, choose additive or percentage mode, and add up to 20 weighted
+resource/status terms. Coefficients support two decimal places, including negative
+values. Resources can use their current amount or percentage of maximum; status
+terms use stacks/intensity/remaining turns. Scaling actor accepts `self`, `target`,
+or an encounter actor ID. Resource IDs can be typed in shared libraries and are
+validated after encounter composition resolves. Scaling-only status references
+are imported automatically.
+
+Effects round down by default and AP/resource costs round up. Optional bounds
+clamp the result before rounding; the action's AP cost still has a minimum of
+one. Dynamic resource scaling requires an existing resource cost entry; renaming
+or removing that entry also moves/removes its formula. Disable scaling to return
+to the fixed base value. Resource costs are paid before ability formulas read
+live values, and before-action hooks can change the final affordability check.
+Previews and planning use current values and do not assume future gains/effects.
+
+Modifier/composite status forms expose **Percentage modifiers** for attack bonus,
+defense, Guard bonus, AP budget, action AP cost, whole damage, and healing. Values
+combine additively across statuses, scaling with stacks × intensity, and apply
+after flat modifiers. Damage percentages apply before defense/Guard; healing
+percentages apply to the source's heals/regeneration. Combat status badges show
+the scaled percentages. Maximum-health percentage modifiers are not included.
+
+Water and **underwater-boss** expose Flow strike (S), Reviving breath (F), and
+Focus current (G). Replay **scaled-current**, **scaled-last-seal**, and
+**pressure-surge-scaling** to inspect resource/intensity-dependent effects and
+costs. The original exhaustion and three-seal scenarios remain available.
+
+Set **Damage type** on attacks, damage ability effects and periodic damage statuses.
+Leave it empty for physical damage, or use the same custom ID everywhere that type
+is referenced. Actor and status forms include **Damage defenses**: enter a type ID,
+choose **Add damage defense type**, then set its resistance/vulnerability percentages or
+enable **Immune**. Remove a type or all defenses to clear those fields from JSON.
+Shared-library statuses expose the same controls and can provide temporary wards.
+Defense-only composite statuses are supported; their percentages scale with
+stacks × intensity, while immunities remain active until the status is removed.
+
+Resistance and vulnerability add across the actor and live statuses; their net
+percentage applies after flat defense and before Guard, with damage rounded down.
+Immunity overrides percentages and preserves Guard. Periodic damage retains its
+flat-defense/Guard bypass. Damage immunity allows independent status application;
+zero-damage hits/ticks do not emit damage-received hooks. Effective defenses and
+typed damage ranges appear in the live view and editor preview. Simulation action
+log entries retain mitigation details, including damage type and immunity.
+
+Water's **typed-damage** scenario compares water resistance, lightning vulnerability
+and poison immunity. Underwater guardian adds **typed-damage** and **seal-shell**;
+the latter enters phase two and applies Tidal shell at intensity two, cancelling
+the guardian's lightning vulnerability. Z/X/C select the three typed abilities.
+Its diver also resists Pressure surge's water damage by 50%.
+
+Set **Move categories (comma-separated)** on any local or shared move. Categories
+are explicit IDs: use `spell` for Silence-sensitive actions, `weapon` for
+Disarm-sensitive actions, and `utility` for recovery that should remain usable.
+A move in multiple categories is blocked when any category matches. Untagged
+moves retain their previous behavior.
+
+Actor and status forms expose **Status immunity and action restrictions**.
+Enter exact, declared status IDs in **Status immunity IDs (comma-separated)**
+and categories in **Blocked move categories (comma-separated)**. A Silence
+composite status can contain only `spell` in the blocked list; a temporary ward
+can contain only immunity IDs. Actor and active-status contributions combine
+until their sources expire or are removed. Empty controls clear saved fields.
+Shared status dependencies import automatically, and deletion/reference checks
+protect statuses mentioned only by immunity lists.
+
+Immunity prevents new applications, refreshes and added stacks/intensity. It
+does not cleanse existing statuses. Damage immunity remains separate from status
+immunity. Use explicit remove-status effects for recovery. The runtime rechecks
+restrictions after before-action hooks; rejected actions spend no costs or RNG.
+Live and editor previews show blocked reasons and immunity, and simulator enemy
+decisions identify blocked categories and the status causing them. Saves retain
+the active controls and rejection logs.
+
+Click **Open control techniques** in Water or Underwater guardian for companion
+views of the same encounter. Brine bind applies Silence/Disarm; Clear mind
+prevents future controls, while Shake off removes existing ones. Stunning bell
+tests Dazed immunity. Replay Water's **brine-control**, **silence-recovery** and
+**status-ward**, plus the boss's **boss-silence** and **boss-control-immunity**.
+The guardian permanently rejects Disarmed/Dazed, and Tidal shell temporarily
+rejects Silence. Original keyboard controls remain on the standard views.
+
+Choose a damage/healing event on a trigger to expose **Effect source filter**,
+**Effect recipient filter**, **Effect delivery filter**, and, for damage,
+**Damage type filter**. Received/dealt events require positive actual HP change;
+resolved events include zero damage and overheal. Move and status filters can
+select a direct action or periodic status. Event conditions add numeric comparisons
+and boolean flags within the existing AND/OR/NOT builder. Only fields available
+on the selected event are offered; source/recipient actors can also be used in
+health/status conditions.
+
+For a resource effect, enable **Scale amount from event**, set the base Amount to
+0 and select **Actual HP changed** with factor 1 to copy actual damage/healing.
+Negative factors can remove exhaustion or another resource. The formula adds
+the selected event value times its factor to the base amount and rounds once.
+Trigger effect types **damage** and **heal** also accept these formulas. Choose
+**Effect recipient** and **Reactive effect source** using actor IDs or Event
+source/recipient; an empty source defaults to the recipient. Reactive damage
+uses normal defenses and Guard without an extra RNG draw; healing uses normal
+healing bonuses and health limits. Neither spends another action's costs.
+
+Reactions ignore other reactive damage/healing by default. Explicitly enable
+**Include effects caused by reactions** for a healing-to-exhaustion chain, and
+use filters/conditions to bound its scope. Invalid event-only fields in phase
+entry effects or unrelated events fail save validation. Trigger loops still
+reject the entire combat transaction. These controls also work in shared
+rulesets and sparse encounter overrides.
+
+Water's **current-siphon** replays Focus current followed by Arc bolt: 27 lightning
+damage produces 18 actual healing after its bonuses, relieving 18 exhaustion.
+Underwater guardian's **lightning-three-seals** recovers and casts two Arc bolts
+per round, filling three seals from actual damage in ten rounds without Channel.
+Its Tidal shell reflects 25% of lightning damage received. Inspect simulator
+event frames' `effect` facts for raw/actual amounts, mitigation, overheal,
+attribution and delivery. Live and saved logs label reactive damage/healing.
+
+The Combat editor's **Combat simulation and debugging** panel runs the current
+encounter draft using saved shared libraries and starting game fields/equipment.
+Set starting health, resources, status strength/duration, boss phase and seed,
+then choose **Start/reset simulation**. Queue player moves with a target and
+resolve a round, or repeat the plan for 1–100 rounds. Repeat retains targets and
+omits unavailable moves. Simulation controls never mark the authoring draft as
+edited or send save commands. They test combat moves independently of live state;
+item use, rewards and world progression are outside this sandbox.
+
+Filter the timeline and inspect a decision, action or event/trigger step. Enemy
+decision explanations show observed condition values, rule priority, AP cost,
+cooldown, resource shortage and per-turn use limits. Lower-priority rules are
+not evaluated after a selection. State frames show health, guard, resources,
+phase, status stacks/intensity/duration, cooldowns and RNG. The current enemy plan
+preview is provisional; actual conditional choices use live round state.
+**Simulation report (JSON)** is a copyable reproducible snapshot with round
+inputs. Trace collection stops after 500 frames while inputs/final state remain
+available. Changed encounter or saved shared data requires restarting the test.
+See the sample game's README for water-exhaustion and three-seal boss exercises.
+
+**Saved combat scenarios** stores named tests in each encounter's
+`simulationScenarios` source field. Select an existing test or capture the current
+simulation's starting setup and recorded/queued actions. Edit its name, ordered
+steps, move/target plans, repetitions, unavailable-action policy, checkpoint
+checks and final checks. To change starting conditions, edit the simulator fields
+and choose **Use simulator starting conditions**. **Load scenario starting
+conditions** loads them into a fresh manual simulation.
+
+**Replay scenario** tests the selected draft against current encounter changes.
+**Run all saved scenarios** tests the saved scenarios for that encounter. Results
+show pass, failed checks with actual values, or an execution error with its step.
+Inspect a result to use the existing timeline and enemy decision debugger. Tests
+default to failing on unavailable actions; explicit skip mode lists skipped
+commands. Checkpoints run after a step's repetitions, and a later step cannot
+execute after a terminal outcome. Final checks always run on a completed script.
+
+**Save simulation scenario** writes only that scenario, preserving unrelated
+encounter edits. Save a new encounter before saving scenarios. Capture expected
+results explicitly; replay does not replace them. Duplicate/delete, conflict
+retries and draft recovery use normal editor behavior. Save/discard scenario
+drafts before switching encounters. Scenario references that no longer resolve
+are reported during replay, allowing gameplay changes without blocking the game.
+Changes to test data do not affect gameplay save compatibility.
+
+For layered encounter mechanics, choose **Compose rulesets**. Select **Ruleset
+to add** and choose **Add ruleset layer**. Add, reorder, replace or remove layers,
+with independent actor-role bindings in each. Existing single references convert
+without copying shared mechanics into the encounter. Library and ruleset usage
+lists include every selected layer.
+
+Duplicate resource/trigger/phase IDs show both providers and prevent saving.
+Choose **When mechanic IDs collide → Replace with this layer** on the later
+layer to replace a whole entry. Arrays are replaced rather than concatenated;
+replaced triggers run at the later layer's position. Different initial phases
+also require explicit replacement. Any layer with objective victory preserves
+trigger-based victory in the composition; encounter settings can override it.
+
+The effective mechanics form shows the supplying library/ruleset and edits only
+encounter overrides. Reset an entry/setting to inherit the composed result again.
+**Detach composition to inline mechanics** retains the effective mechanics and
+shared move/status references. Removing the last layer also detaches. Saved
+composition supports 16 distinct library/ruleset pairs, with overrides applied
+last. Replays use the current composition, bindings, library data and overrides.
+
+Select **underwater-boss** in the mechanics sample to inspect **underwater** plus
+**three-seals**. The fight overrides stamina and water pressure, then adds channel
+exhaustion through an after-action trigger. Replay **three-seals-underwater** and
+**recover-before-seal** to verify both systems together. The harbour includes a
+playable link with Q for channeling and E for recovery.
+
+Combat libraries also provide **Reusable combat rulesets**. Add a ruleset, name
+its actor roles and edit its resources, triggers and phases with the same controls.
+Use **Apply actor roles to controls** after editing the role list. Roles used for
+phase rotations must bind to enemy actors in an encounter. Shared rulesets can
+reference moves and statuses from their own library.
+
+In the encounter form, choose **Combat ruleset** and bind its roles to actual
+actors. The displayed mechanics combine the shared ruleset with local overrides.
+Editing an inherited value saves only that change for the selected fight; untouched
+fields continue to follow library updates. The entry list identifies inherited,
+overridden and excluded definitions. Reset individual entries, settings, or all
+overrides to inherit again. Excluding an entry still requires fixing references to
+it. Choosing inline mechanics detaches a copy with explicit shared dependencies.
+Selecting a different ruleset resets previous local mechanics to the new defaults.
+
+The sample's Reef and Deep water fights share `environments/underwater`, bind the
+swimmer role to different actor IDs, and demonstrate inherited versus overridden
+stamina and water pressure. Sources preserve their ruleset references and sparse
+overrides through normal saves, draft recovery, undo/redo and export.
+
+Status editors support stacking limits, refresh/preserve duration and intensity
+with replace/maximum/add reapplication. Modifier controls include AP budget and
+action AP cost. Choose a composite status to combine periodic damage,
+regeneration, modifiers and stun. Ability, trigger and phase-entry status effects
+can set added stacks/intensity or remove a specified number of stacks.
+
+Numeric effects multiply by stacks × intensity. The runtime recomputes AP and
+costs for planning and during resolution; a newly unaffordable queued action is
+skipped without item/resource consumption or a cooldown. The combat view displays
+effective budgets/costs, scaled status values and strength. Water/Reef demonstrate
+exhaustion reducing AP, Deep water demonstrates higher costs, and A stacks the
+Swimming rhythm defense buff without extending its remaining duration.
+
 ### Action bars and input bindings
 
 Open **Action bar & input** in the explorer, or select an action-bar component in

@@ -13,6 +13,8 @@ import {
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
 import { mergeCombatEntries } from './combatEntryEditing.js'
+import { mergeCombatRulesets } from './combatRulesetEditing.js'
+import { mergeCombatAIProfiles } from './combatAIProfileEditing.js'
 
 function copyEntry(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(copyEntry)
@@ -50,6 +52,20 @@ export function editCombatLibrary(
     const file = combatLibraryFile(library.id)
     const previous = object(documents[file])
 
+    if (Object.keys(object(previous.aiProfiles)).length && library.aiProfiles === undefined)
+      throw new EditorError(
+        422,
+        'ai_profiles_required',
+        'Include aiProfiles explicitly when saving a library that contains them',
+      )
+
+    if (Object.keys(object(previous.rulesets)).length && library.rulesets === undefined)
+      throw new EditorError(
+        422,
+        'rulesets_required',
+        'Include rulesets explicitly when saving a library that contains them',
+      )
+
     if (
       command.createOnly &&
       (game.combatLibraries ?? []).some((id) => id.toLowerCase() === library.id.toLowerCase())
@@ -58,7 +74,13 @@ export function editCombatLibrary(
 
     if (!game.combatLibraries?.includes(library.id) && Object.hasOwn(documents, file))
       throw new EditorError(409, 'combat_library_exists', 'A library file already exists')
-    documents[file] = { ...previous, ...library, ...mergeCombatEntries(previous, library) }
+    documents[file] = {
+      ...previous,
+      ...library,
+      ...mergeCombatEntries(previous, library),
+      rulesets: mergeCombatRulesets(previous.rulesets, library.rulesets),
+      aiProfiles: mergeCombatAIProfiles(previous.aiProfiles, library.aiProfiles),
+    }
 
     if (game.combatLibraries?.includes(library.id)) return [file]
     documents['game.json'] = {
@@ -109,9 +131,12 @@ export function editCombatLibrary(
     },
   }
 
-  if (command.kind === 'moves') {
-    const move = libraries.get(library)!.moves[id]!
+  const dependencies =
+    command.kind === 'moves'
+      ? moveStatusIds(libraries.get(library)!.moves[id]!)
+      : (libraries.get(library)!.statuses[id]!.statusImmunities ?? [])
 
+  if (command.kind === 'moves' || dependencies.length) {
     const rawReferences = Array.isArray(previous.sharedStatuses)
       ? previous.sharedStatuses.map(object)
       : []
@@ -121,7 +146,7 @@ export function editCombatLibrary(
       ...ref,
     }))
 
-    for (const status of moveStatusIds(move))
+    for (const status of dependencies)
       if (!sharedStatuses.some((ref) => ref.library === library && ref.id === status))
         sharedStatuses.push({ library, id: status })
     documents[file] = { ...next, sharedStatuses }

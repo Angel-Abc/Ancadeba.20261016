@@ -165,3 +165,29 @@ export * from './gameSaves.js'
 export * from './mapObjects.js'
 
 export * from './sceneNavigation.js'
+
+export * from './combatMechanics.js'
+
+export * from './combatStatusStacking.js'
+
+export * from './combatActionEconomy.js'
+
+export * from './combatEnemyAI.js'
+
+export * from './combatDebug.js'
+
+export * from './combatConditions.js'
+
+export * from './combatSimulation.js'
+
+export * from './combatScenarioRunner.js'
+
+export * from './combatSimulationSetup.js'
+
+export * from './combatValues.js'
+
+export * from './combatDamage.js'
+
+export * from './combatEventValues.js'
+
+export * from './combatRestrictions.js'

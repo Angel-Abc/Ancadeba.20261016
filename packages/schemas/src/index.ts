@@ -48,6 +48,16 @@ export * from './shop.js'
 
 export * from './combat.js'
 
+export * from './combatConditions.js'
+
+export * from './combatSimulationScenarios.js'
+
+export * from './combatEnemyAI.js'
+
+export * from './combatAIProfiles.js'
+
+export * from './combatAIProfileResolution.js'
+
 export * from './combatRewards.js'
 
 export * from './leveling.js'
@@ -63,3 +73,19 @@ export * from './itemUse.js'
 export * from './itemUseValidation.js'
 
 export * from './save.js'
+
+export * from './combatMechanics.js'
+
+export * from './combatRulesets.js'
+
+export * from './combatRulesetResolution.js'
+
+export * from './combatMechanicsOverrides.js'
+
+export * from './combatValues.js'
+
+export * from './combatDamage.js'
+
+export * from './combatEvents.js'
+
+export * from './combatRestrictions.js'

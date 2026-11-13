@@ -1,0 +1,110 @@
+{
+  "schema-version": "1.0.0",
+  "id": "harbour",
+  "title": "Choose an encounter",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Water: manage stamina and exhaustion. Boss: fill the seal gauge three times. Health is shared between encounters. Leaving an unfinished fight pauses its meters and phases. Reef and Deep water share one underwater ruleset; Deep water overrides pressure and stamina. Underwater boss combines both rulesets: manage exhaustion while breaking three seals.",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 2,
+        "columnSpan": 12
+      }
+    },
+    {
+      "id": "water",
+      "type": "button",
+      "label": "Water battle",
+      "action": {
+        "type": "enter-scene",
+        "scene": "water"
+      },
+      "placement": {
+        "row": 3,
+        "column": 1,
+        "columnSpan": 5
+      }
+    },
+    {
+      "id": "boss",
+      "type": "button",
+      "label": "Three-seal guardian",
+      "action": {
+        "type": "enter-scene",
+        "scene": "boss"
+      },
+      "placement": {
+        "row": 5,
+        "column": 1,
+        "columnSpan": 5
+      }
+    },
+    {
+      "id": "restart",
+      "type": "button",
+      "label": "New game",
+      "action": {
+        "type": "new-game",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 11,
+        "column": 1,
+        "columnSpan": 5
+      }
+    },
+    {
+      "id": "shared-water",
+      "type": "button",
+      "label": "Reef (shared rules)",
+      "action": {
+        "type": "enter-scene",
+        "scene": "shared-water"
+      },
+      "placement": {
+        "row": 7,
+        "column": 1,
+        "columnSpan": 5
+      }
+    },
+    {
+      "id": "rough-water",
+      "type": "button",
+      "label": "Deep water (local overrides)",
+      "action": {
+        "type": "enter-scene",
+        "scene": "rough-water"
+      },
+      "placement": {
+        "row": 9,
+        "column": 1,
+        "columnSpan": 5
+      }
+    },
+    {
+      "id": "underwater-boss",
+      "type": "button",
+      "label": "Underwater guardian (composed rules)",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss"
+      },
+      "placement": {
+        "row": 3,
+        "column": 7,
+        "columnSpan": 6
+      }
+    }
+  ]
+}

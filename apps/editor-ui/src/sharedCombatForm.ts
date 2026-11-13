@@ -16,6 +16,8 @@ export function sharedCombatForm(
   const libraries = new Map(Object.entries(view.combatLibraries ?? {}))
   const resolved = resolveCombatSource(draft, libraries, undefined, view.inventory)
   const usedLibraries = new Set<string>()
+
+  for (const enemy of draft.enemies) if (enemy.aiProfile) usedLibraries.add(enemy.aiProfile.library)
   const rows: HTMLElement[] = []
 
   for (const kind of ['moves', 'statuses'] as const) {
@@ -53,7 +55,7 @@ export function sharedCombatForm(
       const title = create('strong')
       title.textContent = name
       const source = create('small')
-      source.textContent = `${library}/${id}${index < 0 ? t('combat.shared.dependency') : ''}`
+      source.textContent = `${library}/${id}${index < 0 ? t(origin.ruleset ? 'combat.rulesets.dependency' : 'combat.shared.dependency') : ''}`
       const description = create('p')
       description.className = 'help'
       description.textContent = text

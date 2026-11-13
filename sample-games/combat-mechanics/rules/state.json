@@ -1,0 +1,33 @@
+{
+  "state": [
+    {
+      "path": ["player-health"],
+      "value": 80
+    },
+    {
+      "path": ["eel-health"],
+      "value": 90
+    },
+    {
+      "path": ["guardian-health"],
+      "value": 500
+    },
+    {
+      "path": ["seals-broken"],
+      "value": 0
+    },
+    {
+      "path": ["reef-eel-health"],
+      "value": 90
+    },
+    {
+      "path": ["deep-eel-health"],
+      "value": 90
+    },
+    {
+      "path": ["underwater-guardian-health"],
+      "value": 500
+    }
+  ],
+  "actions": {}
+}

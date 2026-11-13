@@ -1,5 +1,11 @@
+import { mergeCombatDamageDefenses } from './combatDamageEditing.js'
 import { mergeCombatEntries } from './combatEntryEditing.js'
-import { combatFile, type CombatActorDefinition, type GameDefinition } from '@ancadeba/schemas'
+import { mergeCombatEnemyAI } from './combatEnemyAIEditing.js'
+import { mergeCombatMechanics } from './combatMechanicsEditing.js'
+import { mergeCombatMechanicsOverrides } from './combatRulesetEditing.js'
+import { combatFile, type CombatActorSource, type GameDefinition } from '@ancadeba/schemas'
+import { mergeCombatAIOverrides } from './combatAIProfileEditing.js'
+import { mergeCombatScenarios } from './combatScenarioEditing.js'
 import type { EditorCommand } from './commands.js'
 import { object, EditorError } from './project.js'
 
@@ -33,6 +39,46 @@ export function editCombat(
     const previous = object(documents[file])
 
     if (
+      Object.keys(object(previous.simulationScenarios)).length &&
+      definition.simulationScenarios === undefined
+    )
+      throw new EditorError(
+        422,
+        'simulation_scenarios_required',
+        'Include simulationScenarios explicitly when saving an encounter that contains them',
+      )
+
+    if (previous.ruleset && definition.ruleset === undefined && definition.rulesets === undefined)
+      throw new EditorError(
+        422,
+        'ruleset_reference_required',
+        'Include ruleset explicitly when saving a linked encounter; use null to detach',
+      )
+
+    if (
+      Array.isArray(previous.rulesets) &&
+      previous.rulesets.length &&
+      definition.rulesets === undefined &&
+      definition.ruleset === undefined
+    )
+      throw new EditorError(
+        422,
+        'ruleset_reference_required',
+        'Include rulesets explicitly when saving a composed encounter; use an empty array to detach',
+      )
+
+    if (
+      Object.keys(object(previous.mechanicsOverrides)).length &&
+      (definition.ruleset || definition.rulesets?.length) &&
+      definition.mechanicsOverrides === undefined
+    )
+      throw new EditorError(
+        422,
+        'mechanics_overrides_required',
+        'Include mechanicsOverrides explicitly when saving local changes; use an empty object to reset',
+      )
+
+    if (
       command.createOnly &&
       (game.combat ?? []).some((id) => id.toLowerCase() === definition.id.toLowerCase())
     )
@@ -56,25 +102,59 @@ export function editCombat(
 
     const oldEnemies = Array.isArray(previous.enemies) ? previous.enemies.map(object) : []
 
-    const actor = (actor: CombatActorDefinition, old: Record<string, unknown>) => ({
-      ...old,
-      ...actor,
-      labelKey: actor.labelKey,
-      descriptionKey: actor.descriptionKey,
-      portrait: actor.portrait,
-      equipmentOwner: actor.equipmentOwner,
-      leveling: actor.leveling,
-      moveLevels: actor.moveLevels ? { ...actor.moveLevels } : undefined,
-      health: { ...object(old.health), ...actor.health, fallback: actor.health.fallback },
-      maximumHealth:
-        typeof actor.maximumHealth === 'object'
+    const actor = (actor: CombatActorSource, old: Record<string, unknown>) => {
+      if (old.aiProfile && actor.aiProfile === undefined)
+        throw new EditorError(
+          422,
+          'ai_profile_required',
+          'Include aiProfile explicitly when saving a linked enemy; use null to detach',
+        )
+
+      if (
+        Object.keys(object(old.aiOverrides)).length &&
+        actor.aiProfile &&
+        actor.aiOverrides === undefined
+      )
+        throw new EditorError(
+          422,
+          'ai_overrides_required',
+          'Include aiOverrides explicitly when saving local AI changes; use an empty object to reset',
+        )
+
+      return {
+        ...old,
+        ...actor,
+        labelKey: actor.labelKey,
+        descriptionKey: actor.descriptionKey,
+        portrait: actor.portrait,
+        damageDefenses: mergeCombatDamageDefenses(old.damageDefenses, actor.damageDefenses),
+        statusImmunities: actor.statusImmunities ? [...actor.statusImmunities] : undefined,
+        blockedMoveCategories: actor.blockedMoveCategories
+          ? [...actor.blockedMoveCategories]
+          : undefined,
+        equipmentOwner: actor.equipmentOwner,
+        leveling: actor.leveling,
+        moveLevels: actor.moveLevels ? { ...actor.moveLevels } : undefined,
+        ai: mergeCombatEnemyAI(old.ai, actor.ai),
+        aiProfile: actor.aiProfile
           ? {
-              ...object(old.maximumHealth),
-              ...actor.maximumHealth,
-              fallback: actor.maximumHealth.fallback,
+              ...object(old.aiProfile),
+              ...actor.aiProfile,
+              actors: actor.aiProfile.actors ? { ...actor.aiProfile.actors } : undefined,
             }
-          : actor.maximumHealth,
-    })
+          : undefined,
+        aiOverrides: mergeCombatAIOverrides(old.aiOverrides, actor.aiOverrides),
+        health: { ...object(old.health), ...actor.health, fallback: actor.health.fallback },
+        maximumHealth:
+          typeof actor.maximumHealth === 'object'
+            ? {
+                ...object(old.maximumHealth),
+                ...actor.maximumHealth,
+                fallback: actor.maximumHealth.fallback,
+              }
+            : actor.maximumHealth,
+      }
+    }
 
     const oldRewardNumeric = object(previous.rewards).numeric
     const oldRewardDrops = object(previous.rewards).drops
@@ -88,6 +168,32 @@ export function editCombat(
         actor(entry, oldEnemies.find((old) => old.id === entry.id) ?? {}),
       ),
       ...mergeCombatEntries(previous, definition),
+      simulationScenarios: mergeCombatScenarios(
+        previous.simulationScenarios,
+        definition.simulationScenarios,
+      ),
+      mechanics: mergeCombatMechanics(previous.mechanics, definition.mechanics),
+      ruleset: definition.ruleset
+        ? {
+            ...object(previous.ruleset),
+            ...definition.ruleset,
+            actors: definition.ruleset.actors ? { ...definition.ruleset.actors } : undefined,
+          }
+        : undefined,
+      rulesets: definition.rulesets?.map((reference) => ({
+        ...oldReferences('rulesets', reference.library, reference.id),
+        ...(object(previous.ruleset).library === reference.library &&
+        object(previous.ruleset).id === reference.id
+          ? object(previous.ruleset)
+          : {}),
+        ...reference,
+        actors: reference.actors ? { ...reference.actors } : undefined,
+        collision: reference.collision,
+      })),
+      mechanicsOverrides: mergeCombatMechanicsOverrides(
+        previous.mechanicsOverrides,
+        definition.mechanicsOverrides,
+      ),
       itemUse: definition.itemUse
         ? { ...object(previous.itemUse), ...definition.itemUse }
         : undefined,

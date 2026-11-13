@@ -1,0 +1,22 @@
+{
+  "schema-version": "1.0.0",
+  "id": "combat-mechanics",
+  "version": "1.0.0",
+  "title": "Tides and the Three Seals",
+  "initial-scene": "start",
+  "scenes": [
+    "start",
+    "harbour",
+    "water",
+    "boss",
+    "shared-water",
+    "rough-water",
+    "underwater-boss",
+    "water-controls",
+    "underwater-boss-controls"
+  ],
+  "input": "controls",
+  "rules": ["state"],
+  "combat": ["water", "boss", "shared-water", "rough-water", "underwater-boss"],
+  "combatLibraries": ["environments"]
+}

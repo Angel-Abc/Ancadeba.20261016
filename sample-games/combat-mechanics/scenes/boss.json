@@ -1,0 +1,163 @@
+{
+  "schema-version": "1.0.0",
+  "id": "boss",
+  "title": "The three-seal guardian",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "boss",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Q: channel 25 seal energy (1 AP). Fill the gauge to 100 three times. Each break resets it and advances the boss phase. Health damage is not the victory condition.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Channel",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "channel"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "label": "Brace",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "guard"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { bindStoryEditor } from '../apps/editor-ui/src/storyEditor.js'
+import { readFile, readdir } from 'node:fs/promises'
 import { captureEditorDrafts, restoreEditorDrafts } from '../apps/editor-ui/src/editorDraftState.js'
 import { bindLevelingEditor } from '../apps/editor-ui/src/levelingEditor.js'
 /// <reference lib="dom" />
@@ -3423,6 +3424,602 @@ describe('editor draft workflows', () => {
     expect(ui.field('Encounter ID').readOnly).toBe(true)
   })
 
+  it('authors move categories, actor/status immunity and restrictions, then clears them on save', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.edit('New status ID', 'silenced')
+    ui.click('Add status')
+    ui.edit('Status type', 'composite', 'Status: silenced')
+    ui.edit('Enable modifiers', 'false', 'Status: silenced')
+    ui.edit('Blocked move categories (comma-separated)', 'spell', 'Status: silenced')
+    ui.edit('New status ID', 'ward')
+    ui.click('Add status')
+    ui.edit('Status immunity IDs (comma-separated)', 'silenced', 'Status: ward')
+    ui.edit('Status immunity IDs (comma-separated)', 'silenced', 'Enemy 1')
+    ui.edit('Blocked move categories (comma-separated)', 'weapon', 'Enemy 1')
+    ui.edit('Move categories (comma-separated)', 'weapon, spell', 'Move: attack')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.training).toMatchObject({
+      enemies: [{ statusImmunities: ['silenced'], blockedMoveCategories: ['weapon'] }],
+      moves: { attack: { categories: ['weapon', 'spell'] } },
+      statuses: {
+        silenced: { type: 'composite', blockedMoveCategories: ['spell'] },
+        ward: { statusImmunities: ['silenced'] },
+      },
+    })
+    ui.edit('Status type', 'regeneration', 'Status: ward')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.training!.statuses!.ward!.statusImmunities).toEqual([
+      'silenced',
+    ])
+    ui.edit('Status immunity IDs (comma-separated)', '', 'Status: ward')
+    ui.edit('Status immunity IDs (comma-separated)', '', 'Enemy 1')
+    ui.edit('Blocked move categories (comma-separated)', '', 'Enemy 1')
+    ui.edit('Move categories (comma-separated)', '', 'Move: attack')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const saved = ui.read().combatSources!.training!
+    expect(saved.enemies[0]!.statusImmunities).toBeUndefined()
+    expect(saved.enemies[0]!.blockedMoveCategories).toBeUndefined()
+    expect(saved.moves.attack!.categories).toBeUndefined()
+    expect(saved.statuses!.ward!.statusImmunities).toBeUndefined()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors actor/status damage defenses and typed attacks, clearing obsolete fields on removal', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+
+    const clickIn = (title: string, button: string) =>
+      ui.root
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some((child) => child.tagName === 'legend' && child.ownText === title),
+        )!
+        .all()
+        .find((node) => node.tagName === 'button' && node.textContent === button)!
+        .dispatchEvent(new Event('click'))
+
+    ui.click('Add encounter')
+    ui.edit('Defense damage type ID', 'fire', 'Enemy 1')
+    clickIn('Enemy 1', 'Add damage defense type')
+    ui.edit('Resistance (%)', '50', 'Damage type: fire')
+    ui.edit('Defense damage type ID', 'lightning', 'Enemy 1')
+    clickIn('Enemy 1', 'Add damage defense type')
+    ui.edit('Vulnerability (%)', '50', 'Damage type: lightning')
+    ui.edit('Defense damage type ID', 'poison', 'Enemy 1')
+    clickIn('Enemy 1', 'Add damage defense type')
+    ui.edit('Immune to this damage type', 'true', 'Damage type: poison')
+    ui.edit('Damage type (empty uses physical)', 'fire', 'Move: attack')
+    ui.edit('New status ID', 'venom')
+    ui.click('Add status')
+    ui.edit('Periodic damage type (empty uses physical)', 'poison', 'Status: venom')
+    ui.edit('Defense damage type ID', 'water', 'Status: venom')
+    clickIn('Status: venom', 'Add damage defense type')
+    ui.edit('Resistance (%)', '12.5', 'Damage type: water')
+    ui.edit('New move ID', 'sting')
+    ui.click('Add ability move')
+    ui.edit('Effect type', 'damage', 'Move: sting')
+    ui.edit('Damage type (empty uses physical)', 'poison', 'Move: sting')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    const source = ui.read().combatSources!.training!
+    expect(source.enemies[0]!.damageDefenses).toMatchObject({
+      resistances: { fire: 50 },
+      vulnerabilities: { lightning: 50 },
+      immunities: ['poison'],
+    })
+    expect(source.moves.attack).toMatchObject({ damageType: 'fire' })
+    expect(source.moves.sting).toMatchObject({ effects: [{ damageType: 'poison' }] })
+    expect(source.statuses!.venom).toMatchObject({
+      damageType: 'poison',
+      damageDefenses: { resistances: { water: 12.5 } },
+    })
+    ui.edit('Damage type (empty uses physical)', '', 'Move: attack')
+    ui.edit('Effect type', 'heal', 'Move: sting')
+    ui.edit('Status type', 'composite', 'Status: venom')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.training!.statuses!.venom).toMatchObject({
+      type: 'composite',
+      damageDefenses: { resistances: { water: 12.5 } },
+    })
+    const composite = ui.read().combatSources!.training!.statuses!.venom!
+    expect(composite.type === 'composite' ? composite.damageType : undefined).toBeUndefined()
+    ui.edit('Status type', 'regeneration', 'Status: venom')
+    clickIn('Enemy 1', 'Remove all damage defenses')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const saved = ui.read().combatSources!.training!
+    expect(saved.enemies[0]!.damageDefenses).toBeUndefined()
+    expect(
+      saved.moves.attack?.type === 'attack' ? saved.moves.attack.damageType : undefined,
+    ).toBeUndefined()
+    expect(
+      saved.moves.sting?.type === 'ability' &&
+        Object.hasOwn(saved.moves.sting.effects[0]!, 'damageType'),
+    ).toBe(false)
+    expect(Object.hasOwn(saved.statuses!.venom!, 'damageType')).toBe(false)
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors dynamic AP/resource costs, effect formulas and percentage statuses without JSON', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'energy')
+    ui.click('Add resource')
+    ui.edit('Initial value', '50', 'energy')
+    ui.edit('New status ID', 'flow')
+    ui.click('Add status')
+    ui.edit('Status type', 'modifier')
+    ui.edit('Percentage · Damage', '12.5')
+    ui.edit('Percentage · Healing', '20')
+    ui.edit('Percentage · Action AP cost', '-25')
+    ui.edit('New move ID', 'surge')
+    ui.click('Add ability move')
+    ui.edit('Effect type', 'damage', 'Move: surge')
+
+    const scope = (title: string) =>
+      ui.root
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some(
+              (child) => child.tagName === 'legend' && child.ownText === 'Move: surge',
+            ),
+        )!
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some((child) => child.tagName === 'legend' && child.ownText === title),
+        )!
+
+    const editScaling = (group: string, title: string, value: string) => {
+      const control = scope(group)
+        .all()
+        .find((node) => node.tagName === 'label' && node.ownText === title)!.children[0]!
+
+      control.value = value
+      control.dispatchEvent(new Event(control.tagName === 'select' ? 'change' : 'input'))
+    }
+
+    editScaling('AP cost scaling', 'Enable scaling', 'true')
+    editScaling('AP cost scaling', 'Scaling factor', '0.05')
+    editScaling('Effect value scaling', 'Enable scaling', 'true')
+    editScaling('Effect value scaling', 'Scaling source', 'status')
+    editScaling('Effect value scaling', 'Scaling factor', '2.5')
+    editScaling('Effect value scaling', 'Scaling maximum (optional)', '40')
+    scope('Resource costs (reserved while planning)')
+      .all()
+      .find((node) => node.tagName === 'button' && node.textContent === 'Add resource cost')!
+      .dispatchEvent(new Event('click'))
+    editScaling('Resource cost scaling', 'Enable scaling', 'true')
+    editScaling('Resource cost scaling', 'Scaling mode', 'percent')
+    editScaling('Resource cost scaling', 'Scaling factor', '0.5')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.training!.moves.surge).toMatchObject({
+      apCostScaling: { terms: [{ type: 'resource', resource: 'energy', factor: 0.05 }] },
+      resourceCostScaling: {
+        energy: { mode: 'percent', terms: [{ type: 'resource', resource: 'energy', factor: 0.5 }] },
+      },
+      effects: [
+        {
+          scaling: {
+            maximum: 40,
+            terms: [
+              { type: 'status', actor: 'self', status: 'flow', measure: 'intensity', factor: 2.5 },
+            ],
+          },
+        },
+      ],
+    })
+    expect(ui.read().combatSources!.training!.statuses!.flow).toMatchObject({
+      percentModifiers: { damage: 12.5, healing: 20, apCost: -25 },
+    })
+    editScaling('AP cost scaling', 'Enable scaling', 'false')
+    ui.edit('Percentage · Damage', '0')
+    ui.edit('Effect type', 'apply-status', 'Move: surge')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const move = ui.read().combatSources!.training!.moves.surge!
+    expect(move.apCostScaling).toBeUndefined()
+    expect(move.type === 'ability' && Object.hasOwn(move.effects[0]!, 'scaling')).toBe(false)
+    const status = ui.read().combatSources!.training!.statuses!.flow!
+    expect(status.type === 'modifier' && status.percentModifiers?.damage).toBeUndefined()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors nested AI expressions, percentage effect conditions and status lifecycle filters', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'energy')
+    ui.click('Add resource')
+    ui.edit('New status ID', 'focus')
+    ui.click('Add status')
+    ui.click('Enable conditional AI')
+    ui.click('Add AI rule')
+    ui.click('Add AI condition')
+    ui.edit('AI condition type', 'or', 'AI condition 1')
+    ui.edit('Threshold unit', 'percent', 'AI condition 1.1')
+    ui.edit('Compare against', '25', 'AI condition 1.1')
+    ui.click('Add child condition')
+    ui.edit('AI condition type', 'not', 'AI condition 1.2')
+    ui.edit('AI condition type', 'status', 'AI condition 1.2.1')
+    ui.edit('Condition actor', 'player', 'AI condition 1.2.1')
+    ui.edit('Status', 'focus', 'AI condition 1.2.1')
+    ui.edit('Trigger ID', 'status-hook')
+    ui.click('Add trigger')
+    ui.edit('Event', 'status-applied', 'status-hook')
+    ui.edit('Status filter', 'focus', 'status-hook')
+    ui.click('Add condition')
+    ui.edit('Condition type', 'and', 'Condition 1')
+    ui.edit('Threshold unit', 'percent', 'Condition 1.1')
+    ui.edit('Value', '50', 'Condition 1.1')
+    ui.edit('New move ID', 'restore')
+    ui.click('Add ability move')
+
+    // Scope the conditional-effect button because phase/trigger effects have the same editor.
+    const move = ui.root
+      .all()
+      .find(
+        (node) =>
+          node.tagName === 'fieldset' &&
+          node.children.some(
+            (child) => child.tagName === 'legend' && child.ownText === 'Move: restore',
+          ),
+      )!
+
+    move
+      .all()
+      .find((node) => node.tagName === 'button' && node.textContent === 'Add effect condition')!
+      .dispatchEvent(new Event('click'))
+    ui.edit('Threshold unit', 'percent', 'Move: restore')
+    ui.edit('Value', '33.33', 'Move: restore')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    const source = ui.read().combatSources!.training!
+    expect(source.enemies[0]!.ai!.rules[0]!.conditions).toEqual([
+      {
+        type: 'or',
+        conditions: [
+          { type: 'health', actor: 'opponent', operator: 'lte', value: 25, unit: 'percent' },
+          {
+            type: 'not',
+            condition: {
+              type: 'status',
+              actor: 'player',
+              status: 'focus',
+              measure: 'stacks',
+              operator: 'gte',
+              value: 1,
+            },
+          },
+        ],
+      },
+    ])
+    expect(source.mechanics!.triggers['status-hook']).toMatchObject({
+      event: 'status-applied',
+      status: 'focus',
+      conditions: [
+        {
+          type: 'and',
+          conditions: [{ type: 'resource', resource: 'energy', value: 50, unit: 'percent' }],
+        },
+      ],
+    })
+    expect(source.moves.restore).toMatchObject({
+      type: 'ability',
+      effects: [{ conditions: [{ type: 'health', actor: 'self', value: 33.33, unit: 'percent' }] }],
+    })
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors event filters, event conditions, actual-amount formulas and reactive effects without JSON', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'seal')
+    ui.click('Add resource')
+    ui.edit('Trigger ID', 'charge')
+    ui.click('Add trigger')
+    ui.edit('Event', 'damage-dealt', 'charge')
+    ui.edit('Effect source filter', 'player', 'charge')
+    ui.edit('Effect recipient filter', 'opponent', 'charge')
+    ui.edit('Damage type filter', 'lightning', 'charge')
+    ui.edit('Effect delivery filter', 'direct', 'charge')
+    ui.edit('Amount', '0', 'charge')
+    ui.edit('Scale amount from event', 'true', 'charge')
+    ui.edit('Event value factor', '1', 'charge')
+    ui.click('Add condition')
+    ui.edit('Condition type', 'event-value', 'charge')
+    ui.edit('Event numeric value', 'amount', 'Condition 1')
+    ui.edit('Comparison', 'gt', 'Condition 1')
+    ui.edit('Value', '0', 'Condition 1')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.training!.mechanics!.triggers.charge).toMatchObject({
+      event: 'damage-dealt',
+      source: 'player',
+      target: 'opponent',
+      damageType: 'lightning',
+      delivery: 'direct',
+      conditions: [{ type: 'event-value', field: 'amount', operator: 'gt', value: 0 }],
+      effects: [{ type: 'change-resource', amount: 0, eventValue: { field: 'amount', factor: 1 } }],
+    })
+    ui.edit('Effect type', 'damage', 'charge')
+    ui.edit('Effect recipient', 'event.source', 'charge')
+    ui.edit('Reactive effect source', 'event.target', 'charge')
+    ui.edit('Damage type (empty uses physical)', 'water', 'charge')
+    ui.edit('Amount', '0', 'charge')
+    ui.edit('Scale amount from event', 'true', 'charge')
+    ui.edit('Event value factor', '0.25', 'charge')
+    ui.edit('Include effects caused by reactions', 'true', 'charge')
+    ui.edit('Condition type', 'event-flag', 'charge')
+    ui.edit('Event flag', 'reactive', 'charge')
+    ui.edit('Value', 'false', 'charge')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.training!.mechanics!.triggers.charge).toMatchObject({
+      includeReactions: true,
+      conditions: [{ type: 'event-flag', field: 'reactive', value: false }],
+      effects: [
+        {
+          type: 'damage',
+          actor: 'event.source',
+          source: 'event.target',
+          damageType: 'water',
+          eventValue: { factor: 0.25 },
+        },
+      ],
+    })
+    ui.edit('Effect type', 'heal', 'charge')
+    ui.edit('Amount', '3', 'charge')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const effect = ui.read().combatSources!.training!.mechanics!.triggers.charge!.effects[0]!
+    expect(effect).toMatchObject({ type: 'heal', actor: 'player', amount: 3 })
+    expect('damageType' in effect).toBe(false)
+    expect('eventValue' in effect ? effect.eventValue : undefined).toBeUndefined()
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('authors combat resources, conditional triggers, phase effects and resource abilities without JSON', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'exhaustion')
+    ui.click('Add resource')
+    ui.edit('Name', 'Exhaustion', 'exhaustion')
+    ui.edit('Initial value', '10', 'exhaustion')
+    ui.edit('Phase ID', 'opening')
+    ui.click('Add phase')
+    ui.click('Add effect')
+    ui.edit('Amount', '5', 'opening')
+    ui.edit('Phase ID', 'enraged')
+    ui.click('Add phase')
+    ui.edit('Trigger ID', 'threshold')
+    ui.click('Add trigger')
+    ui.edit('Event', 'resource-changed', 'threshold')
+    ui.edit('Resource filter (resource-changed only)', 'exhaustion', 'threshold')
+    ui.edit('Run once per encounter', 'true', 'threshold')
+    ui.click('Add condition')
+    ui.edit('Value', '60', 'threshold')
+    ui.edit('Effect type', 'set-phase', 'threshold')
+    ui.edit('Phase', 'enraged', 'threshold')
+    ui.edit('New move ID', 'rest')
+    ui.click('Add ability move')
+    ui.edit('Effect type', 'change-resource', 'Move: rest')
+    ui.edit('Amount', '-30', 'Move: rest')
+    ui.edit('Resource ID', 'exhaustion', 'Move: rest')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.training).toMatchObject({
+      mechanics: {
+        resources: { exhaustion: { label: 'Exhaustion', initial: 10, maximum: 100 } },
+        initialPhase: 'opening',
+        phases: {
+          opening: { onEnter: [{ type: 'change-resource', resource: 'exhaustion', amount: 5 }] },
+        },
+        triggers: {
+          threshold: {
+            event: 'resource-changed',
+            resource: 'exhaustion',
+            once: true,
+            conditions: [{ type: 'resource', resource: 'exhaustion', operator: 'gte', value: 60 }],
+            effects: [{ type: 'set-phase', phase: 'enraged' }],
+          },
+        },
+      },
+      moves: {
+        rest: { effects: [{ type: 'change-resource', resource: 'exhaustion', amount: -30 }] },
+      },
+    })
+    expect(ui.root.all().filter((node) => node.tagName === 'textarea')).toHaveLength(0)
+    await ui.controller.load('demo')
+    expect(ui.field('Initial value', 'exhaustion').value).toBe('10')
+    expect(ui.field('Phase', 'threshold').value).toBe('enraged')
+  })
+
+  it('authors composite statuses, stacks, intensity and AP modifiers in ability and trigger controls', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.edit('New status ID', 'exhaustion')
+    ui.click('Add status')
+    ui.edit('Status type', 'composite', 'Status: exhaustion')
+    ui.edit('Enable stacking', 'true', 'Status: exhaustion')
+    ui.edit('Maximum stacks', '3', 'Status: exhaustion')
+    ui.edit('Duration on reapplication', 'preserve', 'Status: exhaustion')
+    ui.edit('Enable intensity', 'true', 'Status: exhaustion')
+    ui.edit('Default intensity', '2', 'Status: exhaustion')
+    ui.edit('Maximum intensity', '3', 'Status: exhaustion')
+    ui.edit('Intensity on reapplication', 'maximum', 'Status: exhaustion')
+    ui.edit('AP budget modifier per stack and intensity', '-1', 'Status: exhaustion')
+    ui.edit('Action AP cost modifier per stack and intensity', '1', 'Status: exhaustion')
+    ui.edit('Enabled', 'true', 'Periodic damage')
+    ui.edit('Amount', '1', 'Periodic damage')
+    ui.edit('New move ID', 'tire')
+    ui.click('Add ability move')
+    ui.edit('Effect type', 'apply-status', 'Move: tire')
+    ui.edit('Status', 'exhaustion', 'Move: tire')
+    ui.edit('Stacks to add (empty: 1)', '2', 'Move: tire')
+    ui.edit('Applied intensity (empty: status default)', '3', 'Move: tire')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'stamina')
+    ui.click('Add resource')
+    ui.edit('Trigger ID', 'fatigue')
+    ui.click('Add trigger')
+    ui.edit('Effect type', 'apply-status', 'fatigue')
+    ui.edit('Status', 'exhaustion', 'fatigue')
+    ui.edit('Applied intensity (empty: status default)', '2', 'fatigue')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.training).toMatchObject({
+      statuses: {
+        exhaustion: {
+          type: 'composite',
+          damage: 1,
+          stacking: { maximum: 3, duration: 'preserve' },
+          intensity: { initial: 2, maximum: 3, reapply: 'maximum' },
+          modifiers: { ap: -1, apCost: 1 },
+        },
+      },
+      moves: {
+        tire: {
+          effects: [{ type: 'apply-status', status: 'exhaustion', stacks: 2, intensity: 3 }],
+        },
+      },
+      mechanics: { triggers: { fatigue: { effects: [{ type: 'apply-status', intensity: 2 }] } } },
+    })
+    ui.edit('Effect type', 'remove-status', 'Move: tire')
+    ui.edit('Stacks to remove (empty: all)', '1', 'Move: tire')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    const effect = ui.read().combatSources?.training?.moves.tire
+    expect(effect).toMatchObject({
+      effects: [{ type: 'remove-status', status: 'exhaustion', stacks: 1 }],
+    })
+
+    if (effect?.type !== 'ability') throw new Error('Expected ability')
+    expect(effect.effects[0]).not.toHaveProperty('intensity')
+  })
+
+  it('authors conditional enemy priorities, resources, status strength and phases, then removes AI', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add encounter')
+    ui.edit('Available moves (IDs)', 'attack, guard', 'Enemy 1')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'energy')
+    ui.click('Add resource')
+    ui.edit('Phase ID', 'angry')
+    ui.click('Add phase')
+    ui.edit('New status ID', 'rhythm')
+    ui.click('Add status')
+    ui.click('Enable conditional AI')
+    ui.edit('When no rule can act', 'wait')
+    ui.click('Add AI rule')
+    ui.edit('Rule ID', 'stacks', 'AI rule 1')
+    ui.edit('Maximum uses per turn', '2', 'AI rule 1')
+    ui.click('Add AI condition')
+    ui.edit('AI condition type', 'status', 'AI rule 1')
+    ui.edit('Condition actor', 'player', 'AI rule 1')
+    ui.edit('Status', 'rhythm', 'AI rule 1')
+    ui.edit('Status measure', 'intensity', 'AI rule 1')
+    ui.edit('Compare against', '1', 'AI rule 1')
+    ui.click('Add AI rule')
+    ui.edit('Rule ID', 'phase', 'AI rule 2')
+    ui.edit('Chosen move', 'guard', 'AI rule 2')
+
+    const addSecond = ui.root
+      .all()
+      .filter((node) => node.tagName === 'button' && node.textContent === 'Add AI condition')[1]!
+
+    addSecond.dispatchEvent(new Event('click'))
+    ui.edit('AI condition type', 'phase', 'AI rule 2')
+    ui.edit('Condition boss phase', 'angry', 'AI rule 2')
+    ui.root
+      .all()
+      .filter((node) => node.tagName === 'button' && node.textContent === 'Add AI condition')[1]!
+      .dispatchEvent(new Event('click'))
+    ui.edit('AI condition type', 'resource', 'AI condition 2')
+    ui.edit('Condition resource', 'energy', 'AI condition 2')
+    ui.edit('Comparison', 'gte', 'AI condition 2')
+    ui.edit('Compare against', '5', 'AI condition 2')
+    ui.root
+      .all()
+      .find(
+        (node) =>
+          node.tagName === 'button' && node.textContent === 'Raise AI priority' && !node.disabled,
+      )!
+      .dispatchEvent(new Event('click'))
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai).toEqual({
+      fallback: 'wait',
+      rules: [
+        {
+          id: 'phase',
+          move: 'guard',
+          maxUses: 1,
+          conditions: [
+            { type: 'phase', phase: 'angry' },
+            { type: 'resource', resource: 'energy', operator: 'gte', value: 5 },
+          ],
+        },
+        {
+          id: 'stacks',
+          move: 'attack',
+          maxUses: 2,
+          conditions: [
+            {
+              type: 'status',
+              actor: 'player',
+              status: 'rhythm',
+              measure: 'intensity',
+              operator: 'gte',
+              value: 1,
+            },
+          ],
+        },
+      ],
+    })
+    ui.edit('AI condition type', 'health', 'AI rule 2')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai?.rules[1]?.conditions[0]).toEqual({
+      type: 'health',
+      actor: 'opponent',
+      operator: 'lte',
+      value: 10,
+    })
+    ui.click('Remove AI condition')
+    ui.click('Remove AI rule')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai?.rules).toHaveLength(1)
+    ui.click('Remove conditional AI')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai).toBeUndefined()
+  })
+
   it('protects combat libraries from collisions and locks IDs only after successful creation', async () => {
     const ui = await connected(bindCombatEditor)
     ui.click('Add combat library')
@@ -3462,6 +4059,511 @@ describe('editor draft workflows', () => {
     await ui.flush()
     expect(ui.field('Combat library').value).toBe('new-library')
     expect(ui.field('Library ID').readOnly).toBe(true)
+  })
+
+  async function simulationProject() {
+    const root = new URL('../sample-games/combat-mechanics/', import.meta.url)
+
+    const files = (await readdir(root, { recursive: true }))
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => file.replaceAll('\\', '/'))
+
+    return {
+      revision: 'simulation',
+      documents: Object.fromEntries(
+        await Promise.all(
+          files.map(async (file) => [
+            file,
+            JSON.parse(await readFile(new URL(file, root), 'utf8')),
+          ]),
+        ),
+      ),
+    }
+  }
+
+  it('simulates water exhaustion and stack decisions without changing documents or marking drafts', async () => {
+    const source = await simulationProject()
+    const before = JSON.stringify(source)
+    const ui = await connected(bindCombatEditor, source)
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Starting resource · exhaustion', '55')
+    ui.edit('Simulation status', 'rhythm')
+    ui.edit('Starting stacks', '2')
+    ui.edit('Starting duration', '3')
+    ui.click('Add starting status')
+    ui.click('Start/reset simulation')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.click('Resolve simulation round')
+    expect(ui.root.textContent).toContain('Insufficient AP')
+    expect(ui.root.textContent).toContain('exploit-fatigue')
+    expect(ui.root.textContent).toContain('rhythm.stacks: 1')
+
+    const report = () =>
+      JSON.parse(
+        ui.root
+          .all()
+          .find(
+            (node) =>
+              node.tagName === 'textarea' &&
+              node.attributes.get('aria-label') === 'Simulation report (JSON)',
+          )!.value,
+      )
+
+    expect(report()).toMatchObject({
+      state: { health: { player: 77 }, mechanics: { resources: { exhaustion: 65 } } },
+    })
+    ui.edit('Trace filter', 'action')
+    expect(ui.field('Inspect trace step').value).not.toBe('-1')
+    ui.click('Start/reset simulation')
+    expect(report().frames).toEqual([])
+    expect(report().state.health.player).toBe(80)
+    ui.edit('Simulation health · player (maximum 80)', '-1')
+    ui.click('Start/reset simulation')
+    expect(ui.root.textContent).toContain('Invalid simulation health')
+    ui.edit('Simulation health · player (maximum 80)', '80')
+    ui.click('Start/reset simulation')
+    ui.edit('Maximum damage', '8', 'Move: bite')
+    ui.click('Resolve simulation round')
+    expect(ui.root.textContent).toContain('Encounter data changed')
+    ui.click('Start/reset simulation')
+    expect(report().definition.moves.bite.damage.max).toBe(8)
+    expect(ui.editor.hasDrafts()).toBe(true)
+    expect(ui.commands).toEqual([])
+    expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it('repeats the boss simulation to three seals and inspects phase triggers without granting rewards', async () => {
+    const source = await simulationProject()
+    const before = JSON.stringify(source)
+    const ui = await connected(bindCombatEditor, source)
+    ui.edit('Combat encounter', 'boss')
+    ui.click('Start/reset simulation')
+    ui.edit('Simulation move', 'channel')
+
+    for (let index = 0; index < 3; index++) ui.click('Queue simulation move')
+    ui.edit('Rounds to repeat (1–100)', '4')
+    ui.click('Repeat simulation plan')
+    expect(ui.root.textContent).toContain('victory')
+    expect(ui.root.textContent).toContain('breaks: 3')
+    ui.edit('Trace filter', 'mechanics')
+    const selector = ui.field('Inspect trace step')
+
+    const secondSeal = selector.children.find((option) =>
+      option.textContent.includes('second-seal'),
+    )!
+
+    expect(secondSeal).toBeDefined()
+    ui.edit('Inspect trace step', secondSeal.value)
+    expect(ui.root.textContent).toContain('"trigger": "second-seal"')
+    expect(ui.read().rules?.state.find((field) => field.path[0] === 'seals-broken')?.value).toBe(0)
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.commands).toEqual([])
+    expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it('replays saved boss scenarios against changed drafts, verifies failures and explicitly updates expected results', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'boss')
+    ui.edit('Simulation scenario', 'three-seals')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('three-seals: Passed')
+    ui.edit('Amount', '20', 'Move: channel')
+    expect(ui.root.textContent).not.toContain('three-seals: Passed')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('three-seals: Failed checks')
+    expect(ui.root.textContent).toContain('"actual": "planning"')
+    ui.edit('Amount', '25', 'Move: channel')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('three-seals: Passed')
+    ui.edit('Expected outcome', 'planning', 'Final results')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(ui.commands.at(-1)?.type).toBe('combat.upsertSimulationScenario')
+    expect(ui.read().combatSources?.boss?.simulationScenarios?.['three-seals']?.expect[0]).toEqual({
+      type: 'outcome',
+      value: 'planning',
+    })
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('three-seals: Failed checks')
+    ui.click('Capture expected final state')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    ui.click('Run all saved scenarios')
+    expect(ui.root.textContent).toContain('three-seals: Passed')
+    expect(ui.root.textContent).toContain('phase-response: Passed')
+    ui.click('Duplicate simulation scenario')
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(ui.read().combatSources?.boss?.simulationScenarios?.['three-seals-copy']).toBeDefined()
+    ui.click('Delete simulation scenario')
+    await ui.flush()
+    expect(ui.read().combatSources?.boss?.simulationScenarios).not.toHaveProperty(
+      'three-seals-copy',
+    )
+    expect(ui.read().rules?.state.find((field) => field.path[0] === 'seals-broken')?.value).toBe(0)
+    expect(ui.read().diagnostics).toEqual([])
+  })
+
+  it('captures water conditions and plans, saves scenarios independently, and recovers scenario drafts', async () => {
+    const source = await simulationProject()
+    const ui = await connected(bindCombatEditor, source)
+    ui.edit('Combat encounter', 'water')
+    ui.edit('Starting resource · exhaustion', '55')
+    ui.edit('Simulation status', 'rhythm')
+    ui.edit('Starting stacks', '2')
+    ui.edit('Starting duration', '3')
+    ui.click('Add starting status')
+    ui.click('Start/reset simulation')
+    ui.click('Resolve simulation round')
+    ui.edit('New scenario ID', 'water-check')
+    ui.click('Capture simulation as new scenario')
+    ui.click('Capture expected final state')
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.click('Save simulation scenario')
+    await ui.flush()
+    expect(ui.editor.hasDrafts()).toBe(false)
+    expect(ui.read().combatSources?.water?.simulationScenarios?.['water-check']).toMatchObject({
+      setup: { seed: 1024, resources: { exhaustion: 55 } },
+      steps: [{ plan: [], repeat: 1 }],
+    })
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('water-check: Passed')
+    ui.click('Load scenario starting conditions')
+    expect(ui.field('Starting resource · exhaustion').value).toBe('55')
+    ui.edit('Scenario name', 'Recovered water scenario')
+    const recovered = await connected(bindCombatEditor, source)
+    expect(
+      restoreEditorDrafts(
+        recovered.root.asElement(),
+        JSON.parse(JSON.stringify(captureEditorDrafts(ui.root.asElement()))),
+      ),
+    ).toEqual([])
+    expect(recovered.field('Combat encounter').value).toBe('water')
+    expect(recovered.field('Scenario name').value).toBe('Recovered water scenario')
+    expect(recovered.editor.hasDrafts()).toBe(true)
+    recovered.edit('Combat encounter', 'boss')
+    expect(recovered.field('Combat encounter').value).toBe('water')
+    recovered.click('Discard scenario draft')
+    expect(recovered.editor.hasDrafts()).toBe(false)
+    recovered.edit('Combat encounter', 'boss')
+    expect(recovered.field('Combat encounter').value).toBe('boss')
+    expect(recovered.commands).toEqual([])
+  })
+
+  it('authors reusable AI profiles, binds roles, inherits updates and resets or detaches local changes', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add combat library')
+    ui.click('Add guard move')
+    ui.edit('New move ID', 'bash')
+    ui.click('Add attack move')
+    ui.edit('New AI profile ID', 'hunter')
+    ui.click('Add AI profile')
+    ui.click('Add AI rule')
+    ui.edit('Rule ID', 'wounded', 'AI profile: hunter')
+    ui.click('Add AI condition')
+    ui.edit('Condition actor', 'opponent', 'AI profile: hunter')
+    ui.click('Add AI rule')
+    ui.edit('Rule ID', 'charged', 'AI rule 2')
+    ui.edit('Chosen move', 'bash', 'AI rule 2')
+    ui.root
+      .all()
+      .filter((node) => node.tagName === 'button' && node.textContent === 'Add AI condition')[1]!
+      .dispatchEvent(new Event('click'))
+    ui.edit('AI condition type', 'resource', 'AI rule 2')
+    ui.edit('Condition resource', 'charge', 'AI rule 2')
+    ui.edit('Compare against', '5', 'AI rule 2')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(
+      ui.read().combatLibraries?.common?.aiProfiles?.hunter?.ai.rules[0]?.conditions[0],
+    ).toMatchObject({ actor: 'opponent' })
+    ui.click('Add encounter')
+    ui.edit('Available moves (IDs)', 'attack, guard, bash', 'Enemy 1')
+    ui.click('Add encounter mechanics')
+    ui.edit('Resource ID', 'charge')
+    ui.click('Add resource')
+    ui.edit('Shared AI profile', 'common/hunter', 'Enemy 1')
+    expect(ui.field('Bind AI role opponent', 'Enemy 1').value).toBe('opponent')
+    ui.edit('Bind AI role opponent', 'player', 'Enemy 1')
+    ui.edit('Maximum uses per turn', '2', 'Enemy 1')
+    ui.rejectNext()
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.field('Maximum uses per turn', 'Enemy 1').value).toBe('2')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.training?.enemies[0]).toMatchObject({
+      aiProfile: { library: 'common', id: 'hunter', actors: { opponent: 'player' } },
+      aiOverrides: { rules: { wounded: { maxUses: 2 } } },
+    })
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai).toBeUndefined()
+
+    const setProfile = (title: string, value: string) => {
+      const profile = ui.root
+        .all()
+        .find(
+          (node) =>
+            node.tagName === 'fieldset' &&
+            node.children.some(
+              (child) => child.tagName === 'legend' && child.ownText === 'AI profile: hunter',
+            ),
+        )!
+
+      const control = profile
+        .all()
+        .find((node) => node.tagName === 'label' && node.ownText === title)!.children[0]!
+
+      control.value = value
+      control.dispatchEvent(new Event(control.tagName === 'select' ? 'change' : 'input'))
+    }
+
+    setProfile('Maximum uses per turn', '3')
+    setProfile('Compare against', '20')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().combat?.training?.enemies[0]?.ai?.rules[0]).toMatchObject({
+      maxUses: 2,
+      conditions: [{ actor: 'player', value: 20 }],
+    })
+    expect(ui.field('Maximum uses per turn', 'Enemy 1').value).toBe('2')
+    ui.click('Exclude AI rule charged')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.enemies[0]?.aiOverrides?.rules?.charged).toBeNull()
+    ui.click('Reset AI rule charged to inherited')
+    ui.click('Reset AI rule wounded to inherited')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.enemies[0]?.aiOverrides).toEqual({})
+    expect(ui.read().combat?.training?.enemies[0]?.ai?.rules[0]?.maxUses).toBe(3)
+    ui.edit('Shared AI profile', '', 'Enemy 1')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources?.training?.enemies[0]?.aiProfile).toBeUndefined()
+    expect(ui.read().combatSources?.training?.enemies[0]?.ai?.rules[0]?.maxUses).toBe(3)
+    expect(ui.read().combatSources?.training?.sharedMoves).toContainEqual({
+      library: 'common',
+      id: 'bash',
+    })
+  })
+
+  it('authors shared rulesets, binds roles, preserves sparse fight overrides and inherits later library edits', async () => {
+    const ui = await connected(bindCombatEditor, combatProject())
+    ui.click('Add combat library')
+    ui.edit('New ruleset ID', 'underwater')
+    ui.click('Add ruleset')
+    ui.edit('Phase ID', 'calm')
+    ui.click('Add phase')
+    ui.edit('Phase ID', 'surge')
+    ui.click('Add phase')
+    ui.edit('Resource ID', 'stamina')
+    ui.click('Add resource')
+    ui.edit('Initial value', '10', 'Ruleset: underwater')
+    ui.edit('Trigger ID', 'recover')
+    ui.click('Add trigger')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+
+    ui.click('Add encounter')
+    ui.edit('Combat ruleset', 'common/underwater')
+    expect(ui.field('Actor for role player').value).toBe('player')
+    expect(ui.field('Actor for role enemy').value).toBe('opponent')
+    ui.edit('Maximum value', '30', 'stamina')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training).toMatchObject({
+      ruleset: {
+        library: 'common',
+        id: 'underwater',
+        actors: { player: 'player', enemy: 'opponent' },
+      },
+      mechanicsOverrides: { resources: { stamina: { maximum: 30 } } },
+    })
+    expect(ui.read().combatSources?.training?.mechanics).toBeUndefined()
+    expect(ui.read().combatSources?.training?.mechanicsOverrides?.resources?.stamina).toEqual({
+      maximum: 30,
+    })
+
+    ui.edit('Initial value', '20', 'Ruleset: underwater')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().combat?.training?.mechanics?.resources.stamina).toMatchObject({
+      initial: 20,
+      maximum: 30,
+    })
+    expect(ui.field('Initial value', 'stamina').value).toBe('20')
+    expect(ui.field('Maximum value', 'stamina').value).toBe('30')
+
+    ui.click('Add encounter')
+    ui.edit('Combat ruleset', 'common/underwater')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combat?.['training-1']?.mechanics?.resources.stamina?.maximum).toBe(100)
+    ui.edit('Combat encounter', 'training')
+    ui.click('Exclude recover')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.mechanicsOverrides?.triggers?.recover).toBeNull()
+    expect(ui.read().combat?.['training-1']?.mechanics?.triggers.recover).toBeDefined()
+    ui.click('Reset recover to inherited')
+    ui.click('Reset stamina to inherited')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combat?.training?.mechanics?.resources.stamina?.maximum).toBe(100)
+    expect(ui.read().combatSources?.training?.mechanicsOverrides).toEqual({})
+
+    ui.click('Exclude calm')
+    ui.edit('Initial phase', 'surge')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combat?.training?.mechanics?.phases.calm).toBeUndefined()
+    expect(ui.read().combat?.training?.mechanics?.initialPhase).toBe('surge')
+    expect(ui.read().combat?.['training-1']?.mechanics?.initialPhase).toBe('calm')
+    ui.click('Reset calm to inherited')
+    ui.click('Reset initialPhase to inherited')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.mechanicsOverrides).toEqual({})
+
+    ui.edit('Maximum value', '0', 'stamina')
+    const count = ui.commands.length
+    ui.submit('Save combat encounter')
+    expect(ui.commands).toHaveLength(count)
+    expect(ui.field('Maximum value', 'stamina').value).toBe('0')
+    ui.edit('Maximum value', '70', 'stamina')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.mechanicsOverrides?.resources?.stamina).toEqual({
+      maximum: 70,
+    })
+    ui.edit('Combat ruleset', '')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources?.training?.ruleset).toBeUndefined()
+    expect(ui.read().combatSources?.training?.mechanics?.resources.stamina?.maximum).toBe(70)
+  })
+
+  it('composes boss and underwater rules in the editor, reorders layers, inherits edits and detaches without flattening saves', async () => {
+    const ui = await connected(bindCombatEditor, await simulationProject())
+    ui.edit('Combat encounter', 'boss')
+    ui.click('Compose rulesets')
+    ui.edit('Ruleset to add', 'environments/three-seals')
+    ui.click('Add ruleset layer')
+    ui.edit('Ruleset to add', 'environments/underwater')
+    ui.click('Add ruleset layer')
+    expect(ui.field('Actor for role swimmer', 'Ruleset layer 2').value).toBe('player')
+    ui.edit('Maximum value', '120', 'stamina')
+    ui.root
+      .all()
+      .find(
+        (node) =>
+          node.tagName === 'button' &&
+          node.textContent === 'Move ruleset layer up' &&
+          !node.disabled,
+      )!
+      .dispatchEvent(new Event('click'))
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!.boss!.rulesets?.map((reference) => reference.id)).toEqual([
+      'underwater',
+      'three-seals',
+    ])
+    expect(ui.read().combatSources!.boss!.mechanics).toBeUndefined()
+    expect(ui.read().combatSources!.boss!.mechanicsOverrides).toEqual({
+      resources: { stamina: { maximum: 120 } },
+    })
+    expect(ui.read().combat!.boss!.mechanics!.victory).toBe('triggers')
+    expect(ui.root.textContent).toContain('environments/underwater')
+    ui.edit('Combat library', 'environments')
+    ui.edit('Amount', '12', 'Ruleset: underwater')
+    ui.submit('Save combat library')
+    await ui.flush()
+    expect(ui.read().combat!.boss!.mechanics!.triggers['water-pressure']!.effects).toEqual([
+      { type: 'change-resource', resource: 'exhaustion', amount: 12 },
+    ])
+    expect(ui.field('Maximum value', 'stamina').value).toBe('120')
+    ui.click('Reset stamina to inherited')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.boss!.mechanicsOverrides).toEqual({})
+    ui.click('Detach composition to inline mechanics')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!.boss!.rulesets).toBeUndefined()
+    expect(ui.read().combatSources!.boss!.mechanics?.resources).toMatchObject({
+      exhaustion: {},
+      stamina: {},
+      seal: {},
+      breaks: {},
+    })
+    expect(ui.read().combatSources!.boss!.sharedMoves).toContainEqual({
+      library: 'environments',
+      id: 'rest',
+    })
+    expect(ui.editor.hasDrafts()).toBe(false)
+  })
+
+  it('reports layer conflicts, permits explicit replacements and replays the composed underwater boss in the editor', async () => {
+    const source = await simulationProject()
+
+    const library = combatLibrarySchema.parse(
+      source.documents['combat-libraries/environments.json'],
+    )
+
+    source.documents['combat-libraries/environments.json'] = combatLibrarySchema.parse({
+      ...library,
+      rulesets: {
+        ...library.rulesets,
+        extra: {
+          label: 'Alternate exhaustion',
+          mechanics: { resources: { exhaustion: { initial: 5, maximum: 100 } } },
+        },
+      },
+    })
+    const ui = await connected(bindCombatEditor, source)
+    ui.edit('Combat encounter', 'underwater-boss')
+    ui.edit('Simulation scenario', 'three-seals-underwater')
+    ui.click('Replay scenario')
+    expect(ui.root.textContent).toContain('three-seals-underwater: Passed')
+    expect(ui.editor.hasDrafts()).toBe(false)
+    ui.edit('Ruleset to add', 'environments/extra')
+    ui.click('Add ruleset layer')
+    expect(ui.root.textContent).toContain('Ruleset conflict for resources/exhaustion')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!['underwater-boss']!.rulesets).toHaveLength(2)
+    expect(ui.editor.hasDrafts()).toBe(true)
+    ui.edit('When mechanic IDs collide', 'replace', 'Ruleset layer 3')
+    expect(ui.root.textContent).toContain('environments/extra replaces environments/underwater')
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().diagnostics).toEqual([])
+    expect(ui.read().combatSources!['underwater-boss']!.rulesets![2]).toMatchObject({
+      id: 'extra',
+      collision: 'replace',
+    })
+    expect(ui.read().combat!['underwater-boss']!.mechanics!.resources.exhaustion!.initial).toBe(5)
+    ui.root
+      .all()
+      .find(
+        (node) =>
+          node.tagName === 'fieldset' &&
+          node.children.some(
+            (child) => child.tagName === 'legend' && child.ownText === 'Ruleset layer 3',
+          ),
+      )!
+      .all()
+      .find((node) => node.tagName === 'button' && node.textContent === 'Remove ruleset layer')!
+      .dispatchEvent(new Event('click'))
+    ui.submit('Save combat encounter')
+    await ui.flush()
+    expect(ui.read().combatSources!['underwater-boss']!.rulesets).toHaveLength(2)
+    expect(ui.read().combat!['underwater-boss']!.mechanics!.resources.exhaustion!.initial).toBe(0)
   })
 
   it('retains pending input contexts through validation, rerenders and unrelated saves', async () => {

@@ -1,3 +1,8 @@
+import { combatDamageProfile } from './combatDamage.js'
+import { combatStatusImmune, combatMoveRestriction } from './combatRestrictions.js'
+import { combatValueContext } from './combatValues.js'
+import { combatAbilityEffectValues } from './combatResolution.js'
+import { statusContributions } from './combatEffects.js'
 import {
   inventoryOwner,
   itemUseTextSchema,
@@ -8,6 +13,8 @@ import {
 import type { IGameInventory, InventoryItemSnapshot } from './inventory.js'
 import type { IGameBindings } from './gameBindings.js'
 import type { CombatSnapshot } from './combat.js'
+import { combatConditionContext, combatConditionsMatch } from './combatConditions.js'
+import { applyCombatStatus } from './combatStatusStacking.js'
 
 export function usableItem(
   inventory: IGameInventory | undefined,
@@ -56,30 +63,84 @@ export function usableItem(
 export function abilityCanMatter(
   move: CombatMoveDefinition,
   definition: CombatDefinition,
-  snapshot: Pick<CombatSnapshot, 'health' | 'maximumHealth' | 'statuses' | 'guard' | 'stats'>,
+  snapshot: Pick<
+    CombatSnapshot,
+    'health' | 'maximumHealth' | 'statuses' | 'guard' | 'stats' | 'resources'
+  > &
+    Partial<Pick<CombatSnapshot, 'bossPhase'>>,
   target: string,
 ): boolean {
   if (move.type !== 'ability') return false
 
+  if (combatMoveRestriction(definition, definition.player.id, move, snapshot.statuses)) return false
+
+  const context = combatConditionContext(definition, {
+    ...snapshot,
+    phase: snapshot.bossPhase,
+    self: definition.player.id,
+    target,
+  })
+
   return move.effects.some((effect) => {
+    if (!combatConditionsMatch(effect.conditions, context)) return false
+
+    if (effect.type === 'change-resource') {
+      const value = snapshot.resources[effect.resource]
+      const maximum = definition.mechanics?.resources[effect.resource]?.maximum
+
+      return (
+        value !== undefined &&
+        maximum !== undefined &&
+        (effect.amount > 0 ? value < maximum : effect.amount < 0 && value > 0)
+      )
+    }
+
     const recipient = effect.target === 'self' ? definition.player.id : target
 
     if (!snapshot.health[recipient]) return false
 
+    const values = combatAbilityEffectValues(
+      effect,
+      snapshot.stats[definition.player.id],
+      snapshot.stats[recipient]?.defense ?? 0,
+      combatValueContext(
+        definition,
+        snapshot.resources,
+        snapshot.statuses,
+        definition.player.id,
+        target,
+      ),
+      statusContributions(definition, snapshot.statuses[definition.player.id] ?? []),
+      combatDamageProfile(definition, recipient, snapshot.statuses),
+    )
+
     if (effect.type === 'heal')
-      return effect.amount > 0 && snapshot.health[recipient]! < snapshot.maximumHealth[recipient]!
+      return (
+        (values.amount ?? 0) > 0 && snapshot.health[recipient]! < snapshot.maximumHealth[recipient]!
+      )
 
     if (effect.type === 'remove-status')
       return Boolean(snapshot.statuses[recipient]?.some((status) => status.id === effect.status))
 
-    if (effect.type === 'damage')
-      return (
-        effect.damage.max + (snapshot.stats[definition.player.id]?.attack ?? 0) >
-        (snapshot.stats[recipient]?.defense ?? 0)
-      )
+    if (effect.type === 'apply-status') {
+      if (combatStatusImmune(definition, recipient, effect.status, snapshot.statuses)) return false
+      const status = definition.statuses?.[effect.status]
 
-    if (effect.type === 'guard')
-      return effect.amount + (snapshot.stats[definition.player.id]?.guard ?? 0) > 0
+      return Boolean(
+        status &&
+        applyCombatStatus(
+          status,
+          effect.status,
+          definition.player.id,
+          snapshot.statuses[recipient]?.find((active) => active.id === effect.status),
+          effect,
+        ).changed,
+      )
+    }
+
+    if (effect.type === 'damage') return (values.max ?? 0) > 0
+
+    if (effect.type === 'guard') return (values.amount ?? 0) > 0
 
     return true
   })

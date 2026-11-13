@@ -1,0 +1,273 @@
+{
+  "schema-version": "1.0.0",
+  "id": "underwater-boss-controls",
+  "title": "The drowned three-seal guardian - control techniques",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "underwater-boss",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "This view resumes the same encounter and plan. Click Brine bind to apply Silence (blocks spell) and Disarm (blocks weapon). Clear mind prevents new control applications; Shake off cleanses existing controls. Untagged and utility moves remain usable. Stunning bell tests Dazed immunity. Arc bolt is a spell; Venom dart is a weapon move. The guardian is permanently immune to Disarm and Dazed. Tidal shell also prevents new Silence applications in phase two.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Brine bind",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "brine-bind"
+            }
+          }
+        },
+        "2": {
+          "label": "Clear mind",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "clear-mind"
+            }
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        },
+        "3": {
+          "label": "Shake off",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "shake-off"
+            }
+          }
+        },
+        "7": {
+          "label": "Float and recover",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rest"
+            }
+          }
+        },
+        "9": {
+          "label": "Reviving breath",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "reviving-breath"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-9"
+          }
+        },
+        "10": {
+          "label": "Focus current",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "focus-current"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-10"
+          }
+        },
+        "11": {
+          "label": "Brace",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "guard"
+            }
+          }
+        },
+        "12": {
+          "label": "Arc bolt",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "arc-bolt"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-12"
+          }
+        },
+        "13": {
+          "label": "Venom dart",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "venom-dart"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-13"
+          }
+        },
+        "6": {
+          "label": "Stunning bell",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "stunning-bell"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "standard-controls",
+      "type": "button",
+      "label": "Return to standard controls",
+      "action": {
+        "type": "enter-scene",
+        "scene": "underwater-boss"
+      },
+      "placement": {
+        "row": 9,
+        "column": 1,
+        "columnSpan": 12
+      }
+    }
+  ]
+}

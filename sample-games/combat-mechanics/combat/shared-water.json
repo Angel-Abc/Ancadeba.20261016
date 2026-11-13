@@ -1,0 +1,185 @@
+{
+  "schema-version": "1.0.0",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 10000,
+  "logCapacity": 40,
+  "outcomes": {
+    "victory": "harbour",
+    "defeat": "harbour",
+    "escaped": "harbour"
+  },
+  "id": "shared-water",
+  "label": "Reef: shared underwater rules",
+  "description": "Inherits underwater fatigue: intensity 1 at exhaustion 60 removes 1 AP; intensity 2 at 90 removes 2 AP. E recovers and A stacks defense rhythm. B resolves the round. The eel strips rhythm at 2 stacks and lunges at exhaustion 60. The eel inherits the shared Eel hunter AI profile.",
+  "player": {
+    "id": "diver",
+    "label": "Diver",
+    "health": {
+      "source": "game.state",
+      "path": ["player-health"]
+    },
+    "maximumHealth": 80,
+    "ap": 3,
+    "moves": ["jab", "heavy", "rest", "guard", "steady-breath"]
+  },
+  "enemies": [
+    {
+      "id": "reef-eel",
+      "label": "Cave eel",
+      "health": {
+        "source": "game.state",
+        "path": ["reef-eel-health"]
+      },
+      "maximumHealth": 90,
+      "ap": 2,
+      "moves": ["bite", "guard", "ambush", "disrupt"],
+      "rotation": ["guard", "bite"],
+      "aiProfile": {
+        "library": "environments",
+        "id": "eel-hunter",
+        "actors": {
+          "swimmer": "diver"
+        }
+      }
+    }
+  ],
+  "moves": {
+    "jab": {
+      "type": "ability",
+      "label": "Quick thrust",
+      "apCost": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 3,
+            "max": 4
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 12,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 10
+      }
+    },
+    "heavy": {
+      "type": "ability",
+      "label": "Power stroke",
+      "apCost": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 9,
+            "max": 11
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 30,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 30
+      }
+    },
+    "rest": {
+      "type": "ability",
+      "label": "Float and recover",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": -30,
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "stamina",
+          "amount": 25,
+          "id": "effect-1"
+        }
+      ]
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Brace",
+      "apCost": 1,
+      "guard": 5
+    },
+    "bite": {
+      "type": "attack",
+      "label": "Bite",
+      "apCost": 1,
+      "damage": {
+        "min": 2,
+        "max": 4
+      }
+    }
+  },
+  "ruleset": {
+    "library": "environments",
+    "id": "underwater",
+    "actors": {
+      "swimmer": "diver"
+    }
+  },
+  "simulationScenarios": {
+    "shared-pressure": {
+      "label": "Verify shared AI and local pressure",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "diver": 80,
+          "reef-eel": 90
+        },
+        "resources": {
+          "exhaustion": 40
+        }
+      },
+      "steps": [
+        {
+          "id": "pressure",
+          "plan": []
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "planning"
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 50
+        },
+        {
+          "type": "health",
+          "actor": "reef-eel",
+          "operator": "eq",
+          "value": 90
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    }
+  }
+}

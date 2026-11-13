@@ -33,6 +33,7 @@ import {
   shopComponentSchema,
   inventoryComponentSchema,
   combatSourceSchema,
+  combatSimulationScenarioSchema,
   combatLibrarySchema,
   combatReferenceSchema,
   combatComponentSchema,
@@ -229,6 +230,18 @@ export const commandSchema = z.discriminatedUnion('type', [
     scene: z.object({ id: gameIdSchema, component: combatComponentSchema }).optional(),
   }),
   z.strictObject({ type: z.literal('game.removeCombat'), encounterId: gameIdSchema }),
+  z.strictObject({
+    type: z.literal('combat.upsertSimulationScenario'),
+    encounterId: gameIdSchema,
+    scenarioId: combatReferenceSchema.shape.id,
+    scenario: combatSimulationScenarioSchema,
+    createOnly: z.boolean().optional(),
+  }),
+  z.strictObject({
+    type: z.literal('combat.removeSimulationScenario'),
+    encounterId: gameIdSchema,
+    scenarioId: combatReferenceSchema.shape.id,
+  }),
   z.strictObject({
     type: z.literal('scene.setCombat'),
     sceneId: gameIdSchema,
@@ -817,6 +830,28 @@ export const capabilities = {
         kind: 'moves',
         reference: { library: 'common', id: 'attack' },
         localId: 'local-attack',
+      },
+    },
+    {
+      type: 'combat.upsertSimulationScenario',
+      example: {
+        type: 'combat.upsertSimulationScenario',
+        encounterId: 'training',
+        scenarioId: 'survive',
+        scenario: {
+          label: 'Survive one round',
+          setup: { seed: 1 },
+          steps: [{ id: 'wait', plan: [] }],
+          expect: [{ type: 'outcome', value: 'planning' }],
+        },
+      },
+    },
+    {
+      type: 'combat.removeSimulationScenario',
+      example: {
+        type: 'combat.removeSimulationScenario',
+        encounterId: 'training',
+        scenarioId: 'survive',
       },
     },
     {

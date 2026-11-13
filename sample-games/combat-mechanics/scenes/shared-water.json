@@ -1,0 +1,193 @@
+{
+  "schema-version": "1.0.0",
+  "id": "shared-water",
+  "title": "Reef: shared underwater rules",
+  "type": "game",
+  "screen": {
+    "type": "grid",
+    "grid": {
+      "rows": 12,
+      "columns": 12
+    }
+  },
+  "components": [
+    {
+      "id": "combat",
+      "type": "combat",
+      "encounter": "shared-water",
+      "placement": {
+        "row": 1,
+        "column": 1,
+        "rowSpan": 8,
+        "columnSpan": 9
+      }
+    },
+    {
+      "id": "instructions",
+      "type": "text",
+      "text": "Inherits underwater fatigue: intensity 1 at exhaustion 60 removes 1 AP; intensity 2 at 90 removes 2 AP. E recovers and A stacks defense rhythm. B resolves the round.",
+      "placement": {
+        "row": 1,
+        "column": 10,
+        "rowSpan": 6,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "leave",
+      "type": "button",
+      "label": "Pause and return",
+      "action": {
+        "type": "enter-scene",
+        "scene": "harbour"
+      },
+      "placement": {
+        "row": 8,
+        "column": 10,
+        "columnSpan": 3
+      }
+    },
+    {
+      "id": "commands",
+      "type": "action-bar",
+      "placement": {
+        "row": 10,
+        "column": 1,
+        "rowSpan": 3,
+        "columnSpan": 12
+      },
+      "slots": {
+        "1": {
+          "label": "Quick thrust",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "jab"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-1"
+          }
+        },
+        "2": {
+          "label": "Power stroke",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "heavy"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-2"
+          }
+        },
+        "4": {
+          "label": "Undo",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "undo"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-4"
+          }
+        },
+        "5": {
+          "label": "Clear",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "clear"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-5"
+          }
+        },
+        "8": {
+          "label": "Escape",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "escape"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-8"
+          }
+        },
+        "14": {
+          "label": "Continue",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "continue"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-14"
+          }
+        },
+        "15": {
+          "label": "End turn",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "end-turn"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-15"
+          }
+        },
+        "3": {
+          "label": "Float and recover",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "rest"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-3"
+          }
+        },
+        "6": {
+          "label": "Find swimming rhythm",
+          "action": {
+            "type": "combat-action",
+            "combat": "combat",
+            "command": {
+              "type": "queue-move",
+              "move": "steady-breath"
+            }
+          },
+          "inputBinding": {
+            "context": "gameplay",
+            "input": "slot-6"
+          }
+        }
+      }
+    }
+  ]
+}

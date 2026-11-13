@@ -1,0 +1,235 @@
+{
+  "schema-version": "1.0.0",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 10000,
+  "logCapacity": 40,
+  "outcomes": {
+    "victory": "harbour",
+    "defeat": "harbour",
+    "escaped": "harbour"
+  },
+  "id": "rough-water",
+  "label": "Deep water: local overrides",
+  "description": "Pressure adds 20 exhaustion. Local Exhausted raises every action cost by 1 AP at 60 exhaustion and 2 at 90, instead of reducing the AP budget. E recovers; recovery always fits the 3 AP budget. A stacks rhythm, B resolves. The eel strips rhythm at 2 stacks and inherits the Eel hunter profile and lunges at exhaustion 50 through a local override.",
+  "player": {
+    "id": "swimmer",
+    "label": "Diver",
+    "health": {
+      "source": "game.state",
+      "path": ["player-health"]
+    },
+    "maximumHealth": 80,
+    "ap": 3,
+    "moves": ["jab", "heavy", "rest", "guard", "steady-breath"]
+  },
+  "enemies": [
+    {
+      "id": "deep-eel",
+      "label": "Cave eel",
+      "health": {
+        "source": "game.state",
+        "path": ["deep-eel-health"]
+      },
+      "maximumHealth": 90,
+      "ap": 2,
+      "moves": ["bite", "guard", "ambush", "disrupt"],
+      "rotation": ["guard", "bite"],
+      "aiProfile": {
+        "library": "environments",
+        "id": "eel-hunter",
+        "actors": {
+          "swimmer": "swimmer"
+        }
+      },
+      "aiOverrides": {
+        "rules": {
+          "exploit-fatigue": {
+            "conditions": [
+              {
+                "type": "resource",
+                "resource": "exhaustion",
+                "operator": "gte",
+                "value": 50
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "moves": {
+    "jab": {
+      "type": "ability",
+      "label": "Quick thrust",
+      "apCost": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 3,
+            "max": 4
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 12,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 10
+      }
+    },
+    "heavy": {
+      "type": "ability",
+      "label": "Power stroke",
+      "apCost": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 9,
+            "max": 11
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 30,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 30
+      }
+    },
+    "rest": {
+      "type": "ability",
+      "label": "Float and recover",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": -30,
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "stamina",
+          "amount": 25,
+          "id": "effect-1"
+        }
+      ]
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Brace",
+      "apCost": 1,
+      "guard": 5
+    },
+    "bite": {
+      "type": "attack",
+      "label": "Bite",
+      "apCost": 1,
+      "damage": {
+        "min": 2,
+        "max": 4
+      }
+    }
+  },
+  "ruleset": {
+    "library": "environments",
+    "id": "underwater",
+    "actors": {
+      "swimmer": "swimmer"
+    }
+  },
+  "mechanicsOverrides": {
+    "resources": {
+      "stamina": {
+        "initial": 60,
+        "maximum": 80
+      }
+    },
+    "triggers": {
+      "water-pressure": {
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": 20
+          }
+        ]
+      }
+    }
+  },
+  "statuses": {
+    "exhausted": {
+      "type": "composite",
+      "label": "Exhausted",
+      "description": "Each intensity adds 1 AP to every action and deals 1 fatigue damage per turn.",
+      "duration": 2,
+      "damage": 1,
+      "modifiers": {
+        "apCost": 1
+      },
+      "intensity": {
+        "initial": 1,
+        "maximum": 2,
+        "reapply": "replace"
+      }
+    }
+  },
+  "simulationScenarios": {
+    "shared-pressure": {
+      "label": "Verify shared AI and local pressure",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "swimmer": 80,
+          "deep-eel": 90
+        },
+        "resources": {
+          "exhaustion": 40
+        }
+      },
+      "steps": [
+        {
+          "id": "pressure",
+          "plan": []
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "planning"
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 60
+        },
+        {
+          "type": "health",
+          "actor": "deep-eel",
+          "operator": "eq",
+          "value": 90
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    }
+  }
+}

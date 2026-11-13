@@ -1,0 +1,1488 @@
+{
+  "schema-version": "1.0.0",
+  "seed": 1024,
+  "allowEscape": true,
+  "roundTimeMs": 10000,
+  "logCapacity": 40,
+  "outcomes": {
+    "victory": "harbour",
+    "defeat": "harbour",
+    "escaped": "harbour"
+  },
+  "id": "water",
+  "label": "Battle in the flooded grotto",
+  "description": "Water adds 10 exhaustion at turn start. At 60 exhaustion intensity 1 removes 1 AP and deals 3 fatigue damage; at 90 intensity 2 removes 2 AP and deals 6. E recovers, A stacks swimming rhythm, B resolves. The eel strips rhythm at 2 stacks and lunges at exhaustion 60. Focus current enables lightning lifesteal; actual reactive healing relieves exhaustion. Click the control techniques to try Brine bind, Clear mind, Shake off and Stunning bell.",
+  "player": {
+    "id": "player",
+    "label": "Diver",
+    "health": {
+      "source": "game.state",
+      "path": ["player-health"]
+    },
+    "maximumHealth": 80,
+    "ap": 3,
+    "moves": [
+      "jab",
+      "heavy",
+      "rest",
+      "guard",
+      "steady-breath",
+      "flow-strike",
+      "reviving-breath",
+      "focus-current",
+      "tidal-bolt",
+      "arc-bolt",
+      "venom-dart",
+      "brine-bind",
+      "clear-mind",
+      "shake-off",
+      "stunning-bell"
+    ]
+  },
+  "enemies": [
+    {
+      "id": "eel",
+      "label": "Cave eel",
+      "health": {
+        "source": "game.state",
+        "path": ["eel-health"]
+      },
+      "maximumHealth": 90,
+      "ap": 2,
+      "moves": ["bite", "guard", "ambush", "disrupt", "brine-curse", "static-hiss"],
+      "rotation": ["guard", "bite"],
+      "ai": {
+        "fallback": "rotation",
+        "rules": [
+          {
+            "id": "test-clear-mind",
+            "move": "brine-curse",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "status",
+                "actor": "player",
+                "status": "unshaken",
+                "measure": "stacks",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "disarmed-hiss",
+            "move": "static-hiss",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "status",
+                "actor": "self",
+                "status": "disarmed",
+                "measure": "stacks",
+                "operator": "gte",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "id": "break-rhythm",
+            "move": "disrupt",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "status",
+                "actor": "player",
+                "status": "rhythm",
+                "measure": "stacks",
+                "operator": "gte",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "id": "exploit-fatigue",
+            "move": "ambush",
+            "maxUses": 1,
+            "conditions": [
+              {
+                "type": "or",
+                "conditions": [
+                  {
+                    "type": "resource",
+                    "resource": "exhaustion",
+                    "operator": "gte",
+                    "value": 60,
+                    "unit": "percent"
+                  },
+                  {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "type": "health",
+                        "actor": "player",
+                        "operator": "lte",
+                        "value": 25,
+                        "unit": "percent"
+                      },
+                      {
+                        "type": "status",
+                        "actor": "player",
+                        "status": "exhausted",
+                        "measure": "stacks",
+                        "operator": "gte",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "damageDefenses": {
+        "resistances": {
+          "water": 50
+        },
+        "vulnerabilities": {
+          "lightning": 50
+        },
+        "immunities": ["poison"]
+      }
+    }
+  ],
+  "moves": {
+    "jab": {
+      "type": "ability",
+      "label": "Quick thrust",
+      "apCost": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 3,
+            "max": 4
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 12,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "categories": ["weapon"]
+    },
+    "heavy": {
+      "type": "ability",
+      "label": "Power stroke",
+      "apCost": 2,
+      "target": "enemy",
+      "effects": [
+        {
+          "type": "damage",
+          "damage": {
+            "min": 9,
+            "max": 11
+          },
+          "id": "effect-0"
+        },
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 30,
+          "id": "effect-1"
+        }
+      ],
+      "resourceCosts": {
+        "stamina": 30
+      },
+      "categories": ["weapon"]
+    },
+    "rest": {
+      "type": "ability",
+      "label": "Float and recover",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": -30,
+          "id": "effect-0",
+          "conditions": [
+            {
+              "type": "resource",
+              "resource": "exhaustion",
+              "operator": "gt",
+              "value": 0,
+              "unit": "percent"
+            }
+          ]
+        },
+        {
+          "type": "change-resource",
+          "resource": "stamina",
+          "amount": 25,
+          "id": "effect-1"
+        }
+      ],
+      "categories": ["utility"]
+    },
+    "guard": {
+      "type": "guard",
+      "label": "Brace",
+      "apCost": 1,
+      "guard": 5,
+      "categories": ["utility"]
+    },
+    "bite": {
+      "type": "attack",
+      "label": "Bite",
+      "apCost": 1,
+      "damage": {
+        "min": 2,
+        "max": 4
+      },
+      "categories": ["weapon"]
+    },
+    "steady-breath": {
+      "type": "ability",
+      "label": "Find swimming rhythm",
+      "description": "Add one rhythm stack, up to three, for extra defense.",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "target": "self",
+      "effects": [
+        {
+          "id": "rhythm",
+          "type": "apply-status",
+          "status": "rhythm",
+          "stacks": 1
+        }
+      ],
+      "categories": ["utility"]
+    },
+    "ambush": {
+      "type": "attack",
+      "label": "Exploit exhaustion",
+      "description": "The eel lunges when exhaustion reaches 60.",
+      "apCost": 2,
+      "damage": {
+        "min": 5,
+        "max": 7
+      },
+      "categories": ["weapon"]
+    },
+    "disrupt": {
+      "type": "ability",
+      "label": "Break swimming rhythm",
+      "apCost": 1,
+      "cooldown": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "strip-rhythm",
+          "type": "remove-status",
+          "status": "rhythm",
+          "stacks": 1
+        }
+      ],
+      "categories": ["weapon"]
+    },
+    "flow-strike": {
+      "type": "ability",
+      "label": "Flow strike",
+      "description": "Damage gains 10% of current stamina and loses 2 per Exhausted intensity. AP cost rises by 0.02 per exhaustion; stamina cost rises by 5 per Exhausted intensity.",
+      "apCost": 1,
+      "apCostScaling": {
+        "terms": [
+          {
+            "type": "resource",
+            "resource": "exhaustion",
+            "factor": 0.02
+          }
+        ],
+        "maximum": 3
+      },
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "resourceCostScaling": {
+        "stamina": {
+          "terms": [
+            {
+              "type": "status",
+              "actor": "self",
+              "status": "exhausted",
+              "measure": "intensity",
+              "factor": 5
+            }
+          ]
+        }
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "strike",
+          "type": "damage",
+          "damage": {
+            "min": 4,
+            "max": 6
+          },
+          "scaling": {
+            "terms": [
+              {
+                "type": "resource",
+                "resource": "stamina",
+                "factor": 0.1
+              },
+              {
+                "type": "status",
+                "actor": "self",
+                "status": "exhausted",
+                "measure": "intensity",
+                "factor": -2
+              }
+            ]
+          }
+        },
+        {
+          "id": "pressure",
+          "type": "change-resource",
+          "resource": "exhaustion",
+          "amount": 10
+        }
+      ],
+      "categories": ["weapon", "spell"]
+    },
+    "reviving-breath": {
+      "type": "ability",
+      "label": "Reviving breath",
+      "description": "Heal 4 plus 10% of stamina remaining after the cost, minus 2 per Exhausted intensity. Current focus multiplies the result.",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 10
+      },
+      "target": "self",
+      "effects": [
+        {
+          "id": "heal",
+          "type": "heal",
+          "amount": 4,
+          "scaling": {
+            "terms": [
+              {
+                "type": "resource",
+                "resource": "stamina",
+                "factor": 0.1
+              },
+              {
+                "type": "status",
+                "actor": "self",
+                "status": "exhausted",
+                "measure": "intensity",
+                "factor": -2
+              }
+            ]
+          }
+        }
+      ],
+      "categories": ["spell"]
+    },
+    "focus-current": {
+      "type": "ability",
+      "label": "Focus the current",
+      "description": "Apply Current focus at intensity 2: +50% damage, +40% healing and -50% AP costs.",
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "id": "focus",
+          "type": "apply-status",
+          "status": "flow",
+          "intensity": 2
+        }
+      ],
+      "categories": ["spell"]
+    },
+    "tidal-bolt": {
+      "type": "ability",
+      "label": "Tidal bolt",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damageType": "water",
+          "damage": {
+            "min": 12,
+            "max": 12
+          }
+        }
+      ],
+      "categories": ["spell"]
+    },
+    "arc-bolt": {
+      "type": "ability",
+      "label": "Arc bolt",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damageType": "lightning",
+          "damage": {
+            "min": 12,
+            "max": 12
+          }
+        }
+      ],
+      "categories": ["spell"]
+    },
+    "venom-dart": {
+      "type": "ability",
+      "label": "Venom dart",
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "hit",
+          "type": "damage",
+          "damageType": "poison",
+          "damage": {
+            "min": 4,
+            "max": 4
+          }
+        },
+        {
+          "id": "venom",
+          "type": "apply-status",
+          "status": "venom"
+        }
+      ],
+      "categories": ["weapon"]
+    },
+    "brine-bind": {
+      "type": "ability",
+      "label": "Brine bind",
+      "description": "Apply Silence and Disarm. Each status checks immunity independently.",
+      "categories": ["spell"],
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "silence",
+          "type": "apply-status",
+          "status": "silenced"
+        },
+        {
+          "id": "disarm",
+          "type": "apply-status",
+          "status": "disarmed"
+        }
+      ]
+    },
+    "clear-mind": {
+      "type": "ability",
+      "label": "Clear mind",
+      "description": "A utility ward prevents future control applications, even while silenced. It does not cleanse existing controls.",
+      "categories": ["utility"],
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "id": "ward",
+          "type": "apply-status",
+          "status": "unshaken"
+        }
+      ]
+    },
+    "shake-off": {
+      "type": "ability",
+      "label": "Shake off",
+      "description": "Remove Silence and Disarm. This utility action works while either control is active.",
+      "categories": ["utility"],
+      "apCost": 1,
+      "target": "self",
+      "effects": [
+        {
+          "id": "silence",
+          "type": "remove-status",
+          "status": "silenced"
+        },
+        {
+          "id": "disarm",
+          "type": "remove-status",
+          "status": "disarmed"
+        }
+      ]
+    },
+    "stunning-bell": {
+      "type": "ability",
+      "label": "Stunning bell",
+      "description": "Apply Dazed. The underwater guardian is permanently immune.",
+      "categories": ["spell"],
+      "apCost": 1,
+      "resourceCosts": {
+        "stamina": 5
+      },
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "stun",
+          "type": "apply-status",
+          "status": "dazed"
+        }
+      ]
+    },
+    "static-hiss": {
+      "type": "attack",
+      "label": "Static hiss",
+      "description": "A disarmed eel tries this spell, unless Silence blocks it too.",
+      "categories": ["spell"],
+      "apCost": 1,
+      "damageType": "lightning",
+      "damage": {
+        "min": 1,
+        "max": 2
+      }
+    },
+    "brine-curse": {
+      "type": "ability",
+      "label": "Brine curse",
+      "description": "An enemy control spell. Uses AP without spending the diver's stamina.",
+      "categories": ["spell"],
+      "apCost": 1,
+      "target": "enemy",
+      "effects": [
+        {
+          "id": "silence",
+          "type": "apply-status",
+          "status": "silenced"
+        },
+        {
+          "id": "disarm",
+          "type": "apply-status",
+          "status": "disarmed"
+        }
+      ]
+    }
+  },
+  "statuses": {
+    "exhausted": {
+      "type": "composite",
+      "label": "Exhausted",
+      "description": "Each intensity removes 1 AP from the turn budget and deals 3 fatigue damage per turn.",
+      "duration": 2,
+      "damage": 3,
+      "modifiers": {
+        "ap": -1
+      },
+      "intensity": {
+        "initial": 1,
+        "maximum": 2,
+        "reapply": "replace"
+      }
+    },
+    "rhythm": {
+      "type": "modifier",
+      "label": "Swimming rhythm",
+      "description": "Each stack adds 1 defense. Reapplication adds a stack without extending the timer.",
+      "duration": 3,
+      "stacking": {
+        "maximum": 3,
+        "duration": "preserve"
+      },
+      "modifiers": {
+        "defense": 1
+      }
+    },
+    "buoyant": {
+      "type": "modifier",
+      "label": "Emergency buoyancy",
+      "description": "Floating at 25% health or less grants defense. Applying this status relieves 5 exhaustion; expiry restores 5 stamina.",
+      "duration": 1,
+      "modifiers": {
+        "defense": 2
+      }
+    },
+    "flow": {
+      "type": "modifier",
+      "label": "Current focus",
+      "description": "Per intensity: +25% damage, +20% healing, and -25% AP cost, applied after flat modifiers. Lightning damage also heals its source for half the actual damage (then healing bonuses); that actual healing relieves the same amount of exhaustion.",
+      "duration": 3,
+      "modifiers": {},
+      "percentModifiers": {
+        "damage": 25,
+        "healing": 20,
+        "apCost": -25
+      },
+      "intensity": {
+        "initial": 1,
+        "maximum": 2,
+        "reapply": "replace"
+      }
+    },
+    "venom": {
+      "type": "damage",
+      "label": "Venom",
+      "description": "Poison damage each turn; poison immunity prevents the damage, while the status still lasts normally.",
+      "duration": 2,
+      "amount": 4,
+      "damageType": "poison"
+    },
+    "silenced": {
+      "type": "composite",
+      "label": "Silenced",
+      "description": "Blocks moves categorized as spell. Utility recovery remains available.",
+      "duration": 2,
+      "blockedMoveCategories": ["spell"]
+    },
+    "disarmed": {
+      "type": "composite",
+      "label": "Disarmed",
+      "description": "Blocks moves categorized as weapon. Spell and utility actions remain available.",
+      "duration": 2,
+      "blockedMoveCategories": ["weapon"]
+    },
+    "dazed": {
+      "type": "stun",
+      "label": "Dazed",
+      "description": "Skips one affected turn unless the recipient is immune to this status ID.",
+      "duration": 1
+    },
+    "unshaken": {
+      "type": "composite",
+      "label": "Clear mind",
+      "description": "Prevents new Silence, Disarm and Dazed applications for three affected turns. Existing controls need Shake off.",
+      "duration": 3,
+      "statusImmunities": ["silenced", "disarmed", "dazed"]
+    }
+  },
+  "mechanics": {
+    "resources": {
+      "exhaustion": {
+        "label": "Exhaustion",
+        "actor": "player",
+        "initial": 0,
+        "maximum": 100
+      },
+      "stamina": {
+        "label": "Stamina",
+        "actor": "player",
+        "initial": 100,
+        "maximum": 100
+      }
+    },
+    "triggers": {
+      "water-pressure": {
+        "event": "turn-start",
+        "actor": "player",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": 10
+          }
+        ]
+      },
+      "fatigue-on-change": {
+        "event": "resource-changed",
+        "resource": "exhaustion",
+        "conditions": [
+          {
+            "type": "and",
+            "conditions": [
+              {
+                "type": "resource",
+                "resource": "exhaustion",
+                "operator": "gte",
+                "value": 60,
+                "unit": "percent"
+              },
+              {
+                "type": "not",
+                "condition": {
+                  "type": "resource",
+                  "resource": "exhaustion",
+                  "operator": "gte",
+                  "value": 90,
+                  "unit": "percent"
+                }
+              }
+            ]
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "exhausted",
+            "intensity": 1
+          }
+        ]
+      },
+      "severe-fatigue-on-change": {
+        "event": "resource-changed",
+        "resource": "exhaustion",
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "exhaustion",
+            "operator": "gte",
+            "value": 90,
+            "unit": "percent"
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "exhausted",
+            "intensity": 2
+          }
+        ]
+      },
+      "sustain-fatigue": {
+        "event": "turn-start",
+        "actor": "player",
+        "conditions": [
+          {
+            "type": "and",
+            "conditions": [
+              {
+                "type": "resource",
+                "resource": "exhaustion",
+                "operator": "gte",
+                "value": 60,
+                "unit": "percent"
+              },
+              {
+                "type": "not",
+                "condition": {
+                  "type": "resource",
+                  "resource": "exhaustion",
+                  "operator": "gte",
+                  "value": 90,
+                  "unit": "percent"
+                }
+              }
+            ]
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "exhausted",
+            "intensity": 1
+          }
+        ]
+      },
+      "sustain-severe-fatigue": {
+        "event": "turn-start",
+        "actor": "player",
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "exhaustion",
+            "operator": "gte",
+            "value": 90,
+            "unit": "percent"
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "exhausted",
+            "intensity": 2
+          }
+        ]
+      },
+      "recovered": {
+        "event": "resource-changed",
+        "resource": "exhaustion",
+        "conditions": [
+          {
+            "type": "resource",
+            "resource": "exhaustion",
+            "operator": "lt",
+            "value": 60,
+            "unit": "percent"
+          }
+        ],
+        "effects": [
+          {
+            "type": "remove-status",
+            "actor": "player",
+            "status": "exhausted"
+          }
+        ]
+      },
+      "stamina-recovery": {
+        "event": "round-end",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "stamina",
+            "amount": 10
+          }
+        ]
+      },
+      "emergency-float": {
+        "event": "before-action",
+        "actor": "player",
+        "move": "rest",
+        "conditions": [
+          {
+            "type": "and",
+            "conditions": [
+              {
+                "type": "health",
+                "actor": "player",
+                "operator": "lte",
+                "value": 25,
+                "unit": "percent"
+              },
+              {
+                "type": "not",
+                "condition": {
+                  "type": "status",
+                  "actor": "player",
+                  "status": "buoyant",
+                  "measure": "stacks",
+                  "operator": "gte",
+                  "value": 1
+                }
+              }
+            ]
+          }
+        ],
+        "effects": [
+          {
+            "type": "apply-status",
+            "actor": "player",
+            "status": "buoyant"
+          }
+        ]
+      },
+      "buoyancy-recovery": {
+        "event": "status-applied",
+        "actor": "player",
+        "status": "buoyant",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": -5
+          }
+        ]
+      },
+      "buoyancy-expired": {
+        "event": "status-expired",
+        "actor": "player",
+        "status": "buoyant",
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "stamina",
+            "amount": 5
+          }
+        ]
+      },
+      "current-siphon": {
+        "event": "damage-dealt",
+        "source": "player",
+        "damageType": "lightning",
+        "conditions": [
+          {
+            "type": "status",
+            "actor": "player",
+            "status": "flow",
+            "measure": "stacks",
+            "operator": "gte",
+            "value": 1
+          }
+        ],
+        "effects": [
+          {
+            "type": "heal",
+            "actor": "event.source",
+            "amount": 0,
+            "eventValue": {
+              "field": "amount",
+              "factor": 0.5
+            }
+          }
+        ]
+      },
+      "healing-relief": {
+        "event": "healing-received",
+        "target": "player",
+        "delivery": "reaction",
+        "includeReactions": true,
+        "conditions": [
+          {
+            "type": "status",
+            "actor": "player",
+            "status": "flow",
+            "measure": "stacks",
+            "operator": "gte",
+            "value": 1
+          }
+        ],
+        "effects": [
+          {
+            "type": "change-resource",
+            "resource": "exhaustion",
+            "amount": 0,
+            "eventValue": {
+              "field": "amount",
+              "factor": -1
+            }
+          }
+        ]
+      }
+    }
+  },
+  "simulationScenarios": {
+    "rhythm-pressure": {
+      "label": "Rhythm disruption under water pressure",
+      "description": "Fatigue applies before the eel removes one rhythm stack. A lunge cannot fit in the remaining AP.",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "eel": 90
+        },
+        "resources": {
+          "exhaustion": 55
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "rhythm",
+              "source": "player",
+              "remaining": 3,
+              "stacks": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "pressure",
+          "plan": [],
+          "expect": [
+            {
+              "type": "resource",
+              "resource": "exhaustion",
+              "operator": "eq",
+              "value": 65
+            },
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "rhythm",
+              "measure": "stacks",
+              "operator": "eq",
+              "value": 1
+            },
+            {
+              "type": "health",
+              "actor": "player",
+              "operator": "eq",
+              "value": 77
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "planning"
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "recover-fatigue": {
+      "label": "Recover from exhaustion",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "eel": 90
+        },
+        "resources": {
+          "exhaustion": 65
+        }
+      },
+      "steps": [
+        {
+          "id": "recover",
+          "plan": [
+            {
+              "move": "rest"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "outcome",
+          "value": "planning"
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 45
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "exhausted",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 70
+        }
+      ]
+    },
+    "emergency-float": {
+      "label": "Emergency float lifecycle hooks",
+      "description": "Before resting below 25% health, buoyancy applies and immediately removes 5 exhaustion.",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 20,
+          "eel": 90
+        },
+        "resources": {
+          "exhaustion": 40,
+          "stamina": 50
+        }
+      },
+      "steps": [
+        {
+          "id": "float",
+          "plan": [
+            {
+              "move": "rest"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 15
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "buoyant",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "scaled-current": {
+      "label": "Scale damage, healing and costs under exhaustion",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 40,
+          "eel": 90
+        },
+        "resources": {
+          "exhaustion": 55,
+          "stamina": 60
+        },
+        "statuses": {
+          "player": [
+            {
+              "id": "flow",
+              "source": "player",
+              "remaining": 3,
+              "intensity": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "strike",
+          "plan": [
+            {
+              "move": "flow-strike",
+              "target": "eel"
+            }
+          ],
+          "expect": [
+            {
+              "type": "resource",
+              "resource": "stamina",
+              "operator": "eq",
+              "value": 55
+            },
+            {
+              "type": "health",
+              "actor": "eel",
+              "operator": "gte",
+              "value": 78
+            },
+            {
+              "type": "health",
+              "actor": "eel",
+              "operator": "lte",
+              "value": 81
+            }
+          ]
+        },
+        {
+          "id": "recover-and-heal",
+          "plan": [
+            {
+              "move": "rest"
+            },
+            {
+              "move": "reviving-breath"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 55
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 80
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "exhausted",
+          "measure": "stacks",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 35
+        }
+      ]
+    },
+    "typed-damage": {
+      "label": "Test water resistance, lightning vulnerability and poison immunity",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 80,
+          "eel": 90
+        }
+      },
+      "steps": [
+        {
+          "id": "types",
+          "plan": [
+            {
+              "move": "tidal-bolt",
+              "target": "eel"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "eel"
+            },
+            {
+              "move": "venom-dart",
+              "target": "eel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "eel",
+          "operator": "eq",
+          "value": 66
+        },
+        {
+          "type": "status",
+          "actor": "eel",
+          "status": "venom",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "resource",
+          "resource": "stamina",
+          "operator": "eq",
+          "value": 95
+        }
+      ]
+    },
+    "current-siphon": {
+      "label": "Lightning siphon and actual healing relief",
+      "description": "Focus current amplifies Arc bolt to 27 actual lightning damage. Half, rounded down, is 13; its healing bonus makes 18 HP. Only those 18 actually restored relieve exhaustion.",
+      "setup": {
+        "seed": 1024,
+        "health": {
+          "player": 40
+        },
+        "resources": {
+          "exhaustion": 30
+        }
+      },
+      "steps": [
+        {
+          "id": "siphon",
+          "plan": [
+            {
+              "move": "focus-current"
+            },
+            {
+              "move": "arc-bolt",
+              "target": "eel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "eel",
+          "operator": "eq",
+          "value": 63
+        },
+        {
+          "type": "resource",
+          "resource": "exhaustion",
+          "operator": "eq",
+          "value": 22
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "gte",
+          "value": 54
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "lte",
+          "value": 56
+        }
+      ]
+    },
+    "brine-control": {
+      "label": "Silence and disarm force a harmless fallback",
+      "setup": {
+        "seed": 1024
+      },
+      "steps": [
+        {
+          "id": "bind",
+          "plan": [
+            {
+              "move": "brine-bind",
+              "target": "eel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "status",
+          "actor": "eel",
+          "status": "silenced",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "status",
+          "actor": "eel",
+          "status": "disarmed",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 1
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        }
+      ]
+    },
+    "silence-recovery": {
+      "label": "Blocked categories and utility cleanse",
+      "setup": {
+        "seed": 1024,
+        "statuses": {
+          "player": [
+            {
+              "id": "silenced",
+              "source": "eel",
+              "remaining": 2
+            },
+            {
+              "id": "disarmed",
+              "source": "eel",
+              "remaining": 2
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "id": "cleanse",
+          "unavailable": "skip",
+          "plan": [
+            {
+              "move": "arc-bolt",
+              "target": "eel"
+            },
+            {
+              "move": "heavy",
+              "target": "eel"
+            },
+            {
+              "move": "shake-off"
+            }
+          ],
+          "expect": [
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "silenced",
+              "operator": "eq",
+              "value": 0
+            },
+            {
+              "type": "status",
+              "actor": "player",
+              "status": "disarmed",
+              "operator": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "cast-again",
+          "plan": [
+            {
+              "move": "arc-bolt",
+              "target": "eel"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "health",
+          "actor": "eel",
+          "operator": "eq",
+          "value": 77
+        },
+        {
+          "type": "rounds",
+          "operator": "eq",
+          "value": 2
+        }
+      ]
+    },
+    "status-ward": {
+      "label": "Clear mind prevents status applications",
+      "setup": {
+        "seed": 1024
+      },
+      "steps": [
+        {
+          "id": "ward",
+          "plan": [
+            {
+              "move": "clear-mind"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "silenced",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "disarmed",
+          "operator": "eq",
+          "value": 0
+        },
+        {
+          "type": "status",
+          "actor": "player",
+          "status": "unshaken",
+          "measure": "remaining",
+          "operator": "eq",
+          "value": 3
+        },
+        {
+          "type": "health",
+          "actor": "player",
+          "operator": "eq",
+          "value": 80
+        }
+      ]
+    }
+  }
+}

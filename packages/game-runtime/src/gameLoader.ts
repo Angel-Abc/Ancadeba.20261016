@@ -147,7 +147,7 @@ export class GameLoader implements IGameLoader {
       assets,
       [...inventory],
       [...rules],
-      [...combat],
+      [...combat].map(([id, source]) => [id, { ...source, simulationScenarios: undefined }]),
       [...leveling],
       [...libraries],
       [...dialogues],

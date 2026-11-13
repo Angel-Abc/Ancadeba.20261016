@@ -1,3 +1,4 @@
+import { combatRulesetReferences } from '@ancadeba/schemas'
 import { registerEditorDraft } from './editorDraftState.js'
 import { z } from 'zod'
 import type { Translate } from '@ancadeba/utilities'
@@ -8,6 +9,8 @@ import type { ProjectEditorState } from './projectController.js'
 import { ruleFormControls, saveBar, languageWatcher } from './ruleFormControls.js'
 import { combatMovesForm } from './combatMovesForm.js'
 import { combatStatusesForm } from './combatAbilitiesForm.js'
+import { combatRulesetsForm } from './combatRulesetsForm.js'
+import { combatAIProfilesForm } from './combatAIProfilesForm.js'
 
 export function bindCombatLibraryEditor(
   root: HTMLElement,
@@ -144,6 +147,8 @@ export function bindCombatLibraryEditor(
 
     const encounters = Object.values(view.combatSources ?? {}).filter(
       (source) =>
+        combatRulesetReferences(source).some((reference) => reference.library === libraryId) ||
+        source.enemies.some((enemy) => enemy.aiProfile?.library === libraryId) ||
         [...(source.sharedMoves ?? []), ...(source.sharedStatuses ?? [])].some(
           (ref) => ref.library === libraryId,
         ) ||
@@ -201,6 +206,8 @@ export function bindCombatLibraryEditor(
       identity,
       ...combatMovesForm(controls, view, current, render),
       combatStatusesForm(controls, view, current, render),
+      combatRulesetsForm(controls, view, current, render),
+      combatAIProfilesForm(controls, view, current, render),
     )
     form.addEventListener('submit', (event) => {
       event.preventDefault()

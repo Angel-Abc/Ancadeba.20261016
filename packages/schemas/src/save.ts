@@ -1,4 +1,7 @@
+import { combatDamageTypeSchema } from './combatDamage.js'
 import { z } from 'zod'
+import { combatMechanicsStateSchema } from './combatMechanics.js'
+import { combatStatusStrengthSchema } from './combatAbilities.js'
 import { gameIdSchema } from './game.js'
 import { inventorySchema } from './inventory.js'
 import { mapPositionSchema } from './map.js'
@@ -37,20 +40,45 @@ const logEntry = z.strictObject({
     'victory',
     'defeat',
     'escaped',
+    'resourceChanged',
+    'resourceUnavailable',
+    'phaseChanged',
+    'statusReduced',
+    'apUnavailable',
+    'statusImmune',
+    'moveRestricted',
   ]),
   item: id.optional(),
   actor: id.optional(),
   target: id.optional(),
   status: id.optional(),
   damage: counter.optional(),
+  damageType: combatDamageTypeSchema.optional(),
+  category: id.optional(),
+  resistance: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  vulnerability: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  immune: z.boolean().optional(),
+  reactive: z.boolean().optional(),
+  resisted: counter.optional(),
+  amplified: counter.optional(),
+  rawDamage: counter.optional(),
+  typeDamage: counter.optional(),
   blocked: counter.optional(),
   defended: counter.optional(),
   guard: counter.optional(),
   amount: counter.optional(),
   duration: counter.optional(),
+  resource: id.optional(),
+  phase: id.optional(),
+  move: id.optional(),
+  cost: counter.optional(),
+  remaining: counter.optional(),
+  stacks: combatStatusStrengthSchema.optional(),
+  intensity: combatStatusStrengthSchema.optional(),
 })
 
 export const savedCombatSchema = z.strictObject({
+  mechanics: combatMechanicsStateSchema.optional(),
   round: counter.min(1),
   seed: counter.max(0xffffffff),
   started: z.boolean(),
@@ -64,7 +92,17 @@ export const savedCombatSchema = z.strictObject({
     }),
   ),
   statuses: record(
-    z.array(z.strictObject({ id, source: id, remaining: counter.min(1) })).max(1000),
+    z
+      .array(
+        z.strictObject({
+          id,
+          source: id,
+          remaining: counter.min(1),
+          stacks: combatStatusStrengthSchema.optional(),
+          intensity: combatStatusStrengthSchema.optional(),
+        }),
+      )
+      .max(1000),
   ),
   cooldowns: record(record(counter)),
   escape: z.boolean(),
