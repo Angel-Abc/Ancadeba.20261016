@@ -1413,6 +1413,12 @@ the built-in service because their arbitrary state and scheduled callbacks canno
 be safely serialized by it. Custom hosts can supply their own persistence controls.
 The runtime and save schemas remain independent of browser and Node globals.
 
+Manual and autosave loading finish a committed restoration when scene or
+presentation observers throw, reporting those errors through the injected logger.
+Invalid candidates still preserve the current playthrough. If an observer stops
+the engine, disposes the lifecycle, or replaces the candidate game or scene,
+restoration stops and reports `unavailable`.
+
 ## One-shot timers
 
 Every loaded session creates a `TimerService`, exposed through `engine.timers`

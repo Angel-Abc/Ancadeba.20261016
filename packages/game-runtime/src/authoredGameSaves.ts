@@ -1,6 +1,6 @@
 import type { GameData } from './gameData.js'
 import type { GameSave } from '@ancadeba/schemas'
-import type { GameInstance, IGameLifecycle } from './gameLifecycle.js'
+import type { GameInstance, IGameLifecycle, SceneInstance } from './gameLifecycle.js'
 import type { AuthoredPlaythrough } from './authoredRules.js'
 import type { GameActionRuntime } from './gameActionRuntime.js'
 import type { IGameInput } from './input.js'
@@ -109,26 +109,88 @@ export function bindAuthoredGameSaves({
     },
     (save) => {
       if (!isRunning()) throw new GameSaveError('unavailable')
-      lifecycle.startGame(
-        (instance) => prepare(save, instance),
-        (instance) => restoreRuntime(save, instance),
+      let candidate: GameInstance | undefined
+      let scene: SceneInstance | undefined
+
+      const requireCurrent = () => {
+        if (
+          !isRunning() ||
+          lifecycle.disposed ||
+          !candidate ||
+          candidate.disposed ||
+          lifecycle.currentGame !== candidate ||
+          (scene && (scene.disposed || lifecycle.activeScene !== scene))
+        )
+          throw new GameSaveError('unavailable')
+
+        return candidate
+      }
+
+      const complete = (apply: () => void, committed: () => boolean) => {
+        try {
+          apply()
+        } catch (error) {
+          if (!isRunning() || lifecycle.disposed) throw new GameSaveError('unavailable')
+
+          if (!committed()) throw error
+          onObserverError(error)
+        }
+      }
+
+      // A lifecycle call can throw after committing and releasing the previous game.
+      complete(
+        () =>
+          lifecycle.startGame(
+            (instance) => prepare(save, instance),
+            (instance) => {
+              restoreRuntime(save, instance)
+              candidate = instance
+            },
+          ),
+        () => Boolean(candidate && lifecycle.currentGame === candidate && !candidate.disposed),
       )
+      const instance = requireCurrent()
 
-      if (save.language && game.localization?.available.some(({ tag }) => tag === save.language))
-        game.localization.select(save.language)
-      const scene = lifecycle.enterScene(save.scene)
-      const runtime = runtimeFor(lifecycle.currentGame!)!
+      const step = (apply: () => void, committed: () => boolean = () => true) => {
+        requireCurrent()
+        complete(apply, () => {
+          requireCurrent()
 
+          return committed()
+        })
+        requireCurrent()
+      }
+
+      const { language, activeDialogue, inputContext } = save
+      const localization = game.localization
+
+      if (language && localization?.available.some(({ tag }) => tag === language))
+        step(() => localization.select(language))
+
+      const isSavedScene = () => {
+        const active = lifecycle.activeScene
+
+        return active?.type === 'game' && active.game === instance && active.data.id === save.scene
+      }
+
+      step(() => lifecycle.enterScene(save.scene), isSavedScene)
+
+      if (!isSavedScene()) throw new GameSaveError('unavailable')
+      scene = lifecycle.activeScene!
+      const active = scene
+      const runtime = runtimeFor(instance)!
+
+      // Validated setters commit before notifying; an observer must not skip later setters.
       for (const [panel, entry] of Object.entries(save.nearby))
-        runtime.nearby?.select(scene, panel, entry)
+        step(() => runtime.nearby?.select(active, panel, entry))
 
       for (const [panel, item] of Object.entries(save.inventorySelection))
-        runtime.inventorySelection?.select(scene, panel, item)
+        step(() => runtime.inventorySelection?.select(active, panel, item))
 
-      if (save.activeDialogue) runtime.dialogue?.resume(scene, save.activeDialogue)
-      runtime.bindings.invalidate()
+      if (activeDialogue) step(() => runtime.dialogue?.resume(active, activeDialogue))
+      step(() => runtime.bindings.invalidate())
 
-      if (save.inputContext) input()?.setContext(save.inputContext)
+      if (inputContext) step(() => input()?.setContext(inputContext))
     },
     (save) =>
       save.gameId === game.id &&

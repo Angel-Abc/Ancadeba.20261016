@@ -875,6 +875,208 @@ describe('persistent player progress', () => {
     expect(saves.save()).toBe(false)
   })
 
+  describe.each(['manual', 'autosave'] as const)(
+    '%s loading with observer failures',
+    (location) => {
+      async function savedGame() {
+        const store = new MemorySaves()
+        const launched = await launch(store)
+        const { engine, start, advance, logError } = launched
+        const old = start()
+        const scene = engine.lifecycle!.activeScene!
+        old.actions!.request('take-letter')
+        advance()
+        old.nearby!.select(scene, 'nearby', 'curator')
+        old.inventorySelection!.select(scene, 'items', 'folded-letter')
+        old.dialogue!.request(scene, 'nearby', { type: 'start' })
+        advance()
+        old.dialogue!.request(scene, 'nearby', { type: 'choose', position: 1 })
+        advance()
+        engine.game!.localization!.select('nl')
+        const text = old.dialogue!.text(scene, 'nearby')
+        const inventory = old.inventory!.snapshot
+        const progression = old.actions!.progression
+        const saves = engine.saves!
+        saves.selectSlot('3')
+        expect(saves.save('Before observer failure')).toBe(true)
+        advance(500)
+        const manual = store.read('basic-game', '3')!
+        const autosave = store.read('basic-game', 'autosave')!
+        expect(autosave).toBeDefined()
+        engine.game!.localization!.select('en')
+        engine.input!.setContext('menu')
+        logError.mockClear()
+
+        const load = () => (location === 'manual' ? saves.load() : saves.loadAutosave())
+
+        const restored = () => {
+          const current = engine.lifecycle!.currentGame!
+          const active = engine.lifecycle!.activeScene!
+          expect(old.disposed).toBe(true)
+          expect(current).not.toBe(old)
+          expect(active.data.id).toBe('standard')
+          expect(active.type === 'game' && active.game).toBe(current)
+          expect(current.inventory!.snapshot).toEqual(inventory)
+          expect(current.actions!.progression).toEqual(progression)
+          expect(current.quests!.snapshot('harbour-survey')!.status).toBe('active')
+          expect(current.nearby!.getSelection(active, 'nearby')?.entry).toBe('curator')
+          expect(current.inventorySelection!.get(active, 'items')?.item).toBe('folded-letter')
+          expect(current.dialogue!.text(active, 'nearby')).toBe(text)
+          expect(engine.game!.language).toBe('nl')
+          expect(engine.input!.context).toBe('gameplay')
+          expect(saves.status).toBe('loaded')
+          expect(saves.error).toBeUndefined()
+          expect(saves.selectedSlot).toBe('3')
+          expect(store.read('basic-game', '3')).toBe(manual)
+          expect(store.read('basic-game', 'autosave')).toBe(autosave)
+        }
+
+        return { ...launched, old, saves, store, load, restored }
+      }
+
+      it.each(['exit', 'entry', 'both'] as const)(
+        'finishes every restore step after a scene observer throws during %s',
+        async (phase) => {
+          const { engine, load, restored, logError } = await savedGame()
+          const failure = new Error('Scene observer failed')
+          const events: (string | undefined)[] = []
+
+          const unsubscribe = engine.lifecycle!.subscribeSceneChanges(({ current }) => {
+            events.push(current?.data.id)
+
+            if (phase === 'both' || (phase === 'exit' ? !current : current)) throw failure
+          })
+
+          const result = load()
+          unsubscribe()
+          expect(result).toBe(true)
+          restored()
+          expect(events).toEqual([undefined, 'standard'])
+          expect(logError).toHaveBeenCalledTimes(phase === 'both' ? 2 : 1)
+          expect(logError).toHaveBeenCalledWith(
+            'GameSaves',
+            'Save observer failed',
+            expect.any(AggregateError),
+          )
+        },
+      )
+
+      it('finishes loading from a retained menu when entering the saved scene notifies a failing observer', async () => {
+        const { engine, load, restored, logError } = await savedGame()
+        engine.lifecycle!.enterScene('start-screen')
+
+        const unsubscribe = engine.lifecycle!.subscribeSceneChanges(() => {
+          throw new Error('Scene entry observer failed')
+        })
+
+        const result = load()
+        unsubscribe()
+        expect(result).toBe(true)
+        restored()
+        expect(logError).toHaveBeenCalledTimes(1)
+      })
+
+      it('completes later restoration steps when their observers throw after committing', async () => {
+        const { engine, load, restored, logError } = await savedGame()
+        const notified = new Set<string>()
+
+        const fail = (step: string) => () => {
+          notified.add(step)
+          throw new Error(`${step} observer failed`)
+        }
+
+        const language = engine.game!.localization!.subscribe(fail('language'))
+        const input = engine.input!.subscribeContextChanges(fail('input'))
+
+        const scene = engine.lifecycle!.subscribeSceneChanges(({ current }) => {
+          if (current?.type !== 'game') return
+          current.game.nearby!.subscribeChanges(fail('nearby'))
+          current.game.inventorySelection!.subscribe(fail('inventory'))
+          current.game.dialogue!.subscribeChanges(fail('dialogue'))
+          current.game.bindings!.subscribeChanges(fail('bindings'))
+        })
+
+        const result = load()
+        language()
+        input()
+        scene()
+        expect(result).toBe(true)
+        restored()
+        expect(notified).toEqual(
+          new Set(['language', 'nearby', 'inventory', 'dialogue', 'bindings', 'input']),
+        )
+        expect(logError).toHaveBeenCalledWith(
+          'GameSaves',
+          'Save observer failed',
+          expect.any(AggregateError),
+        )
+      })
+
+      it.each(['stop', 'dispose', 'replace', 'change-scene'] as const)(
+        'stops restoring a candidate when an observer requests %s',
+        async (operation) => {
+          const { engine, load, saves, old } = await savedGame()
+          const lifecycle = engine.lifecycle!
+          const input = engine.input!
+
+          const unsubscribe = lifecycle.subscribeSceneChanges(({ current }) => {
+            if (operation === 'dispose' && !current) lifecycle.dispose()
+
+            if (current?.type !== 'game') return
+
+            if (operation === 'stop') engine.stop()
+
+            if (
+              (operation === 'replace' || operation === 'change-scene') &&
+              current.data.id === 'standard'
+            )
+              current.game.bindings!.subscribeChanges(() => {
+                if (operation === 'replace') lifecycle.startGame()
+                lifecycle.enterScene('gallery')
+              })
+          })
+
+          const result = load()
+          unsubscribe()
+          expect(result).toBe(false)
+          expect(saves.error).toBe('unavailable')
+          expect(old.disposed).toBe(true)
+          expect(input.context).toBe('menu')
+
+          if (operation === 'stop') expect(engine.state).toBe('stopped')
+
+          if (operation === 'dispose') expect(lifecycle.disposed).toBe(true)
+
+          if (operation === 'replace' || operation === 'change-scene')
+            expect(lifecycle.activeScene?.data.id).toBe('gallery')
+        },
+      )
+
+      it('rejects invalid candidate state before notifying scene observers or replacing progress', async () => {
+        const { engine, load, store, saves, old } = await savedGame()
+        const slot = location === 'manual' ? '3' : 'autosave'
+        const save = gameSaveSchema.parse(JSON.parse(store.read('basic-game', slot)!))
+        save.state[0]!.value = false
+        store.write('basic-game', JSON.stringify(save), slot)
+        const active = engine.lifecycle!.activeScene
+
+        const observer = vi.fn(() => {
+          throw new Error('Must not notify')
+        })
+
+        const unsubscribe = engine.lifecycle!.subscribeSceneChanges(observer)
+        const result = load()
+        unsubscribe()
+        expect(result).toBe(false)
+        expect(saves.error).toBe('invalid-save')
+        expect(engine.lifecycle!.currentGame).toBe(old)
+        expect(engine.lifecycle!.activeScene).toBe(active)
+        expect(old.disposed).toBe(false)
+        expect(observer).not.toHaveBeenCalled()
+      })
+    },
+  )
+
   it.each([
     'bad-json',
     'wrong-game',
