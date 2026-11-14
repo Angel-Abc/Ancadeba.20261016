@@ -1,6 +1,10 @@
-import type { GameDefinition } from '@ancadeba/schemas'
+import { buttonActionSchema, type GameDefinition } from '@ancadeba/schemas'
 import { basicComponentSchema, type EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
+
+const actionFields = new Set(
+  buttonActionSchema.options.flatMap((option) => Object.keys(option.shape)),
+)
 
 /** Saves a text, button, language selector, or map view in place, keeping its list position. */
 export function editComponent(
@@ -39,6 +43,45 @@ export function editComponent(
     ...previous,
     ...cleared,
     ...component,
+    placement: { ...object(previous.placement), ...component.placement },
+    ...(component.type === 'text'
+      ? { presentation: { ...object(previous.presentation), ...component.presentation } }
+      : {}),
+    ...(component.type === 'map-view'
+      ? {
+          viewport: { ...object(previous.viewport), ...component.viewport },
+          playerSpawn: component.playerSpawn
+            ? { ...object(previous.playerSpawn), ...component.playerSpawn }
+            : undefined,
+        }
+      : {}),
+    ...(component.type === 'button' && component.action
+      ? {
+          action: {
+            ...Object.fromEntries(
+              Object.entries(object(previous.action)).filter(([key]) => !actionFields.has(key)),
+            ),
+            ...component.action,
+            ...(component.action.type === 'request-action' && component.action.enabledWhen
+              ? {
+                  enabledWhen: {
+                    ...object(object(previous.action).enabledWhen),
+                    ...component.action.enabledWhen,
+                    fallback: component.action.enabledWhen.fallback,
+                  },
+                }
+              : {}),
+            ...(component.action.type === 'enter-scene' && component.action.position
+              ? {
+                  position: {
+                    ...object(object(previous.action).position),
+                    ...component.action.position,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
     ...(component.type === 'text' && component.bindings !== undefined
       ? {
           bindings: Object.fromEntries(

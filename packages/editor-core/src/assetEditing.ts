@@ -6,7 +6,7 @@ import {
 } from '@ancadeba/schemas'
 import type { EditorCommand } from './commands.js'
 import { EditorError, object } from './project.js'
-import { mergeGraphicDefinitions } from './graphicDefinitionEditing.js'
+import { mergeGraphicAsset, mergeGraphicDefinitions } from './graphicDefinitionEditing.js'
 import { mergeGraphicAppearance } from './graphicAppearanceEditing.js'
 
 export function editAssets(
@@ -43,17 +43,39 @@ export function editAssets(
       return [file]
     }
 
-    if (command.type === 'assets.upsertImage') catalog.images[command.id] = command.image
-    else if (command.type === 'assets.upsertPart') catalog.parts[command.id] = command.part
-    else if (command.type === 'assets.upsertComposition')
-      catalog.compositions[command.id] = command.composition
-    else if (command.type === 'assets.remove') {
+    const next = { ...object(documents[file]) }
+
+    if (command.type === 'assets.upsertImage') {
+      const images = object(next.images)
+      next.images = {
+        ...images,
+        [command.id]: mergeGraphicAsset(images[command.id], command.image, 'images'),
+      }
+    } else if (command.type === 'assets.upsertPart') {
+      const parts = object(next.parts)
+      next.parts = {
+        ...parts,
+        [command.id]: mergeGraphicAsset(parts[command.id], command.part, 'parts'),
+      }
+    } else if (command.type === 'assets.upsertComposition') {
+      const compositions = object(next.compositions)
+      next.compositions = {
+        ...compositions,
+        [command.id]: mergeGraphicAsset(
+          compositions[command.id],
+          command.composition,
+          'compositions',
+        ),
+      }
+    } else if (command.type === 'assets.remove') {
       if (!Object.hasOwn(catalog[command.kind], command.id))
         throw new EditorError(404, 'asset_not_found', 'Asset does not exist')
-      delete catalog[command.kind][command.id]
+      const entries = { ...object(next[command.kind]) }
+      delete entries[command.id]
+      next[command.kind] = entries
     }
 
-    documents[file] = { ...object(documents[file]), ...catalog }
+    documents[file] = { ...catalog, ...next }
 
     if (!game.assets) {
       documents['game.json'] = { ...object(documents['game.json']), assets: id }

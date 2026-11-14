@@ -4,11 +4,21 @@ import {
   compositionSchema,
   boundsSchema,
   pointSchema,
+  imageAssetSchema,
+  type ImageAsset,
+  type GraphicPart,
+  type GraphicComposition,
 } from '@ancadeba/schemas'
 import { object } from './project.js'
 import type { EditorCommand } from './commands.js'
 
 const fields = new Map<string, readonly string[] | null>([
+  ['images.*', imageAssetSchema.keyof().options],
+  ['images.*.bounds', boundsSchema.keyof().options],
+  ['images.*.preview', boundsSchema.keyof().options],
+  ['images.*.colors', null],
+  ['images.*.palettes', null],
+  ['images.*.palettes.*', null],
   ['parts', null],
   ['compositions', null],
   ['parts.*', partSchema.keyof().options],
@@ -75,6 +85,15 @@ function merge(previous: unknown, next: unknown, path: string[]): DefinitionValu
       ]),
     ),
   }
+}
+
+/** Merge one focused update without reparsing or replacing its sibling definitions. */
+export function mergeGraphicAsset(
+  previous: unknown,
+  next: ImageAsset | GraphicPart | GraphicComposition,
+  kind: 'images' | 'parts' | 'compositions',
+) {
+  return merge(previous, next, [kind, '*'])
 }
 
 /** Preserve extensions by stable asset/piece IDs while removing deleted definitions and dictionary entries. */

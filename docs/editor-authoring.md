@@ -23,6 +23,10 @@ Zod. It does not import the engine runtime, browser APIs, or Node APIs.
 The editable project retains source definitions, including schema versions and
 extension properties. Runtime GameData and mutable playthrough state remain
 separate. Preview and export load saved source files through the game data pipeline.
+Focused asset edits preserve untouched definitions and metadata on retained asset
+entries. Basic component edits and scene creation retain nested extension fields
+while validating and normalizing known fields; clearing an optional setting still
+removes that setting.
 
 ## Supported operations
 

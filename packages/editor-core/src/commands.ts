@@ -7,13 +7,13 @@ import {
 } from '@ancadeba/schemas'
 import { z } from 'zod'
 import { componentSourceSchema } from './componentClipboard.js'
+import { sceneSourceSchema } from './sceneSourceSchema.js'
 import {
   itemUseSchema,
   combatBonusesSchema,
   equipmentCombatEffectsSchema,
   combatStatsProfileSchema,
   gameIdSchema,
-  sceneSchema,
   imageAssetSchema,
   partSchema,
   compositionSchema,
@@ -77,11 +77,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('scene.create'),
-    scene: sceneSchema.passthrough().safeExtend({
-      screen: sceneSchema.shape.screen
-        .passthrough()
-        .extend({ grid: sceneSchema.shape.screen.shape.grid.passthrough() }),
-    }),
+    scene: sceneSourceSchema,
   }),
   z.strictObject({
     type: z.literal('scene.updateMetadata'),
