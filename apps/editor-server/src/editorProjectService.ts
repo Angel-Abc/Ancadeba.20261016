@@ -98,7 +98,11 @@ export class EditorProjectService {
   }
 
   inspect(path: string): Promise<ProjectView> {
-    return this.coordinator.run(async () => this.view(path, await this.repository.load(path)))
+    return this.coordinator.run(async () => {
+      const resolved = await this.resolvePath(path)
+
+      return this.view(resolved, await this.repository.load(resolved))
+    })
   }
 
   importProject(input: unknown, archive: Uint8Array): Promise<ProjectView> {
@@ -240,7 +244,7 @@ export class EditorProjectService {
           'unsupported_project_management',
           'Project renaming is unavailable',
         )
-      const request = parsed.data
+      const request = await this.resolveRequest(parsed.data)
       const path = await this.repository.rename(request)
       this.history.clear(request.path)
       this.history.clear(path)
@@ -249,7 +253,7 @@ export class EditorProjectService {
         return {
           ...this.view(path, await this.repository.load(path)),
           path,
-          previousPath: request.path,
+          previousPath: parsed.data.path,
         }
       } catch {
         throw new EditorError(
@@ -278,8 +282,9 @@ export class EditorProjectService {
           'unsupported_project_management',
           'Project deletion is unavailable',
         )
-      const deleted = await this.repository.delete(parsed.data)
-      this.history.clear(parsed.data.path)
+      const request = await this.resolveRequest(parsed.data)
+      const deleted = await this.repository.delete(request)
+      this.history.clear(request.path)
 
       return deleted
     })
@@ -312,10 +317,16 @@ export class EditorProjectService {
           'Project restoration is unavailable',
         )
       const result = await this.repository.restoreProject(parsed.data)
-      this.history.clear(result.path)
 
       try {
-        return { ...this.view(result.path, await this.repository.load(result.path)), ...result }
+        const path = await this.resolvePath(result.path)
+        this.history.clear(path)
+
+        return {
+          ...this.view(path, await this.repository.load(path)),
+          ...result,
+          path,
+        }
       } catch {
         throw new EditorError(
           500,
@@ -417,11 +428,11 @@ export class EditorProjectService {
     const parsed = historyRequestSchema.safeParse(input)
 
     if (!parsed.success) throw new EditorError(400, 'invalid_request', 'Invalid undo/redo request')
-    const { path, expectedRevision, direction } = parsed.data
 
     return this.coordinator.run(async () => {
       if (!this.repository.restoreHistoryFiles)
         throw new EditorError(503, 'unsupported_history', 'Undo and redo are unavailable')
+      const { path, expectedRevision, direction } = await this.resolveRequest(parsed.data)
       const current = await this.repository.load(path)
       this.history.status(path, current.revision)
 
@@ -457,6 +468,14 @@ export class EditorProjectService {
 
   private view(path: string, project: ProjectSnapshot): ProjectView {
     return { ...inspectProject(project), history: this.history.status(path, project.revision) }
+  }
+
+  private resolvePath(path: string): Promise<string> {
+    return this.repository.resolvePath?.(path) ?? Promise.resolve(path)
+  }
+
+  private async resolveRequest<T extends { path: string }>(request: T) {
+    return { ...request, path: await this.resolvePath(request.path) }
   }
 
   private capture(path: string, files: readonly string[]) {
@@ -523,9 +542,8 @@ export class EditorProjectService {
       throw new EditorError(400, 'invalid_request', 'Invalid editing request', diagnostics)
     }
 
-    const request = parsed.data
-
     return this.coordinator.run(async () => {
+      const request = await this.resolveRequest(parsed.data)
       const current = await this.repository.load(request.path)
 
       if (current.revision !== request.expectedRevision) {
@@ -568,9 +586,9 @@ export class EditorProjectService {
 
     if (!parsed.success)
       throw new EditorError(400, 'invalid_request', 'Invalid asset import metadata')
-    const request = parsed.data
 
     return this.coordinator.run(async () => {
+      const request = await this.resolveRequest(parsed.data)
       const current = await this.repository.load(request.path)
 
       if (current.revision !== request.expectedRevision)

@@ -44,6 +44,7 @@ import { readProjectArchive, writeProjectArchive } from './projectArchive.js'
 import { ProjectArchiveWorkspace } from './projectArchiveWorkspace.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
+  canonicalDirectoryPath?(path: string): Promise<string>
   createDirectory?(path: string): Promise<void>
   removeDirectory?(path: string): Promise<void>
   moveDirectory?(from: string, to: string): Promise<void>
@@ -52,6 +53,8 @@ export interface ProjectWorkspace extends WorkspaceService {
 }
 
 export interface EditorProjectRepository {
+  /** Canonical workspace-relative path for existing project directories. */
+  resolvePath?(folder: string): Promise<string>
   previewRepair?(folder: string, file: string, text: string): Promise<ProjectSnapshot>
   readHistoryFiles?(
     folder: string,
@@ -91,6 +94,10 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       (path) => this.load(path),
       this.storage,
     )
+  }
+
+  resolvePath(folder: string): Promise<string> {
+    return this.workspace.canonicalDirectoryPath?.(folder) ?? Promise.resolve(folder)
   }
 
   rename(request: RenameProjectRequest): Promise<string> {

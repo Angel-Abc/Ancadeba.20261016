@@ -13,7 +13,7 @@ import {
   rm,
   rmdir,
 } from 'node:fs/promises'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { WorkspaceListing } from '@ancadeba/schemas'
 import { isPortablePathSegment } from '@ancadeba/editor-core'
@@ -225,6 +225,15 @@ export class FileWorkspace implements WorkspaceService {
     }
 
     return target
+  }
+
+  /** Preserve actual directory casing so aliases share identity only when the filesystem does. */
+  async canonicalDirectoryPath(path: string): Promise<string> {
+    const target = await this.resolveDirectory(path)
+
+    return relative(this.root, await realpath(target))
+      .split(sep)
+      .join('/')
   }
 
   async create(path: string, contents: Uint8Array): Promise<void> {

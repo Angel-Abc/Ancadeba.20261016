@@ -15,7 +15,8 @@ export async function prepareProjectRepair(repository: EditorProjectRepository, 
 
   if (!repository.previewRepair || !repository.readHistoryFiles || !repository.restoreHistoryFiles)
     throw new EditorError(503, 'unsupported_repair', 'Project repair is unavailable')
-  const current = await repository.load(request.path)
+  const path = (await repository.resolvePath?.(request.path)) ?? request.path
+  const current = await repository.load(path)
 
   if (current.revision !== request.expectedRevision)
     throw new EditorError(
@@ -45,7 +46,7 @@ export async function prepareProjectRepair(repository: EditorProjectRepository, 
     }
   }
 
-  const candidate = await repository.previewRepair(request.path, request.file, request.text)
+  const candidate = await repository.previewRepair(path, request.file, request.text)
 
-  return { request, current, candidate }
+  return { request: { ...request, path }, current, candidate }
 }

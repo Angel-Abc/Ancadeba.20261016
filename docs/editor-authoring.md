@@ -463,7 +463,9 @@ the explorer, editing fields, and preview; if the selected entry disappears, the
 editor selects an available scene.
 
 History is shared by clients of the same editor server, kept separately per project,
-and retained while opening another project or reloading the page. It is held in
+and retained while opening another project or reloading the page. Filesystem-backed
+projects use canonical directory paths, so casing aliases share the same history
+while distinct directories on case-sensitive filesystems stay separate. It is held in
 memory for the server session, with at most 50 steps per project and a 64 MiB total
 file-content budget; older history is evicted when necessary. Restarting the server
 clears it. External changes to referenced files clear a project's history. Revision
