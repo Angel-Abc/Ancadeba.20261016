@@ -1,9 +1,11 @@
-import { inflateRawSync } from 'node:zlib'
+import { crc32, inflateRaw } from 'node:zlib'
 import { Readable } from 'node:stream'
+import { promisify } from 'node:util'
 import { ZipFile } from 'yazl'
 import {
   EditorError,
   projectArchivePathSchema,
+  isProjectArchiveClutter,
   maxProjectArchiveBytes,
   maxProjectUnpackedBytes,
   maxProjectArchiveEntries,
@@ -18,21 +20,8 @@ const tooLarge = () =>
     'Project ZIPs support at most 128 MiB compressed, 128 MiB unpacked, and 10000 entries',
   )
 
-const crcTable = Uint32Array.from({ length: 256 }, (_, index) => {
-  let value = index
-
-  for (let bit = 0; bit < 8; bit++) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
-
-  return value >>> 0
-})
-
-function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff
-
-  for (const byte of bytes) crc = crcTable[(crc ^ byte) & 255]! ^ (crc >>> 8)
-
-  return (crc ^ 0xffffffff) >>> 0
-}
+// Inflation runs on the thread pool, so large imports do not stall other editor requests.
+const inflate = promisify(inflateRaw)
 
 /** Also protects Windows/case-insensitive destinations and implicit parent directories. */
 function claimPath(
@@ -56,7 +45,7 @@ function claimPath(
 }
 
 /** ZIP32 stored/deflated entries only. No extraction occurs until every entry is validated. */
-export function readProjectArchive(archive: Uint8Array): Record<string, Uint8Array> {
+export async function readProjectArchive(archive: Uint8Array): Promise<Record<string, Uint8Array>> {
   if (archive.byteLength > maxProjectArchiveBytes) throw tooLarge()
   const data = Buffer.from(archive.buffer, archive.byteOffset, archive.byteLength)
   let end = -1
@@ -141,6 +130,12 @@ export function readProjectArchive(archive: Uint8Array): Record<string, Uint8Arr
       throw invalid('Inconsistent ZIP entry type')
     const path = directory ? name.slice(0, -1) : name
 
+    // Operating-system clutter is skipped without being extracted, like export omits it.
+    if (isProjectArchiveClutter(path)) {
+      offset = next
+      continue
+    }
+
     if (names.has(path.toLowerCase())) throw invalid(`Duplicate archive entry: ${path}`)
     names.add(path.toLowerCase())
     claimPath(paths, path, directory)
@@ -199,7 +194,7 @@ export function readProjectArchive(archive: Uint8Array): Record<string, Uint8Arr
       contents =
         method === 0
           ? data.subarray(start, stop)
-          : inflateRawSync(data.subarray(start, stop), {
+          : await inflate(data.subarray(start, stop), {
               maxOutputLength: Math.max(1, originalSize),
             })
     } catch {
@@ -257,7 +252,9 @@ export async function writeProjectArchive(
 
   if (paths.size > maxProjectArchiveEntries || unpacked > maxProjectUnpackedBytes) throw tooLarge()
 
-  for (const [name, bytes] of entries) zip.addBuffer(Buffer.from(bytes), name)
+  // A view avoids copying every file; the ZIP writer only reads these bytes.
+  for (const [name, bytes] of entries)
+    zip.addBuffer(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength), name)
   zip.end()
   const chunks: Buffer[] = []
   let size = 0

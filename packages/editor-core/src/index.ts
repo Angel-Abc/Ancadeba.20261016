@@ -14,6 +14,8 @@ export * from './projectCreation.js'
 
 export * from './projectDuplication.js'
 
+export * from './portablePaths.js'
+
 export * from './projectManagement.js'
 
 export * from './projectTransfer.js'

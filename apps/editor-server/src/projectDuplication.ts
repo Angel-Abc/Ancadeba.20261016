@@ -1,27 +1,22 @@
 import {
   EditorError,
+  isPrivateProjectEntry,
   maxDuplicateProjectBytes,
   maxDuplicateProjectFiles,
 } from '@ancadeba/editor-core'
 import type { WorkspaceService } from './workspace.js'
 
-const excludedNames = new Set([
-  '.git',
-  '.hg',
-  '.svn',
-  '.codex',
-  '.agents',
-  'node_modules',
-  '.ds_store',
-  'thumbs.db',
-])
-
-/** Read only this game's regular files; nested games and workspace metadata stay separate. */
+/**
+ * Read only this game's regular files; nested games and workspace metadata stay separate.
+ * A game.json that the project itself references is a document, not a nested game.
+ */
 export async function readProjectCopyFiles(
   workspace: Pick<WorkspaceService, 'list' | 'read'>,
   folder: string,
-  referencedFiles: ReadonlySet<string> = new Set(),
+  referencedFiles: ReadonlySet<string>,
 ): Promise<Record<string, Uint8Array>> {
+  // Nested-game detection ignores case, so its exemption must as well.
+  const referenced = new Set([...referencedFiles].map((file) => file.toLowerCase()))
   const files = new Map<string, Uint8Array>()
   const pending = ['']
   let bytes = 0
@@ -33,29 +28,20 @@ export async function readProjectCopyFiles(
 
     if (
       directory &&
-      !referencedFiles.has(`${directory}/game.json`) &&
+      !referenced.has(`${directory}/game.json`.toLowerCase()) &&
       entries.some((entry) => entry.type === 'file' && entry.name.toLowerCase() === 'game.json')
     )
       continue
 
     for (const entry of entries) {
-      const name = entry.name.toLowerCase()
-
-      if (
-        excludedNames.has(name) ||
-        name === '.env' ||
-        name.startsWith('.env.') ||
-        name.startsWith('.ancadeba-') ||
-        name.startsWith('.game-export-')
-      )
-        continue
+      if (isPrivateProjectEntry(entry.name)) continue
       const file = [directory, entry.name].filter(Boolean).join('/')
 
       if (++count > maxDuplicateProjectFiles)
         throw new EditorError(
           413,
           'project_too_large',
-          'Project duplication supports at most 10000 files and directories',
+          'Project duplication and export support at most 10000 files and directories',
         )
 
       if (entry.type === 'directory') {
@@ -70,7 +56,7 @@ export async function readProjectCopyFiles(
         throw new EditorError(
           413,
           'project_too_large',
-          'Project duplication supports at most 128 MiB',
+          'Project duplication and export support at most 128 MiB',
         )
       files.set(file, contents)
     }

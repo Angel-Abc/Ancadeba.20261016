@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createProjectRequestSchema } from './projectCreation.js'
 import { projectViewSchema } from './protocol.js'
+import { isPortablePathSegment } from './portablePaths.js'
 
 export const projectRegistryFile = '.ancadeba-projects.json'
 export const projectTrashDirectory = '.ancadeba-trash'
@@ -15,15 +16,9 @@ export const managedProjectPathSchema = z
         .split('/')
         .every(
           (part) =>
-            Boolean(part) &&
             !part.startsWith('.') &&
             part.toLowerCase() !== 'node_modules' &&
-            !/[<>:"\\|?*]/.test(part) &&
-            !/[. ]$/.test(part) &&
-            part.split('').every((character) => character.charCodeAt(0) >= 32) &&
-            !/^(con|prn|aux|nul|conin\$|conout\$|clock\$|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(
-              part,
-            ),
+            isPortablePathSegment(part),
         ),
     'Choose a non-root project folder within the workspace',
   )

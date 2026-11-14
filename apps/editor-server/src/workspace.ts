@@ -14,6 +14,7 @@ import {
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { WorkspaceListing } from '@ancadeba/schemas'
+import { isPortablePathSegment } from '@ancadeba/editor-core'
 
 export class WorkspaceError extends Error {
   constructor(
@@ -100,17 +101,7 @@ export class FileWorkspace implements WorkspaceService {
       throw new WorkspaceError(403, 'Path is outside the workspace')
     }
 
-    if (
-      parts.some(
-        (part) =>
-          !part ||
-          part === '.' ||
-          /[<>:"|?*]/.test(part) ||
-          part.split('').some((character) => character.charCodeAt(0) < 32) ||
-          /[. ]$/.test(part) ||
-          /^(con|prn|aux|nul|conin\$|conout\$|clock\$|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(part),
-      )
-    ) {
+    if (parts.some((part) => !isPortablePathSegment(part))) {
       throw new WorkspaceError(400, 'Invalid workspace path')
     }
 

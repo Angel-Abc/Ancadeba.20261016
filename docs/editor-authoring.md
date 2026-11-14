@@ -363,6 +363,9 @@ including implicit parents. Paths must be portable to Windows and use UTF-8 or
 ASCII filenames. Stored and deflated ZIP32 entries are supported. Unsafe paths,
 case conflicts, duplicate entries, file/directory conflicts, links, encryption,
 ZIP64, checksum failures, private workspace paths and nested games are rejected.
+Operating-system clutter in hand-made ZIPs (`__MACOSX` folders, `.DS_Store` and
+`Thumbs.db` files) is skipped. Export requires file names to match their references
+exactly, including capitalization, and names the files that differ.
 Playable engine archives are not editable project archives. Failed publication
 rolls back unchanged owned files; outside changes are preserved and may require
 inspection after an uncertain result. Avoid outside filesystem edits during transfer.

@@ -25,7 +25,6 @@ import {
   type ProjectRepairCheck,
   projectImportRequestSchema,
   projectExportRequestSchema,
-  maxProjectArchiveBytes,
 } from '@ancadeba/editor-core'
 import { gameIdSchema, gameSchema, assetCatalogSchema, assetCatalogFile } from '@ancadeba/schemas'
 import { inspectImageSource } from '@ancadeba/game-runtime'
@@ -110,13 +109,6 @@ export class EditorProjectService {
         400,
         'invalid_request',
         'Choose an unused single-folder import destination',
-      )
-
-    if (archive.length > maxProjectArchiveBytes)
-      throw new EditorError(
-        413,
-        'project_archive_too_large',
-        'Project ZIPs support at most 128 MiB',
       )
 
     return this.coordinator.run(async () => {

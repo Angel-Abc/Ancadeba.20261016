@@ -37,7 +37,7 @@ function alterEntry(
   return bytes
 }
 
-describe('bounded project ZIP codec', () => {
+describe('bounded project ZIP codec', async () => {
   it('reads stored, deflated, UTF-8, empty and single-wrapper files', async () => {
     const files = {
       'game.json': strToU8('{}'),
@@ -58,12 +58,31 @@ describe('bounded project ZIP codec', () => {
     ]
 
     for (const archive of archives) {
-      const decoded = readProjectArchive(archive)
+      const decoded = await readProjectArchive(archive)
       expect(Object.keys(decoded).sort()).toEqual(Object.keys(files).sort())
 
       for (const [path, bytes] of Object.entries(files))
         expect(Buffer.from(decoded[path]!)).toEqual(Buffer.from(bytes))
     }
+  })
+  it('skips Finder and Explorer clutter around a hand-zipped project folder', async () => {
+    const clutter = strToU8('clutter')
+
+    const decoded = await readProjectArchive(
+      packed({
+        'My Game/game.json': strToU8('{}'),
+        'My Game/.DS_Store': clutter,
+        'My Game/assets/Thumbs.db': clutter,
+        'My Game/assets/hero.png': strToU8('image'),
+        '__MACOSX/My Game/._game.json': clutter,
+        '__MACOSX/My Game/assets/._hero.png': clutter,
+      }),
+    )
+
+    expect(Object.keys(decoded).sort()).toEqual(['assets/hero.png', 'game.json'])
+    await expect(readProjectArchive(packed({ '__MACOSX/._game.json': clutter }))).rejects.toThrow(
+      'Place game.json',
+    )
   })
   it.each([
     '../escape',
@@ -83,35 +102,35 @@ describe('bounded project ZIP codec', () => {
     'node_modules/file',
     '.ancadeba-projects.json',
     '.ancadeba-trash/file',
-  ])('rejects unsafe or private path %j', (path) => {
-    expect(() =>
+  ])('rejects unsafe or private path %j', async (path) => {
+    await expect(
       readProjectArchive(packed({ 'game.json': strToU8('{}'), [path]: strToU8('unsafe') })),
-    ).toThrow()
+    ).rejects.toThrow()
   })
   it.each([
     ['A.txt', 'a.txt'],
     ['folder', 'folder/file'],
     ['Assets/a.txt', 'assets/b.txt'],
     ['game.json', 'game.json/child'],
-  ])('rejects conflicting paths %s and %s', (first, second) => {
-    expect(() =>
+  ])('rejects conflicting paths %s and %s', async (first, second) => {
+    await expect(
       readProjectArchive(
         packed({ [first]: strToU8('a'), [second]: strToU8('b'), 'game.json': strToU8('{}') }),
       ),
-    ).toThrow()
+    ).rejects.toThrow()
   })
-  it('rejects incomplete, empty, multi-root and playable-game archives', () => {
+  it('rejects incomplete, empty, multi-root and playable-game archives', async () => {
     for (const bytes of [
       strToU8('not zip'),
       packed({}),
       packed({ 'one/a': strToU8('a'), 'two/game.json': strToU8('{}') }),
       packed({ 'index.html': strToU8('engine'), 'game/game.json': strToU8('{}') }),
     ])
-      expect(() => readProjectArchive(bytes)).toThrow()
+      await expect(readProjectArchive(bytes)).rejects.toThrow()
     const zip = packed({ 'game.json': strToU8('{}') })
-    expect(() => readProjectArchive(zip.slice(0, -1))).toThrow()
+    await expect(readProjectArchive(zip.slice(0, -1))).rejects.toThrow()
   })
-  it('rejects symlinks, encryption, split archives and unsupported methods', () => {
+  it('rejects symlinks, encryption, split archives and unsupported methods', async () => {
     const zip = packed({ 'game.json': strToU8('{}') })
 
     const patches = [
@@ -122,25 +141,26 @@ describe('bounded project ZIP codec', () => {
       (bytes: Buffer, central: number) => bytes.writeUInt32LE(0xffffffff, central + 42),
     ]
 
-    for (const patch of patches) expect(() => readProjectArchive(alterEntry(zip, patch))).toThrow()
+    for (const patch of patches)
+      await expect(readProjectArchive(alterEntry(zip, patch))).rejects.toThrow()
   })
-  it('rejects CRC failures, mismatched names, duplicate entries and invalid UTF-8', () => {
+  it('rejects CRC failures, mismatched names, duplicate entries and invalid UTF-8', async () => {
     const zip = packed({ 'game.json': strToU8('{}') })
-    expect(() =>
+    await expect(
       readProjectArchive(
         alterEntry(zip, (bytes, _central, local) => {
           bytes[local + 30 + 9] = 1
         }),
       ),
-    ).toThrow()
-    expect(() =>
+    ).rejects.toThrow()
+    await expect(
       readProjectArchive(
         alterEntry(zip, (bytes, central) => {
           bytes[central + 46] = 120
         }),
       ),
-    ).toThrow()
-    expect(() =>
+    ).rejects.toThrow()
+    await expect(
       readProjectArchive(
         alterEntry(zip, (bytes, central, local) => {
           bytes.writeUInt16LE(0x800, central + 8)
@@ -149,7 +169,7 @@ describe('bounded project ZIP codec', () => {
           bytes[local + 30] = 255
         }),
       ),
-    ).toThrow('Use UTF-8')
+    ).rejects.toThrow('Use UTF-8')
     const twice = packed({ 'game.json': strToU8('{}'), 'same.json': strToU8('{}') })
     const bytes = Buffer.from(twice)
 
@@ -161,32 +181,32 @@ describe('bounded project ZIP codec', () => {
     const local = bytes.readUInt32LE(second + 42)
     Buffer.from('game.json').copy(bytes, second + 46)
     Buffer.from('game.json').copy(bytes, local + 30)
-    expect(() => readProjectArchive(bytes)).toThrow('Duplicate archive entry')
+    await expect(readProjectArchive(bytes)).rejects.toThrow('Duplicate archive entry')
   })
-  it('bounds declared expansion, entry counts and dishonest compressed streams', () => {
+  it('bounds declared expansion, entry counts and dishonest compressed streams', async () => {
     const zip = packed({ 'game.json': strToU8('{}') })
-    expect(() =>
+    await expect(
       readProjectArchive(
         alterEntry(zip, (bytes, central) =>
           bytes.writeUInt32LE(maxProjectUnpackedBytes + 1, central + 24),
         ),
       ),
-    ).toThrow('128 MiB')
+    ).rejects.toThrow('128 MiB')
     const count = Buffer.from(zip)
     count.writeUInt16LE(maxProjectArchiveEntries + 1, count.length - 14)
     count.writeUInt16LE(maxProjectArchiveEntries + 1, count.length - 12)
-    expect(() => readProjectArchive(count)).toThrow('10000')
+    await expect(readProjectArchive(count)).rejects.toThrow('10000')
     const bomb = zipSync({ 'game.json': new Uint8Array(65536) }, { level: 9 })
-    expect(() =>
+    await expect(
       readProjectArchive(
         alterEntry(bomb, (bytes, central, local) => {
           bytes.writeUInt32LE(1, central + 24)
           bytes.writeUInt32LE(1, local + 22)
         }),
       ),
-    ).toThrow('oversized compressed entry')
+    ).rejects.toThrow('oversized compressed entry')
   })
-  it('reads streaming ZIPs and rejects damaged streaming descriptors', () => {
+  it('reads streaming ZIPs and rejects damaged streaming descriptors', async () => {
     const chunks: Uint8Array[] = []
 
     const zip = new Zip((error, data) => {
@@ -199,12 +219,12 @@ describe('bounded project ZIP codec', () => {
     file.push(strToU8('{}'), true)
     zip.end()
     const streamed = Buffer.concat(chunks)
-    expect(strFromU8(readProjectArchive(streamed)['game.json']!)).toBe('{}')
+    expect(strFromU8((await readProjectArchive(streamed))['game.json']!)).toBe('{}')
     const descriptor = streamed.indexOf(Buffer.from([0x50, 0x4b, 0x07, 0x08]))
 
     if (descriptor < 0) throw new Error('Expected ZIP streaming descriptor')
     streamed[descriptor + 4] = streamed[descriptor + 4]! ^ 1
-    expect(() => readProjectArchive(streamed)).toThrow('data descriptor')
+    await expect(readProjectArchive(streamed)).rejects.toThrow('data descriptor')
   })
 })
 
@@ -291,20 +311,42 @@ describe('project source import and export', () => {
       Object.keys(files).some((path) => path.startsWith('.') || path.startsWith('node_modules')),
     ).toBe(false)
   })
-  it('keeps referenced scene files named game.json', async () => {
+
+  const addScene = async (id: string, fileName = id) => {
     const original = JSON.parse(await readFile(join(root, 'source/game.json'), 'utf8'))
     const sceneName = original.scenes[0]
     const scene = JSON.parse(await readFile(join(root, `source/scenes/${sceneName}.json`), 'utf8'))
-    await writeFile(join(root, 'source/scenes/game.json'), JSON.stringify({ ...scene, id: 'game' }))
+    await writeFile(join(root, `source/scenes/${fileName}.json`), JSON.stringify({ ...scene, id }))
     await writeFile(
       join(root, 'source/game.json'),
-      JSON.stringify({ ...original, scenes: [...original.scenes, 'game'] }),
+      JSON.stringify({ ...original, scenes: [...original.scenes, id] }),
     )
+  }
+
+  it.each(['game', 'Game'])('keeps referenced scene files named %s.json', async (id) => {
+    await addScene(id)
     const archive = await exportSource()
-    expect(unzipSync(archive.bytes)).toHaveProperty('scenes/game.json')
+    expect(unzipSync(archive.bytes)).toHaveProperty(`scenes/${id}.json`)
     expect(
       (await service.importProject({ destination: 'copy' }, archive.bytes)).diagnostics,
     ).toEqual([])
+  })
+  it('names files whose capitalization differs from their references instead of exporting', async () => {
+    await addScene('Extra', 'extra')
+
+    // Case-insensitive disks resolve the reference; simulate that on every platform.
+    const insensitive = createService({
+      read: (path) => workspace.read(path.replace('scenes/Extra.json', 'scenes/extra.json')),
+    })
+
+    const { revision, diagnostics } = await insensitive.inspect('source')
+    expect(diagnostics).toEqual([])
+    await expect(
+      insensitive.exportProject({ path: 'source', expectedRevision: revision }),
+    ).rejects.toMatchObject({
+      code: 'invalid_project',
+      message: expect.stringContaining('scenes/Extra.json is saved as scenes/extra.json'),
+    })
   })
   it('preserves IDs while assigning independent preview-save storage after name reuse', async () => {
     const original = await service.inspect('source')
@@ -323,7 +365,7 @@ describe('project source import and export', () => {
     expect(unzipSync(archive.bytes)).not.toHaveProperty(projectRegistryFile)
   })
   it('accepts a single containing folder and rejects nested projects', async () => {
-    const source = readProjectArchive((await exportSource()).bytes)
+    const source = await readProjectArchive((await exportSource()).bytes)
 
     const wrapped = packed(
       Object.fromEntries(Object.entries(source).map(([path, bytes]) => [`Folder/${path}`, bytes])),
@@ -351,12 +393,16 @@ describe('project source import and export', () => {
     await expect(
       service.importProject({ destination: 'occupied' }, archive.bytes),
     ).rejects.toMatchObject({ code: 'project_exists' })
+    // The occupied folder is reported before the archive itself is examined.
+    await expect(
+      service.importProject({ destination: 'occupied' }, strToU8('not zip')),
+    ).rejects.toMatchObject({ code: 'project_exists' })
     expect(await readdir(join(root, 'occupied'))).toEqual([])
 
     for (const bytes of [
       packed({ 'game.json': strToU8('{ invalid') }),
       packed({ 'game.json': strToU8('{}') }),
-      packed({ 'game.json': readProjectArchive(archive.bytes)['game.json']! }),
+      packed({ 'game.json': (await readProjectArchive(archive.bytes))['game.json']! }),
     ])
       await expect(service.importProject({ destination: 'invalid' }, bytes)).rejects.toMatchObject({
         code: 'invalid_project',

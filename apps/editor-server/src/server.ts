@@ -36,16 +36,18 @@ function json(response: ServerResponse, status: number, value: unknown) {
   response.end(JSON.stringify(value))
 }
 
-function readBody(request: IncomingMessage, limit = maxWriteBytes): Promise<Uint8Array> {
-  const limitMessage =
-    limit === maxWriteBytes
-      ? 'File exceeds the 10 MiB write limit'
-      : 'Project ZIP exceeds the 128 MiB upload limit'
+const writeLimit = { bytes: maxWriteBytes, message: 'File exceeds the 10 MiB write limit' }
 
+const projectArchiveLimit = {
+  bytes: maxProjectArchiveBytes,
+  message: 'Project ZIP exceeds the 128 MiB upload limit',
+}
+
+function readBody(request: IncomingMessage, limit = writeLimit): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    if (Number(request.headers['content-length']) > limit) {
+    if (Number(request.headers['content-length']) > limit.bytes) {
       request.resume()
-      reject(new WorkspaceError(413, limitMessage))
+      reject(new WorkspaceError(413, limit.message))
 
       return
     }
@@ -56,10 +58,10 @@ function readBody(request: IncomingMessage, limit = maxWriteBytes): Promise<Uint
     const onData = (chunk: Buffer) => {
       size += chunk.length
 
-      if (size > limit) {
+      if (size > limit.bytes) {
         chunks.length = 0
         request.off('data', onData)
-        reject(new WorkspaceError(413, limitMessage))
+        reject(new WorkspaceError(413, limit.message))
         request.resume()
 
         return
@@ -159,7 +161,7 @@ export function createEditorServer(
       if (request.method === 'POST' && url.pathname === '/api/editor/projects/import') {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/zip')
           throw new WorkspaceError(415, 'Project imports require application/zip')
-        const archive = await readBody(request, maxProjectArchiveBytes)
+        const archive = await readBody(request, projectArchiveLimit)
         json(
           response,
           201,

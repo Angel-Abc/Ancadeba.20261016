@@ -28,7 +28,11 @@ import {
   type ProjectImportRequest,
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
-import { createWorkspaceProject, createWorkspaceProjectFiles } from './projectCreation.js'
+import {
+  createWorkspaceProject,
+  createWorkspaceProjectFiles,
+  requireUnusedProjectFolder,
+} from './projectCreation.js'
 import { readProjectCopyFiles } from './projectDuplication.js'
 import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
@@ -124,7 +128,14 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   }
 
   async duplicate(request: DuplicateProjectRequest): Promise<void> {
-    const files = await readProjectCopyFiles(this.workspace, request.path)
+    const referenced = await this.load(request.path)
+
+    const files = await readProjectCopyFiles(
+      this.workspace,
+      request.path,
+      new Set(Object.keys(referenced.documents)),
+    )
+
     let source: unknown
 
     try {
@@ -168,6 +179,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
   private async archiveSnapshot(
     files: Readonly<Record<string, Uint8Array>>,
+    describeFailure: (diagnostics: readonly Diagnostic[]) => string,
   ): Promise<ProjectSnapshot> {
     const snapshot = await new WorkspaceProjectRepository(new ProjectArchiveWorkspace(files)).load(
       '',
@@ -176,19 +188,20 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     const diagnostics = validateProject(snapshot.documents, snapshot.sourceDiagnostics)
 
     if (diagnostics.length)
-      throw new EditorError(
-        422,
-        'invalid_project',
-        'The ZIP must contain a complete editable game project',
-        diagnostics,
-      )
+      throw new EditorError(422, 'invalid_project', describeFailure(diagnostics), diagnostics)
 
     return snapshot
   }
 
   async importProject(request: ProjectImportRequest, archive: Uint8Array): Promise<void> {
-    const files = readProjectArchive(archive)
-    const snapshot = await this.archiveSnapshot(files)
+    // An occupied folder is reported before the archive is unpacked and validated.
+    await requireUnusedProjectFolder(this.workspace, request.destination)
+    const files = await readProjectArchive(archive)
+
+    const snapshot = await this.archiveSnapshot(
+      files,
+      () => 'The ZIP must contain a complete editable game project',
+    )
 
     // A second game manifest belongs in a separate project, rather than inside this import.
     for (const path of Object.keys(files)) {
@@ -227,10 +240,25 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
       new Set(Object.keys(source.documents)),
     )
 
-    const captured = await this.archiveSnapshot(files)
-    const current = await this.load(folder)
+    // Archives are case-sensitive; a case-insensitive disk can hide mismatched references.
+    const captured = await this.archiveSnapshot(files, (diagnostics) => {
+      const saved = new Map(Object.keys(files).map((file) => [file.toLowerCase(), file]))
 
-    if (captured.revision !== source.revision || current.revision !== source.revision)
+      const mismatches = new Set(
+        diagnostics.flatMap(({ file }) => {
+          const actual = saved.get(file.toLowerCase())
+
+          return actual && actual !== file ? [`${file} is saved as ${actual}`] : []
+        }),
+      )
+
+      return mismatches.size
+        ? `Project ZIPs need file names that match their references exactly, including capitalization: ${[...mismatches].join('; ')}`
+        : 'The saved files do not form a complete project that can be exported'
+    })
+
+    // The revision covers every authored file, so matching it proves these bytes are current.
+    if (captured.revision !== source.revision)
       throw new EditorError(
         409,
         'revision_conflict',

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createProjectRequestSchema } from './projectCreation.js'
 import { managedProjectPathSchema } from './projectManagement.js'
+import { isPortablePathSegment, isPrivateProjectEntry } from './portablePaths.js'
 
 export const maxProjectArchiveBytes = 128 * 1024 * 1024
 export const maxProjectUnpackedBytes = 128 * 1024 * 1024
@@ -15,16 +16,12 @@ export const projectExportRequestSchema = z.strictObject({
   expectedRevision: z.string().min(1),
 })
 
-const excludedNames = new Set([
-  '.git',
-  '.hg',
-  '.svn',
-  '.codex',
-  '.agents',
-  'node_modules',
-  '.ds_store',
-  'thumbs.db',
-])
+/** Finder and Explorer add these to hand-made ZIPs; importers skip them as non-project files. */
+export function isProjectArchiveClutter(path: string): boolean {
+  const parts = path.toLowerCase().split('/')
+
+  return parts[0] === '__macosx' || ['.ds_store', 'thumbs.db'].includes(parts.at(-1) ?? '')
+}
 
 /** Portable regular-file paths; private workspace state and local secrets never travel. */
 export const projectArchivePathSchema = z
@@ -33,27 +30,12 @@ export const projectArchivePathSchema = z
   .max(1024)
   .refine(
     (path) =>
-      path.split('/').every((part) => {
-        const name = part.toLowerCase()
-
-        return (
-          part.length > 0 &&
-          part.length <= 255 &&
-          part !== '.' &&
-          part !== '..' &&
-          !/[<>:"\\|?*]/.test(part) &&
-          !/[. ]$/.test(part) &&
-          part.split('').every((character) => character.charCodeAt(0) >= 32) &&
-          !/^(con|prn|aux|nul|conin\$|conout\$|clock\$|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(
-            part,
-          ) &&
-          !excludedNames.has(name) &&
-          name !== '.env' &&
-          !name.startsWith('.env.') &&
-          !name.startsWith('.ancadeba-') &&
-          !name.startsWith('.game-export-')
-        )
-      }),
+      path
+        .split('/')
+        .every(
+          (part) =>
+            part.length <= 255 && isPortablePathSegment(part) && !isPrivateProjectEntry(part),
+        ),
     'Archive contains an unsafe, private, or unsupported path',
   )
 

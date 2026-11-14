@@ -2,6 +2,28 @@ import { EditorError, type ProjectDocuments } from '@ancadeba/editor-core'
 import type { ProjectWorkspace } from './editorProjectRepository.js'
 import { workspaceError } from './workspace.js'
 
+const projectExists = () =>
+  new EditorError(409, 'project_exists', 'Choose a new folder; this destination already exists')
+
+/** Fails fast for an occupied destination; creation still reserves the folder exclusively. */
+export async function requireUnusedProjectFolder(
+  workspace: Pick<ProjectWorkspace, 'list'>,
+  folder: string,
+): Promise<void> {
+  try {
+    await workspace.list(folder)
+  } catch (error) {
+    const { status } = workspaceError(error)
+
+    if (status === 404) return
+
+    // A file with that name is a conflict too; anything else is a real failure.
+    if (status !== 409) throw error
+  }
+
+  throw projectExists()
+}
+
 /** Publishes the manifest last and rolls back only unchanged files in our new directory. */
 export async function createWorkspaceProject(
   workspace: ProjectWorkspace,
@@ -51,12 +73,7 @@ export async function createWorkspaceProjectFiles(
     // Exclusive reservation also protects existing empty folders and concurrent creators.
     await workspace.createDirectory(folder)
   } catch (error) {
-    if (workspaceError(error).status === 409)
-      throw new EditorError(
-        409,
-        'project_exists',
-        'Choose a new folder; this destination already exists',
-      )
+    if (workspaceError(error).status === 409) throw projectExists()
     throw error
   }
 

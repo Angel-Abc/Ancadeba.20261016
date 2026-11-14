@@ -365,8 +365,13 @@ describe('project duplication', () => {
           read: async () => new Uint8Array(maxDuplicateProjectBytes + 1),
         },
         'source',
+        new Set(),
       ),
-    ).rejects.toMatchObject({ status: 413, code: 'project_too_large' })
+    ).rejects.toMatchObject({
+      status: 413,
+      code: 'project_too_large',
+      message: 'Project duplication and export support at most 128 MiB',
+    })
     await expect(
       readProjectCopyFiles(
         {
@@ -379,7 +384,26 @@ describe('project duplication', () => {
           read: async () => new Uint8Array(),
         },
         'source',
+        new Set(),
       ),
     ).rejects.toMatchObject({ status: 413, code: 'project_too_large' })
+  })
+
+  it('copies a directory whose referenced document is named game.json', async () => {
+    const original = JSON.parse(await readFile(join(root, 'source/game.json'), 'utf8'))
+
+    const scene = JSON.parse(
+      await readFile(join(root, `source/scenes/${original.scenes[0]}.json`), 'utf8'),
+    )
+
+    await writeFile(join(root, 'source/scenes/game.json'), JSON.stringify({ ...scene, id: 'game' }))
+    await writeFile(
+      join(root, 'source/game.json'),
+      JSON.stringify({ ...original, scenes: [...original.scenes, 'game'] }),
+    )
+    expect((await service.duplicate(await request())).diagnostics).toEqual([])
+    expect(await readFile(join(root, 'copy/scenes/game.json'), 'utf8')).toBe(
+      await readFile(join(root, 'source/scenes/game.json'), 'utf8'),
+    )
   })
 })
