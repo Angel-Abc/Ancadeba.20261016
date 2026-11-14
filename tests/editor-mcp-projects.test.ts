@@ -6,7 +6,13 @@ const config = { editorServerUrl: 'http://127.0.0.1:3100', game: 'My Games/bound
 
 const available = {
   ...capabilities,
-  features: { projectDiscovery: true, projectCreation: true, projectDuplication: true },
+  features: {
+    projectDiscovery: true,
+    projectCreation: true,
+    projectDuplication: true,
+    projectImport: true,
+    projectExport: true,
+  },
 }
 
 const view = { revision: 'created', game: null, scenes: [], diagnostics: [] }
@@ -18,6 +24,78 @@ const requestUrl = (url: Parameters<typeof fetch>[0]) =>
 const input = { path: 'new-game', title: 'New game', description: '' }
 
 describe('MCP project discovery and creation HTTP operations', () => {
+  it('uploads raw project ZIP bytes to a validated unused folder without changing the active binding', async () => {
+    const calls: { url: string; body?: unknown }[] = []
+
+    const client = new EditorApiClient(config, async (url, init) => {
+      if (requestUrl(url).endsWith('capabilities')) return json(available)
+      calls.push({ url: requestUrl(url), body: init?.body })
+
+      return json(view)
+    })
+
+    const bytes = Buffer.from([80, 75, 3, 4])
+    expect(
+      await client.importProject({
+        destination: 'new-folder',
+        dataBase64: bytes.toString('base64'),
+      }),
+    ).toEqual(view)
+    await client.inspectGame()
+    expect(calls[0]!.url).toBe(
+      config.editorServerUrl + '/api/editor/projects/import?destination=new-folder',
+    )
+    expect(calls[0]!.body).toEqual(new Uint8Array(bytes).buffer)
+    expect(calls[1]!.url).toContain('path=My+Games%2Fbound')
+  })
+  it('downloads source ZIPs with the captured project revision and returns bounded archive bytes', async () => {
+    const client = new EditorApiClient(config, async (url, init) => {
+      if (requestUrl(url).endsWith('capabilities')) return json(available)
+      expect(requestUrl(url)).toBe(config.editorServerUrl + '/api/editor/projects/export')
+
+      if (typeof init?.body !== 'string') throw new Error('Expected export JSON')
+      expect(JSON.parse(init.body)).toEqual({ path: config.game, expectedRevision: 'one' })
+
+      return new Response(new Uint8Array([80, 75, 3, 4]), {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': 'attachment; filename="source-project.zip"',
+        },
+      })
+    })
+
+    expect(await client.exportProject({ expectedRevision: 'one' })).toMatchObject({
+      fileName: 'source-project.zip',
+      dataBase64: 'UEsDBA==',
+      size: 4,
+    })
+  })
+  it('rejects archive import/export scope overrides and unsupported servers before posting', async () => {
+    let posts = 0
+
+    const client = new EditorApiClient(config, async (_url, init) => {
+      if (init?.method === 'POST') posts++
+
+      return json(capabilities)
+    })
+
+    for (const input of [
+      { destination: '../escape', dataBase64: 'UEsDBA==' },
+      { destination: 'copy', dataBase64: 'not base64' },
+      { destination: 'copy', dataBase64: 'UEsDBA==', path: 'other' },
+    ])
+      await expect(client.importProject(input)).rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(client.exportProject({ expectedRevision: '' })).rejects.toMatchObject({
+      code: 'invalid_request',
+    })
+    await expect(
+      client.importProject({ destination: 'copy', dataBase64: 'UEsDBA==' }),
+    ).rejects.toMatchObject({ code: 'unsupported_project_import' })
+    await expect(client.exportProject({ expectedRevision: 'one' })).rejects.toMatchObject({
+      code: 'unsupported_project_export',
+    })
+    expect(posts).toBe(0)
+  })
   it('duplicates the captured active project and leaves subsequent reads scoped to the source', async () => {
     const calls: { url: string; body?: unknown }[] = []
 

@@ -338,6 +338,44 @@ the workspace root (`""`) or a nested source; the destination is a new single fo
 under the workspace. Invalid sources return 422, changed revisions or existing
 destinations return 409, and size limits return 413. Duplication itself is not undoable.
 
+Use **Export project ZIP** in the explorer to download saved editable source files,
+language catalogs, CSS and assets. This differs from the toolbar **Export**, which
+packages a standalone playable game with its engine. Unsaved edits stay in the
+editor; exporting uses the inspected saved revision and does not clear drafts or
+change authoring history. Fix diagnostics before exporting. Downloads exclude
+nested projects, links, dependency/version-control directories, `.codex`, `.agents`,
+`.env` files, project trash and workspace save-namespace metadata. Empty directories
+are omitted. Existing file contents, extension fields, game IDs and titles are kept.
+
+**Import project** accepts a ZIP containing `game.json` at the root or inside a
+single containing folder. Select an unused single-folder destination under the
+workspace (1–64 letters, digits, underscores or hyphens). Import validates the game,
+referenced files and assets before reserving the destination, checks again before
+publishing `game.json` last, then opens the project. Existing folders, including
+empty ones, are never reused. Imported projects keep their game ID and title but
+have independent browser preview saves and empty authoring history. Browser
+progress and editor draft-recovery copies are not in project ZIPs. Unsaved edits
+require confirmation before opening an import; failure keeps the current project
+and import form. Both controls support English and Dutch.
+
+ZIP limits are 128 MiB compressed, 128 MiB unpacked and 10000 files/directories,
+including implicit parents. Paths must be portable to Windows and use UTF-8 or
+ASCII filenames. Stored and deflated ZIP32 entries are supported. Unsafe paths,
+case conflicts, duplicate entries, file/directory conflicts, links, encryption,
+ZIP64, checksum failures, private workspace paths and nested games are rejected.
+Playable engine archives are not editable project archives. Failed publication
+rolls back unchanged owned files; outside changes are preserved and may require
+inspection after an uncertain result. Avoid outside filesystem edits during transfer.
+
+`POST /api/editor/projects/export` accepts JSON `{ "path": "source",
+"expectedRevision": "…" }` and returns `application/zip` with a suggested filename.
+Root projects use `"path": ""`. `POST /api/editor/projects/import?destination=my-game`
+accepts raw ZIP bytes with `Content-Type: application/zip` and returns HTTP 201
+with the imported project view. The import upload limit is separate from the
+existing 10 MiB generic file-write and image-import limit. Invalid ZIPs return
+400, incomplete projects 422, occupied folders or stale revisions 409, and size
+limits 413. Import itself is not an undo step.
+
 Use **Rename project** to change the open project's title, folder name, or both.
 The new folder name follows creation's 1–64 character naming rules and stays in
 the same parent. A title change clears `titleKey`; a folder-only change preserves

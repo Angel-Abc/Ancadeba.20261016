@@ -7,6 +7,7 @@ import {
   renameProjectRequestSchema,
   deleteProjectRequestSchema,
   restoreProjectRequestSchema,
+  projectExportRequestSchema,
   type DeletedProject,
   type CommandRequest,
   type CreateProjectRequest,
@@ -30,6 +31,9 @@ class Control extends EventTarget {
   label = ''
   attributes = new Map<string, string>()
   children: Control[] = []
+  files: File[] = []
+  href = ''
+  download = ''
 
   constructor(readonly id: string) {
     super()
@@ -47,6 +51,9 @@ class Control extends EventTarget {
   reset() {}
 
   focus() {}
+  click() {
+    this.fire('click')
+  }
 
   requestSubmit() {
     this.fire('submit')
@@ -107,6 +114,7 @@ function panel(
         'project-duplicate-controls',
         'project-rename-controls',
         'project-trash-controls',
+        'project-import-controls',
       ].includes(id)
       controls.set(id, result)
     }
@@ -120,6 +128,9 @@ function panel(
   const duplications: DuplicateProjectRequest[] = []
   const historyRequests: HistoryRequest[] = []
   const managementRequests: unknown[] = []
+  const imports: { destination: string; file: File }[] = []
+  const exports: { path: string; expectedRevision: string }[] = []
+  let transferResponse: (() => Promise<Response>) | undefined
   let deleted: DeletedProject[] = []
   let managementResponse: (() => Promise<Response>) | undefined
   const inspections: string[] = []
@@ -142,6 +153,35 @@ function panel(
   }
 
   const fetcher: typeof fetch = async (url, init) => {
+    if (typeof url === 'string' && url.startsWith('/api/editor/projects/import?')) {
+      if (!(init?.body instanceof File)) throw new Error('Expected a raw ZIP file')
+      expect(init.headers).toEqual({ 'Content-Type': 'application/zip' })
+      const destination = new URL(url, 'http://editor').searchParams.get('destination')!
+      imports.push({ destination, file: init.body })
+
+      if (transferResponse) return transferResponse()
+      latest = project('imported')
+      latest.game!.id = 'archive-id'
+      latest.game!.title = 'Imported game'
+      choices.push({ path: destination, title: latest.game!.title })
+
+      return Response.json(latest, { status: 201 })
+    }
+
+    if (url === '/api/editor/projects/export') {
+      if (typeof init?.body !== 'string') throw new Error('Expected export JSON')
+      exports.push(projectExportRequestSchema.parse(JSON.parse(init.body)))
+
+      if (transferResponse) return transferResponse()
+
+      return new Response(new Uint8Array([80, 75, 3, 4]), {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': 'attachment; filename="test-project.zip"',
+        },
+      })
+    }
+
     if (url === '/api/editor/projects/trash') return Response.json({ projects: deleted })
 
     if (
@@ -281,6 +321,11 @@ function panel(
     inspections,
     historyRequests,
     managementRequests,
+    imports,
+    exports,
+    setTransferResponse: (response?: () => Promise<Response>) => {
+      transferResponse = response
+    },
     confirmDelete,
     onProjectClose,
     setManagementResponse: (response?: () => Promise<Response>) => {
@@ -314,6 +359,80 @@ function panel(
 }
 
 describe('project panel form reconciliation', () => {
+  it('imports a selected project ZIP into a new folder and opens it while preserving its game ID', async () => {
+    const ui = panel()
+
+    try {
+      expect(ui.control('project-export').disabled).toBe(true)
+      ui.control('project-import-toggle').fire('click')
+
+      const file = new File([new Uint8Array([80, 75, 3, 4])], 'museum-project.zip', {
+        type: 'application/zip',
+      })
+
+      ui.control('project-import-file').files = [file]
+      ui.control('project-import-file').fire('change')
+      expect(ui.control('project-import-folder').value).toBe('museum-imported')
+      ui.control('project-import-controls').fire('submit')
+      await vi.waitFor(() => expect(ui.onProjectChange).toHaveBeenLastCalledWith('museum-imported'))
+      expect(ui.imports).toEqual([{ destination: 'museum-imported', file }])
+      expect(ui.control('editor-title').value).toBe('Imported game')
+      expect(ui.control('project-import-controls').hidden).toBe(true)
+      expect(ui.control('editor-folder').children.map(({ value }) => value)).toContain('basic')
+    } finally {
+      ui.dispose()
+    }
+  })
+  it('confirms unsaved edits before import and retains the form and current project on failure', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('editor-fields').disabled).toBe(false))
+      ui.control('editor-title').value = 'Draft'
+      ui.control('editor-metadata').fire('input')
+      ui.control('project-import-toggle').fire('click')
+      ui.control('project-import-file').files = [new File(['zip'], 'archive.zip')]
+      ui.control('project-import-folder').value = 'copy'
+      ui.control('project-import-controls').fire('submit')
+      expect(ui.imports).toEqual([])
+      ui.confirmDiscardDrafts.mockReturnValue(true)
+      ui.setTransferResponse(async () =>
+        Response.json({ error: 'Folder exists', code: 'project_exists' }, { status: 409 }),
+      )
+      ui.control('project-import-controls').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.control('project-transfer-feedback').textContent).toBe('Folder exists'),
+      )
+      expect(ui.control('project-import-folder').value).toBe('copy')
+      expect(ui.control('project-import-controls').hidden).toBe(false)
+      expect(ui.control('editor-title').value).toBe('Draft')
+      expect(ui.onProjectChange).toHaveBeenLastCalledWith('basic')
+    } finally {
+      ui.dispose()
+    }
+  })
+  it('exports the saved revision without discarding drafts or changing the active project', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-export').disabled).toBe(false))
+      ui.control('editor-title').value = 'Draft'
+      ui.control('editor-metadata').fire('input')
+      ui.control('project-export').fire('click')
+      await vi.waitFor(() => expect(ui.control('project-export-download').hidden).toBe(false))
+      expect(ui.exports).toEqual([{ path: 'basic', expectedRevision: 'one' }])
+      expect(ui.control('project-export-download').download).toBe('test-project.zip')
+      expect(ui.hasDrafts()).toBe(true)
+      expect(ui.confirmDiscardDrafts).not.toHaveBeenCalled()
+      expect(ui.onProjectChange).toHaveBeenCalledOnce()
+      ui.setLanguage('nl')
+      expect(ui.control('project-export').textContent).toBe('Project-ZIP exporteren')
+    } finally {
+      ui.dispose()
+    }
+  })
   it('renames the open project and updates its picker and preview namespace', async () => {
     const ui = panel()
 

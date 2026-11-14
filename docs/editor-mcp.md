@@ -120,6 +120,8 @@ raw-file, shell, or process tools.
 | `ancadeba_create_project`        | `path`, `title`, optional `description`                                                      | Complete created project, its `gamePath`/revision and unchanged `configuredGamePath`                    |
 | `ancadeba_duplicate_project`     | `expectedRevision`, `destination`, `title`                                                   | Complete copied project, its `gamePath`/revision and unchanged `configuredGamePath`                     |
 | `ancadeba_export_game`           | Optional `timeoutMs` (default 120000, maximum 300000)                                        | ZIP metadata and an embedded binary `application/zip` resource                                          |
+| `ancadeba_export_project`        | `expectedRevision`, optional `timeoutMs`                                                     | Editable project ZIP metadata and embedded binary resource                                              |
+| `ancadeba_import_project`        | `destination`, `dataBase64`                                                                  | Imported project view, `gamePath` and unchanged `configuredGamePath`                                    |
 | `ancadeba_rename_project`        | `expectedRevision`, optional `title`/`folderName` (at least one)                             | Updated active `gamePath`, `previousGamePath`, revision and diagnostics                                 |
 | `ancadeba_delete_project`        | `expectedRevision`, `confirm: true`                                                          | Trash ID, original path/title, revision and deletion date; closes active binding                        |
 | `ancadeba_list_deleted_projects` | Empty object                                                                                 | Recoverable project entries and current revisions                                                       |
@@ -136,6 +138,20 @@ raw-file, shell, or process tools.
 | `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                                         | Saved change summary                                                                                    |
 | `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
 | `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns`                         | Saved change summary                                                                                    |
+
+Project ZIP transfer preserves saved authoring files, assets, game IDs and titles.
+`ancadeba_export_project` exports the active project's inspected revision without
+building the playable engine or including browser progress. Save the embedded
+ZIP resource. `ancadeba_import_project` accepts canonical base64 ZIP bytes and an
+unused destination; it works even after deletion closed the active binding.
+Import does not change selection: explicitly switch to the returned `gamePath`.
+Both MCP ZIP operations limit archives to 6 MiB; the editor UI supports ZIPs up
+to 128 MiB compressed and unpacked, with 10000 files/directories. Query capabilities
+for support and size limits. Imports require a complete editable project with
+`game.json` at its root or inside one containing folder; occupied destinations,
+unsafe paths, links, encryption, ZIP64, corrupt data and incomplete games are
+rejected. After uncertain imports, list projects and inspect the destination
+before another deliberate attempt. See the authoring guide for transfer details.
 
 Project renaming preserves game IDs and preview saves and updates this connection's
 active selection. Folder names stay in their original parent; changing a title

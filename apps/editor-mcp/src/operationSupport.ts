@@ -8,6 +8,8 @@ import {
   restoreProjectRequestSchema,
   maxDuplicateProjectBytes,
   maxDuplicateProjectFiles,
+  projectImportRequestSchema,
+  projectExportRequestSchema,
 } from '@ancadeba/editor-core'
 import { z } from 'zod'
 import { workspaceProjectPathSchema } from './projectPath.js'
@@ -55,12 +57,22 @@ export const assetUploadInputSchema = assetImportMetadataSchema.omit({ path: tru
     ),
 })
 
+export const importProjectInputSchema = projectImportRequestSchema.extend({
+  dataBase64: assetUploadInputSchema.shape.dataBase64.max(Math.ceil(maxExportBytes / 3) * 4),
+})
+
+export const exportProjectInputSchema = projectExportRequestSchema.omit({ path: true }).extend({
+  timeoutMs: exportGameInputSchema.shape.timeoutMs,
+})
+
 export const editorFeaturesSchema = z.object({
   history: z.boolean().default(false),
   assetImport: z.boolean().default(false),
   projectDiscovery: z.boolean().optional(),
   projectCreation: z.boolean().optional(),
   projectDuplication: z.boolean().optional(),
+  projectImport: z.boolean().optional(),
+  projectExport: z.boolean().optional(),
   projectRenaming: z.boolean().optional(),
   projectDeletion: z.boolean().optional(),
   projectRestoration: z.boolean().optional(),
@@ -75,6 +87,12 @@ const toolOperation = <T extends string>(tool: T) =>
   })
 
 export const operationsSchema = z.object({
+  projectImport: toolOperation('ancadeba_import_project').extend({
+    maxArchiveBytes: z.number().int().positive(),
+  }),
+  projectExport: toolOperation('ancadeba_export_project').extend({
+    maxArchiveBytes: z.number().int().positive(),
+  }),
   gameExport: toolOperation('ancadeba_export_game').extend({
     maxArchiveBytes: z.number().int().positive(),
     defaultTimeoutMs: z.number().int().positive(),
@@ -102,6 +120,18 @@ export const operationsSchema = z.object({
 
 export function mcpOperations(features?: z.infer<typeof editorFeaturesSchema>) {
   return {
+    projectImport: {
+      tool: 'ancadeba_import_project' as const,
+      supported: features?.projectImport === true,
+      requestSchema: z.toJSONSchema(importProjectInputSchema),
+      maxArchiveBytes: maxExportBytes,
+    },
+    projectExport: {
+      tool: 'ancadeba_export_project' as const,
+      supported: features?.projectExport === true,
+      requestSchema: z.toJSONSchema(exportProjectInputSchema, { io: 'input' }),
+      maxArchiveBytes: maxExportBytes,
+    },
     projectRenaming: {
       tool: 'ancadeba_rename_project' as const,
       supported: features?.projectRenaming === true,

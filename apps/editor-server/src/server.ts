@@ -9,7 +9,7 @@ import {
   type HealthResponse,
 } from '@ancadeba/schemas'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
-import { capabilities, EditorError } from '@ancadeba/editor-core'
+import { capabilities, EditorError, maxProjectArchiveBytes } from '@ancadeba/editor-core'
 import { EditorCoordinator } from './editorCoordinator.js'
 import type { EditorProjectService } from './editorProjectService.js'
 import type { GameExportService } from './gameExports.js'
@@ -36,11 +36,16 @@ function json(response: ServerResponse, status: number, value: unknown) {
   response.end(JSON.stringify(value))
 }
 
-function readBody(request: IncomingMessage): Promise<Uint8Array> {
+function readBody(request: IncomingMessage, limit = maxWriteBytes): Promise<Uint8Array> {
+  const limitMessage =
+    limit === maxWriteBytes
+      ? 'File exceeds the 10 MiB write limit'
+      : 'Project ZIP exceeds the 128 MiB upload limit'
+
   return new Promise((resolve, reject) => {
-    if (Number(request.headers['content-length']) > maxWriteBytes) {
+    if (Number(request.headers['content-length']) > limit) {
       request.resume()
-      reject(new WorkspaceError(413, 'File exceeds the 10 MiB write limit'))
+      reject(new WorkspaceError(413, limitMessage))
 
       return
     }
@@ -51,10 +56,10 @@ function readBody(request: IncomingMessage): Promise<Uint8Array> {
     const onData = (chunk: Buffer) => {
       size += chunk.length
 
-      if (size > maxWriteBytes) {
+      if (size > limit) {
         chunks.length = 0
         request.off('data', onData)
-        reject(new WorkspaceError(413, 'File exceeds the 10 MiB write limit'))
+        reject(new WorkspaceError(413, limitMessage))
         request.resume()
 
         return
@@ -129,6 +134,8 @@ export function createEditorServer(
               assetImport: false,
               projectCreation: false,
               projectDuplication: false,
+              projectImport: false,
+              projectExport: false,
               projectRenaming: false,
               projectDeletion: false,
               projectRestoration: false,
@@ -148,6 +155,46 @@ export function createEditorServer(
       }
 
       if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
+
+      if (request.method === 'POST' && url.pathname === '/api/editor/projects/import') {
+        if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/zip')
+          throw new WorkspaceError(415, 'Project imports require application/zip')
+        const archive = await readBody(request, maxProjectArchiveBytes)
+        json(
+          response,
+          201,
+          await projects.importProject(
+            { destination: url.searchParams.get('destination') ?? '' },
+            archive,
+          ),
+        )
+
+        return
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/editor/projects/export') {
+        if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json')
+          throw new WorkspaceError(415, 'Project export requires application/json')
+        let body: unknown
+
+        try {
+          body = JSON.parse(Buffer.from(await readBody(request)).toString('utf8'))
+        } catch (error) {
+          if (error instanceof WorkspaceError) throw error
+          throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
+        }
+
+        protectManagementPath(body)
+        const archive = await projects.exportProject(body)
+        response.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${archive.fileName}"`,
+          'Content-Length': archive.bytes.length,
+        })
+        response.end(archive.bytes)
+
+        return
+      }
 
       if (request.method === 'GET' && url.pathname === '/api/editor/projects/trash') {
         json(response, 200, { projects: await projects.listDeleted() })

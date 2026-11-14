@@ -16,4 +16,6 @@ export * from './projectDuplication.js'
 
 export * from './projectManagement.js'
 
+export * from './projectTransfer.js'
+
 export * from './componentClipboard.js'

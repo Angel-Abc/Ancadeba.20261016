@@ -192,7 +192,7 @@ export function bindProjectManagementPanel(
       if (next.busy) notice = ''
       else if (next.error) notice = next.error
 
-      if (replaceFields && next.projectChange) {
+      if (replaceFields && next.projectChange && next.projectChange.kind !== 'imported') {
         renameForm.hidden = true
         renameToggle.setAttribute('aria-expanded', 'false')
         notice = `project.${next.projectChange.kind}`

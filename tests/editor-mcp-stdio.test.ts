@@ -122,7 +122,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(22)
+    expect((await activeClient.listTools()).tools).toHaveLength(24)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -272,6 +272,44 @@ describe('MCP stdio process', () => {
     expect(errors).toEqual([])
     expect(stderr.join('')).toBe('')
   })
+  it('round-trips editable project source ZIPs through stdio without changing selection', async () => {
+    const { activeClient, errors, stderr } = await connect()
+    const inspected = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    const source = gameSummarySchema.parse(object(inspected.structuredContent).data)
+
+    const exported = await activeClient.callTool({
+      name: 'ancadeba_export_project',
+      arguments: { expectedRevision: source.revision },
+    })
+
+    expect(exported.isError).toBe(false)
+    const resource = exported.content.find((entry) => entry.type === 'resource')
+
+    if (!resource || resource.type !== 'resource' || !('blob' in resource.resource))
+      throw new Error('Expected binary project ZIP')
+    const files = unzipSync(Buffer.from(resource.resource.blob, 'base64'))
+    expect(JSON.parse(strFromU8(files['game.json']!)).id).toBe(source.game!.id)
+    expect(files).not.toHaveProperty('index.html')
+
+    const imported = await activeClient.callTool({
+      name: 'ancadeba_import_project',
+      arguments: { destination: 'imported', dataBase64: resource.resource.blob },
+    })
+
+    expect(imported.structuredContent).toMatchObject({
+      ok: true,
+      data: { gamePath: 'imported', configuredGamePath: 'basic', game: { id: source.game!.id } },
+    })
+    expect(
+      (await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} }))
+        .structuredContent,
+    ).toMatchObject({ data: { gamePath: 'basic' } })
+    expect(await readFile(join(root, 'imported/game.json'), 'utf8')).toBe(
+      await readFile(join(root, 'basic/game.json'), 'utf8'),
+    )
+    expect(errors).toEqual([])
+    expect(stderr.join('')).toBe('')
+  })
   it('renames, deletes and restores a project through stdio while tracking active selection', async () => {
     const { activeClient, errors, stderr } = await connect()
 
@@ -400,7 +438,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(22)
+    expect((await activeClient.listTools()).tools).toHaveLength(24)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({

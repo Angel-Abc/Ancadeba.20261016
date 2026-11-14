@@ -1215,6 +1215,8 @@ describe('shared editor project API', () => {
       projectDiscovery: true,
       projectCreation: true,
       projectDuplication: true,
+      projectImport: true,
+      projectExport: true,
       projectRenaming: true,
       projectDeletion: true,
       projectRestoration: true,

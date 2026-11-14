@@ -40,6 +40,7 @@ import { bindMetadataTranslations } from './metadataTranslations.js'
 import { bindStylesheetEditor } from './stylesheetEditor.js'
 import { bindProjectRepair } from './projectRepair.js'
 import { bindProjectManagementPanel } from './projectManagementPanel.js'
+import { bindProjectArchivePanel } from './projectArchivePanel.js'
 import {
   buildProjectTree,
   dataFileContent,
@@ -725,6 +726,7 @@ export function bindProjectPanel(
     mapEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
     management?.render(state, replaceFields)
+    archivePanel?.render(state, replaceFields)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     const previousRevision = view?.revision
     const previousStorageKey = view?.storageKey
@@ -1028,6 +1030,7 @@ export function bindProjectPanel(
 
   let draftRecovery: ReturnType<typeof bindEditorDraftRecovery> | undefined
   let management: ReturnType<typeof bindProjectManagementPanel> | undefined
+  let archivePanel: ReturnType<typeof bindProjectArchivePanel> | undefined
 
   const controller = new ProjectEditorController(client, (state, replaceFields) => {
     draftRecovery?.beforeRender()
@@ -1721,12 +1724,19 @@ export function bindProjectPanel(
     () => !hasDrafts() || confirmDiscardDrafts(),
     confirmDelete,
   )
+  archivePanel = bindProjectArchivePanel(
+    root,
+    controller,
+    t,
+    () => !hasDrafts() || confirmDiscardDrafts(),
+  )
   void refreshProjects()
 
   return {
     hasDrafts,
     dispose() {
       management?.dispose()
+      archivePanel?.dispose()
       draftRecovery?.dispose()
       repairEditor?.dispose()
       discovery?.abort()

@@ -1998,5 +1998,17 @@
   "project.confirmDelete": "Move “{title}” ({path}) to project trash? Its saved files will be removed from the project list. You can restore it from Deleted projects.",
   "project.renamed": "Project renamed.",
   "project.deleted": "Project moved to trash.",
-  "project.restored": "Project restored."
+  "project.restored": "Project restored.",
+  "project.import": "Import project",
+  "project.export": "Export project ZIP",
+  "project.importHelp": "Choose an editable project ZIP and an unused folder. The game ID and title are preserved. Limit: 128 MiB compressed, 128 MiB unpacked, 10000 files and folders.",
+  "project.archiveFile": "Project ZIP",
+  "project.importFolder": "New project folder",
+  "project.exportHelp": "Project ZIPs contain saved source files and assets. Use the toolbar Export for a playable game. Browser progress is kept separately.",
+  "project.downloadArchive": "Download project ZIP",
+  "project.importing": "Importing project…",
+  "project.exporting": "Preparing project ZIP…",
+  "project.imported": "Project imported and opened.",
+  "project.exported": "Project ZIP ready. You can download it again using the link.",
+  "project.invalidImport": "Choose a nonempty ZIP up to 128 MiB and a new folder name using 1–64 letters, digits, underscores or hyphens."
 }

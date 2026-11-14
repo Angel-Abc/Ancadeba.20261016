@@ -79,6 +79,74 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
+  it('exports editable ZIP bytes and imports a new project without changing the active binding', async () => {
+    const remote = api()
+    const imports: unknown[] = []
+    const exports: unknown[] = []
+    remote.importProject = async (input) => {
+      imports.push(input)
+
+      return view
+    }
+
+    remote.exportProject = async (input) => {
+      exports.push(input)
+
+      return {
+        fileName: 'source-project.zip',
+        mimeType: 'application/zip',
+        size: 4,
+        dataBase64: 'UEsDBA==',
+      }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const exported = await client.callTool({
+        name: 'ancadeba_export_project',
+        arguments: { expectedRevision: 'one' },
+      })
+
+      expect(exported.structuredContent).toMatchObject({
+        ok: true,
+        data: { fileName: 'source-project.zip', gamePath: 'basic' },
+      })
+      expect(exported.content).toContainEqual({
+        type: 'resource',
+        resource: {
+          uri: expect.stringMatching(/^ancadeba-project:/),
+          mimeType: 'application/zip',
+          blob: 'UEsDBA==',
+        },
+      })
+
+      const imported = await client.callTool({
+        name: 'ancadeba_import_project',
+        arguments: { destination: 'copy', dataBase64: 'UEsDBA==' },
+      })
+
+      expect(imported.structuredContent).toMatchObject({
+        ok: true,
+        data: { gamePath: 'copy', configuredGamePath: 'basic', game: { id: 'test' } },
+      })
+      expect(
+        (await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })).structuredContent,
+      ).toMatchObject({ data: { gamePath: 'basic' } })
+      expect(
+        (
+          await client.callTool({
+            name: 'ancadeba_import_project',
+            arguments: { destination: 'copy', dataBase64: 'UEsDBA==', path: 'other' },
+          })
+        ).isError,
+      ).toBe(true)
+      expect(imports).toEqual([{ destination: 'copy', dataBase64: 'UEsDBA==' }])
+      expect(exports).toEqual([{ expectedRevision: 'one', timeoutMs: 120000 }])
+    } finally {
+      await close()
+    }
+  })
   it('follows renames, closes deleted bindings, and allows discovery and restoration after deletion', async () => {
     const trashId = 'f108487a-40de-45f2-98ac-33f906c4e234'
     let path = 'basic'
@@ -567,7 +635,9 @@ describe('MCP adapter tools', () => {
         'ancadeba_duplicate_project',
         'ancadeba_edit_assets',
         'ancadeba_export_game',
+        'ancadeba_export_project',
         'ancadeba_get_capabilities',
+        'ancadeba_import_project',
         'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
         'ancadeba_inspect_scene',
@@ -583,7 +653,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_update_scene_metadata',
         'ancadeba_upload_asset',
       ])
-      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(7)
+      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(8)
       expect(
         tools.find((tool) => tool.name === 'ancadeba_export_game')?.inputSchema.required ?? [],
       ).not.toContain('timeoutMs')
@@ -594,7 +664,11 @@ describe('MCP adapter tools', () => {
 
         if (
           !tool.annotations?.readOnlyHint &&
-          !['ancadeba_create_project', 'ancadeba_switch_project'].includes(tool.name)
+          ![
+            'ancadeba_create_project',
+            'ancadeba_switch_project',
+            'ancadeba_import_project',
+          ].includes(tool.name)
         )
           expect(tool.inputSchema.required).toContain('expectedRevision')
       }

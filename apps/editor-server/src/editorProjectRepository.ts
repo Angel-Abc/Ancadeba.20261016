@@ -25,6 +25,7 @@ import {
   type DeleteProjectRequest,
   type RestoreProjectRequest,
   type DeletedProject,
+  type ProjectImportRequest,
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
 import { createWorkspaceProject, createWorkspaceProjectFiles } from './projectCreation.js'
@@ -35,6 +36,8 @@ import { projectStylesheets } from './projectStylesheets.js'
 import { suggestRecoveryManifest } from './manifestRecovery.js'
 import { ProjectStorage } from './projectStorage.js'
 import { ProjectDirectoryManagement } from './projectDirectoryManagement.js'
+import { readProjectArchive, writeProjectArchive } from './projectArchive.js'
+import { ProjectArchiveWorkspace } from './projectArchiveWorkspace.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
   createDirectory?(path: string): Promise<void>
@@ -53,6 +56,8 @@ export interface EditorProjectRepository {
   restoreHistoryFiles?(folder: string, files: readonly HistoryFile[]): Promise<void>
   create?(folder: string, documents: ProjectDocuments): Promise<void>
   duplicate?(request: DuplicateProjectRequest): Promise<void>
+  importProject?(request: ProjectImportRequest, archive: Uint8Array): Promise<void>
+  exportProject?(folder: string, source: ProjectSnapshot): Promise<Uint8Array>
   rename?(request: RenameProjectRequest): Promise<string>
   delete?(request: DeleteProjectRequest): Promise<DeletedProject>
   listDeleted?(): Promise<DeletedProject[]>
@@ -159,6 +164,80 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
         )
       await this.storage?.registerNew(request.destination)
     })
+  }
+
+  private async archiveSnapshot(
+    files: Readonly<Record<string, Uint8Array>>,
+  ): Promise<ProjectSnapshot> {
+    const snapshot = await new WorkspaceProjectRepository(new ProjectArchiveWorkspace(files)).load(
+      '',
+    )
+
+    const diagnostics = validateProject(snapshot.documents, snapshot.sourceDiagnostics)
+
+    if (diagnostics.length)
+      throw new EditorError(
+        422,
+        'invalid_project',
+        'The ZIP must contain a complete editable game project',
+        diagnostics,
+      )
+
+    return snapshot
+  }
+
+  async importProject(request: ProjectImportRequest, archive: Uint8Array): Promise<void> {
+    const files = readProjectArchive(archive)
+    const snapshot = await this.archiveSnapshot(files)
+
+    // A second game manifest belongs in a separate project, rather than inside this import.
+    for (const path of Object.keys(files)) {
+      if (
+        path !== 'game.json' &&
+        path.toLowerCase().endsWith('/game.json') &&
+        !Object.hasOwn(snapshot.documents, path)
+      )
+        throw new EditorError(
+          400,
+          'nested_projects',
+          'Import one project at a time; nested games are unsupported',
+        )
+    }
+
+    const manifest = Buffer.from(files['game.json']!).toString('utf8')
+    await createWorkspaceProjectFiles(this.workspace, request.destination, files, async () => {
+      const candidate = await this.load(request.destination, new Map([['game.json', manifest]]))
+      const diagnostics = validateProject(candidate.documents, candidate.sourceDiagnostics)
+
+      if (diagnostics.length)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'Imported files changed before publication',
+          diagnostics,
+        )
+      await this.storage?.registerNew(request.destination)
+    })
+  }
+
+  async exportProject(folder: string, source: ProjectSnapshot): Promise<Uint8Array> {
+    const files = await readProjectCopyFiles(
+      this.workspace,
+      folder,
+      new Set(Object.keys(source.documents)),
+    )
+
+    const captured = await this.archiveSnapshot(files)
+    const current = await this.load(folder)
+
+    if (captured.revision !== source.revision || current.revision !== source.revision)
+      throw new EditorError(
+        409,
+        'revision_conflict',
+        'The project changed while its ZIP was being prepared. Reload before exporting.',
+      )
+
+    return writeProjectArchive(files)
   }
 
   async load(

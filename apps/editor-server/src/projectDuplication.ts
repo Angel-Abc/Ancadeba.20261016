@@ -20,6 +20,7 @@ const excludedNames = new Set([
 export async function readProjectCopyFiles(
   workspace: Pick<WorkspaceService, 'list' | 'read'>,
   folder: string,
+  referencedFiles: ReadonlySet<string> = new Set(),
 ): Promise<Record<string, Uint8Array>> {
   const files = new Map<string, Uint8Array>()
   const pending = ['']
@@ -32,6 +33,7 @@ export async function readProjectCopyFiles(
 
     if (
       directory &&
+      !referencedFiles.has(`${directory}/game.json`) &&
       entries.some((entry) => entry.type === 'file' && entry.name.toLowerCase() === 'game.json')
     )
       continue

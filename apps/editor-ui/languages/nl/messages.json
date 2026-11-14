@@ -1998,5 +1998,17 @@
   "project.confirmDelete": "“{title}” ({path}) naar de projectprullenbak verplaatsen? De opgeslagen bestanden verdwijnen uit de projectlijst. Je kunt het herstellen via Verwijderde projecten.",
   "project.renamed": "Project hernoemd.",
   "project.deleted": "Project naar de prullenbak verplaatst.",
-  "project.restored": "Project hersteld."
+  "project.restored": "Project hersteld.",
+  "project.import": "Project importeren",
+  "project.export": "Project-ZIP exporteren",
+  "project.importHelp": "Kies een bewerkbare project-ZIP en een ongebruikte map. Het spel-ID en de titel blijven behouden. Limiet: 128 MiB gecomprimeerd, 128 MiB uitgepakt, 10000 bestanden en mappen.",
+  "project.archiveFile": "Project-ZIP",
+  "project.importFolder": "Nieuwe projectmap",
+  "project.exportHelp": "Project-ZIPs bevatten opgeslagen bronbestanden en assets. Gebruik Exporteren in de werkbalk voor een speelbaar spel. Browservoortgang wordt apart bewaard.",
+  "project.downloadArchive": "Project-ZIP downloaden",
+  "project.importing": "Project importeren…",
+  "project.exporting": "Project-ZIP voorbereiden…",
+  "project.imported": "Project geïmporteerd en geopend.",
+  "project.exported": "Project-ZIP gereed. Je kunt deze opnieuw downloaden via de link.",
+  "project.invalidImport": "Kies een niet-lege ZIP van maximaal 128 MiB en een nieuwe mapnaam van 1–64 letters, cijfers, underscores of koppeltekens."
 }

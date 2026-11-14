@@ -15,6 +15,8 @@ import type {
   RestoreProjectRequest,
   DeletedProject,
   ProjectLocation,
+  ProjectImportRequest,
+  ProjectExportRequest,
 } from '@ancadeba/editor-core'
 import {
   apiErrorSchema,
@@ -25,6 +27,7 @@ import {
   projectLocationSchema,
   deletedProjectSchema,
   deletedProjectListSchema,
+  maxProjectArchiveBytes,
 } from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
@@ -38,6 +41,8 @@ export class EditorClientError extends Error {
 }
 
 export interface IEditorClient {
+  importProject?(request: ProjectImportRequest, file: File): Promise<ProjectView>
+  exportProject?(request: ProjectExportRequest): Promise<ProjectDownload>
   rename?(request: RenameProjectRequest): Promise<ProjectLocation>
   delete?(request: DeleteProjectRequest): Promise<DeletedProject>
   listDeleted?(): Promise<DeletedProject[]>
@@ -61,8 +66,64 @@ export interface IEditorClient {
   ): Promise<ProjectView>
 }
 
+export interface ProjectDownload {
+  blob: Blob
+  fileName: string
+}
+
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
+
+  importProject(request: ProjectImportRequest, file: File): Promise<ProjectView> {
+    return this.requestProject(
+      `/api/editor/projects/import?${new URLSearchParams(request).toString()}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/zip' },
+        body: file,
+      },
+    )
+  }
+
+  async exportProject(request: ProjectExportRequest): Promise<ProjectDownload> {
+    const response = await this.fetcher('/api/editor/projects/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      const failure = apiErrorSchema.safeParse(await response.json())
+      throw new EditorClientError(
+        failure.success ? (failure.data.code ?? 'request_failed') : 'request_failed',
+        failure.success ? failure.data.error : 'Project export failed',
+        failure.success ? failure.data.diagnostics : [],
+      )
+    }
+
+    if (
+      response.headers.get('content-type')?.split(';')[0] !== 'application/zip' ||
+      Number(response.headers.get('content-length')) > maxProjectArchiveBytes
+    ) {
+      await response.body?.cancel()
+      throw new EditorClientError(
+        'invalid_response',
+        'Project export did not return a supported ZIP',
+      )
+    }
+
+    const blob = await response.blob()
+
+    if (blob.size < 4 || blob.size > maxProjectArchiveBytes)
+      throw new EditorClientError('invalid_response', 'Project ZIP size is invalid')
+
+    const name = /filename="([a-zA-Z0-9_-]+\.zip)"/.exec(
+      response.headers.get('content-disposition') ?? '',
+    )?.[1]
+
+    return { blob, fileName: name ?? 'project.zip' }
+  }
 
   async rename(request: RenameProjectRequest): Promise<ProjectLocation> {
     return projectLocationSchema.parse(await this.manage('rename', request))

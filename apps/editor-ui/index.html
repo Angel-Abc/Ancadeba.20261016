@@ -265,6 +265,57 @@
               Deleted projects
             </button>
           </div>
+          <div class="preview-actions">
+            <button
+              id="project-import-toggle"
+              type="button"
+              aria-controls="project-import-controls"
+              aria-expanded="false"
+              data-i18n="project.import"
+            >
+              Import project
+            </button>
+            <button id="project-export" type="button" disabled data-i18n="project.export">
+              Export project ZIP
+            </button>
+          </div>
+          <form id="project-import-controls" hidden>
+            <fieldset id="project-import-fields">
+              <legend data-i18n="project.import">Import project</legend>
+              <p class="help" data-i18n="project.importHelp">
+                Choose an editable project ZIP and an unused folder. The game ID and title are
+                preserved.
+              </p>
+              <label for="project-import-file" data-i18n="project.archiveFile">Project ZIP</label>
+              <input id="project-import-file" type="file" accept=".zip,application/zip" required />
+              <label for="project-import-folder" data-i18n="project.importFolder"
+                >New project folder</label
+              >
+              <input id="project-import-folder" maxlength="64" pattern="[A-Za-z0-9_-]+" required />
+              <div class="preview-actions">
+                <button id="project-import-submit" type="submit" data-i18n="project.import">
+                  Import project
+                </button>
+                <button id="project-import-cancel" type="button" data-i18n="project.cancelCreate">
+                  Cancel
+                </button>
+              </div>
+            </fieldset>
+          </form>
+          <p class="help" data-i18n="project.exportHelp">
+            Project ZIPs contain saved source files and assets. Use the toolbar Export for a
+            playable game. Browser progress is kept separately.
+          </p>
+          <p
+            id="project-transfer-feedback"
+            class="help"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
+          <a id="project-export-download" hidden data-i18n="project.downloadArchive"
+            >Download project ZIP</a
+          >
           <form id="project-rename-controls" hidden>
             <fieldset id="project-rename-fields">
               <legend data-i18n="project.rename">Rename project</legend>

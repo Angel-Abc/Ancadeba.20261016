@@ -8,16 +8,19 @@ export interface ExportArchive {
   dataBase64: string
 }
 
-export async function readExportArchive(response: Response): Promise<ExportArchive> {
+export async function readExportArchive(
+  response: Response,
+  kind: 'game' | 'project' = 'game',
+): Promise<ExportArchive> {
   const fail = (code: string, message: string) =>
     new EditorApiError(code, message, [], 'not_applied', response.status)
 
   const tooLarge = () =>
-    fail('export_too_large', 'The game ZIP exceeds the MCP export limit of 6 MiB')
+    fail('export_too_large', `The ${kind} ZIP exceeds the MCP export limit of 6 MiB`)
 
   if (response.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/zip') {
     await response.body?.cancel()
-    throw fail('invalid_response', 'The editor did not return a game ZIP')
+    throw fail('invalid_response', `The editor did not return a ${kind} ZIP`)
   }
 
   const declaredLength = response.headers.get('content-length')
@@ -57,10 +60,10 @@ export async function readExportArchive(response: Response): Promise<ExportArchi
   const bytes = Buffer.concat(chunks, size)
 
   if (size < 4 || (length !== undefined && size !== length) || bytes.readUInt32LE(0) !== 0x04034b50)
-    throw fail('invalid_response', 'The editor returned an incomplete or invalid game ZIP')
+    throw fail('invalid_response', `The editor returned an incomplete or invalid ${kind} ZIP`)
 
   const name = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1]
-  const fileName = name && /^[a-zA-Z0-9_-]+\.zip$/.test(name) ? name : 'game.zip'
+  const fileName = name && /^[a-zA-Z0-9_-]+\.zip$/.test(name) ? name : `${kind}.zip`
 
   return { fileName, mimeType: 'application/zip', size, dataBase64: bytes.toString('base64') }
 }

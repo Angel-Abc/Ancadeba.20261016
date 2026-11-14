@@ -23,6 +23,9 @@ import {
   object,
   type ComponentClipboard,
   type ProjectRepairCheck,
+  projectImportRequestSchema,
+  projectExportRequestSchema,
+  maxProjectArchiveBytes,
 } from '@ancadeba/editor-core'
 import { gameIdSchema, gameSchema, assetCatalogSchema, assetCatalogFile } from '@ancadeba/schemas'
 import { inspectImageSource } from '@ancadeba/game-runtime'
@@ -49,6 +52,8 @@ export class EditorProjectService {
       assetImport: typeof this.repository.createAsset === 'function',
       projectCreation: typeof this.repository.create === 'function',
       projectDuplication: typeof this.repository.duplicate === 'function',
+      projectImport: typeof this.repository.importProject === 'function',
+      projectExport: typeof this.repository.exportProject === 'function',
       projectRenaming: typeof this.repository.rename === 'function',
       projectDeletion: typeof this.repository.delete === 'function',
       projectRestoration:
@@ -95,6 +100,79 @@ export class EditorProjectService {
 
   inspect(path: string): Promise<ProjectView> {
     return this.coordinator.run(async () => this.view(path, await this.repository.load(path)))
+  }
+
+  importProject(input: unknown, archive: Uint8Array): Promise<ProjectView> {
+    const parsed = projectImportRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Choose an unused single-folder import destination',
+      )
+
+    if (archive.length > maxProjectArchiveBytes)
+      throw new EditorError(
+        413,
+        'project_archive_too_large',
+        'Project ZIPs support at most 128 MiB',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.importProject)
+        throw new EditorError(503, 'unsupported_project_import', 'Project import is unavailable')
+      await this.repository.importProject(parsed.data, archive)
+      this.history.clear(parsed.data.destination)
+
+      try {
+        return this.view(
+          parsed.data.destination,
+          await this.repository.load(parsed.data.destination),
+        )
+      } catch {
+        throw new EditorError(
+          500,
+          'project_import_uncertain',
+          `Project files may have been imported into ${parsed.data.destination}. List projects and inspect that folder before retrying.`,
+        )
+      }
+    })
+  }
+
+  exportProject(input: unknown): Promise<{ bytes: Uint8Array; fileName: string }> {
+    const parsed = projectExportRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Provide the project path and its current revision',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.exportProject)
+        throw new EditorError(503, 'unsupported_project_export', 'Project export is unavailable')
+      const snapshot = await this.repository.load(parsed.data.path)
+
+      if (snapshot.revision !== parsed.data.expectedRevision)
+        throw new EditorError(409, 'revision_conflict', 'Reload the project before exporting.')
+      const diagnostics = validateProject(snapshot.documents, snapshot.sourceDiagnostics)
+
+      if (diagnostics.length)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'Fix project diagnostics before exporting',
+          diagnostics,
+        )
+      const bytes = await this.repository.exportProject(parsed.data.path, snapshot)
+
+      return {
+        bytes,
+        fileName: `${gameSchema.parse(snapshot.documents['game.json']).id}-project.zip`,
+      }
+    })
   }
 
   duplicate(input: unknown): Promise<ProjectView> {

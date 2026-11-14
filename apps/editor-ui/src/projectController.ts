@@ -8,8 +8,9 @@ import type {
   ProjectRepairCheck,
   RenameProjectRequest,
   RestoreProjectRequest,
+  ProjectImportRequest,
 } from '@ancadeba/editor-core'
-import { EditorClientError, type IEditorClient } from './editorClient.js'
+import { EditorClientError, type IEditorClient, type ProjectDownload } from './editorClient.js'
 
 export interface ProjectEditorState {
   path: string
@@ -21,7 +22,9 @@ export interface ProjectEditorState {
   lastCommand: EditorCommand['type'] | null
   preserveDrafts: boolean
   historyChange?: 'undo' | 'redo' | undefined
-  projectChange?: { kind: 'renamed' | 'deleted' | 'restored'; previousPath: string } | undefined
+  projectChange?:
+    | { kind: 'renamed' | 'deleted' | 'restored' | 'imported'; previousPath: string }
+    | undefined
 }
 
 export type ProjectEditorListener = (state: ProjectEditorState, replaceFields: boolean) => void
@@ -62,6 +65,42 @@ export class ProjectEditorController {
 
       return true
     })
+  }
+
+  importProject(request: ProjectImportRequest, file: File): Promise<void> {
+    return this.perform(async () => {
+      if (!this.client.importProject)
+        throw new EditorClientError('unsupported_project_import', 'Project import is unavailable')
+      const view = await this.client.importProject(request, file)
+      this.state = {
+        ...this.state,
+        path: request.destination,
+        view,
+        lastCommand: null,
+        preserveDrafts: false,
+        conflict: false,
+        changedElsewhere: false,
+        projectChange: { kind: 'imported', previousPath: this.state.path },
+      }
+
+      return true
+    })
+  }
+
+  async exportProject(): Promise<ProjectDownload | undefined> {
+    const { path, view } = this.state
+
+    if (!view) return undefined
+    let result: ProjectDownload | undefined
+    await this.perform(async () => {
+      if (!this.client.exportProject)
+        throw new EditorClientError('unsupported_project_export', 'Project export is unavailable')
+      result = await this.client.exportProject({ path, expectedRevision: view.revision })
+
+      return false
+    })
+
+    return result
   }
 
   load(path: string, preserveFields = false): Promise<void> {

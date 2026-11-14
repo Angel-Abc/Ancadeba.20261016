@@ -19,6 +19,8 @@ import {
   deleteProjectInputSchema,
   restoreProjectInputSchema,
   exportGameInputSchema,
+  importProjectInputSchema,
+  exportProjectInputSchema,
 } from './operationSupport.js'
 import { EditorApiError } from './editorApiError.js'
 import { readExportArchive, type ExportArchive } from './exportArchive.js'
@@ -58,6 +60,14 @@ const jsonBody = (value: unknown): RequestBody => ({
 })
 
 export interface IEditorApi {
+  importProject?(
+    input: z.infer<typeof importProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectViewSchema>>
+  exportProject?(
+    input: z.input<typeof exportProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<ExportArchive>
   renameProject?(
     input: z.infer<typeof renameProjectInputSchema>,
     signal?: AbortSignal,
@@ -110,6 +120,52 @@ export class EditorApiClient implements IEditorApi {
     private readonly fetcher: typeof fetch,
     private readonly shutdownSignal?: AbortSignal,
   ) {}
+
+  async importProject(input: z.infer<typeof importProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = importProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide a new destination and canonical base64 project ZIP up to 6 MiB',
+      )
+
+    if (!(await this.capabilities(signal)).features?.projectImport)
+      throw new EditorApiError('unsupported_project_import', 'Project import is unavailable')
+    const bytes = new Uint8Array(Buffer.from(parsed.data.dataBase64, 'base64'))
+
+    return this.request(
+      `/api/editor/projects/import?${new URLSearchParams({ destination: parsed.data.destination }).toString()}`,
+      projectViewSchema,
+      { body: bytes.buffer, headers: { 'Content-Type': 'application/zip' } },
+      signal,
+    )
+  }
+
+  async exportProject(input: z.input<typeof exportProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = exportProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide the current revision and an optional timeoutMs from 1 to 300000',
+      )
+
+    if (!(await this.capabilities(signal)).features?.projectExport)
+      throw new EditorApiError('unsupported_project_export', 'Project export is unavailable')
+
+    return this.request(
+      '/api/editor/projects/export',
+      undefined,
+      jsonBody({ path: this.config.game, expectedRevision: parsed.data.expectedRevision }),
+      signal,
+      {
+        readResponse: (response) => readExportArchive(response, 'project'),
+        timeoutMs: parsed.data.timeoutMs,
+        readOnly: true,
+      },
+    )
+  }
 
   private async managementSupport(
     feature: 'projectRenaming' | 'projectDeletion' | 'projectRestoration',
