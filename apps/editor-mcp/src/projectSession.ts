@@ -10,13 +10,91 @@ export interface ProjectBinding {
 export class ProjectSession {
   private active: ProjectBinding
   private switches: Promise<void> = Promise.resolve()
+  private closed = false
 
   constructor(api: IEditorApi, gamePath: string) {
     this.active = { api, gamePath }
   }
 
   capture(): ProjectBinding {
+    if (this.closed)
+      throw new EditorApiError(
+        'project_closed',
+        'The active project was deleted. List projects and switch to an existing project before editing.',
+      )
+
     return this.active
+  }
+
+  captureWorkspace(): ProjectBinding {
+    return this.active
+  }
+
+  private transition<T>(
+    binding: ProjectBinding,
+    operation: () => Promise<T>,
+    select: (result: T) => void,
+  ) {
+    const result = this.switches.then(async () => {
+      const result = await operation()
+
+      if (this.active === binding) select(result)
+
+      return result
+    })
+
+    this.switches = result.then(
+      () => undefined,
+      () => undefined,
+    )
+
+    return result
+  }
+
+  renameProject(
+    input: Parameters<NonNullable<IEditorApi['renameProject']>>[0],
+    signal?: AbortSignal,
+  ) {
+    const binding = this.capture()
+
+    return this.transition(
+      binding,
+      async () => {
+        if (!binding.api.renameProject)
+          throw new EditorApiError(
+            'unsupported_project_management',
+            'Project renaming is unavailable',
+          )
+
+        return binding.api.renameProject(input, signal)
+      },
+      (result) => {
+        this.active = { api: binding.api.forProject(result.path), gamePath: result.path }
+      },
+    )
+  }
+
+  deleteProject(
+    input: Parameters<NonNullable<IEditorApi['deleteProject']>>[0],
+    signal?: AbortSignal,
+  ) {
+    const binding = this.capture()
+
+    return this.transition(
+      binding,
+      async () => {
+        if (!binding.api.deleteProject)
+          throw new EditorApiError(
+            'unsupported_project_management',
+            'Project deletion is unavailable',
+          )
+
+        return binding.api.deleteProject(input, signal)
+      },
+      () => {
+        this.closed = true
+      },
+    )
   }
 
   switchProject(path: string, signal?: AbortSignal) {
@@ -48,6 +126,7 @@ export class ProjectSession {
       const view = await api.inspectGame(signal)
       checkCancellation()
       this.active = { api, gamePath: parsed.data }
+      this.closed = false
 
       return { ...view, gamePath: parsed.data, previousGamePath: previous.gamePath }
     })

@@ -241,6 +241,71 @@
             </fieldset>
             <p id="project-duplicate-error" class="error" role="alert" hidden></p>
           </form>
+          <div class="preview-actions">
+            <button
+              id="project-rename-toggle"
+              type="button"
+              disabled
+              aria-controls="project-rename-controls"
+              aria-expanded="false"
+              data-i18n="project.rename"
+            >
+              Rename project
+            </button>
+            <button id="project-delete" type="button" disabled data-i18n="project.delete">
+              Delete project
+            </button>
+            <button
+              id="project-trash-toggle"
+              type="button"
+              aria-controls="project-trash-controls"
+              aria-expanded="false"
+              data-i18n="project.trash"
+            >
+              Deleted projects
+            </button>
+          </div>
+          <form id="project-rename-controls" hidden>
+            <fieldset id="project-rename-fields">
+              <legend data-i18n="project.rename">Rename project</legend>
+              <p class="help" data-i18n="project.renameHelp">
+                Change the title or folder name. The game ID and preview saves are kept.
+              </p>
+              <label for="project-rename-title" data-i18n="game.title">Game title</label>
+              <input id="project-rename-title" maxlength="200" />
+              <label for="project-rename-folder" data-i18n="project.folderName">Folder name</label>
+              <input id="project-rename-folder" maxlength="64" pattern="[A-Za-z0-9_-]+" />
+              <div class="preview-actions">
+                <button type="submit" data-i18n="project.rename">Rename project</button>
+                <button id="project-rename-cancel" type="button" data-i18n="project.cancelCreate">
+                  Cancel
+                </button>
+              </div>
+            </fieldset>
+          </form>
+          <section id="project-trash-controls" hidden aria-labelledby="project-trash-heading">
+            <h3 id="project-trash-heading" data-i18n="project.trash">Deleted projects</h3>
+            <p class="help" data-i18n="project.trashHelp">
+              Deleted projects stay in workspace trash. Restore to the original folder or another
+              unused folder.
+            </p>
+            <label for="project-trash-list" data-i18n="project.trash">Deleted projects</label>
+            <select id="project-trash-list"></select>
+            <label for="project-restore-folder" data-i18n="project.restoreFolder"
+              >Restore folder</label
+            >
+            <input id="project-restore-folder" />
+            <button id="project-restore" type="button" data-i18n="project.restore">
+              Restore project
+            </button>
+          </section>
+          <p
+            id="project-management-feedback"
+            class="help"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
           <div id="draft-recovery" class="draft-recovery" hidden>
             <p id="draft-recovery-message" role="status" aria-live="polite"></p>
             <div class="preview-actions">

@@ -241,6 +241,44 @@ export class FileWorkspace implements WorkspaceService {
     await rmdir(target)
   }
 
+  /** Both canonical endpoints must stay within this workspace; existing targets are rejected. */
+  async moveDirectory(from: string, to: string): Promise<void> {
+    const source = await this.locate(from)
+
+    if (!(await this.inspect(source)).isDirectory())
+      throw new WorkspaceError(409, 'Expected a project directory')
+    await this.resolveDirectory(to.split('/').slice(0, -1).join('/'))
+    const target = await this.locate(to, false, true)
+    const sourceRelative = relative(this.root, source)
+    const targetRelative = relative(this.root, target)
+
+    if (
+      !sourceRelative ||
+      !targetRelative ||
+      [sourceRelative, targetRelative].some(
+        (path) =>
+          path === '..' || path.startsWith('../') || path.startsWith('..\\') || isAbsolute(path),
+      )
+    )
+      throw new WorkspaceError(403, 'Project moves must remain inside the workspace')
+
+    if (source === target) return
+
+    try {
+      await lstat(target)
+      const sourceCanonical = await realpath(source)
+      const targetCanonical = await realpath(target)
+
+      if (process.platform !== 'win32' || sourceCanonical !== targetCanonical)
+        throw new WorkspaceError(409, 'Choose an unused destination; this folder already exists')
+    } catch (error) {
+      if (!hasCode(error, 'ENOENT')) throw error
+    }
+
+    // The editor coordinator serializes its own moves/creations; outside filesystem edits must stop.
+    await rename(source, target)
+  }
+
   async removeCreated(path: string, contents: Uint8Array): Promise<void> {
     const target = await this.locate(path)
     const current = await this.read(path)

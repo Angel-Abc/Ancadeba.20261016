@@ -39,6 +39,7 @@ import { bindEditorShortcuts } from './editorShortcuts.js'
 import { bindMetadataTranslations } from './metadataTranslations.js'
 import { bindStylesheetEditor } from './stylesheetEditor.js'
 import { bindProjectRepair } from './projectRepair.js'
+import { bindProjectManagementPanel } from './projectManagementPanel.js'
 import {
   buildProjectTree,
   dataFileContent,
@@ -72,6 +73,7 @@ export function bindProjectPanel(
   {
     additionalSections = [],
     onProjectChange,
+    onProjectClose,
     onSceneSelect,
     confirmDiscardDrafts = () =>
       root.ownerDocument.defaultView?.confirm(t('project.discardDrafts')) ?? false,
@@ -79,7 +81,8 @@ export function bindProjectPanel(
     draftStorage = () => root.ownerDocument.defaultView?.localStorage,
   }: {
     additionalSections?: readonly ProjectWorkspaceSection[]
-    onProjectChange?: (path: string) => void
+    onProjectChange?: (path: string, storageKey?: string) => void
+    onProjectClose?: () => void
     /** Reports the scene of the explorer selection, or undefined outside the scenes section. */
     onSceneSelect?: (scene: { id: string; title: string } | undefined) => void
     confirmDiscardDrafts?: () => boolean
@@ -721,8 +724,11 @@ export function bindProjectPanel(
     storyEditor?.render(state, replaceFields)
     mapEditor?.render(state, replaceFields)
     refreshLanguage = () => render(state, false)
+    management?.render(state, replaceFields)
     const projectChanged = state.view && (!view || state.path !== loadedPath)
     const previousRevision = view?.revision
+    const previousStorageKey = view?.storageKey
+    const projectClosed = Boolean(view && !state.view)
     view = state.view
     loadedPath = state.path
 
@@ -733,9 +739,40 @@ export function bindProjectPanel(
     }
 
     // Revisions cover every authored resource, including changes made by other clients.
-    const projectUpdated = replaceFields && view && view.revision !== previousRevision
+    const projectUpdated =
+      replaceFields &&
+      view &&
+      (view.revision !== previousRevision || view.storageKey !== previousStorageKey)
 
-    if (projectChanged || projectUpdated) onProjectChange?.(loadedPath)
+    if (projectChanged || projectUpdated) {
+      if (view?.storageKey !== undefined) onProjectChange?.(loadedPath, view.storageKey)
+      else onProjectChange?.(loadedPath)
+    }
+
+    if (projectClosed) {
+      dirtyForms.clear()
+      onProjectClose?.()
+      showOpenControls(true)
+    }
+
+    if (replaceFields && state.projectChange) {
+      const change = state.projectChange
+
+      const removedPaths =
+        change.kind === 'renamed'
+          ? [change.previousPath, loadedPath]
+          : change.kind === 'deleted'
+            ? [change.previousPath]
+            : [loadedPath]
+
+      projectChoices = projectChoices.filter(({ path }) => !removedPaths.includes(path))
+
+      if (view) projectChoices.push({ path: loadedPath, title: view.game?.title ?? loadedPath })
+      projectChoices.sort((a, b) => a.path.localeCompare(b.path))
+      renderProjectChoices(loadedPath)
+
+      if (view) showOpenControls(false)
+    }
 
     busy = state.busy
     historyBlocked = state.conflict || state.changedElsewhere
@@ -990,6 +1027,7 @@ export function bindProjectPanel(
   }
 
   let draftRecovery: ReturnType<typeof bindEditorDraftRecovery> | undefined
+  let management: ReturnType<typeof bindProjectManagementPanel> | undefined
 
   const controller = new ProjectEditorController(client, (state, replaceFields) => {
     draftRecovery?.beforeRender()
@@ -1675,11 +1713,20 @@ export function bindProjectPanel(
     void controller.refresh(hasDrafts)
   })
 
+  management = bindProjectManagementPanel(
+    root,
+    client,
+    controller,
+    t,
+    () => !hasDrafts() || confirmDiscardDrafts(),
+    confirmDelete,
+  )
   void refreshProjects()
 
   return {
     hasDrafts,
     dispose() {
+      management?.dispose()
       draftRecovery?.dispose()
       repairEditor?.dispose()
       discovery?.abort()

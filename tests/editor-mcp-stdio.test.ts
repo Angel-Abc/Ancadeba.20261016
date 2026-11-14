@@ -18,7 +18,7 @@ import { createEditorServer } from '../apps/editor-server/src/server.js'
 import { WorkspaceGameExporter } from '../apps/editor-server/src/gameExports.js'
 import { writeGameArchive } from '../apps/editor-server/src/gameArchive.js'
 import { unzipSync, strFromU8 } from 'fflate'
-import { object } from '@ancadeba/editor-core'
+import { object, deletedProjectSchema } from '@ancadeba/editor-core'
 import {
   historyResultSchema,
   gameSummarySchema,
@@ -122,7 +122,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(18)
+    expect((await activeClient.listTools()).tools).toHaveLength(22)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -186,7 +186,8 @@ describe('MCP stdio process', () => {
     await activeClient.close()
 
     if (pid !== null) expect(() => process.kill(pid, 0)).toThrow()
-  })
+    // First-use JSON output validation compiles the complete advertised game schema.
+  }, 60_000)
 
   it('delivers a binary export over stdio from the selected project without filesystem access in the adapter', async () => {
     const { activeClient, errors, stderr } = await connect()
@@ -271,6 +272,61 @@ describe('MCP stdio process', () => {
     expect(errors).toEqual([])
     expect(stderr.join('')).toBe('')
   })
+  it('renames, deletes and restores a project through stdio while tracking active selection', async () => {
+    const { activeClient, errors, stderr } = await connect()
+
+    const call = (name: string, args: Record<string, unknown> = {}) =>
+      activeClient.callTool({ name, arguments: args })
+
+    const inspected = await call('ancadeba_inspect_game')
+    const source = gameSummarySchema.parse(object(inspected.structuredContent).data)
+
+    const renamed = await call('ancadeba_rename_project', {
+      expectedRevision: source.revision,
+      title: 'Renamed through stdio',
+      folderName: 'renamed',
+    })
+
+    expect(renamed.structuredContent).toMatchObject({
+      ok: true,
+      data: { gamePath: 'renamed', previousGamePath: 'basic' },
+    })
+    const current = await call('ancadeba_inspect_game')
+    const view = gameSummarySchema.parse(object(current.structuredContent).data)
+    expect(object(current.structuredContent).data).toMatchObject({
+      gamePath: 'renamed',
+      game: { id: source.game!.id, title: 'Renamed through stdio' },
+    })
+
+    const removed = await call('ancadeba_delete_project', {
+      expectedRevision: view.revision,
+      confirm: true,
+    })
+
+    expect(removed.isError).toBe(false)
+    expect((await call('ancadeba_inspect_game')).structuredContent).toMatchObject({
+      ok: false,
+      error: { code: 'project_closed' },
+    })
+    const listed = await call('ancadeba_list_deleted_projects')
+    expect(listed.isError).toBe(false)
+    const deleted = deletedProjectSchema.parse(object(removed.structuredContent).data)
+    expect(
+      (
+        await call('ancadeba_restore_project', {
+          trashId: deleted.trashId,
+          expectedRevision: deleted.revision,
+          destination: 'recovered',
+        })
+      ).isError,
+    ).toBe(false)
+    expect((await call('ancadeba_switch_project', { path: 'recovered' })).isError).toBe(false)
+    expect((await call('ancadeba_inspect_game')).structuredContent).toMatchObject({
+      data: { gamePath: 'recovered', game: { id: source.game!.id } },
+    })
+    expect(errors).toEqual([])
+    expect(stderr.join('')).toBe('')
+  })
 
   it('discovers and creates a configured future project through stdio before its manifest exists', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect('future')
@@ -344,7 +400,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(18)
+    expect((await activeClient.listTools()).tools).toHaveLength(22)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({
@@ -355,7 +411,7 @@ describe('MCP stdio process', () => {
     expect(
       (await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })).isError,
     ).toBe(false)
-  })
+  }, 60_000)
   it('writes help and startup failures only to stderr', async () => {
     const run = promisify(execFile)
     const help = await run(process.execPath, ['--import', loader, entry, '--help'], { cwd: root })

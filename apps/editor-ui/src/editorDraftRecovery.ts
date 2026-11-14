@@ -161,7 +161,16 @@ export function bindEditorDraftRecovery(
       busy = state.busy
       render()
 
-      if (paused || !state.view || state.busy) return
+      if (!state.view) {
+        currentPath = undefined
+        pending = undefined
+        notice = ''
+        render()
+
+        return
+      }
+
+      if (paused || state.busy) return
 
       if (currentPath !== state.path) {
         currentPath = state.path

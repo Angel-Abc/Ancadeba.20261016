@@ -127,6 +127,8 @@ function clearDownload(): void {
   exportDownload.hidden = true
 }
 
+const projectSaveKeys = new Map<string, string>()
+
 const container = new ContainerBuilder({
   fetcher: fetch,
   host: new EditorPreviewHost(
@@ -144,7 +146,10 @@ const container = new ContainerBuilder({
   },
   runtime: createBrowserTiming(window),
   createGameSaveStore: (folder) =>
-    new BrowserGameSaveStore(() => window.localStorage, `editor-preview:${folder}`),
+    new BrowserGameSaveStore(
+      () => window.localStorage,
+      `editor-preview:${projectSaveKeys.get(folder) ?? folder}`,
+    ),
   download: (archive, fileName) => {
     clearDownload()
     downloadUrl = URL.createObjectURL(archive)
@@ -211,13 +216,21 @@ const projectPanel = bindProjectPanel(
   t,
   subscribeLanguageChanges,
   {
-    onProjectChange(path) {
+    onProjectChange(path, storageKey) {
       const restartPreview = previewState !== 'stopped'
       projectPath = path
+      projectSaveKeys.set(path, storageKey ?? path)
       exportController.reset()
       controller.stop()
 
       if (restartPreview) void controller.start(path, { confirm: false })
+    },
+    onProjectClose() {
+      projectPath = undefined
+      selectedScene = undefined
+      exportController.reset()
+      controller.stop()
+      renderStartLabel()
     },
     onSceneSelect(scene) {
       selectedScene = scene

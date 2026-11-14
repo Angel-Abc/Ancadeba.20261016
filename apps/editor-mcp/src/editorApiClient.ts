@@ -2,6 +2,9 @@ import {
   commandRequestSchema,
   type EditorCommand,
   type EditorWriteOutcome,
+  projectLocationSchema,
+  deletedProjectSchema,
+  deletedProjectListSchema,
 } from '@ancadeba/editor-core'
 import type { z } from 'zod'
 import type { AdapterConfig } from './config.js'
@@ -12,6 +15,9 @@ import {
   maxUploadBytes,
   createProjectInputSchema,
   duplicateProjectInputSchema,
+  renameProjectInputSchema,
+  deleteProjectInputSchema,
+  restoreProjectInputSchema,
   exportGameInputSchema,
 } from './operationSupport.js'
 import { EditorApiError } from './editorApiError.js'
@@ -52,6 +58,19 @@ const jsonBody = (value: unknown): RequestBody => ({
 })
 
 export interface IEditorApi {
+  renameProject?(
+    input: z.infer<typeof renameProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectLocationSchema>>
+  deleteProject?(
+    input: z.infer<typeof deleteProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof deletedProjectSchema>>
+  listDeletedProjects?(signal?: AbortSignal): Promise<z.infer<typeof deletedProjectListSchema>>
+  restoreProject?(
+    input: z.infer<typeof restoreProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectLocationSchema>>
   forProject(path: string): IEditorApi
   exportGame(
     input: z.input<typeof exportGameInputSchema>,
@@ -91,6 +110,74 @@ export class EditorApiClient implements IEditorApi {
     private readonly fetcher: typeof fetch,
     private readonly shutdownSignal?: AbortSignal,
   ) {}
+
+  private async managementSupport(
+    feature: 'projectRenaming' | 'projectDeletion' | 'projectRestoration',
+    signal?: AbortSignal,
+  ) {
+    if (!(await this.capabilities(signal)).features?.[feature])
+      throw new EditorApiError(
+        'unsupported_project_management',
+        'The connected editor does not advertise this project operation',
+      )
+  }
+
+  async renameProject(input: z.infer<typeof renameProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = renameProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide the source revision and a new title or folder name',
+      )
+    await this.managementSupport('projectRenaming', signal)
+
+    return this.request(
+      '/api/editor/projects/rename',
+      projectLocationSchema,
+      jsonBody({ ...parsed.data, path: this.config.game }),
+      signal,
+    )
+  }
+
+  async deleteProject(input: z.infer<typeof deleteProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = deleteProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError('invalid_request', 'Provide the source revision and confirm: true')
+    await this.managementSupport('projectDeletion', signal)
+
+    return this.request(
+      '/api/editor/projects/delete',
+      deletedProjectSchema,
+      jsonBody({ ...parsed.data, path: this.config.game }),
+      signal,
+    )
+  }
+
+  async listDeletedProjects(signal?: AbortSignal) {
+    await this.managementSupport('projectRestoration', signal)
+
+    return this.request('/api/editor/projects/trash', deletedProjectListSchema, undefined, signal)
+  }
+
+  async restoreProject(input: z.infer<typeof restoreProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = restoreProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide a trash ID, its revision and an optional unused destination',
+      )
+    await this.managementSupport('projectRestoration', signal)
+
+    return this.request(
+      '/api/editor/projects/restore',
+      projectLocationSchema,
+      jsonBody(parsed.data),
+      signal,
+    )
+  }
 
   forProject(path: string): IEditorApi {
     const parsed = workspaceProjectPathSchema.safeParse(path)

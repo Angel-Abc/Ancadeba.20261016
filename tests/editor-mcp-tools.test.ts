@@ -79,6 +79,84 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
+  it('follows renames, closes deleted bindings, and allows discovery and restoration after deletion', async () => {
+    const trashId = 'f108487a-40de-45f2-98ac-33f906c4e234'
+    let path = 'basic'
+    let removed = false
+
+    const scoped = (bound: string): IEditorApi => ({
+      ...api(),
+      forProject: scoped,
+      inspectGame: async () => {
+        expect(bound).toBe(path)
+
+        return view
+      },
+      listProjects: async () => ({ projects: removed ? [] : [{ path, title: 'Game' }] }),
+      renameProject: async (input) => {
+        expect(bound).toBe('basic')
+        path = input.folderName!
+
+        return { ...view, path, previousPath: bound }
+      },
+      deleteProject: async (input) => {
+        expect(input.confirm).toBe(true)
+        expect(bound).toBe('renamed')
+        removed = true
+
+        return {
+          trashId,
+          path,
+          title: 'Game',
+          revision: 'one',
+          deletedAt: '2026-11-14T00:00:00.000Z',
+        }
+      },
+      listDeletedProjects: async () => ({ projects: [] }),
+      restoreProject: async () => {
+        removed = false
+
+        return { ...view, path, previousPath: path }
+      },
+    })
+
+    const { client, close } = await connection(scoped('basic'))
+
+    const call = (name: string, args: Record<string, unknown> = {}) =>
+      client.callTool({ name, arguments: args })
+
+    try {
+      expect(
+        (await call('ancadeba_rename_project', { expectedRevision: 'one', folderName: 'renamed' }))
+          .isError,
+      ).toBe(false)
+      expect((await call('ancadeba_inspect_game')).structuredContent).toMatchObject({
+        data: { gamePath: 'renamed' },
+      })
+      expect(
+        (await call('ancadeba_delete_project', { expectedRevision: 'one', confirm: true })).isError,
+      ).toBe(false)
+      expect((await call('ancadeba_inspect_game')).structuredContent).toMatchObject({
+        ok: false,
+        error: { code: 'project_closed' },
+      })
+
+      for (const name of [
+        'ancadeba_get_capabilities',
+        'ancadeba_list_projects',
+        'ancadeba_list_deleted_projects',
+      ])
+        expect((await call(name)).isError).toBe(false)
+      expect(
+        (await call('ancadeba_restore_project', { trashId, expectedRevision: 'one' })).isError,
+      ).toBe(false)
+      expect((await call('ancadeba_inspect_game')).isError).toBe(true)
+      expect((await call('ancadeba_switch_project', { path })).isError).toBe(false)
+      expect((await call('ancadeba_inspect_game')).isError).toBe(false)
+    } finally {
+      await close()
+    }
+  })
   it('duplicates without switching the active binding and rejects source-path overrides', async () => {
     const remote = api()
     const copies: unknown[] = []
@@ -485,6 +563,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_apply_command',
         'ancadeba_create_project',
         'ancadeba_create_scene',
+        'ancadeba_delete_project',
         'ancadeba_duplicate_project',
         'ancadeba_edit_assets',
         'ancadeba_export_game',
@@ -492,8 +571,11 @@ describe('MCP adapter tools', () => {
         'ancadeba_inspect_assets',
         'ancadeba_inspect_game',
         'ancadeba_inspect_scene',
+        'ancadeba_list_deleted_projects',
         'ancadeba_list_projects',
         'ancadeba_redo',
+        'ancadeba_rename_project',
+        'ancadeba_restore_project',
         'ancadeba_switch_project',
         'ancadeba_undo',
         'ancadeba_update_game_metadata',
@@ -501,7 +583,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_update_scene_metadata',
         'ancadeba_upload_asset',
       ])
-      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(6)
+      expect(tools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(7)
       expect(
         tools.find((tool) => tool.name === 'ancadeba_export_game')?.inputSchema.required ?? [],
       ).not.toContain('timeoutMs')
@@ -542,7 +624,8 @@ describe('MCP adapter tools', () => {
     } finally {
       await close()
     }
-  })
+    // The client compiles the complete advertised JSON output schema on its first inspected result.
+  }, 60_000)
   it('dispatches every advertised editor command through the typed generic tool', async () => {
     expect(new Set(capabilities.commands.map(({ type }) => type))).toEqual(
       new Set(commandSchema.options.map((option) => option.shape.type.value)),

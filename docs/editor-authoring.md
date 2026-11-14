@@ -338,6 +338,41 @@ the workspace root (`""`) or a nested source; the destination is a new single fo
 under the workspace. Invalid sources return 422, changed revisions or existing
 destinations return 409, and size limits return 413. Duplication itself is not undoable.
 
+Use **Rename project** to change the open project's title, folder name, or both.
+The new folder name follows creation's 1–64 character naming rules and stays in
+the same parent. A title change clears `titleKey`; a folder-only change preserves
+the manifest bytes. Both keep the game ID and browser preview saves.
+
+**Delete project** asks for confirmation and moves the entire folder into
+`.ancadeba-trash` in the workspace. **Deleted projects** lists recoverable entries;
+restore one to its original folder or enter another unused workspace-relative
+folder. The destination's parent must exist. Existing directories are never
+overwritten. Deleting the open project stops its preview and closes the editor;
+restoring opens the recovered project. Unsaved edits require confirmation before
+rename, deletion, or restoration. Cancellation and failures retain the open project.
+The workspace root supports title changes but cannot be moved or deleted. A folder
+containing nested games cannot be moved or deleted until those games are handled
+separately. Repair a damaged manifest before changing its title.
+
+The revision-checked JSON endpoints are `POST /api/editor/projects/rename`
+(`path`, `expectedRevision`, optional `title`/`folderName`, at least one required),
+`POST /api/editor/projects/delete` (`path`, `expectedRevision`, `confirm: true`),
+and `POST /api/editor/projects/restore` (`trashId`, `expectedRevision`, optional
+`destination`). They return HTTP 200. `GET /api/editor/projects/trash` returns
+recoverable entries and their current revisions. Inspect the list after a conflict.
+Rename and restoration return a project view with `path` and `previousPath`.
+Project folder operations clear authoring undo history and are not undo steps.
+
+Workspace metadata in `.ancadeba-projects.json` keeps preview-save namespaces
+stable across moves and restores, and isolates newly created projects when a
+folder name is reused. Keep this file and the trash together with the workspace.
+Trash and registry files are excluded from project discovery, duplication, raw
+file access, stylesheet discovery, and game exports. There is no permanent-delete
+control. Damaged trash records remain on disk for manual recovery. Operations
+attempt guarded rollback on failure, but do not provide a crash journal or a
+cross-process filesystem snapshot. Avoid outside filesystem edits during moves;
+after an uncertain outcome inspect both the original folder and project trash.
+
 In **Rules → Trigger links**, save or discard edited button links before switching
 buttons or scenes, and edited inspections before switching item types. Saving
 one trigger form preserves drafts in the other forms. **Discard trigger draft**

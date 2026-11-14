@@ -120,6 +120,10 @@ raw-file, shell, or process tools.
 | `ancadeba_create_project`        | `path`, `title`, optional `description`                                                      | Complete created project, its `gamePath`/revision and unchanged `configuredGamePath`                    |
 | `ancadeba_duplicate_project`     | `expectedRevision`, `destination`, `title`                                                   | Complete copied project, its `gamePath`/revision and unchanged `configuredGamePath`                     |
 | `ancadeba_export_game`           | Optional `timeoutMs` (default 120000, maximum 300000)                                        | ZIP metadata and an embedded binary `application/zip` resource                                          |
+| `ancadeba_rename_project`        | `expectedRevision`, optional `title`/`folderName` (at least one)                             | Updated active `gamePath`, `previousGamePath`, revision and diagnostics                                 |
+| `ancadeba_delete_project`        | `expectedRevision`, `confirm: true`                                                          | Trash ID, original path/title, revision and deletion date; closes active binding                        |
+| `ancadeba_list_deleted_projects` | Empty object                                                                                 | Recoverable project entries and current revisions                                                       |
+| `ancadeba_restore_project`       | `trashId`, `expectedRevision`, optional `destination`                                        | Restored `gamePath`, original `previousGamePath`, revision and diagnostics                              |
 | `ancadeba_inspect_game`          | Empty object                                                                                 | Game metadata, scene summaries, source definitions, revision, diagnostics                               |
 | `ancadeba_inspect_scene`         | `sceneId`                                                                                    | Scene definition, revision, diagnostics                                                                 |
 | `ancadeba_inspect_assets`        | Empty object                                                                                 | Asset catalogue, parts, compositions, revision, source diagnostics                                      |
@@ -132,6 +136,19 @@ raw-file, shell, or process tools.
 | `ancadeba_create_scene`          | `expectedRevision`, complete `scene`                                                         | Saved change summary                                                                                    |
 | `ancadeba_update_scene_metadata` | `expectedRevision`, `sceneId`, `title`, `description`; optional `titleKey`, `descriptionKey` | Saved change summary                                                                                    |
 | `ancadeba_update_scene_layout`   | `expectedRevision`, `sceneId`, positive integer `rows` and `columns`                         | Saved change summary                                                                                    |
+
+Project renaming preserves game IDs and preview saves and updates this connection's
+active selection. Folder names stay in their original parent; changing a title
+clears its translation key. Deletion moves the complete folder into recoverable
+workspace trash. After deletion, project tools report `project_closed` until an
+explicit switch; workspace discovery, creation, capabilities and trash operations
+remain available. Restoring never overwrites an existing folder and does not
+select the restored game. List trash to obtain a fresh revision, restore it, then
+switch to its returned path. Root-folder moves/deletion and moves of projects
+containing nested games are rejected. Folder operations clear authoring history.
+After uncertain outcomes, inspect discovery, the original/destination folders and
+trash before another deliberate attempt. See the authoring guide for recovery and
+filesystem transaction limits.
 
 Editing input schemas derive from editor-core's commands. The generic tool takes
 the command type inside `command`; dedicated aliases supply their own type. The

@@ -21,6 +21,8 @@ import {
 export type ProjectDocuments = Readonly<Record<string, unknown>>
 
 export interface ProjectSnapshot {
+  /** Stable editor-preview storage namespace after a folder move. */
+  storageKey?: string | undefined
   revision: string
   documents: ProjectDocuments
   sourceDiagnostics?: readonly Diagnostic[]
@@ -38,6 +40,7 @@ export interface Diagnostic {
 }
 
 export interface ProjectView {
+  storageKey?: string | undefined
   recoveryManifest?: string | undefined
   /** Available only while invalid; raw definitions support repairing syntax and schema errors. */
   repairFiles?: Record<string, string | null> | undefined

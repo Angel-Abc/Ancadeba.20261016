@@ -1,4 +1,4 @@
-import type { ProjectChoice } from '@ancadeba/editor-core'
+import { projectTrashDirectory, type ProjectChoice } from '@ancadeba/editor-core'
 import { workspaceError, type WorkspaceService } from './workspace.js'
 import { hasRecoveryResources } from './manifestRecovery.js'
 
@@ -46,7 +46,8 @@ export async function listWorkspaceProjects(
     const { entries } = listing
 
     for (const entry of entries) {
-      if (entry.type === 'directory') pending.push(prefix + entry.name)
+      if (entry.type === 'directory' && entry.name.toLowerCase() !== projectTrashDirectory)
+        pending.push(prefix + entry.name)
     }
 
     if (!entries.some((entry) => entry.type === 'file' && entry.name === 'game.json')) {

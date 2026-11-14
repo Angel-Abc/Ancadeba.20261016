@@ -106,6 +106,9 @@ describe('standalone game export', () => {
     await mkdir(join(source, 'assets/dialogue'), { recursive: true })
     await mkdir(join(source, '.git'))
     await mkdir(join(source, 'node_modules'))
+    await mkdir(join(source, '.ancadeba-trash'))
+    await writeFile(join(source, '.ancadeba-trash', 'private.txt'), 'Deleted project')
+    await writeFile(join(source, '.ancadeba-projects.json'), 'Private save aliases')
     await mkdir(join(source, 'scenes'))
     await mkdir(join(source, 'input'))
     await writeFile(join(source, 'game.json'), JSON.stringify(game))
@@ -737,7 +740,14 @@ describe('standalone game export', () => {
       '<title>Game asset</title>',
     )
 
-    for (const path of ['.env', '.env.local', '.git', 'node_modules']) {
+    for (const path of [
+      '.env',
+      '.env.local',
+      '.git',
+      'node_modules',
+      '.ancadeba-trash',
+      '.ancadeba-projects.json',
+    ]) {
       await expect(readFile(join(output, 'game', path))).rejects.toHaveProperty('code', 'ENOENT')
     }
 

@@ -10,6 +10,11 @@ import {
   createProjectRequestSchema,
   createStarterProject,
   duplicateProjectRequestSchema,
+  renameProjectRequestSchema,
+  deleteProjectRequestSchema,
+  restoreProjectRequestSchema,
+  type ProjectLocation,
+  type DeletedProject,
   validateProject,
   historyRequestSchema,
   type ProjectSnapshot,
@@ -44,6 +49,11 @@ export class EditorProjectService {
       assetImport: typeof this.repository.createAsset === 'function',
       projectCreation: typeof this.repository.create === 'function',
       projectDuplication: typeof this.repository.duplicate === 'function',
+      projectRenaming: typeof this.repository.rename === 'function',
+      projectDeletion: typeof this.repository.delete === 'function',
+      projectRestoration:
+        typeof this.repository.restoreProject === 'function' &&
+        typeof this.repository.listDeleted === 'function',
       projectRepair:
         typeof this.repository.previewRepair === 'function' &&
         typeof this.repository.readHistoryFiles === 'function' &&
@@ -139,6 +149,109 @@ export class EditorProjectService {
       return {
         revision: current.revision,
         diagnostics: validateProject(candidate.documents, candidate.sourceDiagnostics),
+      }
+    })
+  }
+
+  rename(input: unknown): Promise<ProjectLocation> {
+    const parsed = renameProjectRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Provide a project revision and a new title or folder name',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.rename)
+        throw new EditorError(
+          503,
+          'unsupported_project_management',
+          'Project renaming is unavailable',
+        )
+      const request = parsed.data
+      const path = await this.repository.rename(request)
+      this.history.clear(request.path)
+      this.history.clear(path)
+
+      try {
+        return {
+          ...this.view(path, await this.repository.load(path)),
+          path,
+          previousPath: request.path,
+        }
+      } catch {
+        throw new EditorError(
+          500,
+          'project_rename_uncertain',
+          `The project may have been renamed to ${path || 'the workspace root'}. Refresh the project list and inspect that location before retrying.`,
+        )
+      }
+    })
+  }
+
+  delete(input: unknown): Promise<DeletedProject> {
+    const parsed = deleteProjectRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Select a non-root project, provide its revision, and confirm deletion',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.delete)
+        throw new EditorError(
+          503,
+          'unsupported_project_management',
+          'Project deletion is unavailable',
+        )
+      const deleted = await this.repository.delete(parsed.data)
+      this.history.clear(parsed.data.path)
+
+      return deleted
+    })
+  }
+
+  listDeleted(): Promise<DeletedProject[]> {
+    return this.coordinator.run(async () => {
+      if (!this.repository.listDeleted)
+        throw new EditorError(503, 'unsupported_project_management', 'Project trash is unavailable')
+
+      return this.repository.listDeleted()
+    })
+  }
+
+  restoreProject(input: unknown): Promise<ProjectLocation> {
+    const parsed = restoreProjectRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Select a deleted project and provide its revision',
+      )
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.restoreProject)
+        throw new EditorError(
+          503,
+          'unsupported_project_management',
+          'Project restoration is unavailable',
+        )
+      const result = await this.repository.restoreProject(parsed.data)
+      this.history.clear(result.path)
+
+      try {
+        return { ...this.view(result.path, await this.repository.load(result.path)), ...result }
+      } catch {
+        throw new EditorError(
+          500,
+          'project_restore_uncertain',
+          `The project may have been restored to ${result.path}. Refresh the project list and inspect it before retrying.`,
+        )
       }
     })
   }

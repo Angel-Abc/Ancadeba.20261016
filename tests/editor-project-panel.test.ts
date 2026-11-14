@@ -4,6 +4,10 @@ import {
   createProjectRequestSchema,
   duplicateProjectRequestSchema,
   historyRequestSchema,
+  renameProjectRequestSchema,
+  deleteProjectRequestSchema,
+  restoreProjectRequestSchema,
+  type DeletedProject,
   type CommandRequest,
   type CreateProjectRequest,
   type DuplicateProjectRequest,
@@ -101,6 +105,8 @@ function panel(
         'project-create-controls',
         'project-recover-controls',
         'project-duplicate-controls',
+        'project-rename-controls',
+        'project-trash-controls',
       ].includes(id)
       controls.set(id, result)
     }
@@ -113,12 +119,17 @@ function panel(
   const creations: CreateProjectRequest[] = []
   const duplications: DuplicateProjectRequest[] = []
   const historyRequests: HistoryRequest[] = []
+  const managementRequests: unknown[] = []
+  let deleted: DeletedProject[] = []
+  let managementResponse: (() => Promise<Response>) | undefined
   const inspections: string[] = []
   let createResponse: (() => Promise<Response>) | undefined
   let duplicateResponse: (() => Promise<Response>) | undefined
   let applyResponse: (() => Promise<Response>) | undefined
   const onProjectChange = vi.fn<(path: string) => void>()
   const confirmDiscardDrafts = vi.fn(() => false)
+  const confirmDelete = vi.fn(() => false)
+  const onProjectClose = vi.fn()
   let localization = editorLocalization()
   let languageChanged = () => {}
 
@@ -131,6 +142,59 @@ function panel(
   }
 
   const fetcher: typeof fetch = async (url, init) => {
+    if (url === '/api/editor/projects/trash') return Response.json({ projects: deleted })
+
+    if (
+      [
+        '/api/editor/projects/rename',
+        '/api/editor/projects/delete',
+        '/api/editor/projects/restore',
+      ].some((path) => path === url)
+    ) {
+      if (typeof init?.body !== 'string') throw new Error('Expected JSON management request')
+      const body = JSON.parse(init.body)
+
+      const request =
+        url === '/api/editor/projects/rename'
+          ? renameProjectRequestSchema.parse(body)
+          : url === '/api/editor/projects/delete'
+            ? deleteProjectRequestSchema.parse(body)
+            : restoreProjectRequestSchema.parse(body)
+
+      managementRequests.push(request)
+
+      if (managementResponse) return managementResponse()
+
+      if (url === '/api/editor/projects/delete') {
+        deleted = [
+          {
+            trashId: 'f108487a-40de-45f2-98ac-33f906c4e234',
+            path: body.path,
+            title: latest?.game?.title ?? '',
+            revision: latest!.revision,
+            deletedAt: '2026-11-14T00:00:00.000Z',
+          },
+        ]
+        latest = undefined
+
+        return Response.json(deleted[0])
+      }
+
+      latest ??= project('restored')
+
+      if (body.title) latest.game!.title = body.title
+      const path = body.destination ?? body.folderName ?? body.path
+
+      if (url === '/api/editor/projects/restore') deleted = []
+
+      return Response.json({
+        ...latest,
+        path,
+        previousPath: body.path ?? 'basic',
+        storageKey: 'basic',
+      })
+    }
+
     if (typeof url === 'string' && url.startsWith('/api/editor/project?')) inspections.push(url)
 
     if (url === '/api/editor/projects/duplicate') {
@@ -194,7 +258,13 @@ function panel(
         languageChanged = () => {}
       }
     },
-    { onProjectChange, confirmDiscardDrafts, draftStorage: () => recoveryStorage },
+    {
+      onProjectChange,
+      onProjectClose,
+      confirmDiscardDrafts,
+      confirmDelete,
+      draftStorage: () => recoveryStorage,
+    },
   )
 
   const submitProject = async (path?: string) => {
@@ -210,6 +280,12 @@ function panel(
     requests,
     inspections,
     historyRequests,
+    managementRequests,
+    confirmDelete,
+    onProjectClose,
+    setManagementResponse: (response?: () => Promise<Response>) => {
+      managementResponse = response
+    },
     window: root.ownerDocument.defaultView,
     creations,
     duplications,
@@ -238,6 +314,82 @@ function panel(
 }
 
 describe('project panel form reconciliation', () => {
+  it('renames the open project and updates its picker and preview namespace', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-rename-toggle').disabled).toBe(false))
+      ui.control('project-rename-toggle').fire('click')
+      ui.control('project-rename-title').value = 'Renamed'
+      ui.control('project-rename-folder').value = 'renamed'
+      ui.control('project-rename-controls').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.onProjectChange).toHaveBeenLastCalledWith('renamed', 'basic'),
+      )
+      expect(ui.managementRequests).toEqual([
+        { path: 'basic', expectedRevision: 'one', title: 'Renamed', folderName: 'renamed' },
+      ])
+      expect(ui.control('editor-folder').children.map(({ value }) => value)).not.toContain('basic')
+      expect(ui.control('editor-title').value).toBe('Renamed')
+      expect(ui.control('project-rename-controls').hidden).toBe(true)
+    } finally {
+      ui.dispose()
+    }
+  })
+  it('requires draft and delete confirmation, closes the deleted project, then restores it', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-delete').disabled).toBe(false))
+      ui.control('project-delete').fire('click')
+      expect(ui.managementRequests).toEqual([])
+      ui.confirmDelete.mockReturnValue(true)
+      ui.control('editor-title').value = 'Unsaved'
+      ui.control('editor-metadata').fire('input')
+      ui.control('project-delete').fire('click')
+      expect(ui.managementRequests).toEqual([])
+      ui.confirmDiscardDrafts.mockReturnValue(true)
+      ui.control('project-delete').fire('click')
+      await vi.waitFor(() => expect(ui.onProjectClose).toHaveBeenCalledOnce())
+      expect(ui.hasDrafts()).toBe(false)
+      expect(ui.control('editor-workspace').hidden).toBe(true)
+      expect(ui.control('project-open-controls').hidden).toBe(false)
+      expect(ui.control('editor-folder').children.map(({ value }) => value)).toContain('')
+      await vi.waitFor(() => expect(ui.control('project-restore').disabled).toBe(false))
+      ui.control('project-restore-folder').value = 'recovered'
+      ui.control('project-restore').fire('click')
+      await vi.waitFor(() =>
+        expect(ui.onProjectChange).toHaveBeenLastCalledWith('recovered', 'basic'),
+      )
+      expect(ui.control('editor-workspace').hidden).toBe(false)
+    } finally {
+      ui.dispose()
+    }
+  })
+  it('preserves rename drafts and the current project on failure', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-rename-toggle').disabled).toBe(false))
+      ui.control('project-rename-toggle').fire('click')
+      ui.control('project-rename-folder').value = 'occupied'
+      ui.setManagementResponse(async () =>
+        Response.json({ error: 'Folder occupied', diagnostics: [] }, { status: 409 }),
+      )
+      ui.control('project-rename-controls').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.control('project-management-feedback').textContent).toBe('Folder occupied'),
+      )
+      expect(ui.control('project-rename-folder').value).toBe('occupied')
+      expect(ui.control('project-rename-controls').hidden).toBe(false)
+      expect(ui.onProjectChange).toHaveBeenLastCalledWith('basic')
+    } finally {
+      ui.dispose()
+    }
+  })
   it('duplicates the open saved project with a new title and folder and opens the copy', async () => {
     const ui = panel()
 

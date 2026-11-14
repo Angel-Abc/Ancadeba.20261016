@@ -42,6 +42,7 @@ export async function projectStylesheets(
 
       if (
         entry.type === 'directory' &&
+        !entry.name.toLowerCase().startsWith('.ancadeba-') &&
         file !== excludedDirectory &&
         !ignoredDirectories.has(entry.name.toLowerCase()) &&
         stylesheetPathSchema.safeParse(`${file}/style.css`).success

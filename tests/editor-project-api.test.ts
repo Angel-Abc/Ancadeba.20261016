@@ -1215,6 +1215,9 @@ describe('shared editor project API', () => {
       projectDiscovery: true,
       projectCreation: true,
       projectDuplication: true,
+      projectRenaming: true,
+      projectDeletion: true,
+      projectRestoration: true,
       projectRepair: true,
     })
     const initial = await inspect()

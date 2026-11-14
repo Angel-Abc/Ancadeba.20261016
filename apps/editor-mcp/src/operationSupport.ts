@@ -3,6 +3,9 @@ import {
   historyRequestSchema,
   createProjectRequestSchema,
   duplicateProjectRequestSchema,
+  renameProjectFieldsSchema,
+  deleteProjectRequestSchema,
+  restoreProjectRequestSchema,
   maxDuplicateProjectBytes,
   maxDuplicateProjectFiles,
 } from '@ancadeba/editor-core'
@@ -17,6 +20,16 @@ export const historyInputSchema = historyRequestSchema.omit({ path: true, direct
 export const listProjectsInputSchema = z.strictObject({})
 export const createProjectInputSchema = createProjectRequestSchema
 export const duplicateProjectInputSchema = duplicateProjectRequestSchema.omit({ path: true })
+
+export const renameProjectInputSchema = renameProjectFieldsSchema
+  .omit({ path: true })
+  .refine(
+    ({ title, folderName }) => title !== undefined || folderName !== undefined,
+    'Provide a new title or folder name',
+  )
+
+export const deleteProjectInputSchema = deleteProjectRequestSchema.omit({ path: true })
+export const restoreProjectInputSchema = restoreProjectRequestSchema
 export const switchProjectInputSchema = z.strictObject({ path: workspaceProjectPathSchema })
 
 // A base64 archive plus its envelope must fit clients' default 10 MiB MCP message limit.
@@ -48,6 +61,9 @@ export const editorFeaturesSchema = z.object({
   projectDiscovery: z.boolean().optional(),
   projectCreation: z.boolean().optional(),
   projectDuplication: z.boolean().optional(),
+  projectRenaming: z.boolean().optional(),
+  projectDeletion: z.boolean().optional(),
+  projectRestoration: z.boolean().optional(),
   gameExport: z.boolean().optional(),
 })
 
@@ -72,6 +88,10 @@ export const operationsSchema = z.object({
     maxFiles: z.number().int().positive(),
   }),
   projectSwitching: toolOperation('ancadeba_switch_project'),
+  projectRenaming: toolOperation('ancadeba_rename_project'),
+  projectDeletion: toolOperation('ancadeba_delete_project'),
+  deletedProjects: toolOperation('ancadeba_list_deleted_projects'),
+  projectRestoration: toolOperation('ancadeba_restore_project'),
   assetUpload: z.object({
     tool: z.literal('ancadeba_upload_asset'),
     supported: z.boolean(),
@@ -82,6 +102,26 @@ export const operationsSchema = z.object({
 
 export function mcpOperations(features?: z.infer<typeof editorFeaturesSchema>) {
   return {
+    projectRenaming: {
+      tool: 'ancadeba_rename_project' as const,
+      supported: features?.projectRenaming === true,
+      requestSchema: z.toJSONSchema(renameProjectInputSchema),
+    },
+    projectDeletion: {
+      tool: 'ancadeba_delete_project' as const,
+      supported: features?.projectDeletion === true,
+      requestSchema: z.toJSONSchema(deleteProjectInputSchema),
+    },
+    deletedProjects: {
+      tool: 'ancadeba_list_deleted_projects' as const,
+      supported: features?.projectRestoration === true,
+      requestSchema: z.toJSONSchema(listProjectsInputSchema),
+    },
+    projectRestoration: {
+      tool: 'ancadeba_restore_project' as const,
+      supported: features?.projectRestoration === true,
+      requestSchema: z.toJSONSchema(restoreProjectInputSchema),
+    },
     gameExport: {
       tool: 'ancadeba_export_game' as const,
       supported: features?.gameExport === true,

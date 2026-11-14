@@ -25,6 +25,7 @@ export const diagnosticSchema = z.object({
 })
 
 export const projectViewSchema = z.object({
+  storageKey: z.string().optional(),
   recoveryManifest: z.string().optional(),
   repairFiles: z.record(z.string(), z.string().nullable()).optional(),
   history: z

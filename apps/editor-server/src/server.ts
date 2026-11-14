@@ -17,6 +17,20 @@ import { listWorkspaceProjects } from './workspaceProjects.js'
 
 export const maxWriteBytes = 10 * 1024 * 1024
 
+const managementPath = (path: string) =>
+  path.split('/').some((part) => part.toLowerCase().startsWith('.ancadeba-'))
+
+function protectManagementPath(body: unknown) {
+  if (
+    body &&
+    typeof body === 'object' &&
+    'path' in body &&
+    typeof body.path === 'string' &&
+    managementPath(body.path)
+  )
+    throw new WorkspaceError(403, 'Project management metadata is private')
+}
+
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json' })
   response.end(JSON.stringify(value))
@@ -100,6 +114,9 @@ export function createEditorServer(
 
     const path = url.searchParams.get('path') ?? ''
 
+    if (managementPath(path))
+      throw new WorkspaceError(403, 'Project management metadata is private')
+
     if (url.pathname.startsWith('/api/editor/')) {
       response.setHeader('Cache-Control', 'no-store')
 
@@ -112,6 +129,9 @@ export function createEditorServer(
               assetImport: false,
               projectCreation: false,
               projectDuplication: false,
+              projectRenaming: false,
+              projectDeletion: false,
+              projectRestoration: false,
             }),
             projectDiscovery: true,
             gameExport: exports !== undefined,
@@ -129,13 +149,22 @@ export function createEditorServer(
 
       if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
 
+      if (request.method === 'GET' && url.pathname === '/api/editor/projects/trash') {
+        json(response, 200, { projects: await projects.listDeleted() })
+
+        return
+      }
+
       if (
         request.method === 'POST' &&
         (url.pathname === '/api/editor/projects' ||
-          url.pathname === '/api/editor/projects/duplicate')
+          url.pathname === '/api/editor/projects/duplicate' ||
+          url.pathname === '/api/editor/projects/rename' ||
+          url.pathname === '/api/editor/projects/delete' ||
+          url.pathname === '/api/editor/projects/restore')
       ) {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json')
-          throw new WorkspaceError(415, 'Project creation and duplication require application/json')
+          throw new WorkspaceError(415, 'Project management requires application/json')
         const bytes = await readBody(request)
         let body: unknown
 
@@ -143,6 +172,26 @@ export function createEditorServer(
           body = JSON.parse(Buffer.from(bytes).toString('utf8'))
         } catch {
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
+        }
+
+        protectManagementPath(body)
+
+        if (url.pathname.endsWith('/rename')) {
+          json(response, 200, await projects.rename(body))
+
+          return
+        }
+
+        if (url.pathname.endsWith('/delete')) {
+          json(response, 200, await projects.delete(body))
+
+          return
+        }
+
+        if (url.pathname.endsWith('/restore')) {
+          json(response, 200, await projects.restoreProject(body))
+
+          return
         }
 
         json(
@@ -188,6 +237,8 @@ export function createEditorServer(
         } catch {
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
         }
+
+        protectManagementPath(body)
 
         if (url.pathname === '/api/editor/components/copy') {
           json(response, 200, await projects.copyComponent(body))
@@ -252,6 +303,7 @@ export function createEditorServer(
           throw new EditorError(400, 'invalid_json', 'Invalid import metadata JSON')
         }
 
+        protectManagementPath(value)
         const result = await projects.importAsset(value, new Uint8Array(await file.arrayBuffer()))
         json(response, 200, {
           ...result.view,
@@ -287,6 +339,8 @@ export function createEditorServer(
         throw new WorkspaceError(400, 'Export requires a workspace-relative game folder')
       }
 
+      if (parsed.path.split('/').some((part) => part.toLowerCase().startsWith('.ancadeba-')))
+        throw new WorkspaceError(403, 'Project trash cannot be exported')
       const archive = await exports.create(parsed.path)
 
       try {
@@ -305,12 +359,16 @@ export function createEditorServer(
     }
 
     if (request.method === 'GET' && url.pathname === '/api/workspace') {
+      if (path.split('/').some((part) => part.toLowerCase().startsWith('.ancadeba-')))
+        throw new WorkspaceError(403, 'Project management metadata is private')
       json(response, 200, await workspace.list(path))
 
       return
     }
 
     if (request.method === 'GET' && url.pathname === '/api/files') {
+      if (path.split('/').some((part) => part.toLowerCase().startsWith('.ancadeba-')))
+        throw new WorkspaceError(403, 'Project management metadata is private')
       const contents = await coordinator.run(() => workspace.read(path))
       response.writeHead(200, { 'Content-Type': 'application/octet-stream' })
       response.end(contents)
@@ -319,6 +377,11 @@ export function createEditorServer(
     }
 
     if (request.method === 'PUT' && url.pathname === '/api/files') {
+      if (path.split('/').some((part) => part.toLowerCase().startsWith('.ancadeba-')))
+        throw new WorkspaceError(
+          403,
+          'Project management metadata cannot be edited through the file API',
+        )
       const contents = await readBody(request)
       const created = await coordinator.run(() => workspace.write(path, contents))
       response.writeHead(created ? 201 : 204)

@@ -163,6 +163,7 @@ export function inspectProject(project: ProjectSnapshot): ProjectView {
     ...(Object.keys(maps).length ? { maps } : {}),
     ...(Object.keys(inventoryFiles).length ? { inventoryFiles } : {}),
     revision: project.revision,
+    ...(project.storageKey === undefined ? {} : { storageKey: project.storageKey }),
     game: game.success ? game.data : null,
     scenes: game.success
       ? game.data.scenes.flatMap((id) => {

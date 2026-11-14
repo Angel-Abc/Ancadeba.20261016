@@ -1983,5 +1983,20 @@
   "combat.scenarios.scriptedItem": "Gepland item (leeg = eigen actie)",
   "combat.scenarios.nativeMove": "Eigen actie gebruiken",
   "combat.simulation.item": "Simulatie-item",
-  "combat.simulation.queueItem": "Item inplannen"
+  "combat.simulation.queueItem": "Item inplannen",
+  "project.rename": "Project hernoemen",
+  "project.delete": "Project verwijderen",
+  "project.trash": "Verwijderde projecten",
+  "project.renameHelp": "Wijzig de titel of mapnaam. Het spel-ID en de opgeslagen voorbeeldspellen blijven behouden. Een gewijzigde titel verwijdert de vertaalsleutel.",
+  "project.folderName": "Mapnaam",
+  "project.trashHelp": "Verwijderde projecten blijven in de werkruimteprullenbak. Herstel ze naar de oorspronkelijke map of een andere ongebruikte map.",
+  "project.restoreFolder": "Herstelmap",
+  "project.restore": "Project herstellen",
+  "project.trashEmpty": "Er zijn geen verwijderde projecten om te herstellen.",
+  "project.invalidRename": "Wijzig de titel of mapnaam. Gebruik 1–64 letters, cijfers, underscores of koppeltekens voor de map.",
+  "project.invalidRestore": "Kies een verwijderd project en een geldige ongebruikte werkruimtemap.",
+  "project.confirmDelete": "“{title}” ({path}) naar de projectprullenbak verplaatsen? De opgeslagen bestanden verdwijnen uit de projectlijst. Je kunt het herstellen via Verwijderde projecten.",
+  "project.renamed": "Project hernoemd.",
+  "project.deleted": "Project naar de prullenbak verplaatst.",
+  "project.restored": "Project hersteld."
 }

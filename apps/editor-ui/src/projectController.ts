@@ -6,6 +6,8 @@ import type {
   ComponentClipboard,
   ProjectRepairRequest,
   ProjectRepairCheck,
+  RenameProjectRequest,
+  RestoreProjectRequest,
 } from '@ancadeba/editor-core'
 import { EditorClientError, type IEditorClient } from './editorClient.js'
 
@@ -19,6 +21,7 @@ export interface ProjectEditorState {
   lastCommand: EditorCommand['type'] | null
   preserveDrafts: boolean
   historyChange?: 'undo' | 'redo' | undefined
+  projectChange?: { kind: 'renamed' | 'deleted' | 'restored'; previousPath: string } | undefined
 }
 
 export type ProjectEditorListener = (state: ProjectEditorState, replaceFields: boolean) => void
@@ -105,6 +108,74 @@ export class ProjectEditorController {
         error: '',
         conflict: false,
         changedElsewhere: false,
+      }
+
+      return true
+    })
+  }
+
+  rename(request: Pick<RenameProjectRequest, 'title' | 'folderName'>): Promise<void> {
+    const { view, path } = this.state
+
+    if (!view) return Promise.resolve()
+
+    return this.perform(async () => {
+      if (!this.client.rename)
+        throw new EditorClientError('unsupported_renaming', 'Project renaming is unavailable')
+      const next = await this.client.rename({ ...request, path, expectedRevision: view.revision })
+      this.state = {
+        ...this.state,
+        path: next.path,
+        view: next,
+        lastCommand: null,
+        preserveDrafts: false,
+        conflict: false,
+        changedElsewhere: false,
+        projectChange: { kind: 'renamed', previousPath: path },
+      }
+
+      return true
+    })
+  }
+
+  delete(): Promise<void> {
+    const { view, path } = this.state
+
+    if (!view || !path) return Promise.resolve()
+
+    return this.perform(async () => {
+      if (!this.client.delete)
+        throw new EditorClientError('unsupported_deletion', 'Project deletion is unavailable')
+      await this.client.delete({ path, expectedRevision: view.revision, confirm: true })
+      this.state = {
+        path: '',
+        busy: true,
+        error: '',
+        lastCommand: null,
+        preserveDrafts: false,
+        conflict: false,
+        changedElsewhere: false,
+        projectChange: { kind: 'deleted', previousPath: path },
+      }
+
+      return true
+    })
+  }
+
+  restoreProject(request: RestoreProjectRequest): Promise<void> {
+    return this.perform(async () => {
+      if (!this.client.restoreProject)
+        throw new EditorClientError('unsupported_restoration', 'Project restoration is unavailable')
+      const next = await this.client.restoreProject(request)
+      this.state = {
+        ...this.state,
+        path: next.path,
+        view: next,
+        lastCommand: null,
+        preserveDrafts: false,
+        conflict: false,
+        changedElsewhere: false,
+        projectChange: { kind: 'restored', previousPath: next.previousPath },
       }
 
       return true
@@ -275,7 +346,7 @@ export class ProjectEditorController {
 
       if (!isCurrent()) return
 
-      if (next.revision === view.revision) {
+      if (next.revision === view.revision && next.storageKey === view.storageKey) {
         if (JSON.stringify(next.history) !== JSON.stringify(view.history)) {
           this.state = { ...this.state, view: { ...view, history: next.history } }
           this.onChange(this.state, false)
@@ -335,7 +406,13 @@ export class ProjectEditorController {
   private async perform(operation: () => Promise<boolean>): Promise<void> {
     if (this.disposed || this.state.busy) return
     this.refreshSequence++
-    this.state = { ...this.state, busy: true, error: '', historyChange: undefined }
+    this.state = {
+      ...this.state,
+      busy: true,
+      error: '',
+      historyChange: undefined,
+      projectChange: undefined,
+    }
     this.onChange(this.state, false)
     let replaceFields = false
 

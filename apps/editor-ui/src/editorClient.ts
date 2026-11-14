@@ -10,6 +10,11 @@ import type {
   ComponentClipboard,
   ProjectRepairRequest,
   ProjectRepairCheck,
+  RenameProjectRequest,
+  DeleteProjectRequest,
+  RestoreProjectRequest,
+  DeletedProject,
+  ProjectLocation,
 } from '@ancadeba/editor-core'
 import {
   apiErrorSchema,
@@ -17,6 +22,9 @@ import {
   projectViewSchema,
   componentClipboardSchema,
   projectRepairCheckSchema,
+  projectLocationSchema,
+  deletedProjectSchema,
+  deletedProjectListSchema,
 } from '@ancadeba/editor-core'
 
 export class EditorClientError extends Error {
@@ -30,6 +38,10 @@ export class EditorClientError extends Error {
 }
 
 export interface IEditorClient {
+  rename?(request: RenameProjectRequest): Promise<ProjectLocation>
+  delete?(request: DeleteProjectRequest): Promise<DeletedProject>
+  listDeleted?(): Promise<DeletedProject[]>
+  restoreProject?(request: RestoreProjectRequest): Promise<ProjectLocation>
   checkRepair?(request: ProjectRepairRequest): Promise<ProjectRepairCheck>
   repair?(request: ProjectRepairRequest): Promise<ProjectView>
   copyComponent?(request: ComponentCopyRequest): Promise<ComponentClipboard>
@@ -51,6 +63,30 @@ export interface IEditorClient {
 
 export class HttpEditorClient implements IEditorClient {
   constructor(private readonly fetcher: typeof fetch) {}
+
+  async rename(request: RenameProjectRequest): Promise<ProjectLocation> {
+    return projectLocationSchema.parse(await this.manage('rename', request))
+  }
+
+  async delete(request: DeleteProjectRequest): Promise<DeletedProject> {
+    return deletedProjectSchema.parse(await this.manage('delete', request))
+  }
+
+  async listDeleted(): Promise<DeletedProject[]> {
+    return deletedProjectListSchema.parse(await this.request('/api/editor/projects/trash')).projects
+  }
+
+  async restoreProject(request: RestoreProjectRequest): Promise<ProjectLocation> {
+    return projectLocationSchema.parse(await this.manage('restore', request))
+  }
+
+  private manage(operation: string, request: unknown): Promise<unknown> {
+    return this.request(`/api/editor/projects/${operation}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
 
   async checkRepair(request: ProjectRepairRequest): Promise<ProjectRepairCheck> {
     const value = await this.request('/api/editor/repair/check', {

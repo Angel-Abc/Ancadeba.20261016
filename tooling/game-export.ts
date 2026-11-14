@@ -27,7 +27,17 @@ export interface GameExportResult {
 }
 
 const engineRoot = fileURLToPath(new URL('../apps/engine/', import.meta.url))
-const excludedNames = new Set(['.git', '.hg', '.svn', 'node_modules', '.DS_Store', 'Thumbs.db'])
+
+const excludedNames = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  'node_modules',
+  '.DS_Store',
+  'Thumbs.db',
+  '.ancadeba-trash',
+  '.ancadeba-projects.json',
+])
 
 const validationLogger: ILogger = {
   debug: () => '',
@@ -73,7 +83,13 @@ async function copyGame(source: string, destination: string): Promise<number> {
   let fileCount = 0
 
   for (const name of entries.sort()) {
-    if (excludedNames.has(name) || name === '.env' || name.startsWith('.env.')) continue
+    if (
+      excludedNames.has(name) ||
+      name.toLowerCase().startsWith('.ancadeba-') ||
+      name === '.env' ||
+      name.startsWith('.env.')
+    )
+      continue
     const from = join(source, name)
     const to = join(destination, name)
     const info = await lstat(from)

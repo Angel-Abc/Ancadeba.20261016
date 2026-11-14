@@ -1983,5 +1983,20 @@
   "combat.scenarios.scriptedItem": "Scripted item (empty = native move)",
   "combat.scenarios.nativeMove": "Use native move",
   "combat.simulation.item": "Simulation item",
-  "combat.simulation.queueItem": "Queue item"
+  "combat.simulation.queueItem": "Queue item",
+  "project.rename": "Rename project",
+  "project.delete": "Delete project",
+  "project.trash": "Deleted projects",
+  "project.renameHelp": "Change the title or folder name. The game ID and preview saves are kept. Changing the title removes its translation key.",
+  "project.folderName": "Folder name",
+  "project.trashHelp": "Deleted projects stay in workspace trash. Restore to the original folder or another unused folder.",
+  "project.restoreFolder": "Restore folder",
+  "project.restore": "Restore project",
+  "project.trashEmpty": "There are no deleted projects to restore.",
+  "project.invalidRename": "Change the title or folder name. Use 1–64 letters, digits, underscores or hyphens for the folder.",
+  "project.invalidRestore": "Choose a deleted project and a valid unused workspace folder.",
+  "project.confirmDelete": "Move “{title}” ({path}) to project trash? Its saved files will be removed from the project list. You can restore it from Deleted projects.",
+  "project.renamed": "Project renamed.",
+  "project.deleted": "Project moved to trash.",
+  "project.restored": "Project restored."
 }

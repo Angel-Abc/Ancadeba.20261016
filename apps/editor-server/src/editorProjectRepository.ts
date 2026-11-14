@@ -21,6 +21,10 @@ import {
   type DuplicateProjectRequest,
   duplicateProjectManifest,
   validateProject,
+  type RenameProjectRequest,
+  type DeleteProjectRequest,
+  type RestoreProjectRequest,
+  type DeletedProject,
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
 import { createWorkspaceProject, createWorkspaceProjectFiles } from './projectCreation.js'
@@ -29,10 +33,13 @@ import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
 import { projectStylesheets } from './projectStylesheets.js'
 import { suggestRecoveryManifest } from './manifestRecovery.js'
+import { ProjectStorage } from './projectStorage.js'
+import { ProjectDirectoryManagement } from './projectDirectoryManagement.js'
 
 export interface ProjectWorkspace extends WorkspaceService {
   createDirectory?(path: string): Promise<void>
   removeDirectory?(path: string): Promise<void>
+  moveDirectory?(from: string, to: string): Promise<void>
   create(path: string, contents: Uint8Array): Promise<void>
   removeCreated(path: string, contents: Uint8Array): Promise<void>
 }
@@ -46,6 +53,10 @@ export interface EditorProjectRepository {
   restoreHistoryFiles?(folder: string, files: readonly HistoryFile[]): Promise<void>
   create?(folder: string, documents: ProjectDocuments): Promise<void>
   duplicate?(request: DuplicateProjectRequest): Promise<void>
+  rename?(request: RenameProjectRequest): Promise<string>
+  delete?(request: DeleteProjectRequest): Promise<DeletedProject>
+  listDeleted?(): Promise<DeletedProject[]>
+  restoreProject?(request: RestoreProjectRequest): Promise<{ path: string; previousPath: string }>
   load(folder: string, overrides?: ReadonlyMap<string, string>): Promise<ProjectSnapshot>
   save(folder: string, change: CommandResult): Promise<void>
   validateAssets?(
@@ -61,7 +72,30 @@ export function projectPath(folder: string, file: string): string {
 }
 
 export class WorkspaceProjectRepository implements EditorProjectRepository {
-  constructor(private readonly workspace: ProjectWorkspace) {}
+  private readonly storage: ProjectStorage | undefined
+  private readonly directories: ProjectDirectoryManagement
+
+  constructor(private readonly workspace: ProjectWorkspace) {
+    this.storage = workspace.moveDirectory ? new ProjectStorage(workspace) : undefined
+    this.directories = new ProjectDirectoryManagement(
+      workspace,
+      (path) => this.load(path),
+      this.storage,
+    )
+  }
+
+  rename(request: RenameProjectRequest): Promise<string> {
+    return this.directories.rename(request)
+  }
+  delete(request: DeleteProjectRequest): Promise<DeletedProject> {
+    return this.directories.delete(request)
+  }
+  listDeleted(): Promise<DeletedProject[]> {
+    return this.directories.listDeleted()
+  }
+  restoreProject(request: RestoreProjectRequest) {
+    return this.directories.restore(request)
+  }
 
   previewRepair(folder: string, file: string, text: string): Promise<ProjectSnapshot> {
     return this.load(folder, new Map([[file, text]]))
@@ -76,7 +110,12 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
   }
 
   create(folder: string, documents: ProjectDocuments): Promise<void> {
-    return createWorkspaceProject(this.workspace, folder, documents)
+    return createWorkspaceProject(
+      this.workspace,
+      folder,
+      documents,
+      () => this.storage?.registerNew(folder) ?? Promise.resolve(),
+    )
   }
 
   async duplicate(request: DuplicateProjectRequest): Promise<void> {
@@ -118,6 +157,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
           'The copied files do not form a complete game',
           diagnostics,
         )
+      await this.storage?.registerNew(request.destination)
     })
   }
 
@@ -184,7 +224,11 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     if (sourceTexts['game.json'] === null) {
       const listing = await this.workspace.list(folder)
       recoveryManifest = await suggestRecoveryManifest(this.workspace, folder, listing)
-      sources.push(['<recovery-manifest>', recoveryManifest])
+      // Suggested title/ID depend on the folder name, not the saved files being guarded.
+      sources.push([
+        '<recovery-manifest>',
+        JSON.stringify({ ...JSON.parse(recoveryManifest), id: 'recovered-game', title: '' }),
+      ])
     }
 
     const game = gameSchema.safeParse(documents['game.json'])
@@ -261,6 +305,7 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     }
 
     return {
+      ...(this.storage ? { storageKey: await this.storage.get(folder) } : {}),
       revision: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),
       documents,
       sourceDiagnostics,

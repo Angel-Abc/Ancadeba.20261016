@@ -7,6 +7,7 @@ export async function createWorkspaceProject(
   workspace: ProjectWorkspace,
   folder: string,
   documents: ProjectDocuments,
+  beforePublish?: () => Promise<void>,
 ): Promise<void> {
   return createWorkspaceProjectFiles(
     workspace,
@@ -17,6 +18,7 @@ export async function createWorkspaceProject(
         Buffer.from(typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`),
       ]),
     ),
+    beforePublish,
   )
 }
 
