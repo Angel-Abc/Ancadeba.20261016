@@ -111,6 +111,7 @@ export function createEditorServer(
               history: false,
               assetImport: false,
               projectCreation: false,
+              projectDuplication: false,
             }),
             projectDiscovery: true,
             gameExport: exports !== undefined,
@@ -128,9 +129,13 @@ export function createEditorServer(
 
       if (!projects) throw new WorkspaceError(503, 'Project editing is not available')
 
-      if (request.method === 'POST' && url.pathname === '/api/editor/projects') {
+      if (
+        request.method === 'POST' &&
+        (url.pathname === '/api/editor/projects' ||
+          url.pathname === '/api/editor/projects/duplicate')
+      ) {
         if (request.headers['content-type']?.split(';')[0]?.trim() !== 'application/json')
-          throw new WorkspaceError(415, 'Project creation requires application/json')
+          throw new WorkspaceError(415, 'Project creation and duplication require application/json')
         const bytes = await readBody(request)
         let body: unknown
 
@@ -140,7 +145,13 @@ export function createEditorServer(
           throw new EditorError(400, 'invalid_json', 'Invalid JSON request')
         }
 
-        json(response, 201, await projects.create(body))
+        json(
+          response,
+          201,
+          await (url.pathname.endsWith('/duplicate')
+            ? projects.duplicate(body)
+            : projects.create(body)),
+        )
 
         return
       }

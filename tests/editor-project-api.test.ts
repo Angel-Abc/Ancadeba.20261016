@@ -1214,6 +1214,7 @@ describe('shared editor project API', () => {
       gameExport: false,
       projectDiscovery: true,
       projectCreation: true,
+      projectDuplication: true,
       projectRepair: true,
     })
     const initial = await inspect()

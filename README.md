@@ -1046,6 +1046,15 @@ providing a lifecycle or rules factory.
 
 ## Engine instances
 
+To create an independent copy of an existing game, open it in the editor and
+choose **Open another project → Duplicate project**. Supply a title and an unused
+folder name. The editor copies saved files and assets, gives the copy a new game
+ID, and opens it; the source and its player saves remain intact. Unsaved edits
+are excluded. Duplication supports workspace-root and nested games and never
+overwrites an existing destination. See [project duplication](docs/editor-authoring.md)
+for file exclusions, limits and the HTTP API. MCP clients can use
+`ancadeba_duplicate_project` and then explicitly switch to the new game.
+
 The editor lists games in the server's `workFolder`, including the workspace
 root and nested projects. Select a game and press Enter or click **Open project**.
 Start loads the open project's `game.json` and referenced scenes through

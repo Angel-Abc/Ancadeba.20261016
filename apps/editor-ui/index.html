@@ -115,6 +115,16 @@
               >
                 Recover project
               </button>
+              <button
+                id="project-duplicate-toggle"
+                type="button"
+                disabled
+                aria-controls="project-duplicate-controls"
+                aria-expanded="false"
+                data-i18n="project.duplicate"
+              >
+                Duplicate project
+              </button>
             </div>
             <p id="project-open-feedback" class="help" role="status" hidden></p>
           </form>
@@ -193,6 +203,44 @@
           <button id="editor-reload" type="button" disabled hidden data-i18n="project.reload">
             Reload latest (keep entries)
           </button>
+          <form id="project-duplicate-controls" hidden>
+            <fieldset id="project-duplicate-fields">
+              <legend data-i18n="project.duplicate">Duplicate project</legend>
+              <p id="project-duplicate-help" class="help" data-i18n="project.duplicateHelp">
+                Copy the open project's saved files and assets into a new folder, then open the
+                copy. The copy has its own game ID. Unsaved edits are not included.
+              </p>
+              <label for="project-copy-title" data-i18n="game.title">Game title</label>
+              <input id="project-copy-title" maxlength="200" required />
+              <label for="project-copy-folder" data-i18n="project.newFolder">New folder name</label>
+              <input
+                id="project-copy-folder"
+                pattern="[a-zA-Z0-9_\-]+"
+                maxlength="64"
+                autocomplete="off"
+                required
+                aria-describedby="project-duplicate-help"
+              />
+              <div class="editor-actions">
+                <button
+                  id="project-duplicate-submit"
+                  type="submit"
+                  class="primary"
+                  data-i18n="project.duplicate"
+                >
+                  Duplicate project
+                </button>
+                <button
+                  id="project-duplicate-cancel"
+                  type="button"
+                  data-i18n="project.cancelCreate"
+                >
+                  Cancel
+                </button>
+              </div>
+            </fieldset>
+            <p id="project-duplicate-error" class="error" role="alert" hidden></p>
+          </form>
           <div id="draft-recovery" class="draft-recovery" hidden>
             <p id="draft-recovery-message" role="status" aria-live="polite"></p>
             <div class="preview-actions">

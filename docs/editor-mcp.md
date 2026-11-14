@@ -118,6 +118,7 @@ raw-file, shell, or process tools.
 | `ancadeba_list_projects`         | Empty object                                                                                 | Workspace project paths/titles and configured `gamePath`                                                |
 | `ancadeba_switch_project`        | `path` from discovery, including empty for the workspace root                                | Full selected project view, fresh revision, diagnostics, `gamePath` and `previousGamePath`              |
 | `ancadeba_create_project`        | `path`, `title`, optional `description`                                                      | Complete created project, its `gamePath`/revision and unchanged `configuredGamePath`                    |
+| `ancadeba_duplicate_project`     | `expectedRevision`, `destination`, `title`                                                   | Complete copied project, its `gamePath`/revision and unchanged `configuredGamePath`                     |
 | `ancadeba_export_game`           | Optional `timeoutMs` (default 120000, maximum 300000)                                        | ZIP metadata and an embedded binary `application/zip` resource                                          |
 | `ancadeba_inspect_game`          | Empty object                                                                                 | Game metadata, scene summaries, source definitions, revision, diagnostics                               |
 | `ancadeba_inspect_scene`         | `sceneId`                                                                                    | Scene definition, revision, diagnostics                                                                 |
@@ -138,6 +139,16 @@ adapter supplies the active project path captured at request start for existing-
 uses the validated new folder argument. Each command write checks that the
 connected server advertises API version 1 and supports the requested command;
 workspace operations check their own feature flags.
+
+Duplication copies the active project's saved files into a new single-folder
+destination with its own game ID and supplied title. It preserves source bytes
+apart from the copy's manifest identity/title and clears the old manifest title
+translation key. It excludes nested games, links, workspace metadata, dependencies,
+`.env` files and temporary files. Limits are 128 MiB and 10000 source files/directories.
+The server checks the source revision, rejects existing destinations, and publishes
+the copy's manifest last. Duplication does not change the active MCP binding;
+call `ancadeba_switch_project` explicitly to select the copy. After an uncertain
+outcome, list projects and inspect the requested destination before another attempt.
 
 Metadata commands require literal title and description, plus version for game
 metadata; translation-key fields are optional. Scene creation requires the current

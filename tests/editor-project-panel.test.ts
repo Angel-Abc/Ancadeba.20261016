@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vite-plus/test'
 import {
   commandRequestSchema,
   createProjectRequestSchema,
+  duplicateProjectRequestSchema,
   historyRequestSchema,
   type CommandRequest,
   type CreateProjectRequest,
+  type DuplicateProjectRequest,
   type ProjectChoice,
   type ProjectView,
   type HistoryRequest,
@@ -95,7 +97,11 @@ function panel(
 
     if (!result) {
       result = new Control(id)
-      result.hidden = ['project-create-controls', 'project-recover-controls'].includes(id)
+      result.hidden = [
+        'project-create-controls',
+        'project-recover-controls',
+        'project-duplicate-controls',
+      ].includes(id)
       controls.set(id, result)
     }
 
@@ -105,9 +111,11 @@ function panel(
   let latest: ProjectView | undefined = project('one')
   const requests: CommandRequest[] = []
   const creations: CreateProjectRequest[] = []
+  const duplications: DuplicateProjectRequest[] = []
   const historyRequests: HistoryRequest[] = []
   const inspections: string[] = []
   let createResponse: (() => Promise<Response>) | undefined
+  let duplicateResponse: (() => Promise<Response>) | undefined
   let applyResponse: (() => Promise<Response>) | undefined
   const onProjectChange = vi.fn<(path: string) => void>()
   const confirmDiscardDrafts = vi.fn(() => false)
@@ -124,6 +132,20 @@ function panel(
 
   const fetcher: typeof fetch = async (url, init) => {
     if (typeof url === 'string' && url.startsWith('/api/editor/project?')) inspections.push(url)
+
+    if (url === '/api/editor/projects/duplicate') {
+      if (typeof init?.body !== 'string') throw new Error('Expected JSON duplication request')
+      const request = duplicateProjectRequestSchema.parse(JSON.parse(init.body))
+      duplications.push(request)
+
+      if (duplicateResponse) return duplicateResponse()
+      latest = project('duplicated')
+      latest.game!.id = request.destination
+      latest.game!.title = request.title
+      choices.push({ path: request.destination, title: request.title })
+
+      return Response.json(latest, { status: 201 })
+    }
 
     if (url === '/api/editor/history') {
       if (typeof init?.body !== 'string') throw new Error('Expected JSON history request')
@@ -190,6 +212,7 @@ function panel(
     historyRequests,
     window: root.ownerDocument.defaultView,
     creations,
+    duplications,
     onProjectChange,
     confirmDiscardDrafts,
     submitProject,
@@ -205,6 +228,9 @@ function panel(
     setCreateResponse: (response?: () => Promise<Response>) => {
       createResponse = response
     },
+    setDuplicateResponse: (response?: () => Promise<Response>) => {
+      duplicateResponse = response
+    },
     setApplyResponse: (response?: () => Promise<Response>) => {
       applyResponse = response
     },
@@ -212,6 +238,111 @@ function panel(
 }
 
 describe('project panel form reconciliation', () => {
+  it('duplicates the open saved project with a new title and folder and opens the copy', async () => {
+    const ui = panel()
+
+    try {
+      expect(ui.control('project-duplicate-toggle').disabled).toBe(true)
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-duplicate-toggle').disabled).toBe(false))
+      ui.control('project-open-toggle').fire('click')
+      ui.control('project-duplicate-toggle').fire('click')
+      expect(ui.control('project-copy-title').value).toBe('Copy of Game')
+      expect(ui.control('project-copy-folder').value).toBe('test-copy')
+      ui.control('project-copy-title').value = '  New adventure  '
+      ui.control('project-copy-folder').value = '../outside'
+      ui.control('project-duplicate-controls').fire('submit')
+      expect(ui.duplications).toEqual([])
+      expect(ui.control('project-duplicate-error').hidden).toBe(false)
+      ui.control('project-copy-folder').value = 'new-adventure'
+      ui.setLanguage('nl')
+      expect(ui.control('project-copy-title').value).toBe('  New adventure  ')
+      expect(ui.control('project-duplicate-submit').textContent).toBe('Project dupliceren')
+      ui.control('project-duplicate-controls').fire('submit')
+      await vi.waitFor(() => expect(ui.onProjectChange).toHaveBeenLastCalledWith('new-adventure'))
+      expect(ui.duplications).toEqual([
+        {
+          path: 'basic',
+          destination: 'new-adventure',
+          expectedRevision: 'one',
+          title: 'New adventure',
+        },
+      ])
+      expect(ui.control('project-duplicate-controls').hidden).toBe(true)
+      expect(ui.control('editor-folder').value).toBe('new-adventure')
+      expect(ui.control('editor-title').value).toBe('New adventure')
+      expect(ui.control('editor-folder').children.map(({ value }) => value)).toContain('basic')
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('preserves the source and drafts when duplication is cancelled or fails, then permits retry', async () => {
+    const ui = panel()
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('scene-title').value).toBe('shop'))
+      ui.control('scene-title').value = 'Unsaved scene'
+      ui.control('scene-metadata').fire('input')
+      ui.control('project-open-toggle').fire('click')
+      ui.control('project-duplicate-toggle').fire('click')
+      ui.control('project-copy-folder').value = 'copy'
+      ui.control('project-copy-title').value = 'Copy'
+      ui.control('project-duplicate-cancel').fire('click')
+      expect(ui.duplications).toEqual([])
+      ui.control('project-duplicate-toggle').fire('click')
+      ui.control('project-duplicate-controls').fire('submit')
+      expect(ui.confirmDiscardDrafts).toHaveBeenCalledOnce()
+      expect(ui.duplications).toEqual([])
+      ui.confirmDiscardDrafts.mockReturnValue(true)
+      ui.setDuplicateResponse(async () =>
+        Response.json({ code: 'project_exists', error: 'Folder exists' }, { status: 409 }),
+      )
+      ui.control('project-duplicate-controls').fire('submit')
+      await vi.waitFor(() =>
+        expect(ui.control('project-duplicate-error').textContent).toBe('Folder exists'),
+      )
+      expect(ui.control('scene-title').value).toBe('Unsaved scene')
+      expect(ui.control('project-copy-folder').value).toBe('copy')
+      expect(ui.control('project-duplicate-controls').hidden).toBe(false)
+      expect(ui.onProjectChange.mock.calls).toEqual([['basic']])
+      ui.setDuplicateResponse()
+      ui.control('project-duplicate-controls').fire('submit')
+      await vi.waitFor(() => expect(ui.onProjectChange).toHaveBeenLastCalledWith('copy'))
+    } finally {
+      ui.dispose()
+    }
+  })
+
+  it('sends one duplication request while pending and ignores late UI updates after disposal', async () => {
+    const ui = panel()
+    let finish!: (response: Response) => void
+
+    try {
+      await ui.submitProject('basic')
+      await vi.waitFor(() => expect(ui.control('project-duplicate-toggle').disabled).toBe(false))
+      ui.control('project-duplicate-toggle').fire('click')
+      ui.setDuplicateResponse(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+      ui.control('project-duplicate-controls').fire('submit')
+      ui.control('project-duplicate-controls').fire('submit')
+      expect(ui.duplications).toHaveLength(1)
+      expect(ui.control('project-duplicate-fields').disabled).toBe(true)
+      expect(ui.control('project-duplicate-submit').textContent).toBe('Duplicating…')
+      ui.dispose()
+      finish(Response.json(project('duplicated'), { status: 201 }))
+      await new Promise<void>((resolve) => queueMicrotask(resolve))
+      expect(ui.onProjectChange.mock.calls).toEqual([['basic']])
+    } finally {
+      ui.dispose()
+    }
+  })
+
   it('opens an unlisted recovery folder or workspace root even when the project list is empty', async () => {
     const ui = panel([])
 

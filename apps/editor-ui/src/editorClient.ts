@@ -1,6 +1,7 @@
 import type {
   CommandRequest,
   CreateProjectRequest,
+  DuplicateProjectRequest,
   Diagnostic,
   ProjectChoice,
   ProjectView,
@@ -34,6 +35,7 @@ export interface IEditorClient {
   copyComponent?(request: ComponentCopyRequest): Promise<ComponentClipboard>
   restore?(request: HistoryRequest): Promise<ProjectView>
   create?(request: CreateProjectRequest): Promise<ProjectView>
+  duplicate?(request: DuplicateProjectRequest): Promise<ProjectView>
   inspect(path: string): Promise<ProjectView>
   apply(request: CommandRequest): Promise<ProjectView>
   importAsset?(
@@ -98,6 +100,14 @@ export class HttpEditorClient implements IEditorClient {
 
   create(request: CreateProjectRequest): Promise<ProjectView> {
     return this.requestProject('/api/editor/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
+
+  duplicate(request: DuplicateProjectRequest): Promise<ProjectView> {
+    return this.requestProject('/api/editor/projects/duplicate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

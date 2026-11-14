@@ -18,9 +18,13 @@ import {
   type ProjectSnapshot,
   type Diagnostic,
   type ProjectDocuments,
+  type DuplicateProjectRequest,
+  duplicateProjectManifest,
+  validateProject,
 } from '@ancadeba/editor-core'
 import { WorkspaceError, workspaceError, type WorkspaceService } from './workspace.js'
-import { createWorkspaceProject } from './projectCreation.js'
+import { createWorkspaceProject, createWorkspaceProjectFiles } from './projectCreation.js'
+import { readProjectCopyFiles } from './projectDuplication.js'
 import { saveProjectStructureChanges } from './projectPersistence.js'
 import { readHistoryFiles, restoreHistoryFiles, type HistoryFile } from './historyFiles.js'
 import { projectStylesheets } from './projectStylesheets.js'
@@ -41,6 +45,7 @@ export interface EditorProjectRepository {
   ): Promise<Record<string, Uint8Array | undefined>>
   restoreHistoryFiles?(folder: string, files: readonly HistoryFile[]): Promise<void>
   create?(folder: string, documents: ProjectDocuments): Promise<void>
+  duplicate?(request: DuplicateProjectRequest): Promise<void>
   load(folder: string, overrides?: ReadonlyMap<string, string>): Promise<ProjectSnapshot>
   save(folder: string, change: CommandResult): Promise<void>
   validateAssets?(
@@ -74,9 +79,52 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
     return createWorkspaceProject(this.workspace, folder, documents)
   }
 
+  async duplicate(request: DuplicateProjectRequest): Promise<void> {
+    const files = await readProjectCopyFiles(this.workspace, request.path)
+    let source: unknown
+
+    try {
+      source = JSON.parse(Buffer.from(files['game.json'] ?? []).toString('utf8'))
+    } catch {
+      throw new EditorError(
+        409,
+        'revision_conflict',
+        'The source changed. Reload before duplicating.',
+      )
+    }
+
+    const text = `${JSON.stringify(duplicateProjectManifest(source, request), null, 2)}\n`
+    files['game.json'] = Buffer.from(text)
+    await createWorkspaceProjectFiles(this.workspace, request.destination, files, async () => {
+      const source = await this.load(
+        request.path,
+        new Map(),
+        request.path === '' ? request.destination : undefined,
+      )
+
+      if (source.revision !== request.expectedRevision)
+        throw new EditorError(
+          409,
+          'revision_conflict',
+          'The source changed. Reload before duplicating.',
+        )
+      const candidate = await this.load(request.destination, new Map([['game.json', text]]))
+      const diagnostics = validateProject(candidate.documents, candidate.sourceDiagnostics)
+
+      if (diagnostics.length)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'The copied files do not form a complete game',
+          diagnostics,
+        )
+    })
+  }
+
   async load(
     folder: string,
     overrides: ReadonlyMap<string, string> = new Map(),
+    excludedStylesheetDirectory?: string,
   ): Promise<ProjectSnapshot> {
     const documents: Record<string, unknown> = {}
     const sources: [string, string | null][] = []
@@ -164,7 +212,11 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
       if (game.data.stylesheet) await read(game.data.stylesheet, { json: false })
 
-      for (const file of await projectStylesheets(this.workspace, folder)) {
+      for (const file of await projectStylesheets(
+        this.workspace,
+        folder,
+        excludedStylesheetDirectory,
+      )) {
         if (file === game.data.stylesheet) continue
 
         try {

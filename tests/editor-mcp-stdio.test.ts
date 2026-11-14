@@ -122,7 +122,7 @@ describe('MCP stdio process', () => {
 
   it('initializes, discovers tools, and saves over stdio from an unrelated working directory without stdout contamination', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(17)
+    expect((await activeClient.listTools()).tools).toHaveLength(18)
     const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     // SAFETY: our inspect tool emits a revision-bearing data object on this successful fixture path.
     const current = (inspection.structuredContent as { data: { revision: string } }).data
@@ -241,6 +241,37 @@ describe('MCP stdio process', () => {
     expect(stderr.join('')).toBe('')
   }, 15000)
 
+  it('duplicates a saved project through stdio while retaining the source binding', async () => {
+    const { activeClient, errors, stderr } = await connect()
+    const original = await readFile(join(root, 'basic/game.json'), 'utf8')
+    const inspection = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
+    const source = gameSummarySchema.parse(object(inspection.structuredContent).data)
+
+    const result = await activeClient.callTool({
+      name: 'ancadeba_duplicate_project',
+      arguments: {
+        expectedRevision: source.revision,
+        destination: 'process-copy',
+        title: 'Process copy',
+      },
+    })
+
+    expect(result.isError).toBe(false)
+    expect(projectCreationResultSchema.parse(object(result.structuredContent).data)).toMatchObject({
+      gamePath: 'process-copy',
+      configuredGamePath: 'basic',
+      diagnostics: [],
+      game: { id: 'process-copy', title: 'Process copy' },
+    })
+    expect(await readFile(join(root, 'basic/game.json'), 'utf8')).toBe(original)
+    expect(
+      (await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} }))
+        .structuredContent,
+    ).toMatchObject({ data: { gamePath: 'basic', game: { title: 'Process game' } } })
+    expect(errors).toEqual([])
+    expect(stderr.join('')).toBe('')
+  })
+
   it('discovers and creates a configured future project through stdio before its manifest exists', async () => {
     const { activeClient, activeTransport, errors, stderr } = await connect('future')
     const listed = await activeClient.callTool({ name: 'ancadeba_list_projects', arguments: {} })
@@ -313,7 +344,7 @@ describe('MCP stdio process', () => {
       server.close((error) => (error ? reject(error) : resolve())),
     )
     const { activeClient } = await connect()
-    expect((await activeClient.listTools()).tools).toHaveLength(17)
+    expect((await activeClient.listTools()).tools).toHaveLength(18)
     const failed = await activeClient.callTool({ name: 'ancadeba_inspect_game', arguments: {} })
     expect(failed.isError).toBe(true)
     expect(failed.structuredContent).toMatchObject({

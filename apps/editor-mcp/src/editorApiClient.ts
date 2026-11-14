@@ -11,6 +11,7 @@ import {
   historyInputSchema,
   maxUploadBytes,
   createProjectInputSchema,
+  duplicateProjectInputSchema,
   exportGameInputSchema,
 } from './operationSupport.js'
 import { EditorApiError } from './editorApiError.js'
@@ -59,6 +60,10 @@ export interface IEditorApi {
   listProjects(signal?: AbortSignal): Promise<z.infer<typeof projectListSchema>>
   createProject(
     input: z.infer<typeof createProjectInputSchema>,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof projectViewSchema>>
+  duplicateProject?(
+    input: z.infer<typeof duplicateProjectInputSchema>,
     signal?: AbortSignal,
   ): Promise<z.infer<typeof projectViewSchema>>
   capabilities(signal?: AbortSignal): Promise<z.infer<typeof capabilitiesSchema>>
@@ -176,6 +181,30 @@ export class EditorApiClient implements IEditorApi {
       `/api/editor/project?${new URLSearchParams({ path: this.config.game }).toString()}`,
       projectViewSchema,
       undefined,
+      signal,
+    )
+  }
+
+  async duplicateProject(input: z.infer<typeof duplicateProjectInputSchema>, signal?: AbortSignal) {
+    const parsed = duplicateProjectInputSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorApiError(
+        'invalid_request',
+        'Provide the source revision, a new folder name, and a title',
+      )
+    const available = await this.capabilities(signal)
+
+    if (!available.features?.projectDuplication)
+      throw new EditorApiError(
+        'unsupported_duplication',
+        'The connected editor does not advertise project duplication support',
+      )
+
+    return this.request(
+      '/api/editor/projects/duplicate',
+      projectViewSchema,
+      jsonBody({ ...parsed.data, path: this.config.game }),
       signal,
     )
   }

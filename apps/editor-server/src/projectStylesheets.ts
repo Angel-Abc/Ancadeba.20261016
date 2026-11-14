@@ -8,6 +8,7 @@ const ignoredDirectories = new Set(['node_modules', 'dist', 'coverage'])
 export async function projectStylesheets(
   workspace: Pick<WorkspaceService, 'list'>,
   folder: string,
+  excludedDirectory?: string,
 ) {
   const pending = ['']
 
@@ -41,6 +42,7 @@ export async function projectStylesheets(
 
       if (
         entry.type === 'directory' &&
+        file !== excludedDirectory &&
         !ignoredDirectories.has(entry.name.toLowerCase()) &&
         stylesheetPathSchema.safeParse(`${file}/style.css`).success
       )

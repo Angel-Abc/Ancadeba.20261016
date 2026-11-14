@@ -17,7 +17,7 @@ import {
 } from '@ancadeba/ui-components'
 import { EditorWorkspaceResources, normalizeGameFolder } from './workspaceResources.js'
 import type { ProjectView, EditorCommand, ProjectChoice } from '@ancadeba/editor-core'
-import { createProjectRequestSchema } from '@ancadeba/editor-core'
+import { createProjectRequestSchema, duplicateProjectRequestSchema } from '@ancadeba/editor-core'
 import { HttpEditorClient } from './editorClient.js'
 import { ProjectEditorController, type ProjectEditorListener } from './projectController.js'
 import type { Translate } from '@ancadeba/utilities'
@@ -119,6 +119,12 @@ export function bindProjectPanel(
   const newSubmit = find<HTMLButtonElement>('project-create-submit')
   const newCancel = find<HTMLButtonElement>('project-create-cancel')
   const newError = find<HTMLElement>('project-create-error')
+  const duplicateToggle = find<HTMLButtonElement>('project-duplicate-toggle')
+  const duplicateForm = find<HTMLFormElement>('project-duplicate-controls')
+  const duplicateFields = find<HTMLFieldSetElement>('project-duplicate-fields')
+  const duplicateSubmit = find<HTMLButtonElement>('project-duplicate-submit')
+  const duplicateCancel = find<HTMLButtonElement>('project-duplicate-cancel')
+  const duplicateError = find<HTMLElement>('project-duplicate-error')
   const recoverToggle = root.querySelector<HTMLButtonElement>('#project-recover-toggle')
   const recoverForm = root.querySelector<HTMLFormElement>('#project-recover-controls')
   const recoverFields = root.querySelector<HTMLFieldSetElement>('#project-recover-fields')
@@ -133,6 +139,8 @@ export function bindProjectPanel(
     if (!show) {
       newForm.hidden = true
       newToggle.setAttribute('aria-expanded', 'false')
+      duplicateForm.hidden = true
+      duplicateToggle.setAttribute('aria-expanded', 'false')
 
       if (recoverForm) recoverForm.hidden = true
       recoverToggle?.setAttribute('aria-expanded', 'false')
@@ -151,6 +159,7 @@ export function bindProjectPanel(
   let historyBlocked = false
   let openingProject = false
   let creatingProject = false
+  let duplicatingProject = false
 
   const projectTranslations = bindMetadataTranslations(root, 'editor', t, () => {
     dirtyForms.add(metadata.id)
@@ -174,6 +183,12 @@ export function bindProjectPanel(
     folder.disabled = disabled
     load.disabled = disabled
     newToggle.disabled = busy
+    duplicateToggle.disabled = busy || !view?.game || Boolean(view.diagnostics.length)
+    duplicateFields.disabled = busy
+    duplicateSubmit.disabled = duplicateToggle.disabled
+    duplicateSubmit.textContent = t(
+      duplicatingProject ? 'project.duplicating' : 'project.duplicate',
+    )
 
     if (recoverToggle) recoverToggle.disabled = busy
 
@@ -711,6 +726,12 @@ export function bindProjectPanel(
     view = state.view
     loadedPath = state.path
 
+    if (projectChanged) {
+      duplicateForm.reset()
+      duplicateForm.hidden = true
+      duplicateToggle.setAttribute('aria-expanded', 'false')
+    }
+
     // Revisions cover every authored resource, including changes made by other clients.
     const projectUpdated = replaceFields && view && view.revision !== previousRevision
 
@@ -762,25 +783,30 @@ export function bindProjectPanel(
       openingProject = false
 
       if (replaceFields) {
-        if (creatingProject) {
+        if (creatingProject || duplicatingProject) {
           projectChoices = [
             ...projectChoices.filter(({ path }) => path !== loadedPath),
             { path: loadedPath, title: view?.game?.title ?? loadedPath },
           ].sort((a, b) => a.path.localeCompare(b.path))
           renderProjectChoices(loadedPath)
           newForm.reset()
+          duplicateForm.reset()
         }
 
         showOpenControls(false)
         openToggle.focus()
       } else {
-        if (creatingProject) {
+        if (duplicatingProject) {
+          duplicateError.textContent = state.error
+          duplicateError.hidden = !state.error
+        } else if (creatingProject) {
           newError.textContent = state.error
           newError.hidden = !state.error
         } else openError = state.error
       }
 
       creatingProject = false
+      duplicatingProject = false
     }
 
     renderOpenControls()
@@ -1255,6 +1281,9 @@ export function bindProjectPanel(
     if (show) void refreshProjects(true)
   })
   on(newToggle, 'click', () => {
+    duplicateForm.hidden = true
+    duplicateToggle.setAttribute('aria-expanded', 'false')
+
     if (recoverForm) recoverForm.hidden = true
     recoverToggle?.setAttribute('aria-expanded', 'false')
     newForm.hidden = !newForm.hidden
@@ -1294,8 +1323,65 @@ export function bindProjectPanel(
     void controller.create(request.data)
   })
 
+  on(duplicateToggle, 'click', () => {
+    if (duplicateToggle.disabled) return
+    duplicateForm.hidden = !duplicateForm.hidden
+    duplicateToggle.setAttribute('aria-expanded', String(!duplicateForm.hidden))
+    newForm.hidden = true
+    newToggle.setAttribute('aria-expanded', 'false')
+
+    if (recoverForm) recoverForm.hidden = true
+    recoverToggle?.setAttribute('aria-expanded', 'false')
+
+    if (!duplicateForm.hidden) {
+      if (!value('project-copy-title'))
+        set(
+          'project-copy-title',
+          t('project.copyTitle', { title: view ? gameTitle(view) : '' }).slice(0, 200),
+        )
+
+      if (!value('project-copy-folder'))
+        set('project-copy-folder', `${(view?.game?.id ?? 'game').slice(0, 59)}-copy`)
+      find('project-copy-title').focus()
+    }
+  })
+  on(duplicateCancel, 'click', () => {
+    duplicateForm.hidden = true
+    duplicateToggle.setAttribute('aria-expanded', 'false')
+    duplicateError.hidden = true
+    duplicateToggle.focus()
+  })
+  on(duplicateForm, 'submit', (event) => {
+    event.preventDefault()
+
+    if (busy || duplicateToggle.disabled || !view) return
+
+    const request = duplicateProjectRequestSchema.safeParse({
+      path: loadedPath,
+      expectedRevision: view.revision,
+      destination: value('project-copy-folder').trim(),
+      title: value('project-copy-title'),
+    })
+
+    if (!request.success) {
+      duplicateError.textContent = t('project.invalidCreation')
+      duplicateError.hidden = false
+
+      return
+    }
+
+    if (hasDrafts() && !confirmDiscardDrafts()) return
+    openingProject = true
+    duplicatingProject = true
+    openError = ''
+    duplicateError.hidden = true
+    void controller.duplicate(request.data)
+  })
+
   if (recoverToggle && recoverForm && recoverFolder && recoverCancel) {
     on(recoverToggle, 'click', () => {
+      duplicateForm.hidden = true
+      duplicateToggle.setAttribute('aria-expanded', 'false')
       recoverForm.hidden = !recoverForm.hidden
       recoverToggle.setAttribute('aria-expanded', String(!recoverForm.hidden))
       newForm.hidden = true

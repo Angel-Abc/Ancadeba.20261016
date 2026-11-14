@@ -79,6 +79,55 @@ function api(): IEditorApi {
 }
 
 describe('MCP adapter tools', () => {
+  it('duplicates without switching the active binding and rejects source-path overrides', async () => {
+    const remote = api()
+    const copies: unknown[] = []
+    remote.duplicateProject = async (input, signal) => {
+      expect(signal).toBeInstanceOf(AbortSignal)
+      copies.push(input)
+
+      return { ...view, game: { ...view.game, id: input.destination, title: input.title } }
+    }
+
+    const { client, close } = await connection(remote)
+
+    try {
+      const input = { expectedRevision: 'one', destination: 'copy', title: 'Copy' }
+      expect(
+        (
+          await client.callTool({
+            name: 'ancadeba_duplicate_project',
+            arguments: { ...input, path: 'other' },
+          })
+        ).isError,
+      ).toBe(true)
+      const result = await client.callTool({ name: 'ancadeba_duplicate_project', arguments: input })
+      expect(result.structuredContent).toMatchObject({
+        ok: true,
+        data: {
+          gamePath: 'copy',
+          configuredGamePath: 'basic',
+          game: { id: 'copy', title: 'Copy' },
+        },
+      })
+      expect(copies).toEqual([input])
+      expect(
+        (await client.callTool({ name: 'ancadeba_inspect_game', arguments: {} })).structuredContent,
+      ).toMatchObject({ data: { gamePath: 'basic', game: { id: 'test' } } })
+      remote.duplicateProject = async () => {
+        throw new EditorApiError('project_duplication_uncertain', 'Read failed', [], 'unknown', 500)
+      }
+
+      const failed = await client.callTool({ name: 'ancadeba_duplicate_project', arguments: input })
+      expect(failed.structuredContent).toMatchObject({
+        ok: false,
+        error: { outcome: 'unknown', recovery: expect.stringContaining('"copy"') },
+      })
+    } finally {
+      await close()
+    }
+  })
+
   it('rejects export scope overrides before running a build and includes bytes only as a binary resource', async () => {
     const remote = api()
     let exports = 0
@@ -436,6 +485,7 @@ describe('MCP adapter tools', () => {
         'ancadeba_apply_command',
         'ancadeba_create_project',
         'ancadeba_create_scene',
+        'ancadeba_duplicate_project',
         'ancadeba_edit_assets',
         'ancadeba_export_game',
         'ancadeba_get_capabilities',

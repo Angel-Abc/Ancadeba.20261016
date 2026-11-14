@@ -3,7 +3,12 @@ import { capabilities } from '@ancadeba/editor-core'
 import { EditorApiClient } from '../apps/editor-mcp/src/editorApiClient.js'
 
 const config = { editorServerUrl: 'http://127.0.0.1:3100', game: 'My Games/bound', timeoutMs: 200 }
-const available = { ...capabilities, features: { projectDiscovery: true, projectCreation: true } }
+
+const available = {
+  ...capabilities,
+  features: { projectDiscovery: true, projectCreation: true, projectDuplication: true },
+}
+
 const view = { revision: 'created', game: null, scenes: [], diagnostics: [] }
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status })
 
@@ -13,6 +18,64 @@ const requestUrl = (url: Parameters<typeof fetch>[0]) =>
 const input = { path: 'new-game', title: 'New game', description: '' }
 
 describe('MCP project discovery and creation HTTP operations', () => {
+  it('duplicates the captured active project and leaves subsequent reads scoped to the source', async () => {
+    const calls: { url: string; body?: unknown }[] = []
+
+    const client = new EditorApiClient(config, async (url, init) => {
+      if (requestUrl(url).endsWith('capabilities')) return json(available)
+      calls.push({
+        url: requestUrl(url),
+        ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) } : {}),
+      })
+
+      return json(view, init?.method === 'POST' ? 201 : 200)
+    })
+
+    expect(
+      await client.duplicateProject({
+        expectedRevision: 'one',
+        destination: 'copy',
+        title: ' Copy ',
+      }),
+    ).toEqual(view)
+    await client.inspectGame()
+    expect(calls).toEqual([
+      {
+        url: config.editorServerUrl + '/api/editor/projects/duplicate',
+        body: { path: config.game, expectedRevision: 'one', destination: 'copy', title: 'Copy' },
+      },
+      { url: config.editorServerUrl + '/api/editor/project?path=My+Games%2Fbound' },
+    ])
+  })
+
+  it('rejects duplication scope overrides and unsupported servers before sending a write', async () => {
+    let posts = 0
+
+    const client = new EditorApiClient(config, async (_url, init) => {
+      if (init?.method === 'POST') posts++
+
+      return json(capabilities)
+    })
+
+    const input = { expectedRevision: 'one', destination: 'copy', title: 'Copy' }
+
+    for (const extra of [
+      { path: 'other' },
+      { editorServerUrl: 'http://other' },
+      { destination: '../escape' },
+      { expectedRevision: '' },
+    ])
+      await expect(client.duplicateProject({ ...input, ...extra })).rejects.toMatchObject({
+        code: 'invalid_request',
+        outcome: 'not_applied',
+      })
+    await expect(client.duplicateProject(input)).rejects.toMatchObject({
+      code: 'unsupported_duplication',
+      outcome: 'not_applied',
+    })
+    expect(posts).toBe(0)
+  })
+
   it('lists workspace projects without inspecting or requiring the bound game', async () => {
     const calls: string[] = []
 

@@ -308,6 +308,36 @@ or a failed creation preserves the current project and its drafts. Failed storag
 operations roll back unchanged starter files; if external changes prevent cleanup,
 the error identifies the folder to inspect before retrying.
 
+With a valid project open, choose **Open another project → Duplicate project**.
+Enter the copy's title and an unused folder name. Duplication copies the saved
+game files, referenced assets, catalogs, stylesheets and unused regular files,
+then opens the copy. Unsaved edits are excluded; confirmation is required before
+leaving drafts behind. Cancelling or a failed copy keeps the source open and
+preserves drafts and the duplication form. Labels support English and Dutch.
+
+The copy has its own game ID and starts with empty editor history. Its folder
+name becomes its game ID; if that equals the source ID, `-copy` is appended. The
+copy's manifest uses the supplied literal title, clearing its old `titleKey` so
+the original title translation cannot hide the new name. Other metadata and
+resource contents are preserved, including extension fields and binary bytes.
+Player saves and browser draft-recovery copies remain scoped to the source.
+
+Duplication excludes nested projects, links, version-control/dependency directories,
+`.codex`, `.agents`, `.env` files, and temporary save/export files. Empty directories
+are not copied. Limits are 128 MiB and 10000 source files/directories. Existing
+destinations, including empty directories, are never reused. The server checks
+the source revision and validates the copy before publishing `game.json` last.
+Failed copies roll back unchanged destination files. If an outside edit prevents
+cleanup, the error identifies the destination for inspection. Avoid external
+filesystem edits during duplication; file reads are not a cross-process snapshot.
+
+`POST /api/editor/projects/duplicate` accepts JSON `{ "path": "source",
+"expectedRevision": "…", "destination": "my-copy", "title": "My copy" }` and
+returns HTTP 201 with the copied project view and fresh revision. Paths can select
+the workspace root (`""`) or a nested source; the destination is a new single folder
+under the workspace. Invalid sources return 422, changed revisions or existing
+destinations return 409, and size limits return 413. Duplication itself is not undoable.
+
 In **Rules → Trigger links**, save or discard edited button links before switching
 buttons or scenes, and edited inspections before switching item types. Saving
 one trigger form preserves drafts in the other forms. **Discard trigger draft**
@@ -320,6 +350,8 @@ Invalid input returns 400, an existing destination returns 409, and links remain
 inaccessible. Creation reserves a new folder exclusively and publishes `game.json`
 after both scene files. MCP clients can list workspace projects and create a
 starter project with `ancadeba_list_projects` and `ancadeba_create_project`.
+`ancadeba_duplicate_project` duplicates the active saved project with its inspected
+revision, a new `destination` and `title`.
 Creation leaves the active project unchanged. Use `ancadeba_switch_project` to
 select a discovered or newly created game without reconnecting; each MCP
 connection retains its own selection and in-flight requests keep their original scope.

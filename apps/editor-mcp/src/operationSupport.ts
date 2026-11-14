@@ -2,6 +2,9 @@ import {
   assetImportMetadataSchema,
   historyRequestSchema,
   createProjectRequestSchema,
+  duplicateProjectRequestSchema,
+  maxDuplicateProjectBytes,
+  maxDuplicateProjectFiles,
 } from '@ancadeba/editor-core'
 import { z } from 'zod'
 import { workspaceProjectPathSchema } from './projectPath.js'
@@ -13,6 +16,7 @@ export const maxMcpMessageBytes = maxBase64UploadCharacters + 64 * 1024
 export const historyInputSchema = historyRequestSchema.omit({ path: true, direction: true })
 export const listProjectsInputSchema = z.strictObject({})
 export const createProjectInputSchema = createProjectRequestSchema
+export const duplicateProjectInputSchema = duplicateProjectRequestSchema.omit({ path: true })
 export const switchProjectInputSchema = z.strictObject({ path: workspaceProjectPathSchema })
 
 // A base64 archive plus its envelope must fit clients' default 10 MiB MCP message limit.
@@ -43,6 +47,7 @@ export const editorFeaturesSchema = z.object({
   assetImport: z.boolean().default(false),
   projectDiscovery: z.boolean().optional(),
   projectCreation: z.boolean().optional(),
+  projectDuplication: z.boolean().optional(),
   gameExport: z.boolean().optional(),
 })
 
@@ -62,6 +67,10 @@ export const operationsSchema = z.object({
   redo: toolOperation('ancadeba_redo'),
   projectDiscovery: toolOperation('ancadeba_list_projects'),
   projectCreation: toolOperation('ancadeba_create_project'),
+  projectDuplication: toolOperation('ancadeba_duplicate_project').extend({
+    maxProjectBytes: z.number().int().positive(),
+    maxFiles: z.number().int().positive(),
+  }),
   projectSwitching: toolOperation('ancadeba_switch_project'),
   assetUpload: z.object({
     tool: z.literal('ancadeba_upload_asset'),
@@ -94,6 +103,13 @@ export function mcpOperations(features?: z.infer<typeof editorFeaturesSchema>) {
       tool: 'ancadeba_create_project' as const,
       supported: features?.projectCreation === true,
       requestSchema: z.toJSONSchema(createProjectInputSchema),
+    },
+    projectDuplication: {
+      tool: 'ancadeba_duplicate_project' as const,
+      supported: features?.projectDuplication === true,
+      requestSchema: z.toJSONSchema(duplicateProjectInputSchema),
+      maxProjectBytes: maxDuplicateProjectBytes,
+      maxFiles: maxDuplicateProjectFiles,
     },
     undo: {
       tool: 'ancadeba_undo' as const,

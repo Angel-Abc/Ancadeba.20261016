@@ -1,5 +1,6 @@
 import type {
   CreateProjectRequest,
+  DuplicateProjectRequest,
   EditorCommand,
   ProjectView,
   ComponentClipboard,
@@ -71,6 +72,36 @@ export class ProjectEditorController {
         view,
         lastCommand: null,
         preserveDrafts,
+        error: '',
+        conflict: false,
+        changedElsewhere: false,
+      }
+
+      return true
+    })
+  }
+
+  duplicate(request: Pick<DuplicateProjectRequest, 'destination' | 'title'>): Promise<void> {
+    const { view, path } = this.state
+
+    if (!view?.game) return Promise.resolve()
+
+    return this.perform(async () => {
+      if (!this.client.duplicate)
+        throw new EditorClientError('unsupported_duplication', 'Project duplication is unavailable')
+
+      const copy = await this.client.duplicate({
+        ...request,
+        path,
+        expectedRevision: view.revision,
+      })
+
+      this.state = {
+        ...this.state,
+        path: request.destination,
+        view: copy,
+        lastCommand: null,
+        preserveDrafts: false,
         error: '',
         conflict: false,
         changedElsewhere: false,

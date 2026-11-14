@@ -9,6 +9,7 @@ import {
   assetImportMetadataSchema,
   createProjectRequestSchema,
   createStarterProject,
+  duplicateProjectRequestSchema,
   validateProject,
   historyRequestSchema,
   type ProjectSnapshot,
@@ -42,6 +43,7 @@ export class EditorProjectService {
         typeof this.repository.readHistoryFiles === 'function',
       assetImport: typeof this.repository.createAsset === 'function',
       projectCreation: typeof this.repository.create === 'function',
+      projectDuplication: typeof this.repository.duplicate === 'function',
       projectRepair:
         typeof this.repository.previewRepair === 'function' &&
         typeof this.repository.readHistoryFiles === 'function' &&
@@ -83,6 +85,51 @@ export class EditorProjectService {
 
   inspect(path: string): Promise<ProjectView> {
     return this.coordinator.run(async () => this.view(path, await this.repository.load(path)))
+  }
+
+  duplicate(input: unknown): Promise<ProjectView> {
+    const parsed = duplicateProjectRequestSchema.safeParse(input)
+
+    if (!parsed.success)
+      throw new EditorError(
+        400,
+        'invalid_request',
+        'Provide the source revision, a new folder name, and a title',
+      )
+    const request = parsed.data
+
+    return this.coordinator.run(async () => {
+      if (!this.repository.duplicate)
+        throw new EditorError(503, 'unsupported_duplication', 'Project duplication is unavailable')
+      const source = await this.repository.load(request.path)
+
+      if (source.revision !== request.expectedRevision)
+        throw new EditorError(
+          409,
+          'revision_conflict',
+          'Project changed. Reload before duplicating.',
+        )
+      const diagnostics = validateProject(source.documents, source.sourceDiagnostics)
+
+      if (diagnostics.length)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'Fix project diagnostics before duplicating',
+          diagnostics,
+        )
+      await this.repository.duplicate(request)
+
+      try {
+        return this.view(request.destination, await this.repository.load(request.destination))
+      } catch {
+        throw new EditorError(
+          500,
+          'project_duplication_uncertain',
+          `Project files were copied to ${request.destination}, but could not be reopened. Refresh the project list and inspect that folder before retrying.`,
+        )
+      }
+    })
   }
 
   checkRepair(input: unknown): Promise<ProjectRepairCheck> {

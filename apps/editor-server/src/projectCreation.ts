@@ -8,18 +8,42 @@ export async function createWorkspaceProject(
   folder: string,
   documents: ProjectDocuments,
 ): Promise<void> {
+  return createWorkspaceProjectFiles(
+    workspace,
+    folder,
+    Object.fromEntries(
+      Object.entries(documents).map(([file, value]) => [
+        file,
+        Buffer.from(typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`),
+      ]),
+    ),
+  )
+}
+
+/** Reserve a new directory, publish complete files, then publish the manifest last. */
+export async function createWorkspaceProjectFiles(
+  workspace: ProjectWorkspace,
+  folder: string,
+  contents: Readonly<Record<string, Uint8Array>>,
+  beforePublish?: () => Promise<void>,
+): Promise<void> {
   if (!workspace.createDirectory || !workspace.removeDirectory)
     throw new EditorError(503, 'unsupported_creation', 'Project creation is unavailable')
 
-  const files = Object.entries(documents)
+  const files = Object.entries(contents)
     .sort(([a], [b]) => Number(a === 'game.json') - Number(b === 'game.json'))
-    .map(
-      ([file, value]) =>
-        [
-          `${folder}/${file}`,
-          Buffer.from(typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`),
-        ] as const,
-    )
+    .map(([file, bytes]) => [`${folder}/${file}`, bytes] as const)
+
+  const directories = new Set<string>()
+
+  for (const file of Object.keys(contents)) {
+    const segments = file.split('/')
+
+    for (let count = 1; count < segments.length; count++)
+      directories.add(segments.slice(0, count).join('/'))
+  }
+
+  const createdDirectories: string[] = []
 
   try {
     // Exclusive reservation also protects existing empty folders and concurrent creators.
@@ -35,9 +59,18 @@ export async function createWorkspaceProject(
   }
 
   try {
-    await workspace.createDirectory(`${folder}/scenes`)
+    for (const directory of [...directories].sort(
+      (a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b),
+    )) {
+      const path = `${folder}/${directory}`
+      await workspace.createDirectory(path)
+      createdDirectories.push(path)
+    }
 
-    for (const [file, bytes] of files) await workspace.create(file, bytes)
+    for (const [file, bytes] of files) {
+      if (file === `${folder}/game.json`) await beforePublish?.()
+      await workspace.create(file, bytes)
+    }
   } catch (error) {
     try {
       const saved = await Promise.all(
@@ -62,10 +95,12 @@ export async function createWorkspaceProject(
         }
       }
 
-      try {
-        await workspace.removeDirectory(`${folder}/scenes`)
-      } catch (cleanupError) {
-        if (workspaceError(cleanupError).status !== 404) throw cleanupError
+      for (const directory of createdDirectories.reverse()) {
+        try {
+          await workspace.removeDirectory(directory)
+        } catch (cleanupError) {
+          if (workspaceError(cleanupError).status !== 404) throw cleanupError
+        }
       }
 
       await workspace.removeDirectory(folder)

@@ -12,4 +12,6 @@ export * from './editing.js'
 
 export * from './projectCreation.js'
 
+export * from './projectDuplication.js'
+
 export * from './componentClipboard.js'
