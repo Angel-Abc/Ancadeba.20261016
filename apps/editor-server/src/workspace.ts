@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
+  constants,
+  copyFile,
   link,
   lstat,
   mkdir,
@@ -35,20 +37,44 @@ function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
 }
 
-async function replaceFile(source: string, target: string): Promise<void> {
+/** Publication calls whose support differs between platforms and volumes. */
+export interface WorkspacePublishing {
+  link(existingPath: string, newPath: string): Promise<void>
+  rename(from: string, to: string): Promise<void>
+}
+
+const nodePublishing: WorkspacePublishing = { link, rename }
+
+async function renameWhenReleased(
+  publishing: WorkspacePublishing,
+  source: string,
+  target: string,
+): Promise<void> {
   for (let attempt = 0; ; attempt++) {
     try {
-      await rename(source, target)
+      await publishing.rename(source, target)
 
       return
     } catch (error) {
-      // Windows can briefly deny replacement while a reader has the old file open.
+      // Windows can briefly deny a rename while a reader, scanner or indexer holds a handle.
       if (attempt === 5 || !['EPERM', 'EACCES', 'EBUSY'].some((code) => hasCode(error, code))) {
         throw error
       }
 
       await delay(10 * 2 ** attempt)
     }
+  }
+}
+
+/** For filesystems without hard links (FAT, exFAT, some network shares); still never replaces. */
+async function copyWithoutReplacing(source: string, target: string): Promise<void> {
+  try {
+    await copyFile(source, target, constants.COPYFILE_EXCL)
+  } catch (error) {
+    if (hasCode(error, 'EEXIST')) throw new WorkspaceError(409, 'File already exists')
+    // An interrupted copy must not leave partial bytes that look like a published file.
+    await rm(target, { force: true })
+    throw error
   }
 }
 
@@ -69,9 +95,12 @@ export function workspaceError(error: unknown): WorkspaceError {
 }
 
 export class FileWorkspace implements WorkspaceService {
-  private constructor(private readonly root: string) {}
+  private constructor(
+    private readonly root: string,
+    private readonly publishing: WorkspacePublishing,
+  ) {}
 
-  static async open(workFolder: string): Promise<FileWorkspace> {
+  static async open(workFolder: string, publishing = nodePublishing): Promise<FileWorkspace> {
     try {
       const info = await lstat(workFolder)
 
@@ -79,7 +108,7 @@ export class FileWorkspace implements WorkspaceService {
         throw new Error('workFolder must be an existing directory, not a link or file')
       }
 
-      return new FileWorkspace(await realpath(workFolder))
+      return new FileWorkspace(await realpath(workFolder), publishing)
     } catch (error) {
       throw new Error(
         'Cannot open workFolder. Configure an existing, accessible directory in editor-server/config.json.',
@@ -212,10 +241,10 @@ export class FileWorkspace implements WorkspaceService {
 
       try {
         // A hard link publishes complete bytes without replacing an existing destination.
-        await link(temporary, target)
+        await this.publishing.link(temporary, target)
       } catch (error) {
         if (hasCode(error, 'EEXIST')) throw new WorkspaceError(409, 'File already exists')
-        throw error
+        await copyWithoutReplacing(temporary, target)
       }
     } finally {
       await rm(temporary, { force: true })
@@ -267,7 +296,7 @@ export class FileWorkspace implements WorkspaceService {
     }
 
     // The editor coordinator serializes its own moves/creations; outside filesystem edits must stop.
-    await rename(source, target)
+    await renameWhenReleased(this.publishing, source, target)
   }
 
   async removeCreated(path: string, contents: Uint8Array): Promise<void> {
@@ -307,7 +336,7 @@ export class FileWorkspace implements WorkspaceService {
       }
 
       // Publish a complete file on the same filesystem, including during concurrent saves.
-      await replaceFile(temporary, target)
+      await renameWhenReleased(this.publishing, temporary, target)
     } finally {
       await rm(temporary, { force: true })
     }

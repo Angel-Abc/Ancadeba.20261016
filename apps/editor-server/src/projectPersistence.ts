@@ -1,10 +1,7 @@
 import { EditorError, type CommandResult } from '@ancadeba/editor-core'
 import type { ProjectWorkspace } from './editorProjectRepository.js'
 import { workspaceError } from './workspace.js'
-
-function same(a: Uint8Array | undefined, b: Uint8Array | undefined): boolean {
-  return a === undefined ? b === undefined : b !== undefined && Buffer.from(a).equals(b)
-}
+import { sameBytes as same } from './historyFiles.js'
 
 /** Publishes references and the manifest before removing old files, with guarded rollback. */
 export async function saveProjectStructureChanges(

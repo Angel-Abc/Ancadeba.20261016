@@ -95,6 +95,14 @@ All paths are relative to the configured editor-server workspace, using forward
 slashes. An empty project path selects the workspace root. Existing workspace
 path restrictions also apply to editor routes.
 
+To stop other websites from reaching the editor through DNS rebinding or
+cross-site requests, the server answers only when the `Host` header is an IP
+address, `localhost`, a `*.localhost` name or the configured `host`, and when
+any `Origin` header meets the same rule. Other requests receive HTTP 403.
+Unexpected failures return a generic HTTP 500 and are written to the server
+console. Project discovery skips dependency, version-control and editor-state
+folders such as `node_modules` and `.git`.
+
 | Endpoint                                   | Result                                                                 |
 | ------------------------------------------ | ---------------------------------------------------------------------- |
 | `GET /api/editor/capabilities`             | API version, JSON Schema for requests, supported commands and examples |
@@ -241,8 +249,9 @@ that check are not protected by filesystem compare-and-swap.
 Successful commands save immediately. Single-document changes use the workspace's
 atomic replacement. Scene creation publishes complete scene bytes using an
 exclusive hard link from a temporary file, then replaces the manifest last.
-Filesystems must support hard links. An existing destination, including an
-unreferenced orphan, is never overwritten.
+Filesystems without hard links (FAT, exFAT, some network shares) fall back to an
+exclusive copy, which is not atomic for concurrent readers. An existing destination,
+including an unreferenced orphan, is never overwritten.
 
 A normal manifest-save failure first checks whether publication already succeeded.
 If the saved manifest matches the intended bytes, the command succeeds. Otherwise,

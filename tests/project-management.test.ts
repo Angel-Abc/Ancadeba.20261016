@@ -435,4 +435,18 @@ describe('project renaming and recoverable deletion', () => {
       (await fetch(`${base}/api/editor/projects/rename`, { method: 'POST', body: '{}' })).status,
     ).toBe(415)
   })
+  it('renames and deletes a project whose referenced document is named Game.json', async () => {
+    await mkdir(join(root, 'source/inventory'))
+    await writeFile(
+      join(root, 'source/inventory/Game.json'),
+      JSON.stringify({ 'schema-version': '1.0.0', itemTypes: {}, owners: {}, items: {} }),
+    )
+    await writeFile(
+      join(root, 'source/game.json'),
+      JSON.stringify({ ...(await manifest()), inventory: ['Game'] }),
+    )
+    expect((await service.inspect('source')).diagnostics).toEqual([])
+    expect((await rename({ folderName: 'renamed' })).path).toBe('renamed')
+    await expect(remove('renamed')).resolves.toMatchObject({ path: 'renamed' })
+  })
 })

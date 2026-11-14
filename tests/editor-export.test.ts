@@ -13,7 +13,7 @@ import {
   type GameExportArchive,
 } from '../apps/editor-server/src/gameExports.js'
 import { createEditorServer } from '../apps/editor-server/src/server.js'
-import { FileWorkspace } from '../apps/editor-server/src/workspace.js'
+import { FileWorkspace, WorkspaceError } from '../apps/editor-server/src/workspace.js'
 
 function gameDefinition(title: string) {
   return {
@@ -206,6 +206,30 @@ describe('editor game export API', () => {
     expect(await readdir(scratch)).toEqual([])
     const archive = await exports.create('')
     await archive.dispose()
+    expect(await readdir(scratch)).toEqual([])
+  })
+
+  it('reports the build failure and keeps deliberate build errors intact', async () => {
+    const workspace = await FileWorkspace.open(root)
+    const cause = new Error('tsx is missing')
+    const timeout = new WorkspaceError(504, 'The export build did not finish within 5 minutes')
+    const builder = vi.fn().mockRejectedValueOnce(cause).mockRejectedValueOnce(timeout)
+    const reportError = vi.fn()
+
+    const exports = new WorkspaceGameExporter(
+      workspace,
+      builder,
+      writeGameArchive,
+      scratch,
+      reportError,
+    )
+
+    await expect(exports.create('')).rejects.toMatchObject({ status: 422 })
+    expect(reportError).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Game export build failed'),
+      cause,
+    )
+    await expect(exports.create('')).rejects.toBe(timeout)
     expect(await readdir(scratch)).toEqual([])
   })
 

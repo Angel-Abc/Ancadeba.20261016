@@ -542,6 +542,9 @@ export class WorkspaceProjectRepository implements EditorProjectRepository {
 
         throw error
       }
+    } else if (change.changedFiles.length > 1) {
+      // No special case applies: publish every file with guarded rollback, never only the first.
+      await saveProjectStructureChanges(this.workspace, folder, change)
     } else {
       const file = change.changedFiles[0]
 

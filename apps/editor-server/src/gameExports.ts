@@ -2,6 +2,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { WorkspaceError } from './workspace.js'
+import { ignoreErrors, type ErrorReporter } from './errorReporter.js'
 
 export interface GameExportArchive {
   filePath: string
@@ -26,6 +27,7 @@ export class WorkspaceGameExporter implements GameExportService {
     private readonly buildGame: (source: string, output: string) => Promise<void>,
     private readonly writeArchive: (source: string, output: string) => Promise<void>,
     private readonly temporaryRoot = tmpdir(),
+    private readonly reportError: ErrorReporter = ignoreErrors,
   ) {}
 
   async create(path: string): Promise<GameExportArchive> {
@@ -64,7 +66,10 @@ export class WorkspaceGameExporter implements GameExportService {
 
       try {
         await this.buildGame(gameDirectory, output)
-      } catch {
+      } catch (error) {
+        this.reportError(`Game export build failed for ${gameDirectory}`, error)
+
+        if (error instanceof WorkspaceError) throw error
         throw new WorkspaceError(
           422,
           'Could not export the game. Check game.json and the game assets.',

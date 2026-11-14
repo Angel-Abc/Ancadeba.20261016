@@ -1,4 +1,4 @@
-import { projectTrashDirectory, type ProjectChoice } from '@ancadeba/editor-core'
+import { isPrivateProjectEntry, type ProjectChoice } from '@ancadeba/editor-core'
 import { workspaceError, type WorkspaceService } from './workspace.js'
 import { hasRecoveryResources } from './manifestRecovery.js'
 
@@ -45,8 +45,9 @@ export async function listWorkspaceProjects(
 
     const { entries } = listing
 
+    // Dependency, version-control and editor-state folders are large and never hold projects.
     for (const entry of entries) {
-      if (entry.type === 'directory' && entry.name.toLowerCase() !== projectTrashDirectory)
+      if (entry.type === 'directory' && !isPrivateProjectEntry(entry.name))
         pending.push(prefix + entry.name)
     }
 

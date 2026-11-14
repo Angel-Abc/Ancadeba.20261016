@@ -5,8 +5,9 @@ import { mkdtemp, mkdir, rm, writeFile, readFile, symlink } from 'node:fs/promis
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Server } from 'node:http'
-import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vite-plus/test'
 import { createEditorServer, maxWriteBytes } from '../apps/editor-server/src/server.js'
+import { isTrustedRequest } from '../apps/editor-server/src/requestOrigin.js'
 import {
   FileWorkspace,
   WorkspaceError,
@@ -82,6 +83,13 @@ describe('editor server', () => {
       await mkdir(nested, { recursive: true })
       await mkdir(broken)
       await mkdir(join(group, 'ordinary', 'game.json'), { recursive: true })
+
+      // Dependency and version-control folders are never searched for games.
+      for (const hidden of ['node_modules/dependency', '.git/objects']) {
+        await mkdir(join(group, hidden), { recursive: true })
+        await writeFile(join(group, hidden, 'game.json'), '{"title":"Not a project"}')
+      }
+
       await writeFile(rootManifest, '{"title":"Root game"}')
       await writeFile(join(nested, 'game.json'), '{"title":"Nested game"}')
       await writeFile(join(broken, 'game.json'), '{invalid')
@@ -268,5 +276,81 @@ describe('editor server', () => {
     expect(workspaceError(new Error(root)).message).toBe('Workspace operation failed')
     const error = new WorkspaceError(400, 'Invalid workspace path')
     expect(workspaceError(error)).toBe(error)
+  })
+
+  it.each([
+    [{ host: '127.0.0.1:3000' }, true],
+    [{ host: 'localhost:3000' }, true],
+    [{ host: 'editor.localhost' }, true],
+    [{ host: '[::1]:3000' }, true],
+    [{ host: '192.168.1.20:3000' }, true],
+    [{ host: 'studio.example:3000' }, true],
+    [{ host: 'localhost:3000', origin: 'http://localhost:5174' }, true],
+    [{ host: 'localhost:3000', origin: 'http://127.0.0.1:5174' }, true],
+    [{}, false],
+    [{ host: '' }, false],
+    [{ host: 'attacker.example:3000' }, false],
+    [{ host: 'localhost.attacker.example' }, false],
+    [{ host: 'localhost:3000', origin: 'https://attacker.example' }, false],
+    [{ host: 'localhost:3000', origin: 'null' }, false],
+  ])('decides whether request headers %j are trusted', (headers, trusted) => {
+    expect(isTrustedRequest(headers, 'studio.example')).toBe(trusted)
+  })
+
+  it('refuses rebinding hosts and cross-site origins before reading the workspace', async () => {
+    const status = (headers: Record<string, string>) =>
+      new Promise<number | undefined>((resolve, reject) => {
+        const request = httpRequest(
+          `${baseUrl}/api/files?path=hello.txt`,
+          { headers },
+          (response) => {
+            response.resume()
+            response.once('end', () => resolve(response.statusCode))
+          },
+        )
+
+        request.on('error', reject)
+        request.end()
+      })
+
+    expect(await status({ Host: 'attacker.example' })).toBe(403)
+    expect(await status({ Origin: 'https://attacker.example' })).toBe(403)
+    expect(await status({ Origin: 'http://localhost:5174' })).toBe(200)
+  })
+
+  it('reports unexpected failures to the operator while clients see a generic error', async () => {
+    const cause = new Error('Disk on fire')
+    const reportError = vi.fn()
+
+    const failing = createEditorServer(
+      { workFolder: root, host: '127.0.0.1', port: 3100 },
+      {
+        list: () => Promise.reject(cause),
+        read: () => Promise.reject(new WorkspaceError(404, 'Resource not found')),
+        write: () => Promise.reject(cause),
+      },
+      undefined,
+      undefined,
+      reportError,
+    )
+
+    failing.listen(0, '127.0.0.1')
+    await once(failing, 'listening')
+    // SAFETY: this server is listening on a TCP loopback port, not a Unix socket.
+    const address = failing.address() as AddressInfo
+
+    try {
+      const base = `http://127.0.0.1:${address.port}`
+      const response = await fetch(`${base}/api/workspace`)
+      expect(response.status).toBe(500)
+      await expect(response.json()).resolves.toEqual({ error: 'Workspace operation failed' })
+      expect(reportError).toHaveBeenCalledExactlyOnceWith('GET /api/workspace', cause)
+      expect((await fetch(`${base}/api/files?path=missing.txt`)).status).toBe(404)
+      expect(reportError).toHaveBeenCalledTimes(1)
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        failing.close((error) => (error ? reject(error) : resolve()))
+      })
+    }
   })
 })

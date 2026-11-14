@@ -14,6 +14,8 @@ import { EditorCoordinator } from './editorCoordinator.js'
 import type { EditorProjectService } from './editorProjectService.js'
 import type { GameExportService } from './gameExports.js'
 import { listWorkspaceProjects } from './workspaceProjects.js'
+import { isTrustedRequest } from './requestOrigin.js'
+import { ignoreErrors, type ErrorReporter } from './errorReporter.js'
 
 export const maxWriteBytes = 10 * 1024 * 1024
 
@@ -81,6 +83,7 @@ export function createEditorServer(
   workspace: WorkspaceService,
   exports?: GameExportService,
   projects?: EditorProjectService,
+  reportError: ErrorReporter = ignoreErrors,
 ): Server {
   parseEditorServerConfig(config)
   const coordinator = projects?.coordinator ?? new EditorCoordinator()
@@ -105,11 +108,19 @@ export function createEditorServer(
       }
 
       const failure = workspaceError(error)
+
+      // Clients only see a generic message, so the cause must reach the operator.
+      if (failure.status >= 500) reportError(`${request.method} ${request.url}`, error)
       json(response, failure.status, { error: failure.message })
     })
   })
 
   async function handle(request: IncomingMessage, response: ServerResponse) {
+    if (!isTrustedRequest(request.headers, config.host))
+      throw new WorkspaceError(
+        403,
+        'Address the editor server by localhost, an IP address or its configured host',
+      )
     const url = new URL(request.url ?? '/', 'http://localhost')
 
     if (request.method === 'GET' && request.url === '/health') {

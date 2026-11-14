@@ -333,6 +333,31 @@ describe('revision-checked graphics authoring', () => {
     expect(await readdir(join(root, 'game/assets/images'))).toEqual([])
   })
 
+  it('reports diagnostics instead of a server error when the catalogue is damaged', async () => {
+    await upload((await inspect()).revision)
+    await writeFile(
+      join(root, 'game/assets/catalogue.json'),
+      '{"schema-version":"1.0.0","images":[]}',
+    )
+
+    const service = new EditorProjectService(
+      new WorkspaceProjectRepository(workspace),
+      new EditorCoordinator(),
+    )
+
+    const broken = await service.inspect('game')
+    await expect(
+      service.importAsset(
+        { path: 'game', expectedRevision: broken.revision, id: 'art', format: 'svg' },
+        new TextEncoder().encode(artwork),
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: 'invalid_project',
+      diagnostics: [expect.objectContaining({ file: 'assets/catalogue.json' })],
+    })
+  })
+
   it('validates references and supports creating, editing, and removing graphic components', async () => {
     await upload((await inspect()).revision)
     expect(

@@ -594,13 +594,23 @@ export class EditorProjectService {
         )
       }
 
-      const game = gameSchema.parse(current.documents['game.json'])
+      const game = gameSchema.safeParse(current.documents['game.json'])
 
-      const catalog = game.assets
-        ? assetCatalogSchema.parse(current.documents[assetCatalogFile(game.assets)])
-        : undefined
+      const catalog =
+        game.success && game.data.assets
+          ? assetCatalogSchema.safeParse(current.documents[assetCatalogFile(game.data.assets)])
+          : undefined
 
-      const previous = catalog?.images[request.id]
+      // Images with broken sources can still be replaced; a damaged manifest or catalogue cannot.
+      if (!game.success || catalog?.success === false)
+        throw new EditorError(
+          422,
+          'invalid_project',
+          'Fix project diagnostics before importing an image',
+          validateProject(current.documents, current.sourceDiagnostics),
+        )
+
+      const previous = catalog?.data.images[request.id]
       const colors = { ...info.colors }
 
       for (const slot of Object.keys(colors))

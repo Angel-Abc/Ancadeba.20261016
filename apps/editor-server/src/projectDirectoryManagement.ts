@@ -5,6 +5,7 @@ import {
   EditorError,
   deletedProjectSchema,
   projectTrashDirectory,
+  isPrivateProjectEntry,
   object,
   type ProjectSnapshot,
   type RenameProjectRequest,
@@ -22,16 +23,6 @@ const trashRecordSchema = deletedProjectSchema.extend({
   version: z.literal(1),
   storageKey: z.string(),
 })
-
-const ignoredDirectories = new Set([
-  'node_modules',
-  '.git',
-  '.hg',
-  '.svn',
-  '.codex',
-  '.agents',
-  projectTrashDirectory,
-])
 
 /** Filesystem transactions for project directories; callers hold the editor coordinator. */
 export class ProjectDirectoryManagement {
@@ -63,6 +54,9 @@ export class ProjectDirectoryManagement {
   private async noNestedProjects(path: string, snapshot: ProjectSnapshot): Promise<void> {
     const pending = ['']
 
+    // Manifest detection ignores case, so its exemption for project documents must as well.
+    const referenced = new Set(Object.keys(snapshot.documents).map((file) => file.toLowerCase()))
+
     for (const directory of pending) {
       const { entries } = await this.workspace.list(directory ? `${path}/${directory}` : path)
 
@@ -71,7 +65,7 @@ export class ProjectDirectoryManagement {
         entries.some(
           (entry) => entry.type === 'file' && entry.name.toLowerCase() === 'game.json',
         ) &&
-        !Object.hasOwn(snapshot.documents, `${directory}/game.json`)
+        !referenced.has(`${directory}/game.json`.toLowerCase())
       ) {
         let isScene = false
 
@@ -96,7 +90,7 @@ export class ProjectDirectoryManagement {
       }
 
       for (const entry of entries)
-        if (entry.type === 'directory' && !ignoredDirectories.has(entry.name.toLowerCase()))
+        if (entry.type === 'directory' && !isPrivateProjectEntry(entry.name))
           pending.push(directory ? `${directory}/${entry.name}` : entry.name)
     }
   }
