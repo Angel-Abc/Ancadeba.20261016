@@ -24,6 +24,7 @@ import {
   effectTypeLabels,
   labelled,
   questChoices,
+  questOutcomeChoices,
   questStatusLabels,
   sceneChoices,
 } from './choiceLabels.js'
@@ -112,6 +113,8 @@ export function rulesDefinitionForm(
         return { type, path: firstPath(), value: firstValue() }
       case 'state-compare':
         return { type, path: firstPath(), operator: 'gte', value: 1 }
+      case 'quest-outcome':
+        return { type, quest: Object.keys(view.quests ?? {})[0] ?? '', outcome: '' }
       case 'quest-state':
         return { type, quest: Object.keys(view.quests ?? {})[0] ?? '', status: 'completed' }
       case 'combat-outcome':
@@ -209,6 +212,8 @@ export function rulesDefinitionForm(
           t(comparisonLabels.get(condition.operator)!),
           condition.value,
         ].join(' ')
+      case 'quest-outcome':
+        return [condition.quest, condition.outcome].join(' · ')
       case 'quest-state':
         return [condition.quest, t(questStatusLabels.get(condition.status)!), condition.stage]
           .filter(Boolean)
@@ -511,6 +516,7 @@ export function rulesDefinitionForm(
                 'state-is',
                 'state-compare',
                 'quest-state',
+                'quest-outcome',
                 'combat-outcome',
                 'item-owned-by',
                 'item-carried-by',
@@ -556,6 +562,23 @@ export function rulesDefinitionForm(
                 entry.value = Number(value)
               },
               'number',
+            ),
+          )
+
+        if (entry.type === 'quest-outcome')
+          field.append(
+            select(t('form.quest'), entry.quest, questChoices(view), (id) => {
+              entry.quest = id
+              entry.outcome = ''
+              rerender()
+            }),
+            select(
+              t('story.outcome'),
+              entry.outcome,
+              questOutcomeChoices(view, entry.quest),
+              (id) => {
+                entry.outcome = id
+              },
             ),
           )
 
@@ -686,7 +709,22 @@ export function rulesDefinitionForm(
           field.append(
             select(t('form.quest'), entry.quest, questChoices(view), (value) => {
               entry.quest = value
+
+              if (entry.type === 'complete-quest') delete entry.outcome
+              rerender()
             }),
+          )
+
+        if (entry.type === 'complete-quest' && view.quests?.[entry.quest]?.outcomes.length)
+          field.append(
+            select(
+              t('story.outcome'),
+              entry.outcome ?? '',
+              questOutcomeChoices(view, entry.quest),
+              (id) => {
+                entry.outcome = id || undefined
+              },
+            ),
           )
 
         if (entry.type === 'move-map-object') {

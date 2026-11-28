@@ -191,7 +191,9 @@ export const gameSaveSchema = z.strictObject({
     }),
   ),
   quests: z.strictObject({
-    records: record(z.strictObject({ index: counter, completed: z.boolean() })),
+    records: record(
+      z.strictObject({ index: counter, completed: z.boolean(), outcome: id.optional() }),
+    ),
     tracked: id.optional(),
   }),
   dialogue: z.record(z.string(), savedDialogueSchema),

@@ -658,7 +658,7 @@ describe('branching dialogue and quest transactions', () => {
     flush()
     expect(game().quests!.snapshot('delivery')?.status).toBe('ready')
     const captured = game().quests!.capture(active())
-    game().quests!.request(active(), 'delivery', 'turn-in', captured)
+    game().quests!.request(active(), 'delivery', 'turn-in', { capture: captured })
     game().quests!.select(active(), 'journal', 'delivery')
     flush()
     expect(game().quests!.snapshot('delivery')?.status).toBe('ready')
@@ -792,6 +792,45 @@ function project() {
 }
 
 describe('story project integration', () => {
+  it('rejects ambiguous completion and unknown outcomes in scripts and follow-up conditions', () => {
+    const original = project()
+
+    const branched = questSchema.parse({
+      ...quest,
+      outcomes: [{ id: 'accepted', label: 'Accepted' }],
+    })
+
+    const documents = { ...original.documents, 'quests/delivery.json': branched }
+    expect(validateProject(documents)).toContainEqual(
+      expect.objectContaining({
+        file: 'dialogues/giver.json',
+        message: 'Choose a declared completion outcome for delivery',
+      }),
+    )
+    const edited = structuredClone(dialogue)
+    const reply = edited.nodes.delivery!.choices[0]!
+    reply.effects = [{ type: 'complete-quest', quest: 'delivery', outcome: 'accepted' }]
+    reply.visibleWhen = [{ type: 'quest-outcome', quest: 'delivery', outcome: 'missing' }]
+    expect(validateProject({ ...documents, 'dialogues/giver.json': edited })).toContainEqual(
+      expect.objectContaining({
+        file: 'dialogues/giver.json',
+        message: 'Unknown quest outcome: delivery/missing',
+      }),
+    )
+    reply.visibleWhen = []
+    expect(validateProject({ ...documents, 'dialogues/giver.json': edited })).toEqual([])
+    expect(
+      questSchema.safeParse({ ...branched, outcomes: [...branched.outcomes, ...branched.outcomes] })
+        .success,
+    ).toBe(false)
+    expect(
+      questSchema.safeParse({
+        ...branched,
+        outcomes: [{ ...branched.outcomes[0], handIns: quest.handIns }],
+      }).success,
+    ).toBe(false)
+  })
+
   it('inspects definitions and protects references, input reachability and declared fields', () => {
     const original = project()
     expect(validateProject(original.documents)).toEqual([])

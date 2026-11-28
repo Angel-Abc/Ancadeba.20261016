@@ -9,6 +9,7 @@ export const storyPathSchema = z.array(id).min(1)
 export const questStatusSchema = z.enum(['not-started', 'active', 'ready', 'completed'])
 
 export const worldConditionSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('quest-outcome'), quest: id, outcome: id }),
   z.strictObject({ type: z.literal('scene-is'), scene: id }),
   z.strictObject({
     type: z.literal('state-is'),

@@ -189,7 +189,12 @@ export const actionBarSlotSchema = z
           quest: gameIdSchema.optional(),
           journal: gameIdSchema.optional(),
           operation: questOperationSchema,
+          outcome: gameIdSchema.optional(),
         })
+        .refine(
+          (action) => !action.outcome || (action.operation === 'turn-in' && Boolean(action.quest)),
+          { message: 'An explicit outcome requires a fixed turn-in quest' },
+        )
         .refine((action) => Boolean(action.quest) !== Boolean(action.journal), {
           message: 'Choose a fixed quest or a quest journal',
         }),

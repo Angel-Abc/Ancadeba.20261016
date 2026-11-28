@@ -5724,13 +5724,35 @@ describe('editor scene picker', () => {
       slot('11').dispatchEvent(new Event('click'))
       flush(engine)
       expect(slot('12').hidden).toBe(true)
-      expect(slot('13').textContent).toContain('I have returned')
-      slot('13').dispatchEvent(new Event('click'))
+      slot('13').click()
       flush(engine)
-      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('completed')
-      expect(mainText()).toContain('Here is your payment')
+      slot('12').click()
+      flush(engine)
+      expect(slot('12').textContent).toContain('Publish it for the local pilots')
+      expect(slot('13').textContent).toContain('Sell the exclusive rights')
+      // A generic turn-in must present a choice even when dialogue is already open.
+      slot('15').click()
+      flush(engine)
+      const chooser = target.find((node) => node.tagName === 'DIALOG')!
+      expect(chooser.textContent).toContain('XP: 5')
+      expect(chooser.textContent).toContain('Gold: 8')
+      expect(game.quests!.snapshot('harbour-survey')?.status).toBe('ready')
+
+      if (preview) {
+        chooser.find((node) => node.dataset.questOutcome === 'published')!.click()
+      } else {
+        chooser.find((node) => node.textContent === 'Cancel')!.click()
+        slot('12').click()
+      }
+
+      flush(engine)
+      expect(game.quests!.snapshot('harbour-survey')).toMatchObject({
+        status: 'completed',
+        outcome: 'published',
+      })
+      expect(game.quests!.text('harbour-survey')).toContain('Published for the pilots')
       game.data.localization!.select('nl')
-      expect(mainText()).toContain('Hier zijn je betaling')
+      expect(game.quests!.text('harbour-survey')).toContain('Gepubliceerd voor de loodsen')
       expect(
         game.bindings!.read({ source: 'game.state', path: ['player', 'experience'] }),
       ).toMatchObject({ value: 5 })

@@ -3,6 +3,7 @@ import type { ProjectView } from '@ancadeba/editor-core'
 import {
   dialogueNodeSchema,
   dialogueChoiceSchema,
+  questOutcomeSchema,
   questObjectiveSchema,
   ruleStateType,
   type DialogueDefinition,
@@ -25,6 +26,7 @@ import {
   effectTypeLabels,
   labelled,
   questChoices,
+  questOutcomeChoices,
   questStatusLabels,
   sceneChoices,
 } from './choiceLabels.js'
@@ -107,6 +109,7 @@ export function storyConditions(
             'item-carried-by',
             'item-owned-by',
             'quest-state',
+            'quest-outcome',
             'combat-outcome',
           ] as const,
           conditionTypeLabels,
@@ -116,19 +119,25 @@ export function storyConditions(
           conditions[index] =
             type === 'scene-is'
               ? { type, scene: view.scenes[0]?.id ?? '' }
-              : type === 'quest-state'
-                ? { type, quest: Object.keys(view.quests ?? {})[0] ?? '', status: 'completed' }
-                : type === 'combat-outcome'
-                  ? { type, encounter: Object.keys(view.combat ?? {})[0] ?? '', outcome: 'victory' }
-                  : type === 'state-is'
-                    ? { type, path: view.rules?.state[0]?.path ?? ['flag'], value: false }
-                    : type === 'state-compare'
-                      ? { type, path: ['gold'], operator: 'gte', value: 1 }
-                      : {
-                          type: type === 'item-carried-by' ? 'item-carried-by' : 'item-owned-by',
-                          item: Object.keys(view.inventory?.items ?? {})[0] ?? '',
-                          owner: Object.keys(view.inventory?.owners ?? {})[0] ?? '',
-                        }
+              : type === 'quest-outcome'
+                ? { type, quest: Object.keys(view.quests ?? {})[0] ?? '', outcome: '' }
+                : type === 'quest-state'
+                  ? { type, quest: Object.keys(view.quests ?? {})[0] ?? '', status: 'completed' }
+                  : type === 'combat-outcome'
+                    ? {
+                        type,
+                        encounter: Object.keys(view.combat ?? {})[0] ?? '',
+                        outcome: 'victory',
+                      }
+                    : type === 'state-is'
+                      ? { type, path: view.rules?.state[0]?.path ?? ['flag'], value: false }
+                      : type === 'state-compare'
+                        ? { type, path: ['gold'], operator: 'gte', value: 1 }
+                        : {
+                            type: type === 'item-carried-by' ? 'item-carried-by' : 'item-owned-by',
+                            item: Object.keys(view.inventory?.items ?? {})[0] ?? '',
+                            owner: Object.keys(view.inventory?.owners ?? {})[0] ?? '',
+                          }
           render()
         },
       ),
@@ -201,6 +210,23 @@ export function storyConditions(
           Object.keys(view.inventory?.owners ?? {}),
           (value) => {
             condition.owner = value
+          },
+        ),
+      )
+
+    if (condition.type === 'quest-outcome')
+      row.append(
+        controls.select(t('form.quest'), condition.quest, questChoices(view), (quest) => {
+          condition.quest = quest
+          condition.outcome = ''
+          render()
+        }),
+        controls.select(
+          t('story.outcome'),
+          condition.outcome,
+          questOutcomeChoices(view, condition.quest),
+          (id) => {
+            condition.outcome = id
           },
         ),
       )
@@ -333,13 +359,28 @@ function effectsForm(
       ),
     )
 
-    if (effect.type === 'start-quest' || effect.type === 'complete-quest')
+    if (effect.type === 'start-quest' || effect.type === 'complete-quest') {
       row.append(
         controls.select(t('story.effectQuest'), effect.quest, questChoices(view), (value) => {
           effect.quest = value
+
+          if (effect.type === 'complete-quest') delete effect.outcome
+          render()
         }),
       )
-    else if (effect.type === 'append-log')
+
+      if (effect.type === 'complete-quest' && view.quests?.[effect.quest]?.outcomes.length)
+        row.append(
+          controls.select(
+            t('story.outcome'),
+            effect.outcome ?? '',
+            questOutcomeChoices(view, effect.quest),
+            (id) => {
+              effect.outcome = id || undefined
+            },
+          ),
+        )
+    } else if (effect.type === 'append-log')
       row.append(
         textField(
           controls,
@@ -926,6 +967,92 @@ export function questForm(
       render()
     }),
   )
+  const outcomes = controls.group(t('story.outcomes'))
+  outcomes.append(
+    entryEditor(
+      controls,
+      selected,
+      'outcomes',
+      t('story.outcome'),
+      draft.outcomes,
+      (outcome) => presentationName(view, outcome),
+      (outcome, index) => {
+        const path = ['outcomes', index]
+        const box = controls.group(t('story.outcome'))
+        box.append(
+          controls.input(t('story.outcomeId'), outcome.id, (id) => {
+            outcome.id = id
+          }),
+          ...storyPresentation(controls, view, outcome, path),
+          storyConditions(controls, view, t('story.outcomeConditions'), outcome.when, render),
+          textField(
+            controls,
+            view,
+            t('story.outcomeUnavailable'),
+            outcome.unavailableText ?? '',
+            (value) => {
+              outcome.unavailableText = value || undefined
+            },
+            render,
+          ),
+          ...settlementFields(controls, view, outcome, render, path),
+          controls.button(t('story.removeOutcome'), () => {
+            draft.outcomes.splice(index, 1)
+            controls.markEdited()
+            render()
+          }),
+        )
+
+        return fieldPath(box, ...path)
+      },
+      { path: ['outcomes'] },
+    ),
+    controls.button(t('story.addOutcome'), () => {
+      selected.outcomes = draft.outcomes.length
+      draft.outcomes.push(
+        questOutcomeSchema.parse({
+          id: unusedId('outcome-', draft.outcomes),
+          label: t('story.outcome'),
+        }),
+      )
+      controls.markEdited()
+      render()
+    }),
+  )
+
+  return [
+    stages,
+    controls.fold(
+      'metadata',
+      t('specialist.metadata'),
+      false,
+      identity,
+      ...storyPresentation(controls, view, draft, []),
+    ),
+    controls.section(
+      'when',
+      fieldPath(storyConditions(controls, view, t('story.canStart'), draft.when, render), 'when'),
+    ),
+    controls.section(
+      'turnIn',
+      fieldPath(
+        storyConditions(controls, view, t('story.canTurnIn'), draft.turnInWhen, render),
+        'turnInWhen',
+      ),
+    ),
+    ...settlementFields(controls, view, draft, render, []),
+    controls.section('outcomes', outcomes),
+  ]
+}
+
+function settlementFields(
+  controls: StoryControls,
+  view: ProjectView,
+  draft: Pick<QuestDefinition, 'handIns' | 'rewards'>,
+  render: () => void,
+  path: (string | number)[],
+) {
+  const { t } = controls
   const handIns = controls.group(t('story.handIns'))
   draft.handIns.forEach((entry, index) => {
     const row = controls.group(t('story.handIn', { number: index + 1 }))
@@ -934,6 +1061,7 @@ export function questForm(
         controls.input(t('story.handInItem'), entry.item, (value) => {
           entry.item = value
         }),
+        ...path,
         'handIns',
         index,
         'item',
@@ -1011,6 +1139,7 @@ export function questForm(
           controls.input(t('story.rewardId'), entry.id, (value) => {
             entry.id = value
           }),
+          ...path,
           'rewards',
           'numeric',
           index,
@@ -1020,6 +1149,7 @@ export function questForm(
           controls.input(t('story.rewardLabel'), entry.label, (value) => {
             entry.label = value
           }),
+          ...path,
           'rewards',
           'numeric',
           index,
@@ -1052,6 +1182,7 @@ export function questForm(
             },
             'number',
           ),
+          ...path,
           'rewards',
           'numeric',
           index,
@@ -1142,26 +1273,7 @@ export function questForm(
   )
 
   return [
-    stages,
-    controls.fold(
-      'metadata',
-      t('specialist.metadata'),
-      false,
-      identity,
-      ...storyPresentation(controls, view, draft, []),
-    ),
-    controls.section(
-      'when',
-      fieldPath(storyConditions(controls, view, t('story.canStart'), draft.when, render), 'when'),
-    ),
-    controls.section(
-      'turnIn',
-      fieldPath(
-        storyConditions(controls, view, t('story.canTurnIn'), draft.turnInWhen, render),
-        'turnInWhen',
-      ),
-    ),
-    controls.section('handIns', fieldPath(handIns, 'handIns')),
-    controls.section('rewards', fieldPath(rewards, 'rewards')),
+    controls.section([...path, 'handIns'].join('/'), fieldPath(handIns, ...path, 'handIns')),
+    controls.section([...path, 'rewards'].join('/'), fieldPath(rewards, ...path, 'rewards')),
   ]
 }

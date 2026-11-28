@@ -7925,6 +7925,25 @@ describe('scene inspector registry', () => {
     editor.dispose()
   })
 
+  it('authors a quest outcome and saves it alongside the existing survey endings', async () => {
+    const ui = panel()
+    const source = await sample('basic')
+    const view = inspectProject(source)
+    const editor = bindStoryEditor(ui.root.asElement(), (command) => ui.commands.push(command))
+    editor.render({ ...ui.initial, view }, true)
+    editor.openDefinition('quest:harbour-survey')
+    ui.click('Add outcome')
+    ui.edit('Outcome ID', 'archived')
+    ui.edit('Unmet requirement message', 'Return to the archive.')
+    ui.submit('Save quest')
+    const result = applyCommand(source, ui.commands.at(-1)!)
+    expect(result.changedFiles).toEqual(['quests/harbour-survey.json'])
+    expect(inspectProject(result.project).quests?.['harbour-survey']?.outcomes).toEqual([
+      ...view.quests!['harbour-survey']!.outcomes,
+      expect.objectContaining({ id: 'archived', unavailableText: 'Return to the archive.' }),
+    ])
+  })
+
   it('recovers the reordered quest stage and saves the edited objective with the complete quest', async () => {
     const ui = panel()
     const view = inspectProject(await sample('basic'))

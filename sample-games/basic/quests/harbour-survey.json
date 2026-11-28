@@ -37,26 +37,42 @@
       ]
     }
   ],
-  "rewards": {
-    "numeric": [
-      {
-        "id": "gold",
-        "labelKey": "quest.survey.gold",
-        "field": {
-          "source": "game.state",
-          "path": ["player", "gold"]
-        },
-        "amount": 8
-      },
-      {
-        "id": "xp",
-        "labelKey": "quest.survey.xp",
-        "field": {
-          "source": "game.state",
-          "path": ["player", "experience"]
-        },
-        "amount": 5
+  "outcomes": [
+    {
+      "id": "published",
+      "labelKey": "quest.survey.published",
+      "descriptionKey": "quest.survey.publishedDesc",
+      "rewards": {
+        "numeric": [
+          {
+            "id": "xp",
+            "labelKey": "quest.survey.xp",
+            "field": {
+              "source": "game.state",
+              "path": ["player", "experience"]
+            },
+            "amount": 5
+          }
+        ]
       }
-    ]
-  }
+    },
+    {
+      "id": "sold",
+      "labelKey": "quest.survey.sold",
+      "descriptionKey": "quest.survey.soldDesc",
+      "rewards": {
+        "numeric": [
+          {
+            "id": "gold",
+            "labelKey": "quest.survey.gold",
+            "field": {
+              "source": "game.state",
+              "path": ["player", "gold"]
+            },
+            "amount": 8
+          }
+        ]
+      }
+    }
+  ]
 }

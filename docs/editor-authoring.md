@@ -615,7 +615,7 @@ unique within this text component. **Bound value** changes an existing binding.
 **Append {{name}}** adds a placeholder at the end of literal text.
 
 State values come from fields declared in Rules, including numeric gold/currency
-fields. Quest choices include status, current stage ID and tracked state. For an
+fields. Quest choices include status, current stage ID, outcome ID and tracked state. For an
 objective counter, bind the state field used by that objective's numeric progress.
 Game time offers turns and elapsed world time; authored character levels and
 equipment stats are also selectable.
@@ -2028,7 +2028,7 @@ has an ID, label, and `when` conditions or numeric `progress`, for example:
 ```
 
 Supported world conditions are `scene-is`, `state-is`, `state-compare` with
-`eq/gte/lte/gt/lt`, `item-carried-by`, `item-owned-by`, `quest-state`, and
+`eq/gte/lte/gt/lt`, `item-carried-by`, `item-owned-by`, `quest-state`, `quest-outcome`, and
 `combat-outcome` (`victory/defeat/escaped`). Owned-item checks include containers;
 carried-item checks retain their direct-carried meaning. Combat checks only read
 recorded outcomes and never start encounters. Conditions also work in authored
@@ -2055,14 +2055,38 @@ substitute for the authored instance.
 `rewards.numeric` uses the existing `{ id, label, field, amount }` reward format.
 Amounts are fixed nonnegative safe integers. XP rewards use the leveling
 transaction path. `rewards.items` contains `{ id, itemType, colors? }` entries and
-requires `rewards.recipient`. Generated IDs are stable:
-`quest-reward-<quest-ID-length>-<quest-ID>-<reward-ID>`. Items are finite and
-delivered to the recipient's carried inventory.
+requires `rewards.recipient`. Quest-wide item rewards use the stable ID
+`quest-reward-<quest-ID-length>-<quest-ID>-<reward-ID>`. Outcome item rewards use
+`quest-outcome-reward-<quest-ID-length>-<quest-ID>-<outcome-ID-length>-<outcome-ID>-<reward-ID>`.
+The recipient receives each item in their carried inventory.
 
 Hand-ins, rewards, level gains, related state/log effects, completion, and the
 dialogue cursor commit together before observers run. Failure changes nothing;
 observer failure keeps the completed result without retrying it. Commands spend
 no game turn or world time. New Game resets quests and conversations.
+
+### Branching quest outcomes
+
+In the quest editor, open **Outcomes** and add an ending with a stable ID, title and
+description. Each ending can have its own conditions, unmet requirement message,
+hand-ins and rewards. The chosen ending and the quest-wide hand-ins and rewards
+commit together. The journal records the ending after completion.
+
+To let the player decide, place a **Turn in** action on the action bar. For a quest
+with outcomes, it opens a chooser showing the cost, rewards and eligibility of each
+ending. A fixed-quest action can also target a specific outcome. In dialogue or
+rules, select the ending explicitly. For example, the Basic curator's publishing
+choice uses this effect.
+
+```json
+{ "type": "complete-quest", "quest": "harbour-survey", "outcome": "published" }
+```
+
+Use a condition such as `{ "type": "quest-outcome", "quest": "harbour-survey", "outcome": "published" }`
+to unlock a later reply, objective or rule. The read-only binding
+`game.quests / harbour-survey / outcome` contains the chosen ID after completion
+and an empty string beforehand. In Basic, publishing earns 5 XP and unlocks a
+pilot's note. Selling exclusive rights earns 8 gold and unlocks the buyer's account.
 
 ### Journal and runtime services
 
@@ -2074,7 +2098,7 @@ a `journal` component for its selection. One quest can be tracked globally.
 
 `game.quests` and `game.dialogue` expose snapshots, eligibility, captured requests,
 text, and subscriptions. Read-only bindings use `game.quests` paths
-`[questId, "status" | "stage" | "tracked"]`. Queued shortcuts retain their scene,
+`[questId, "status" | "stage" | "outcome" | "tracked"]`. Queued shortcuts retain their scene,
 participant, page/choice, journal selection, and world facts; stale commands are
 discarded and held-key terminal phases stay consumed.
 

@@ -272,6 +272,7 @@ export class AuthoredPlaythrough {
                 switch (condition.type) {
                   case 'state-compare':
                   case 'item-owned-by':
+                  case 'quest-outcome':
                   case 'quest-state':
                   case 'combat-outcome':
                     return matchesConditions([condition], { game, scene: lifecycle.activeScene })

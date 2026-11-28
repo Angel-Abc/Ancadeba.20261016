@@ -262,6 +262,14 @@
   background: var(--ge-scene-background);
 }
 
+.ancadeba-outcomes section {
+  margin-block: 1em;
+}
+.ancadeba-outcomes p {
+  white-space: pre-line;
+  margin-block: 0.35em;
+}
+
 .ancadeba-crafting {
   overflow: auto;
   overflow-wrap: anywhere;

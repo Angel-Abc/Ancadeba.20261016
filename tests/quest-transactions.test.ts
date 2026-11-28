@@ -621,3 +621,77 @@ it.each([1, 2])(
     ])
   },
 )
+
+it('settles shared and chosen rewards atomically and exposes the provisional outcome to later effects', async () => {
+  const { game, action, active, flush } = await setup('none', false, (definitions) => {
+    const numeric = (amount: number) => [
+      { id: 'gold', label: 'Gold', amount, field: { source: 'game.state', path: ['gold'] } },
+    ]
+
+    definitions.a = questSchema.parse({
+      ...definitions.a,
+      rewards: { numeric: numeric(3) },
+      outcomes: [
+        {
+          id: 'delivered',
+          label: 'Delivered',
+          when: [{ type: 'state-is', path: ['ready'], value: true }],
+          handIns: [{ item: 'letter', owner: 'player', operation: 'transfer', recipient: 'giver' }],
+          rewards: {
+            recipient: 'player',
+            numeric: numeric(5),
+            items: [{ id: 'receipt', itemType: 'letter' }],
+          },
+        },
+        {
+          id: 'kept',
+          label: 'Kept',
+          when: [{ type: 'state-is', path: ['ready'], value: false }],
+          unavailableText: 'Wait for nightfall.',
+        },
+      ],
+    })
+    definitions.b.when = [{ type: 'quest-outcome', quest: 'a', outcome: 'delivered' }]
+    definitions.rules.actions.finishA = [
+      {
+        when: [],
+        effects: [
+          { type: 'complete-quest', quest: 'a', outcome: 'delivered' },
+          { type: 'start-quest', quest: 'b' },
+        ],
+      },
+    ]
+  })
+
+  action('startA')
+  expect(game.quests!.reason(active(), 'a', 'turn-in', 'kept')).toBe('Wait for nightfall.')
+  const offered: string[] = []
+  game.quests!.onChooseOutcome((_, quest) => offered.push(quest))
+  game.quests!.request(active(), 'a', 'turn-in')
+  flush()
+  expect(offered).toEqual(['a'])
+  expect(game.quests!.snapshot('a')?.status).toBe('ready')
+  const before = game.inventory!.snapshot
+  const reservation = { encounter: 'test' }
+  game.inventory!.reserveItem!('letter', reservation)
+  action('finishA')
+  expect(game.inventory!.snapshot).toEqual(before)
+  expect(game.quests!.snapshot('a')?.outcome).toBeUndefined()
+  expect(game.quests!.snapshot('b')?.status).toBe('not-started')
+  game.inventory!.releaseItems!(reservation)
+  action('finishA')
+  action('finishA')
+  expect(game.quests!.snapshot('a')).toMatchObject({ status: 'completed', outcome: 'delivered' })
+  expect(game.bindings!.read({ source: 'game.quests', path: ['a', 'outcome'] })).toMatchObject({
+    value: 'delivered',
+  })
+  expect(game.quests!.snapshot('b')?.status).toBe('active')
+  expect(game.bindings!.read({ source: 'game.state', path: ['gold'] })).toMatchObject({ value: 8 })
+  expect(game.inventory!.snapshot).toEqual([
+    expect.objectContaining({ id: 'letter', placement: { type: 'carried', owner: 'giver' } }),
+    expect.objectContaining({
+      id: questRewardItemId('a', 'receipt', 'delivered'),
+      placement: { type: 'carried', owner: 'player' },
+    }),
+  ])
+})

@@ -37,20 +37,7 @@
         {
           "id": "report",
           "labelKey": "dialogue.curator.report",
-          "visibleWhen": [
-            {
-              "type": "quest-state",
-              "quest": "harbour-survey",
-              "status": "ready"
-            }
-          ],
-          "effects": [
-            {
-              "type": "complete-quest",
-              "quest": "harbour-survey"
-            }
-          ],
-          "next": "thanks"
+          "next": "desk"
         }
       ]
     },
@@ -67,7 +54,121 @@
         }
       ]
     },
-    "thanks": {
+    "desk": {
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.desk"
+          }
+        }
+      ],
+      "choices": [
+        {
+          "id": "file",
+          "labelKey": "dialogue.curator.file",
+          "next": "decision",
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "harbour-survey",
+              "status": "ready"
+            }
+          ]
+        },
+        {
+          "id": "news",
+          "labelKey": "dialogue.curator.news",
+          "next": "news",
+          "visibleWhen": [
+            {
+              "type": "quest-state",
+              "quest": "harbour-survey",
+              "status": "completed"
+            }
+          ]
+        }
+      ]
+    },
+    "decision": {
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.decision"
+          }
+        }
+      ],
+      "choices": [
+        {
+          "id": "published",
+          "labelKey": "dialogue.curator.published",
+          "next": "published-receipt",
+          "effects": [
+            {
+              "type": "complete-quest",
+              "quest": "harbour-survey",
+              "outcome": "published"
+            }
+          ]
+        },
+        {
+          "id": "sold",
+          "labelKey": "dialogue.curator.sold",
+          "next": "sold-receipt",
+          "effects": [
+            {
+              "type": "complete-quest",
+              "quest": "harbour-survey",
+              "outcome": "sold"
+            }
+          ]
+        }
+      ]
+    },
+    "news": {
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.newsIntro"
+          }
+        }
+      ],
+      "choices": [
+        {
+          "id": "published-news",
+          "labelKey": "dialogue.curator.publishedNews",
+          "next": "published-news",
+          "visibleWhen": [
+            {
+              "type": "quest-outcome",
+              "quest": "harbour-survey",
+              "outcome": "published"
+            }
+          ]
+        },
+        {
+          "id": "sold-news",
+          "labelKey": "dialogue.curator.soldNews",
+          "next": "sold-news",
+          "visibleWhen": [
+            {
+              "type": "quest-outcome",
+              "quest": "harbour-survey",
+              "outcome": "sold"
+            }
+          ]
+        }
+      ]
+    },
+    "published-receipt": {
       "terminal": true,
       "lines": [
         {
@@ -75,7 +176,46 @@
             "textKey": "nearby.curator.name"
           },
           "text": {
-            "textKey": "dialogue.curator.thanks"
+            "textKey": "dialogue.curator.publishedReceipt"
+          }
+        }
+      ]
+    },
+    "published-news": {
+      "terminal": true,
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.publishedNote"
+          }
+        }
+      ]
+    },
+    "sold-receipt": {
+      "terminal": true,
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.soldReceipt"
+          }
+        }
+      ]
+    },
+    "sold-news": {
+      "terminal": true,
+      "lines": [
+        {
+          "speaker": {
+            "textKey": "nearby.curator.name"
+          },
+          "text": {
+            "textKey": "dialogue.curator.soldNote"
           }
         }
       ]

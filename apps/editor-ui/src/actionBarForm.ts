@@ -12,7 +12,7 @@ import {
   statePath,
   translationChoices,
 } from './ruleFormControls.js'
-import { questChoices, sceneChoices } from './choiceLabels.js'
+import { questOutcomeChoices, questChoices, sceneChoices } from './choiceLabels.js'
 import { sceneEntranceFields } from './sceneEntranceFields.js'
 import { mapInteractFields } from './mapInteractFields.js'
 import { actionDescriptionFields } from './actionDescriptionFields.js'
@@ -245,6 +245,7 @@ export function actionBarForm(
           ['quest', 'journal'],
           (value) =>
             change(() => {
+              delete action.outcome
               action.quest =
                 value === 'quest' ? (Object.keys(view.quests ?? {})[0] ?? '') : undefined
               action.journal =
@@ -260,7 +261,10 @@ export function actionBarForm(
           action.operation,
           questOperationSchema.options,
           (value) => {
-            action.operation = value
+            change(() => {
+              action.operation = value
+              delete action.outcome
+            })
           },
         ),
       )
@@ -268,7 +272,10 @@ export function actionBarForm(
       if (action.quest !== undefined)
         detail.append(
           select(t('controls.fixedQuest'), action.quest, questChoices(view), (value) => {
-            action.quest = value
+            change(() => {
+              action.quest = value
+              delete action.outcome
+            })
           }),
         )
       else
@@ -282,6 +289,22 @@ export function actionBarForm(
               .map((component) => component.id) ?? [],
             (value) => {
               action.journal = value
+            },
+          ),
+        )
+
+      if (
+        action.quest &&
+        action.operation === 'turn-in' &&
+        view.quests?.[action.quest]?.outcomes.length
+      )
+        detail.append(
+          select(
+            t('story.outcome'),
+            action.outcome ?? '',
+            [['', t('story.playerChooses')], ...questOutcomeChoices(view, action.quest)],
+            (id) => {
+              action.outcome = id || undefined
             },
           ),
         )

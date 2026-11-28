@@ -46,7 +46,14 @@ export class QuestLogComponentRenderer implements IComponentRenderer<QuestLogCom
         const definition = quests?.definition(id)
         button.hidden = !snapshot || !component.statuses.includes(snapshot.status)
         button.disabled = !quests
-        button.textContent = `${snapshot?.tracked ? '★ ' : ''}${definition?.label ?? id}${snapshot && definition ? ` — ${definition.messages[snapshot.status]}` : ''}`
+        const outcome = definition?.outcomes.find(({ id }) => id === snapshot?.outcome)
+        button.textContent = [
+          (snapshot?.tracked ? '★ ' : '') + (definition?.label ?? id),
+          snapshot && definition?.messages[snapshot.status],
+          outcome?.label,
+        ]
+          .filter(Boolean)
+          .join(' — ')
         button.setAttribute('aria-pressed', String(id === selected))
 
         if (button.hidden && document.activeElement === button) context.onActionBarFocusLost?.()

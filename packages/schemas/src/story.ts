@@ -24,7 +24,7 @@ export const storyEffectSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('set-state'), path: storyPathSchema, value: ruleValueSchema }),
   z.object({ type: z.literal('append-log'), text: ruleTextSchema }),
   z.object({ type: z.literal('start-quest'), quest: id }),
-  z.object({ type: z.literal('complete-quest'), quest: id }),
+  z.object({ type: z.literal('complete-quest'), quest: id, outcome: id.optional() }),
 ])
 
 export const dialogueChoiceSchema = z
@@ -177,6 +177,59 @@ export const questTextSchema = z.object({
   reward: z.string().default('Rewards'),
 })
 
+const settlementFields = {
+  handIns: z
+    .array(
+      z
+        .object({
+          item: id,
+          owner: id,
+          operation: z.enum(['consume', 'transfer']),
+          recipient: id.optional(),
+        })
+        .superRefine((handIn, context) => {
+          if ((handIn.operation === 'transfer') !== Boolean(handIn.recipient))
+            context.addIssue({
+              code: 'custom',
+              path: ['recipient'],
+              message: 'Transfers require a recipient; consumed hand-ins have none',
+            })
+
+          if (handIn.recipient === handIn.owner)
+            context.addIssue({
+              code: 'custom',
+              path: ['recipient'],
+              message: 'A hand-in must change ownership',
+            })
+        }),
+    )
+    .max(100)
+    .default([]),
+  rewards: z
+    .object({
+      recipient: id.optional(),
+      numeric: z.array(numericRewardSchema).max(100).default([]),
+      items: z
+        .array(z.object({ id, itemType: id, colors: z.record(id, colorSchema).default({}) }))
+        .max(100)
+        .default([]),
+    })
+    .prefault({}),
+}
+
+export const questOutcomeSchema = z
+  .object({
+    id,
+    ...presentation,
+    when: conditions,
+    unavailableText: ruleTextSchema.optional(),
+    ...settlementFields,
+  })
+  .refine((outcome) => Boolean(outcome.label || outcome.labelKey), {
+    path: ['label'],
+    message: 'An outcome label or translation is required',
+  })
+
 export const questSchema = z
   .object({
     'schema-version': z.literal('1.0.0'),
@@ -194,43 +247,8 @@ export const questSchema = z
       )
       .min(1)
       .max(100),
-    handIns: z
-      .array(
-        z
-          .object({
-            item: id,
-            owner: id,
-            operation: z.enum(['consume', 'transfer']),
-            recipient: id.optional(),
-          })
-          .superRefine((handIn, context) => {
-            if ((handIn.operation === 'transfer') !== Boolean(handIn.recipient))
-              context.addIssue({
-                code: 'custom',
-                path: ['recipient'],
-                message: 'Transfers require a recipient; consumed hand-ins have none',
-              })
-
-            if (handIn.recipient === handIn.owner)
-              context.addIssue({
-                code: 'custom',
-                path: ['recipient'],
-                message: 'A hand-in must change ownership',
-              })
-          }),
-      )
-      .max(100)
-      .default([]),
-    rewards: z
-      .object({
-        recipient: id.optional(),
-        numeric: z.array(numericRewardSchema).max(100).default([]),
-        items: z
-          .array(z.object({ id, itemType: id, colors: z.record(id, colorSchema).default({}) }))
-          .max(100)
-          .default([]),
-      })
-      .prefault({}),
+    ...settlementFields,
+    outcomes: z.array(questOutcomeSchema).max(100).default([]),
     messages: questTextSchema.prefault({}),
     messageKeys: z
       .partialRecord(z.enum(questTextSchema.keyof().options), translationKeySchema)
@@ -244,29 +262,60 @@ export const questSchema = z
         message: 'A quest label or translation is required',
       })
 
-    for (const [key, values] of [
-      ['stages', quest.stages.map((stage) => stage.id)],
-      [
-        'objectives',
-        quest.stages.flatMap((stage) => stage.objectives.map((objective) => objective.id)),
-      ],
-      ['handIns', quest.handIns.map((entry) => entry.item)],
-      ['rewards', quest.rewards.items.map((entry) => entry.id)],
-      ['numeric', quest.rewards.numeric.map((entry) => entry.id)],
-    ] as const)
-      if (new Set(values).size !== values.length)
+    const unique = (ids: string[], path: (string | number)[]) => {
+      if (new Set(ids).size !== ids.length)
+        context.addIssue({ code: 'custom', path, message: 'IDs must be unique within a quest' })
+    }
+
+    unique(
+      quest.stages.map(({ id }) => id),
+      ['stages'],
+    )
+    unique(
+      quest.stages.flatMap((s) => s.objectives.map(({ id }) => id)),
+      ['objectives'],
+    )
+    unique(
+      quest.outcomes.map(({ id }) => id),
+      ['outcomes'],
+    )
+
+    const validateSettlement = (
+      part: Pick<typeof quest, 'handIns' | 'rewards'>,
+      path: (string | number)[],
+    ) => {
+      unique(
+        part.handIns.map((h) => h.item),
+        [...path, 'handIns'],
+      )
+      unique(
+        part.rewards.items.map(({ id }) => id),
+        [...path, 'rewards', 'items'],
+      )
+      unique(
+        part.rewards.numeric.map(({ id }) => id),
+        [...path, 'rewards', 'numeric'],
+      )
+
+      if (part.rewards.items.length && !part.rewards.recipient)
         context.addIssue({
           code: 'custom',
-          path: [key],
-          message: 'IDs must be unique within a quest',
+          path: [...path, 'rewards', 'recipient'],
+          message: 'Item rewards require an inventory recipient',
         })
+    }
 
-    if (quest.rewards.items.length && !quest.rewards.recipient)
-      context.addIssue({
-        code: 'custom',
-        path: ['rewards', 'recipient'],
-        message: 'Item rewards require an inventory recipient',
-      })
+    validateSettlement(quest, [])
+    quest.outcomes.forEach((outcome, index) => {
+      validateSettlement(outcome, ['outcomes', index])
+
+      if (outcome.handIns.some(({ item }) => quest.handIns.some((shared) => shared.item === item)))
+        context.addIssue({
+          code: 'custom',
+          path: ['outcomes', index, 'handIns'],
+          message: 'An outcome cannot hand in a shared item twice',
+        })
+    })
   })
 
 export const dialogueCommandSchema = z.discriminatedUnion('type', [
@@ -298,6 +347,9 @@ export function questFile(id: string): string {
   return `quests/${id}.json`
 }
 
-export function questRewardItemId(quest: string, entry: string): string {
+export function questRewardItemId(quest: string, entry: string, outcome?: string): string {
+  if (outcome)
+    return `quest-outcome-reward-${quest.length}-${quest}-${outcome.length}-${outcome}-${entry}`
+
   return `quest-reward-${quest.length}-${quest}-${entry}`
 }

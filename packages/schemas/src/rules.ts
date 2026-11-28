@@ -45,7 +45,7 @@ export const ruleEffectSchema = z.discriminatedUnion('type', [
   sceneTransitionSchema,
   z.strictObject({ type: z.literal('append-log'), text: ruleTextSchema }),
   z.strictObject({ type: z.literal('start-quest'), quest: id }),
-  z.strictObject({ type: z.literal('complete-quest'), quest: id }),
+  z.strictObject({ type: z.literal('complete-quest'), quest: id, outcome: id.optional() }),
 ])
 
 const branchSchema = z

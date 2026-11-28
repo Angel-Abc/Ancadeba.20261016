@@ -23,6 +23,7 @@ import { runtimeText } from './runtimeText.js'
 export interface QuestSnapshot {
   readonly id: string
   readonly status: 'not-started' | 'active' | 'ready' | 'completed'
+  readonly outcome?: string | undefined
   readonly stage: string | undefined
   readonly tracked: boolean
   readonly objectives: readonly {
@@ -39,9 +40,16 @@ export interface StoryCapture {
   readonly signature: string
 }
 
+interface QuestRequestOptions {
+  readonly capture?: StoryCapture | undefined
+  readonly origin?: ActionOrigin | undefined
+  readonly outcome?: string | undefined
+}
+
 export interface QuestRequest {
   readonly scene: SceneInstance
   readonly quest: string
+  readonly outcome?: string | undefined
   readonly operation: QuestOperation
   readonly capture: StoryCapture
   readonly origin: ActionOrigin
@@ -65,14 +73,18 @@ export interface IGameQuests {
   readonly bindingValues: ReadonlyMap<string, ReadonlyMap<string, BindingValue>>
   selected(scene: SceneInstance, journal: string): string | undefined
   select(scene: SceneInstance, journal: string, quest?: string): void
-  reason(scene: SceneInstance, quest: string, operation: QuestOperation): string | undefined
+  reason(
+    scene: SceneInstance,
+    quest: string,
+    operation: QuestOperation,
+    outcome?: string,
+  ): string | undefined
   capture(scene: SceneInstance): StoryCapture
   request(
     scene: SceneInstance,
     quest: string,
     operation: QuestOperation,
-    capture?: StoryCapture,
-    origin?: ActionOrigin,
+    options?: QuestRequestOptions,
   ): void
   prepareEffects(
     scene: SceneInstance,
@@ -80,17 +92,21 @@ export interface IGameQuests {
     proposal?: ProposedFormState,
   ): PreparedStory | undefined
   text(id: string): string
+  settlementText(quest: QuestDefinition, outcome?: QuestDefinition['outcomes'][number]): string
+  onChooseOutcome(listener: (scene: SceneInstance, quest: string) => void): () => void
   subscribeChanges(listener: () => void): () => void
 }
 
 interface QuestRecord {
   readonly index: number
   readonly completed: boolean
+  readonly outcome?: string | undefined
 }
 
 /** Playthrough-owned quest progression and atomic hand-in/reward transactions. */
 export class GameQuests implements IGameQuests {
   private records = new Map<string, QuestRecord>()
+  private readonly choosers = new Set<(scene: SceneInstance, quest: string) => void>()
   private tracked: string | undefined
   private readonly selections = new WeakMap<SceneInstance, Map<string, string>>()
   private readonly listeners = new Set<() => void>()
@@ -112,6 +128,14 @@ export class GameQuests implements IGameQuests {
 
       if (!quest || record.index >= quest.stages.length)
         throw new Error('Invalid saved quest stage')
+
+      if (
+        (record.completed && record.index !== quest.stages.length - 1) ||
+        (record.outcome !== undefined &&
+          (!record.completed || !quest.outcomes.some(({ id }) => id === record.outcome))) ||
+        (record.completed && quest.outcomes.length && !record.outcome)
+      )
+        throw new Error('Invalid saved quest outcome')
     }
 
     if (save.tracked && !this.definition(save.tracked)) throw new Error('Invalid tracked quest')
@@ -182,6 +206,7 @@ export class GameQuests implements IGameQuests {
                     ? 'active'
                     : 'not-started'
                 : this.status(definition, records, scene, values, inventory),
+              outcome: record?.outcome,
               stage: record && definition.stages[record.index]?.id,
             }
           : undefined
@@ -262,6 +287,7 @@ export class GameQuests implements IGameQuests {
       id,
       status,
       stage: record && definition.stages[record.index]?.id,
+      outcome: record?.outcome,
       tracked: this.tracked === id,
       objectives: Object.freeze(
         record ? this.objectives(definition, record, this.lifecycle.activeScene) : [],
@@ -284,6 +310,7 @@ export class GameQuests implements IGameQuests {
           new Map<string, BindingValue>([
             ['status', this.status(definition)],
             ['stage', record ? (definition.stages[record.index]?.id ?? '') : ''],
+            ['outcome', record?.outcome ?? ''],
             ['tracked', this.tracked === id],
           ]),
         ]
@@ -346,12 +373,36 @@ export class GameQuests implements IGameQuests {
     })
   }
 
-  reason(scene: SceneInstance, id: string, operation: QuestOperation): string | undefined {
+  private canHandIn(
+    items: ReadonlyMap<string, InventoryItem>,
+    entry: QuestDefinition['handIns'][number],
+  ): boolean {
+    const item = items.get(entry.item)
+
+    return Boolean(
+      item &&
+      inventoryOwner(items, entry.item) === entry.owner &&
+      item.placement.type !== 'equipped' &&
+      !this.game.inventory?.isReserved?.(entry.item) &&
+      ![...items.values()].some(
+        (child) => child.placement.type === 'inside' && child.placement.container === entry.item,
+      ),
+    )
+  }
+
+  reason(
+    scene: SceneInstance,
+    id: string,
+    operation: QuestOperation,
+    outcome?: string,
+  ): string | undefined {
     const definition = this.definition(id)
 
     if (!definition || !this.validScene(scene))
       return runtimeText(this.game.data, 'quest.unavailable')
     const status = this.status(definition)
+
+    if (outcome !== undefined && operation !== 'turn-in') return definition.messages.unavailable
 
     if (operation === 'track')
       return status === 'not-started' || this.tracked === id
@@ -369,7 +420,25 @@ export class GameQuests implements IGameQuests {
     if (status !== 'ready' || !matchesConditions(definition.turnInWhen, this.facts(scene)))
       return definition.messages.requirements
 
-    return this.prepareEffects(scene, [{ type: 'complete-quest', quest: id }])
+    if (definition.outcomes.length && !outcome) return
+    const ending = definition.outcomes.find((entry) => entry.id === outcome)
+
+    if (outcome && !ending) return definition.messages.unavailable
+
+    if (ending && !matchesConditions(ending.when, this.facts(scene)))
+      return ending.unavailableText
+        ? this.resolveText(ending.unavailableText)
+        : definition.messages.requirements
+    const items = new Map(this.game.inventory?.snapshot.map((item) => [item.id, item]))
+
+    if (
+      [...definition.handIns, ...(ending?.handIns ?? [])].some(
+        (entry) => !this.canHandIn(items, entry),
+      )
+    )
+      return definition.messages.inventory
+
+    return this.prepareEffects(scene, [{ type: 'complete-quest', quest: id, outcome }])
       ? undefined
       : definition.messages.rewards
   }
@@ -378,20 +447,23 @@ export class GameQuests implements IGameQuests {
     scene: SceneInstance,
     quest: string,
     operation: QuestOperation,
-    capture = this.capture(scene),
-    origin: ActionOrigin = { type: 'direct' },
+    {
+      capture = this.capture(scene),
+      origin = { type: 'direct' },
+      outcome,
+    }: QuestRequestOptions = {},
   ): void {
     if (!this.validScene(scene)) return
-    this.messages.publish('quest.request', { scene, quest, operation, capture, origin })
+    this.messages.publish('quest.request', { scene, quest, operation, capture, origin, outcome })
   }
 
   private execute(request: QuestRequest): void {
-    const { scene, quest, operation, capture } = request
+    const { scene, quest, operation, capture, outcome } = request
 
     if (
       !this.validScene(scene) ||
       this.capture(scene).signature !== capture.signature ||
-      this.reason(scene, quest, operation)
+      this.reason(scene, quest, operation, outcome)
     )
       return
 
@@ -403,8 +475,16 @@ export class GameQuests implements IGameQuests {
       return
     }
 
+    if (operation === 'turn-in' && !outcome && this.definition(quest)?.outcomes.length) {
+      for (const listener of this.choosers) listener(scene, quest)
+
+      return
+    }
+
     const prepared = this.prepareEffects(scene, [
-      { type: operation === 'start' ? 'start-quest' : 'complete-quest', quest },
+      operation === 'start'
+        ? { type: 'start-quest', quest }
+        : { type: 'complete-quest', quest, outcome },
     ])
 
     if (!prepared?.isCurrent()) return
@@ -515,19 +595,21 @@ export class GameQuests implements IGameQuests {
         )
           return
 
-        for (const entry of quest.handIns) {
-          const item = items.get(entry.item)
+        const ending = quest.outcomes.find(({ id }) => id === effect.outcome)
 
-          if (
-            !item ||
-            inventoryOwner(items, entry.item) !== entry.owner ||
-            item.placement.type === 'equipped' ||
-            this.game.inventory?.isReserved?.(item.id) ||
-            [...items.values()].some(
-              (child) => child.placement.type === 'inside' && child.placement.container === item.id,
-            )
-          )
-            return
+        if ((quest.outcomes.length || effect.outcome) && !ending) return
+
+        if (
+          ending &&
+          !matchesConditions(ending.when, this.facts(scene, provisional, values, items))
+        )
+          return
+
+        const parts = ending ? [quest, ending] : [quest]
+
+        for (const entry of parts.flatMap((part) => part.handIns)) {
+          if (!this.canHandIn(items, entry)) return
+          const item = items.get(entry.item)!
 
           if (entry.operation === 'consume') {
             remove.push(item.id)
@@ -541,37 +623,43 @@ export class GameQuests implements IGameQuests {
           }
         }
 
-        for (const reward of quest.rewards.numeric) {
-          const key = JSON.stringify(reward.field.path)
-          const before = this.bindings.read(reward.field)
+        for (const part of parts) {
+          for (const reward of part.rewards.numeric) {
+            const key = JSON.stringify(reward.field.path)
+            const before = this.bindings.read(reward.field)
 
-          const current =
-            values.get(key) ?? (before.status === 'resolved' ? before.value : undefined)
+            const current =
+              values.get(key) ?? (before.status === 'resolved' ? before.value : undefined)
 
-          if (
-            reward.field.source !== 'game.state' ||
-            typeof current !== 'number' ||
-            !assign(reward.field.path.map(String), current + reward.amount, 'reward')
-          )
-            return
-        }
-
-        for (const reward of quest.rewards.items) {
-          if (!quest.rewards.recipient) return
-
-          const item: InventoryItemSnapshot = {
-            id: questRewardItemId(quest.id, reward.id),
-            itemType: reward.itemType,
-            colors: { ...reward.colors },
-            placement: { type: 'carried', owner: quest.rewards.recipient },
+            if (
+              reward.field.source !== 'game.state' ||
+              typeof current !== 'number' ||
+              !assign(reward.field.path.map(String), current + reward.amount, 'reward')
+            )
+              return
           }
 
-          if (items.has(item.id)) return
-          create.push(item)
-          items.set(item.id, item)
+          for (const reward of part.rewards.items) {
+            if (!part.rewards.recipient) return
+
+            const item: InventoryItemSnapshot = {
+              id: questRewardItemId(quest.id, reward.id, part === quest ? undefined : part.id),
+              itemType: reward.itemType,
+              colors: { ...reward.colors },
+              placement: { type: 'carried', owner: part.rewards.recipient },
+            }
+
+            if (items.has(item.id)) return
+            create.push(item)
+            items.set(item.id, item)
+          }
         }
 
-        records.set(quest.id, { index: quest.stages.length - 1, completed: true })
+        records.set(quest.id, {
+          index: quest.stages.length - 1,
+          completed: true,
+          ...(ending && { outcome: ending.id }),
+        })
       }
     }
 
@@ -699,6 +787,8 @@ export class GameQuests implements IGameQuests {
     if (!quest || !snapshot) return ''
     const stage = quest.stages.find((entry) => entry.id === snapshot.stage)
 
+    const ending = quest.outcomes.find(({ id }) => id === snapshot.outcome)
+
     return [
       quest.label,
       quest.description,
@@ -709,23 +799,46 @@ export class GameQuests implements IGameQuests {
         (entry) =>
           `${entry.complete ? '✓' : '○'} ${entry.label}${entry.target !== undefined ? ` (${entry.current ?? '?'}/${entry.target})` : ''}`,
       ),
-      ...(quest.handIns.length
-        ? [quest.messages.handIn, ...quest.handIns.map((entry) => entry.item)]
-        : []),
-      ...(quest.rewards.items.length || quest.rewards.numeric.length
-        ? [
-            quest.messages.reward,
-            ...quest.rewards.numeric.map((entry) => `${entry.label}: ${entry.amount}`),
-            ...quest.rewards.items.map(
-              (entry) =>
-                this.game.data.inventory?.itemTypes[entry.itemType]?.label ?? entry.itemType,
-            ),
-          ]
-        : []),
+      ending?.label,
+      ending?.description,
+      this.settlementText(quest, ending),
       snapshot.reason,
     ]
       .filter(Boolean)
       .join('\n')
+  }
+  settlementText(quest: QuestDefinition, outcome?: QuestDefinition['outcomes'][number]): string {
+    return (outcome ? [quest, outcome] : [quest])
+      .flatMap((part) => [
+        ...(part.handIns.length
+          ? [
+              quest.messages.handIn,
+              ...part.handIns.map((entry) => {
+                const type =
+                  this.game.inventory?.snapshot.find((item) => item.id === entry.item)?.itemType ??
+                  this.game.data.inventory?.items[entry.item]?.itemType
+
+                return (type && this.game.data.inventory?.itemTypes[type]?.label) || entry.item
+              }),
+            ]
+          : []),
+        ...(part.rewards.items.length || part.rewards.numeric.length
+          ? [
+              quest.messages.reward,
+              ...part.rewards.numeric.map((entry) => `${entry.label}: ${entry.amount}`),
+              ...part.rewards.items.map(
+                (entry) =>
+                  this.game.data.inventory?.itemTypes[entry.itemType]?.label ?? entry.itemType,
+              ),
+            ]
+          : []),
+      ])
+      .join('\n')
+  }
+  onChooseOutcome(listener: (scene: SceneInstance, quest: string) => void): () => void {
+    this.choosers.add(listener)
+
+    return () => this.choosers.delete(listener)
   }
   subscribeChanges(listener: () => void): () => void {
     if (this.disposed) return () => {}
@@ -737,6 +850,7 @@ export class GameQuests implements IGameQuests {
   dispose(): void {
     this.disposed = true
     this.cleanups.splice(0).forEach((cleanup) => cleanup())
+    this.choosers.clear()
     this.listeners.clear()
     this.records.clear()
   }

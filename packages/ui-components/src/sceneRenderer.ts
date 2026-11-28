@@ -3,6 +3,7 @@ import type { IGameLifecycle, SceneInstance } from '@ancadeba/game-runtime'
 import { ComponentRenderer } from './componentRenderer.js'
 import { ActionInfo } from './actionInfo.js'
 import { bindSceneInput } from './sceneInput.js'
+import { bindQuestOutcomeChooser } from './questOutcomeChooser.js'
 import type {
   ComponentRenderContext,
   ComponentRendererOptions,
@@ -111,6 +112,7 @@ export class SceneRenderer {
 
     const components: RenderedComponent[] = []
     let unbindInput: (() => void) | undefined
+    let unbindChooser: (() => void) | undefined
     let active = true
 
     const rendered: RenderedComponent = {
@@ -118,6 +120,7 @@ export class SceneRenderer {
       dispose() {
         if (!active) return
         active = false
+        unbindChooser?.()
         unbindInput?.()
         const errors: unknown[] = []
 
@@ -188,6 +191,7 @@ export class SceneRenderer {
       }
 
       const maps = components.filter((component) => component.moveMap)
+      unbindChooser = bindQuestOutcomeChooser(root, context)
       unbindInput = bindSceneInput(
         this.options.input,
         maps,

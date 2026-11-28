@@ -276,7 +276,7 @@ export class GameActionBar implements IGameActionBar {
       return Boolean(
         quest &&
         this.quests() &&
-        this.quests()?.reason(scene, quest, action.operation) === undefined,
+        this.quests()?.reason(scene, quest, action.operation, action.outcome) === undefined,
       )
     }
 
@@ -370,7 +370,11 @@ export class GameActionBar implements IGameActionBar {
           action.quest ?? (action.journal && this.quests()?.selected(scene, action.journal))
 
         if (quest)
-          this.quests()?.request(scene, quest, action.operation, target.storyCapture, origin)
+          this.quests()?.request(scene, quest, action.operation, {
+            capture: target.storyCapture,
+            origin,
+            outcome: action.outcome,
+          })
       }
 
       return

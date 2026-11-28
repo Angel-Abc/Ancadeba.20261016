@@ -37,7 +37,9 @@ export function storyIssues(sources: StorySources) {
   const items = new Set(Object.keys(sources.inventory?.items ?? {}))
 
   for (const quest of sources.quests.values())
-    for (const reward of quest.rewards.items) items.add(questRewardItemId(quest.id, reward.id))
+    for (const part of [quest, ...quest.outcomes])
+      for (const reward of part.rewards.items)
+        items.add(questRewardItemId(quest.id, reward.id, part === quest ? undefined : part.id))
 
   for (const combat of sources.combat?.values() ?? [])
     for (const drop of combat.rewards?.drops ?? []) items.add(rewardItemId(combat.id, drop.id))
@@ -55,6 +57,12 @@ export function storyIssues(sources: StorySources) {
 
     if (value.type === 'scene-is' && !sources.scenes.has(value.scene))
       add(file, `Unknown scene: ${value.scene}`)
+
+    if (
+      value.type === 'quest-outcome' &&
+      !sources.quests.get(value.quest)?.outcomes.some(({ id }) => id === value.outcome)
+    )
+      add(file, 'Unknown quest outcome: ' + value.quest + '/' + value.outcome)
 
     if (value.type === 'quest-state') {
       const quest = sources.quests.get(value.quest)
@@ -75,7 +83,15 @@ export function storyIssues(sources: StorySources) {
 
   const effect = (value: StoryEffect, file: string) => {
     if (value.type === 'start-quest' || value.type === 'complete-quest') {
-      if (!sources.quests.has(value.quest)) add(file, `Unknown quest: ${value.quest}`)
+      const quest = sources.quests.get(value.quest)
+
+      if (!quest) add(file, `Unknown quest: ${value.quest}`)
+      else if (
+        value.type === 'complete-quest' &&
+        (quest.outcomes.length || value.outcome) &&
+        !quest.outcomes.some(({ id }) => id === value.outcome)
+      )
+        add(file, 'Choose a declared completion outcome for ' + value.quest)
     } else if (value.type === 'append-log') {
       if (!sources.rules?.log) add(file, 'Appending dialogue text requires a declared log')
     } else {
@@ -129,63 +145,67 @@ export function storyIssues(sources: StorySources) {
           add(file, 'Numeric quest progress requires a declared numeric field')
       }
 
-    for (const handIn of quest.handIns)
-      if (
-        !items.has(handIn.item) ||
-        !owner(handIn.owner) ||
-        (handIn.recipient && !owner(handIn.recipient))
-      )
-        add(file, 'Unknown hand-in item or owner')
+    for (const outcome of quest.outcomes) outcome.when.forEach((value) => condition(value, file))
 
-    if (quest.rewards.recipient && !owner(quest.rewards.recipient))
-      add(file, 'Unknown quest reward recipient')
-
-    for (const reward of quest.rewards.numeric) {
-      if (
-        [...(sources.leveling?.values() ?? [])].some(
-          (profile) => JSON.stringify(profile.level.path) === JSON.stringify(reward.field.path),
+    for (const part of [quest, ...quest.outcomes]) {
+      for (const handIn of part.handIns)
+        if (
+          !items.has(handIn.item) ||
+          !owner(handIn.owner) ||
+          (handIn.recipient && !owner(handIn.recipient))
         )
-      )
-        add(file, 'Rewards must grant XP instead of writing a managed level')
-      const field = fields.get(JSON.stringify(reward.field.path))
+          add(file, 'Unknown hand-in item or owner')
 
-      if (reward.field.source !== 'game.state' || !field || typeof field.value !== 'number')
-        add(file, 'Quest rewards require declared numeric state fields')
+      if (part.rewards.recipient && !owner(part.rewards.recipient))
+        add(file, 'Unknown quest reward recipient')
 
-      if (
-        [...(sources.combat?.values() ?? [])].some((encounter) =>
-          [encounter.player, ...encounter.enemies].some(
-            (actor) => JSON.stringify(actor.health.path) === JSON.stringify(reward.field.path),
-          ),
+      for (const reward of part.rewards.numeric) {
+        if (
+          [...(sources.leveling?.values() ?? [])].some(
+            (profile) => JSON.stringify(profile.level.path) === JSON.stringify(reward.field.path),
+          )
         )
-      )
-        add(file, 'Quest rewards cannot write combat health')
-    }
+          add(file, 'Rewards must grant XP instead of writing a managed level')
+        const field = fields.get(JSON.stringify(reward.field.path))
 
-    for (const reward of quest.rewards.items) {
-      const itemId = questRewardItemId(id, reward.id)
+        if (reward.field.source !== 'game.state' || !field || typeof field.value !== 'number')
+          add(file, 'Quest rewards require declared numeric state fields')
 
-      if (rewardIds.has(itemId)) add(file, 'Quest reward instance ID collision')
-      rewardIds.add(itemId)
-      const type = sources.inventory?.itemTypes[reward.itemType]
+        if (
+          [...(sources.combat?.values() ?? [])].some((encounter) =>
+            [encounter.player, ...encounter.enemies].some(
+              (actor) => JSON.stringify(actor.health.path) === JSON.stringify(reward.field.path),
+            ),
+          )
+        )
+          add(file, 'Quest rewards cannot write combat health')
+      }
 
-      if (!type) add(file, `Unknown reward item type: ${reward.itemType}`)
+      for (const reward of part.rewards.items) {
+        const itemId = questRewardItemId(id, reward.id, part === quest ? undefined : part.id)
 
-      if (sources.inventory && quest.rewards.recipient)
-        for (const issue of inventoryIssues(
-          {
-            ...sources.inventory,
-            items: {
-              [itemId]: {
-                itemType: reward.itemType,
-                colors: reward.colors,
-                placement: { type: 'carried', owner: quest.rewards.recipient },
+        if (rewardIds.has(itemId)) add(file, 'Quest reward instance ID collision')
+        rewardIds.add(itemId)
+        const type = sources.inventory?.itemTypes[reward.itemType]
+
+        if (!type) add(file, `Unknown reward item type: ${reward.itemType}`)
+
+        if (sources.inventory && part.rewards.recipient)
+          for (const issue of inventoryIssues(
+            {
+              ...sources.inventory,
+              items: {
+                [itemId]: {
+                  itemType: reward.itemType,
+                  colors: reward.colors,
+                  placement: { type: 'carried', owner: part.rewards.recipient },
+                },
               },
             },
-          },
-          sources.assets,
-        ).filter((issue) => issue.path[0] === 'items'))
-          add(file, issue.message)
+            sources.assets,
+          ).filter((issue) => issue.path[0] === 'items'))
+            add(file, issue.message)
+      }
     }
   }
 
@@ -230,7 +250,7 @@ export function storyIssues(sources: StorySources) {
         !Array.isArray(path) ||
         path.length !== 2 ||
         !sources.quests.has(path[0]) ||
-        !['status', 'stage', 'tracked'].includes(path[1])
+        !['status', 'stage', 'tracked', 'outcome'].includes(path[1])
       )
         add(file, 'Unknown quest binding')
     }
@@ -300,13 +320,19 @@ export function storyIssues(sources: StorySources) {
       }
 
       if (component.type === 'action-bar')
-        for (const slot of Object.values(component.slots))
+        for (const slot of Object.values(component.slots)) {
+          const action = slot.action
+
+          if (action.type === 'quest-action' && action.quest && action.outcome)
+            effect({ type: 'complete-quest', quest: action.quest, outcome: action.outcome }, file)
+
           if (
             slot.action.type === 'quest-action' &&
             slot.action.quest &&
             !sources.quests.has(slot.action.quest)
           )
             add(file, `Unknown quest: ${slot.action.quest}`)
+        }
 
       if (component.type !== 'nearby') continue
 

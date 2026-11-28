@@ -100,6 +100,12 @@ export function textBindingChoices(
       ),
       choice(
         'game.quests',
+        [id, 'outcome'],
+        t('bindings.questOutcome', { quest: displayLabel(view, id, quest) }),
+        '',
+      ),
+      choice(
+        'game.quests',
         [id, 'tracked'],
         t('bindings.questTracked', { quest: displayLabel(view, id, quest) }),
         false,

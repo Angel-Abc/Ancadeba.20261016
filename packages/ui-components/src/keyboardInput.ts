@@ -54,7 +54,7 @@ export function bindKeyboardInput(
     !usesNativeKeyboard(document.activeElement, allowButtons)
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) return
+    if (event.defaultPrevented || document.activeElement?.closest('dialog[open]')) return
     const reserved = input.isReservedKey?.(event.code) === true
 
     if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return

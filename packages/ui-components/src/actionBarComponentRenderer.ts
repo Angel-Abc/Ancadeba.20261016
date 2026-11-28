@@ -132,6 +132,7 @@ export class ActionBarComponentRenderer implements IComponentRenderer<ActionBarC
                       (action.journal && scene.game.quests.selected(scene, action.journal)) ??
                       '',
                     action.operation,
+                    action.outcome,
                   )
                 : undefined
             : undefined

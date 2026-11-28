@@ -23,6 +23,7 @@ export const conditionTypeLabels = new Map<string, string>([
   ['scene-is', 'choices.sceneIs'],
   ['state-is', 'choices.stateIs'],
   ['state-compare', 'choices.stateCompare'],
+  ['quest-outcome', 'story.outcome'],
   ['quest-state', 'form.questStatus'],
   ['combat-outcome', 'choices.combatOutcome'],
   ['item-owned-by', 'choices.itemOwnedBy'],
@@ -78,5 +79,11 @@ export function sceneChoices(
 export function questChoices(view: ProjectView): (readonly [string, string])[] {
   return Object.entries(view.quests ?? {}).map(
     ([id, quest]) => [id, displayLabel(view, id, quest)] as const,
+  )
+}
+
+export function questOutcomeChoices(view: ProjectView, quest: string) {
+  return (view.quests?.[quest]?.outcomes ?? []).map(
+    (outcome) => [outcome.id, displayLabel(view, outcome.id, outcome)] as const,
   )
 }

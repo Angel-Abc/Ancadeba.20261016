@@ -34,6 +34,7 @@ const known = new Set([
   'quest',
   'turnInWhen',
   'stages',
+  'outcomes',
   'objectives',
   'progress',
   'binding',

@@ -4167,7 +4167,9 @@ on managed XP/level fields are rejected. Code hosts can grant XP through
 gains. Supply the existing `createStateTransactions` adapter for code-hosted games.
 Authored games receive it automatically. Numeric field writes must go through
 the supported transaction path; mutating host state directly cannot trigger a
-level-up. Quest-reward authoring is deferred.
+level-up. In the quest editor, a numeric reward can grant XP for completing a
+quest or for choosing a particular outcome. The Basic sample grants 5 XP when
+the player publishes the harbour survey for local pilots.
 
 When maximum health grows, `health.policy` chooses `preserve` (the default),
 `increase` (add the maximum-health gain to current health), or `restore` (fill the

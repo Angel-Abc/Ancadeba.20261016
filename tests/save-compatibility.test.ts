@@ -120,7 +120,7 @@ describe('gameplay save compatibility', () => {
     heavy.damage.max++
     attack.damage.max++
     dialogue.nodes.greeting!.choices[0]!.next = 'greeting'
-    quest.rewards!.numeric[0]!.amount++
+    quest.outcomes[0]!.rewards.numeric[0]!.amount++
     leveling.levels[1]!.xp++
     scene.components.pop()
     inventory.itemTypes['healing-potion']!.use!.consumption = 'keep'

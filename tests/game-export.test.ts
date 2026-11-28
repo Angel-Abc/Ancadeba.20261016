@@ -819,7 +819,7 @@ describe('standalone game export', () => {
       for (let batch = 0; batch < 6; batch++) engine.flushMessages()
       game.nearby!.select(lifecycle.activeScene!, 'nearby', 'curator')
 
-      for (const slot of ['11', '13']) {
+      for (const slot of ['11', '13', '12', '13']) {
         game.actionBar!.activate(lifecycle.activeScene!, 'action-bar', slot)
 
         for (let batch = 0; batch < 6; batch++) engine.flushMessages()
@@ -827,7 +827,7 @@ describe('standalone game export', () => {
 
       expect(game.quests!.snapshot('harbour-survey')?.status).toBe('completed')
       expect(game.dialogue!.text(lifecycle.activeScene!, 'nearby')).toContain(
-        'Your observations are valuable',
+        'Here are your 8 gold',
       )
     } finally {
       engine?.stop()

@@ -82,6 +82,7 @@ const en = {
   'itemUse.unavailable': 'Item use is unavailable.',
   'itemUse.selection': 'Select a usable item.',
   'quest.unavailable': 'Quest operation is unavailable.',
+  'quest.chooseOutcome': 'Choose an ending for {quest}',
   'dialogue.unavailable': 'Conversation is unavailable.',
   'save.save': 'Save progress',
   'save.load': 'Load progress',
@@ -128,6 +129,7 @@ export type RuntimeTextValues = Readonly<Record<string, string | number>>
 export type RuntimeTranslator = (key: RuntimeTextKey, values?: RuntimeTextValues) => string
 
 const nl: Record<RuntimeTextKey, string> = {
+  'quest.chooseOutcome': 'Kies een afloop voor {quest}',
   'action.unavailable': 'Deze actie is momenteel niet beschikbaar.',
   'action.requirements': 'Er is niet voldaan aan de voorwaarden voor deze actie.',
   'action.noAction': 'Er is geen actie aan deze knop toegewezen.',

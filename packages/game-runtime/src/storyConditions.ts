@@ -7,7 +7,9 @@ export interface WorldFacts {
   readonly scene?: SceneInstance | undefined
   readonly values?: ReadonlyMap<string, BindingValue>
   readonly inventory?: ReadonlyMap<string, InventoryItem>
-  readonly quest?: (id: string) => { status: string; stage?: string | undefined } | undefined
+  readonly quest?: (
+    id: string,
+  ) => { status: string; stage?: string | undefined; outcome?: string | undefined } | undefined
 }
 
 export function matchesConditions(
@@ -64,6 +66,12 @@ export function matchesConditions(
         )
       case 'combat-outcome':
         return facts.game.combat?.outcome?.(condition.encounter) === condition.outcome
+      case 'quest-outcome': {
+        const quest = facts.quest?.(condition.quest) ?? facts.game.quests?.snapshot(condition.quest)
+
+        return quest?.outcome === condition.outcome
+      }
+
       case 'quest-state': {
         const quest = facts.quest?.(condition.quest) ?? facts.game.quests?.snapshot(condition.quest)
 

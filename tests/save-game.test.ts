@@ -956,22 +956,75 @@ describe('persistent player progress', () => {
     expect(restored.messageHistory).toEqual(history)
     engine.lifecycle!.enterScene('standard')
     advance()
-    restored.quests!.request(engine.lifecycle!.activeScene!, 'harbour-survey', 'turn-in')
-    advance()
-    expect(restored.quests!.snapshot('harbour-survey')!.status).toBe('completed')
-    const gold = restored.bindings!.read({ source: 'game.state', path: ['player', 'gold'] })
-    expect(engine.saves!.save()).toBe(true)
-    expect(engine.saves!.load()).toBe(true)
-    advance()
-    expect(engine.lifecycle!.currentGame!.quests!.snapshot('harbour-survey')!.status).toBe(
-      'completed',
-    )
     expect(
-      engine.lifecycle!.currentGame!.bindings!.read({
-        source: 'game.state',
-        path: ['player', 'gold'],
-      }),
-    ).toEqual(gold)
+      restored.inventory!.move('harbour-chart', { type: 'carried', owner: 'player' }).status,
+    ).toBe('applied')
+    const saves = engine.saves!
+    expect(saves.save()).toBe(true)
+
+    for (const outcome of ['published', 'sold'] as const) {
+      saves.selectSlot('1')
+      expect(saves.load()).toBe(true)
+      advance()
+      const current = engine.lifecycle!.currentGame!
+      const here = engine.lifecycle!.activeScene!
+
+      const field = (id: string) =>
+        current.bindings!.read({ source: 'game.state', path: ['player', id] })
+
+      const gold = field('gold')
+      const xp = field('experience')
+
+      if (gold.status !== 'resolved' || xp.status !== 'resolved')
+        throw new Error('Missing survey rewards')
+      const inventory = current.inventory!.snapshot
+      const finish = () => current.quests!.request(here, 'harbour-survey', 'turn-in', { outcome })
+      finish()
+      finish()
+      advance()
+      expect(field('gold')).toMatchObject({
+        value: Number(gold.value) + (outcome === 'sold' ? 8 : 0),
+      })
+      expect(field('experience')).toMatchObject({
+        value: Number(xp.value) + (outcome === 'published' ? 5 : 0),
+      })
+      expect(current.inventory!.snapshot).toEqual(inventory)
+      saves.selectSlot('2')
+      expect(saves.save()).toBe(true)
+      expect(saves.load()).toBe(true)
+      advance()
+      const resumed = engine.lifecycle!.currentGame!
+      const home = engine.lifecycle!.activeScene!
+      expect(resumed.quests!.snapshot('harbour-survey')).toMatchObject({
+        status: 'completed',
+        outcome,
+      })
+      expect(
+        resumed.quests!.reason(
+          home,
+          'harbour-survey',
+          'turn-in',
+          outcome === 'sold' ? 'published' : 'sold',
+        ),
+      ).toBeTruthy()
+      resumed.nearby!.select(home, 'nearby', 'curator')
+      resumed.dialogue!.request(home, 'nearby', { type: 'start' })
+      advance()
+
+      for (const position of [2, 2]) {
+        resumed.dialogue!.request(home, 'nearby', { type: 'choose', position })
+        advance()
+      }
+
+      const news = outcome === 'published' ? 1 : 2
+      expect(resumed.dialogue!.reply(home, 'nearby', news)?.id).toBe(outcome + '-news')
+      expect(resumed.dialogue!.reply(home, 'nearby', 3 - news)).toBeUndefined()
+      resumed.dialogue!.request(home, 'nearby', { type: 'choose', position: news })
+      advance()
+      expect(resumed.dialogue!.text(home, 'nearby')).toContain(
+        outcome === 'published' ? 'red buoy to port' : 'cargo cleared the buoy',
+      )
+    }
   })
 
   it('preserves combat plans, RNG, cooldowns, health, locks and progression when continuing a saved encounter', async () => {
@@ -1347,6 +1400,9 @@ describe('persistent player progress', () => {
     'bad-inventory',
     'bad-scene',
     'bad-quest',
+    'unknown-outcome',
+    'premature-outcome',
+    'missing-outcome',
     'bad-map',
     'bad-map-scene',
     'bad-inactive-map',
@@ -1377,6 +1433,15 @@ describe('persistent player progress', () => {
 
     if (failure === 'bad-quest')
       save.quests.records['harbour-survey'] = { index: 999, completed: false }
+
+    if (failure === 'unknown-outcome')
+      save.quests.records['harbour-survey'] = { index: 1, completed: true, outcome: 'missing' }
+
+    if (failure === 'premature-outcome')
+      save.quests.records['harbour-survey'] = { index: 1, completed: false, outcome: 'published' }
+
+    if (failure === 'missing-outcome')
+      save.quests.records['harbour-survey'] = { index: 1, completed: true }
 
     if (failure === 'bad-map') save.mapPositions[save.scene] = { missing: { x: 0, y: 0 } }
 

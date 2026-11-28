@@ -102,6 +102,7 @@ describe('text binding authoring', () => {
     ).toEqual([
       ['delivery', 'status'],
       ['delivery', 'stage'],
+      ['delivery', 'outcome'],
       ['delivery', 'tracked'],
     ])
 
