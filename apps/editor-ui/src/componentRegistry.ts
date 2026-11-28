@@ -31,6 +31,7 @@ export const componentGroups = {
   'status-panel': 'character',
   'quest-log': 'character',
   inventory: 'items',
+  crafting: 'items',
   'item-details': 'items',
   equipment: 'items',
   shop: 'items',
@@ -71,6 +72,7 @@ export function componentUnavailable(
       'character-progression',
       'status-panel',
       'inventory',
+      'crafting',
       'item-details',
       'equipment',
       'shop',
@@ -117,6 +119,7 @@ export function componentUnavailable(
       return view.scenes.some((entry) => entry.id !== scene.id && entry.type === 'game')
         ? undefined
         : 'inspector.destinationFirst'
+    case 'crafting':
     case 'inventory':
       return Object.keys(view.inventory?.owners ?? {}).length ? undefined : 'items.ownerFirst'
     case 'equipment':

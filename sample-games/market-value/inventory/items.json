@@ -1,6 +1,11 @@
 {
   "schema-version": "1.0.0",
   "itemTypes": {
+    "fishing-rod": {
+      "label": "Fishing rod",
+      "description": "A length of rope tied to a salt-worn branch.",
+      "recipe": { "ingredients": { "driftwood": 1, "rope": 1 } }
+    },
     "driftwood": {
       "label": "Driftwood",
       "description": "A pale branch smoothed by the sea.",

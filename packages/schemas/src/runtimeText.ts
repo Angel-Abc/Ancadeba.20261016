@@ -1,6 +1,11 @@
 import type { GameTranslation } from './localization.js'
 
 const en = {
+  'crafting.craft': 'Craft {item}',
+  'crafting.crafted': 'Added {item} to inventory.',
+  'crafting.ingredient': '{item} {available}/{required}',
+  'crafting.unavailable': 'The required materials are unavailable.',
+  'crafting.empty': 'No recipes available.',
   'action.unavailable': 'This action is currently unavailable.',
   'action.requirements': 'The requirements for this action are not met.',
   'action.noAction': 'No action has been assigned to this button.',
@@ -133,6 +138,11 @@ const nl: Record<RuntimeTextKey, string> = {
   'confirmation.confirm': 'Bevestigen',
   'confirmation.cancel': 'Annuleren',
   'inventory.unavailable': 'Inventaris niet beschikbaar',
+  'crafting.craft': 'Maak {item}',
+  'crafting.crafted': '{item} toegevoegd aan de inventaris.',
+  'crafting.ingredient': '{item} {available}/{required}',
+  'crafting.unavailable': 'De benodigde materialen zijn niet beschikbaar.',
+  'crafting.empty': 'Geen recepten beschikbaar.',
   'inventory.destination': 'Bestemming',
   'inventory.move': 'Geselecteerd voorwerp verplaatsen',
   'inventory.clear': 'Selectie wissen',

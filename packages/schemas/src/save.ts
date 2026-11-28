@@ -179,6 +179,7 @@ export const gameSaveSchema = z.strictObject({
   log: z.array(z.string()),
   messageHistory: z.array(messageHistoryEntrySchema).max(messageHistoryCapacity),
   inventory: inventorySchema.shape.items,
+  craftingSequence: counter.optional(),
   progression: z.strictObject({ turn: counter, worldTimeMs: z.number().finite().nonnegative() }),
   combat: record(savedCombatSchema),
   rewards: record(savedRewardsSchema),

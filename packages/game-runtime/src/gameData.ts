@@ -110,6 +110,7 @@ export type SceneComponentData =
           | 'save-point'
           | 'action-info'
           | 'message-history'
+          | 'crafting'
           | 'form'
           | 'character-view'
           | 'character-sheet'
@@ -723,6 +724,9 @@ export function assembleGameData(
 
       if (component.type === 'background-image')
         assertBackgroundImageReference(assets, component.image)
+
+      if (component.type === 'crafting' && !Object.hasOwn(inventory?.owners ?? {}, component.owner))
+        throw new Error('Unknown crafting inventory owner: ' + component.owner)
 
       if (component.type === 'inventory') {
         const issue = inventoryPanelIssues(

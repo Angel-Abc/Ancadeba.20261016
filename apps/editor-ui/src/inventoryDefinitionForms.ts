@@ -15,6 +15,7 @@ import {
 import { itemPresentationForm } from './itemPresentationForm.js'
 import { itemUseForm } from './itemUseForm.js'
 import { combatStatsForm } from './combatStatsForm.js'
+import { craftingRecipeForm } from './craftingRecipeForm.js'
 
 export type InventoryKind = 'itemTypes' | 'owners' | 'items'
 
@@ -97,6 +98,7 @@ export function inventoryDefinitionForms(
 
     return [
       ...itemPresentationForm(controls, view, type, render),
+      craftingRecipeForm(controls, view, type, render),
       controls.section('equipment', fieldPath(equipment, 'equipmentSlots')),
       controls.section('use', fieldPath(itemUseForm(controls, view, type, render), 'use')),
     ]

@@ -7273,6 +7273,38 @@ describe('editor draft workflows', () => {
     })
   })
 
+  it('edits recipe quantities and removes ingredients from the saved inventory file', async () => {
+    const file = new URL('../sample-games/market-value/inventory/items.json', import.meta.url)
+
+    const original = applyCommand(project(), {
+      type: 'game.upsertInventory',
+      inventoryId: 'items',
+      inventory: inventorySchema.parse(JSON.parse(await readFile(file, 'utf8'))),
+    }).project
+
+    const ui = await connected(bindInventoryEditor, original)
+    ui.edit('Inventory entry', 'fishing-rod')
+    ui.edit('Driftwood required', '2')
+    ui.click('Remove Piece of rope')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.read().inventory?.itemTypes['fishing-rod']?.recipe?.ingredients).toEqual({
+      driftwood: 2,
+    })
+    ui.edit('Add ingredient', 'rope')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.read().inventory?.itemTypes['fishing-rod']?.recipe?.ingredients).toEqual({
+      driftwood: 2,
+      rope: 1,
+    })
+    ui.click('Remove Piece of rope')
+    ui.click('Remove Driftwood')
+    ui.submit('Save inventory')
+    await ui.flush()
+    expect(ui.read().inventory?.itemTypes['fishing-rod']?.recipe).toBeUndefined()
+  })
+
   it('creates types, owners, slots and starting placements together from an empty project', async () => {
     const ui = await connected(bindInventoryEditor)
     ui.edit('Inventory entry kind', 'owners')

@@ -58,6 +58,8 @@ export type { PreparedInventoryTransfer } from './inventory.js'
 
 export { GameInventory } from './inventory.js'
 
+export { GameCrafting, type IGameCrafting, type CraftingRecipe } from './crafting.js'
+
 export {
   GameLifecycle,
   type IGameLifecycle,

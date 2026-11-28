@@ -148,6 +148,18 @@ export function basicComponentFields(
 
   main.push(...label)
 
+  if (draft.type === 'crafting')
+    return behavior.push(
+      select(
+        t('crafting.owner'),
+        draft.owner,
+        Object.keys(view.inventory?.owners ?? {}),
+        (owner) => {
+          draft.owner = owner
+        },
+      ),
+    )
+
   if (draft.type === 'action-info') {
     const help = create('p')
     help.className = 'help'

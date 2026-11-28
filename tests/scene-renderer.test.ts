@@ -4551,10 +4551,11 @@ describe('scene renderer', () => {
   )
 
   it.each(['preview', 'standalone'])(
-    'shows each Market Value beach pickup only while it can be used in the %s host',
+    'collects beach materials and crafts a persistent fishing rod in the Market Value %s host',
     async (host) => {
       const game = await new GameLoader(new JsonResourceLoader(market, logger)).load()
       const { target, document } = setup(game)
+      const storage = new Map<string, string>()
 
       const engine = new Engine(
         { load: async () => game },
@@ -4563,7 +4564,15 @@ describe('scene renderer', () => {
           : new DomEngineHost(target.asElement()),
         logger,
         () => new MessageBus<EngineMessages>(),
-        timing,
+        {
+          ...timing,
+          saveStore: {
+            read: (id) => storage.get(id),
+            write: (id, value) => {
+              storage.set(id, value)
+            },
+          },
+        },
       )
 
       onTestFinished(() => engine.stop())
@@ -4575,6 +4584,10 @@ describe('scene renderer', () => {
       const slot = (id: string) => target.find((node) => node.dataset.actionBarSlot === id)!
       const wood = slot('1')
       const rope = slot('2')
+      const panel = () => target.find((node) => node.dataset.componentId === 'beach-crafting')!
+      const craft = () => panel().find((node) => node.tagName === 'BUTTON')!
+      expect(craft().disabled).toBe(true)
+      expect(panel().textContent).toContain('Driftwood 0/1')
       const cell = wood.parent!
       const empty = cell.find((node) => node.className === 'ancadeba-action-bar-empty')!
       expect([wood.hidden, rope.hidden, empty.hidden]).toEqual([true, true, false])
@@ -4591,6 +4604,35 @@ describe('scene renderer', () => {
       expect(cell.parent!.children[0]).toBe(cell)
       expect(document.activeElement).toBe(target.find((node) => node.className === 'ancadeba-game'))
       expect(target.find((node) => node.dataset.mapObject === 'driftwood')!.hidden).toBe(true)
+      expect(panel().textContent).toContain('Driftwood 1/1')
+      expect(panel().textContent).toContain('Piece of rope 0/1')
+      expect(craft().disabled).toBe(true)
+      movement.place(scene, 'coast-map', { x: 7, y: 10 })
+      rope.click()
+      flush(engine)
+      expect(panel().textContent).toContain('Piece of rope 1/1')
+      expect(craft().disabled).toBe(false)
+      craft().click()
+      expect(panel().textContent).toContain('Added Fishing rod to inventory.')
+      expect(craft().disabled).toBe(true)
+      craft().click()
+      const pack = () => lifecycle.currentGame!.inventory!.snapshot
+      expect(pack()).toEqual([
+        expect.objectContaining({
+          itemType: 'fishing-rod',
+          placement: { type: 'carried', owner: 'player' },
+        }),
+      ])
+      const crafted = pack()
+      expect(engine.saves!.save()).toBe(true)
+      lifecycle.startGame()
+      expect(pack().some((item) => item.itemType === 'fishing-rod')).toBe(false)
+      expect(engine.saves!.load()).toBe(true)
+      flush(engine)
+      expect(pack()).toEqual(crafted)
+      expect(panel().textContent).toContain('Driftwood 0/1')
+      expect(craft().disabled).toBe(true)
+      expect(target.find((node) => node.dataset.mapObject === 'rope')!.hidden).toBe(true)
     },
   )
 

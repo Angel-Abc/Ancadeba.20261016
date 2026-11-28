@@ -5,6 +5,7 @@ import type { AuthoredPlaythrough } from './authoredRules.js'
 import type { GameActionRuntime } from './gameActionRuntime.js'
 import type { IGameInput } from './input.js'
 import { GameInventory } from './inventory.js'
+import { GameCrafting } from './crafting.js'
 import { GameSaves, GameSaveError, type GameSaveStore } from './gameSaves.js'
 import { GameAutosave } from './gameAutosave.js'
 import type { ITaskScheduler } from '@ancadeba/utilities'
@@ -78,6 +79,11 @@ export function bindAuthoredGameSaves({
 
     if (instance.inventory instanceof GameInventory) instance.inventory.restore(save.inventory)
     else if (Object.keys(save.inventory).length) throw new GameSaveError('incompatible-save')
+
+    if (save.craftingSequence !== undefined) {
+      if (!(instance.crafting instanceof GameCrafting)) throw new GameSaveError('incompatible-save')
+      instance.crafting.restoreSequence(save.craftingSequence)
+    }
   }
 
   const restoreRuntime = (save: GameSave, instance: GameInstance) => {
@@ -116,6 +122,10 @@ export function bindAuthoredGameSaves({
         inventory: Object.fromEntries(
           (instance.inventory?.snapshot ?? []).map(({ id, ...item }) => [id, item]),
         ),
+        ...(instance.crafting instanceof GameCrafting &&
+          instance.crafting.sequence > 0 && {
+            craftingSequence: instance.crafting.sequence,
+          }),
         progression: { ...runtime.actions.progression },
         ...runtime.save(),
         ...(scene?.type === 'game' ? sceneSelections(scene, runtime) : lastSelections),

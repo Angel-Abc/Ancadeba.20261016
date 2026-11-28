@@ -170,6 +170,21 @@ and [the harbour chart](sample-games/basic/inventory/harbour.json). Items can re
 to types, owners, and containers defined in another file. IDs must be unique within
 each section (`itemTypes`, `owners`, and `items`) across all inventory files.
 
+### Crafting recipes
+
+In Market Value, walk beside the driftwood and rope on the beach and pick them up.
+The **Crafting** panel shows how many of each you carry. Choose **Craft Fishing rod**
+to exchange one of each for a rod. The rod appears in the inventory and persists
+when you save and load. [Market Value inventory](sample-games/market-value/inventory/items.json)
+
+To author a recipe, open the output item type in the inventory file editor. Under
+**Crafting recipe**, add each ingredient item type and its required quantity. Place
+a **Crafting** component in a game scene and choose its inventory owner. The panel
+lists all recipes and uses the owner's directly carried items. Equipped items,
+items inside containers, nonempty containers, and items reserved for combat are
+excluded. Each craft consumes all ingredients and produces one item in a single
+inventory update.
+
 ## App configuration
 
 Copy each app's `config.example.json` to `config.json` and edit the values.

@@ -4,6 +4,7 @@ import {
   dialogueSchema,
   questSchema,
   questLogComponentSchema,
+  craftingComponentSchema,
   levelingProfileSchema,
   characterProgressionComponentSchema,
 } from '@ancadeba/schemas'
@@ -68,6 +69,7 @@ import {
 
 /** Scene components without a dedicated authoring command are saved whole. */
 export const basicComponentSchema = z.discriminatedUnion('type', [
+  craftingComponentSchema,
   saveSlotsComponentSchema,
   saveStatusComponentSchema,
   savePointComponentSchema,

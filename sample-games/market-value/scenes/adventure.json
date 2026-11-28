@@ -103,26 +103,23 @@
         "rowSpan": 12,
         "columnSpan": 7
       },
-      "text": "Use arrow keys to move. Select an item beside you to pick it up.",
+      "text": "Use arrow keys to move. Pick up the driftwood and rope on the beach, then use Crafting to make a fishing rod.",
       "presentation": {
         "variant": "body",
         "align": "start"
       }
     },
     {
-      "id": "event-log",
-      "type": "text",
+      "id": "beach-crafting",
+      "type": "crafting",
       "placement": {
-        "row": 23,
+        "row": 13,
         "column": 26,
-        "rowSpan": 10,
+        "rowSpan": 20,
         "columnSpan": 7
       },
-      "text": "TODO: event log",
-      "presentation": {
-        "variant": "body",
-        "align": "start"
-      }
+      "label": "Crafting",
+      "owner": "player"
     },
     {
       "id": "action-bar",

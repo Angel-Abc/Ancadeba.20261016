@@ -14,6 +14,7 @@ import { LanguageSelectComponentRenderer } from './languageSelectComponentRender
 import { GraphicComponentRenderer } from './graphicComponentRenderer.js'
 import { MapViewComponentRenderer } from './mapViewComponentRenderer.js'
 import { InventoryComponentRenderer } from './inventoryComponentRenderer.js'
+import { CraftingComponentRenderer } from './craftingComponentRenderer.js'
 import { ActionBarComponentRenderer } from './actionBarComponentRenderer.js'
 import { ActionInfoComponentRenderer } from './actionInfoComponentRenderer.js'
 import { NearbyComponentRenderer } from './nearbyComponentRenderer.js'
@@ -46,6 +47,7 @@ export class ComponentRenderer implements IComponentRenderer {
       'language-select': new LanguageSelectComponentRenderer(),
       'map-view': new MapViewComponentRenderer(),
       inventory: new InventoryComponentRenderer(),
+      crafting: new CraftingComponentRenderer(),
       'action-bar': new ActionBarComponentRenderer(),
       'action-info': new ActionInfoComponentRenderer(),
       nearby: new NearbyComponentRenderer(),
@@ -113,6 +115,8 @@ export class ComponentRenderer implements IComponentRenderer {
         return this.renderers['map-view'].render(component, context)
       case 'inventory':
         return this.renderers.inventory.render(component, context)
+      case 'crafting':
+        return this.renderers.crafting.render(component, context)
       default: {
         const unsupported: never = component
         throw new Error(`Unsupported scene component: ${String(unsupported)}`)

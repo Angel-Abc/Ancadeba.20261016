@@ -7,6 +7,7 @@ import type { GameData, SceneData } from './gameData.js'
 import type { IGameActions } from './actions.js'
 import type { IGameBindings } from './gameBindings.js'
 import { GameInventory, type IGameInventory } from './inventory.js'
+import { GameCrafting, type IGameCrafting } from './crafting.js'
 import type { IGameActionBar } from './actionBar.js'
 import type { IGameMapMovement } from './mapMovement.js'
 import type { IGameMapObjects } from './mapObjects.js'
@@ -67,6 +68,7 @@ export interface GameInstance<TState = unknown> {
   readonly actionBar?: IGameActionBar | undefined
   readonly data: GameData
   readonly inventory?: IGameInventory | undefined
+  readonly crafting?: IGameCrafting | undefined
   readonly actions: IGameActions | undefined
   readonly bindings: IGameBindings | undefined
   /** Released on disposal. Retained instances must no longer be used. */
@@ -171,6 +173,7 @@ class OwnedInstance<TData, TState> {
 class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
   private runtime: IGameRuntime | undefined
   private inventoryState: GameInventory | undefined
+  crafting: IGameCrafting | undefined
 
   setPaused(paused: boolean): void {
     this.runtime?.setPaused?.(paused)
@@ -250,10 +253,13 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
     factory: GameRuntimeFactory | undefined,
     prepare?: (game: GameInstance<TState>) => void,
   ): void {
-    if (this.data.inventory)
+    if (this.data.inventory) {
       this.inventoryState = new GameInventory(this.data.inventory, (key, values) =>
         runtimeText(this.data, key, values),
       )
+      this.crafting = new GameCrafting(this.data.inventory, this.inventoryState)
+    }
+
     prepare?.(this)
     this.runtime = factory?.(this)
   }
@@ -267,6 +273,7 @@ class OwnedGameInstance<TState> extends OwnedInstance<GameData, TState> {
     this.runtime = undefined
     this.inventoryState?.dispose()
     this.inventoryState = undefined
+    this.crafting = undefined
     const errors: unknown[] = []
 
     try {

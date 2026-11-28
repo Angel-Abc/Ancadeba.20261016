@@ -13,6 +13,7 @@ export const creatableComponentTypes = [
   'background-image',
   'language-select',
   'quest-log',
+  'crafting',
   'form',
   'character-sheet',
   'character-view',
@@ -122,6 +123,15 @@ export function createComponentDraft(
 
   if (type === 'quest-log')
     return { id, type, label: 'Quests', placement, statuses: ['active', 'ready', 'completed'] }
+
+  if (type === 'crafting') {
+    const owner = Object.keys(view.inventory?.owners ?? {})[0]
+
+    if (!owner || scene.type !== 'game') return
+
+    return { id, type, label: 'Crafting', owner, placement }
+  }
+
   const mapId = view.game?.maps?.[0] ?? ''
   const map = view.maps?.[mapId]
 

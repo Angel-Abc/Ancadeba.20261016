@@ -43,6 +43,8 @@ const fields = new Map<string, readonly string[] | null>([
   ['itemTypes.*.inspection', ['action', 'details', 'inline']],
   ['itemTypes.*.inspection.details', gameBindingSchema.keyof().options],
   ['itemTypes.*.actions', null],
+  ['itemTypes.*.recipe', ['ingredients']],
+  ['itemTypes.*.recipe.ingredients', null],
   ['itemTypes.*.actions.*', inventoryItemActionSchema.keyof().options],
   ['itemTypes.*.actions.*.enabledWhen', gameBindingSchema.keyof().options],
   ['owners.*.combatStats', combatStatsProfileSchema.keyof().options],

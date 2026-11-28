@@ -363,6 +363,17 @@ export const inventoryComponentSchema = z
 
 export type InventoryComponentDefinition = z.infer<typeof inventoryComponentSchema>
 
+export const craftingComponentSchema = z.object({
+  id: gameIdSchema,
+  type: z.literal('crafting'),
+  ...componentLayoutFields,
+  label: z.string().trim().min(1).default('Crafting'),
+  labelKey: translationKeySchema.optional(),
+  owner: gameIdSchema,
+})
+
+export type CraftingComponentDefinition = z.infer<typeof craftingComponentSchema>
+
 export const itemDetailsComponentSchema = z.object({
   equipment: gameIdSchema.optional(),
   showCombatStats: z.boolean().optional(),
@@ -678,6 +689,7 @@ export const sceneComponentSchema = z.discriminatedUnion('type', [
   backgroundImageComponentSchema,
   mapViewComponentSchema,
   inventoryComponentSchema,
+  craftingComponentSchema,
   actionBarComponentSchema,
   actionInfoComponentSchema,
   messageHistoryComponentSchema,
@@ -960,6 +972,13 @@ export const sceneSchema = z
           code: 'custom',
           path: ['components', index],
           message: 'Inventory panels require a game scene',
+        })
+
+      if (scene.type === 'stand-alone' && component.type === 'crafting')
+        context.addIssue({
+          code: 'custom',
+          path: ['components', index],
+          message: 'Crafting panels require a game scene',
         })
 
       if (

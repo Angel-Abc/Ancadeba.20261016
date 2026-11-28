@@ -300,6 +300,14 @@ export function validateProject(
             message: issue.message,
           })
 
+      if (component.type === 'crafting' && !Object.hasOwn(inventory?.owners ?? {}, component.owner))
+        diagnostics.push({
+          code: 'invalid_crafting',
+          file: `scenes/${id}.json`,
+          path: ['components', index, 'owner'],
+          message: 'Unknown crafting inventory owner: ' + component.owner,
+        })
+
       if (component.type === 'inventory') {
         for (const issue of inventoryPanelIssues(
           component.owners,

@@ -77,6 +77,16 @@ export const itemPresentationSchema = z
   })
 
 export const inventoryItemTypeSchema = itemPresentationSchema.safeExtend({
+  recipe: z
+    .object({
+      ingredients: z
+        .record(gameIdSchema, z.number().int().positive().safe())
+        .refine(
+          (ingredients) => Object.keys(ingredients).length > 0,
+          'A recipe needs an ingredient',
+        ),
+    })
+    .optional(),
   combatBonuses: combatBonusesSchema.optional(),
   combatEffects: equipmentCombatEffectsSchema.optional(),
   use: itemUseSchema.optional(),
@@ -298,6 +308,13 @@ export function inventoryIssues(
 
   for (const [id, type] of Object.entries(definition.itemTypes)) {
     const path = ['itemTypes', id]
+
+    for (const ingredient of Object.keys(type.recipe?.ingredients ?? {}))
+      if (!Object.hasOwn(definition.itemTypes, ingredient))
+        issues.push({
+          path: [...path, 'recipe', 'ingredients', ingredient],
+          message: 'Unknown recipe ingredient item type: ' + ingredient,
+        })
 
     for (const slot of type.equipmentSlots) {
       if (!slots.has(slot))
